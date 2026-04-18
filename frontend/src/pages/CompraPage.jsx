@@ -2253,16 +2253,19 @@ function CompraPage() {
                                     value={item.fracao_memorizada || ''}
                                     onChange={(e) => {
                                       const valor = e.target.value;
-                                      atualizarItem(index, 'fracao_memorizada', valor);
-                                      
-                                      // Calcular quantidade com fração
                                       const fracao = parseFloat(valor);
+                                      
+                                      const novosItens = [...form.itens];
+                                      novosItens[index] = { ...novosItens[index], fracao_memorizada: valor };
+                                      
                                       if (!isNaN(fracao) && fracao > 0) {
                                         const qtd = parseFloat(item.quantidade) || 0;
-                                        atualizarItem(index, 'quantidade_com_fracao', qtd * fracao);
+                                        novosItens[index].quantidade_com_fracao = qtd * fracao;
                                       } else {
-                                        atualizarItem(index, 'quantidade_com_fracao', null);
+                                        novosItens[index].quantidade_com_fracao = null;
                                       }
+                                      
+                                      setForm({ ...form, itens: novosItens });
                                     }}
                                     inputProps={{ min: 0, step: 0.1 }}
                                     variant="outlined"
