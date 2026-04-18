@@ -1,10 +1,9 @@
 @echo off
 title APERUS - ATUALIZAR SERVIDOR
-powershell.exe -NoExit -ExecutionPolicy Bypass -File "%~dp0ATUALIZAR.ps1" > "%~dp0logs\atualizar_saida.txt" 2>&1
-echo.
-echo ============================================================
-echo  Processo finalizado. Veja o log em:
-echo  %~dp0logs\atualizar_saida.txt
-echo ============================================================
-echo.
-pause
+if not exist "%~dp0logs" mkdir "%~dp0logs"
+set LOGFILE=%~dp0logs\atualizar_saida.txt
+echo Iniciando atualizacao em %date% %time% > "%LOGFILE%"
+powershell.exe -ExecutionPolicy Bypass -File "%~dp0ATUALIZAR.ps1" >> "%LOGFILE%" 2>&1
+echo. >> "%LOGFILE%"
+echo === FIM === >> "%LOGFILE%"
+notepad "%LOGFILE%"
