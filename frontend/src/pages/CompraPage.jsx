@@ -2250,29 +2250,18 @@ function CompraPage() {
                                     fullWidth
                                     type="number"
                                     label="Fração"
-                                    value={item.fracao_memorizada !== null && item.fracao_memorizada !== undefined ? item.fracao_memorizada : ''}
+                                    value={item.fracao_memorizada || ''}
                                     onChange={(e) => {
-                                      const valorDigitado = e.target.value;
+                                      const valor = e.target.value;
+                                      atualizarItem(index, 'fracao_memorizada', valor);
                                       
-                                      // Se vazio, limpar fração
-                                      if (valorDigitado === '' || valorDigitado === null) {
-                                        atualizarItem(index, 'fracao_memorizada', null);
-                                        atualizarItem(index, 'quantidade_com_fracao', null);
-                                        return;
-                                      }
-                                      
-                                      // Tentar converter para número
-                                      const fracao = parseFloat(valorDigitado);
-                                      
-                                      // Se for número válido, calcular quantidade com fração
+                                      // Calcular quantidade com fração
+                                      const fracao = parseFloat(valor);
                                       if (!isNaN(fracao) && fracao > 0) {
                                         const qtd = parseFloat(item.quantidade) || 0;
-                                        const qtdComFracao = qtd * fracao;
-                                        atualizarItem(index, 'fracao_memorizada', fracao);
-                                        atualizarItem(index, 'quantidade_com_fracao', qtdComFracao);
+                                        atualizarItem(index, 'quantidade_com_fracao', qtd * fracao);
                                       } else {
-                                        // Durante digitação, aceitar o valor mas não calcular ainda
-                                        atualizarItem(index, 'fracao_memorizada', valorDigitado);
+                                        atualizarItem(index, 'quantidade_com_fracao', null);
                                       }
                                     }}
                                     inputProps={{ min: 0, step: 0.1 }}
