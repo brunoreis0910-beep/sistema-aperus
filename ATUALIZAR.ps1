@@ -127,6 +127,23 @@ Write-Host "============================================================" -Foreg
 Write-Host "  [OK] SERVIDOR ATUALIZADO COM SUCESSO!" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host ""
+
+# Verificar configuração da GEMINI_API_KEY
+if (Test-Path ".env") {
+    $envContent = Get-Content ".env" -Raw -ErrorAction SilentlyContinue
+    if ($envContent -notmatch "GEMINI_API_KEY\s*=\s*\S+") {
+        Write-Host "  [AVISO] GEMINI_API_KEY nao configurada!" -ForegroundColor Yellow
+        Write-Host "  A classificacao IA nao funcionara sem ela." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  Execute: .\CONFIGURAR_GEMINI.ps1" -ForegroundColor Cyan
+        Write-Host ""
+    }
+} else {
+    Write-Host "  [AVISO] Arquivo .env nao encontrado!" -ForegroundColor Yellow
+    Write-Host "  Execute: .\CONFIGURAR_GEMINI.ps1" -ForegroundColor Cyan
+    Write-Host ""
+}
+
 Write-Host "  Acesse: http://aperus.com.br" -ForegroundColor White
 Write-Host ""
 Read-Host "Pressione ENTER para sair"
