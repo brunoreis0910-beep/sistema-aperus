@@ -214,7 +214,7 @@ class ProdutoEANService:
     
     def _buscar_fallback(self, ean: str) -> Dict:
         """
-        Fallback: Open Food Facts → Cloudmersive (opcional, 800/mês) → DEMO local
+        Fallback: Open Food Facts → Cloudmersive (opcional, 800/mês) → Gemini IA → DEMO local
         """
         resultado_off = self._buscar_open_food_facts(ean)
         if resultado_off['sucesso']:
@@ -222,7 +222,112 @@ class ProdutoEANService:
         resultado_cm = self._buscar_cloudmersive(ean)
         if resultado_cm['sucesso']:
             return resultado_cm
+        resultado_ia = self._buscar_via_gemini_ia(ean)
+        if resultado_ia['sucesso']:
+            return resultado_ia
         return self._gerar_dados_demo(ean)
+
+    def _buscar_via_gemini_ia(self, ean: str) -> Dict:
+        """
+        Fallback via Gemini AI + Google Search.
+        Quando todas as APIs falham, pesquisa o EAN na internet e extrai nome, marca e NCM.
+        """
+        try:
+            from google import genai
+            from google.genai import types
+            from decouple import config as dconfig
+
+            api_key = dconfig('GEMINI_API_KEY', default='')
+            if not api_key:
+                return {'sucesso': False, 'mensagem': 'GEMINI_API_KEY não configurada', 'fonte': 'GEMINI_IA'}
+
+            client = genai.Client(api_key=api_key)
+
+            prompt = (
+                f"Pesquise o produto brasileiro com código de barras EAN/GTIN: {ean}\n"
+                "Encontre o nome completo do produto, marca e categoria.\n"
+                "Responda APENAS em JSON com os campos:\n"
+                '{"nome": "...", "marca": "...", "ncm": "...", "categoria": "...", "unidade": "UN"}\n'
+                "Se não encontrar, responda: {\"nome\": \"\", \"marca\": \"\", \"ncm\": \"\", \"categoria\": \"Mercearia > Outros\", \"unidade\": \"UN\"}"
+            )
+
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    tools=[types.Tool(google_search=types.GoogleSearch())],
+                    temperature=0.1,
+                )
+            )
+
+            texto = (response.text or '').strip()
+            logger.info(f"[GEMINI EAN] Resposta para EAN {ean}: {texto[:200]}")
+
+            # Extrai JSON da resposta
+            import re as _re
+            match_json = _re.search(r'\{[^{}]+\}', texto, _re.DOTALL)
+            if not match_json:
+                return {'sucesso': False, 'mensagem': 'Gemini não retornou JSON válido', 'fonte': 'GEMINI_IA'}
+
+            dados_ia = json.loads(match_json.group())
+            nome = (dados_ia.get('nome') or '').strip()
+
+            if not nome:
+                return {'sucesso': False, 'mensagem': 'Gemini não identificou o produto', 'fonte': 'GEMINI_IA'}
+
+            # Tenta extrair imagem usando os grounding chunks
+            imagem_url = ''
+            if response.candidates and response.candidates[0].grounding_metadata:
+                gm = response.candidates[0].grounding_metadata
+                if gm.grounding_chunks:
+                    import requests as _req
+                    headers = {'User-Agent': 'Mozilla/5.0'}
+                    for chunk in gm.grounding_chunks[:3]:
+                        if hasattr(chunk, 'web') and chunk.web and chunk.web.uri:
+                            try:
+                                resp = _req.get(chunk.web.uri, timeout=5, headers=headers, allow_redirects=True)
+                                match_img = _re.search(r'og:image["\s]+content="([^"]+)"', resp.text)
+                                if not match_img:
+                                    match_img = _re.search(r'content="([^"]+)"[^>]*property="og:image"', resp.text)
+                                if match_img:
+                                    url_img = match_img.group(1)
+                                    if url_img.startswith('http') and 'logo' not in url_img.lower():
+                                        imagem_url = url_img
+                                        break
+                            except Exception:
+                                continue
+
+            ncm_raw = dados_ia.get('ncm') or ''
+            ncm_digits = ''.join(filter(str.isdigit, str(ncm_raw)))
+            ncm = ncm_digits if len(ncm_digits) == 8 else ''
+
+            produto_data = {
+                'ean': ean,
+                'nome': nome,
+                'descricao': nome,
+                'imagem_url': imagem_url,
+                'marca': (dados_ia.get('marca') or '').strip(),
+                'categoria_sugerida': (dados_ia.get('categoria') or 'Mercearia > Outros').strip(),
+                'ncm': ncm,
+                'peso': 0,
+                'unidade': (dados_ia.get('unidade') or 'UN').strip(),
+            }
+
+            logger.info(f"[GEMINI EAN] Produto identificado: {nome[:60]}")
+            return {
+                'sucesso': True,
+                'dados': produto_data,
+                'fonte': 'GEMINI_IA',
+                'is_generic': False,
+                'mensagem': f'Produto identificado via IA (confira os dados antes de salvar)'
+            }
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"[GEMINI EAN] JSON inválido na resposta: {e}")
+            return {'sucesso': False, 'mensagem': 'Resposta IA inválida', 'fonte': 'GEMINI_IA'}
+        except Exception as e:
+            logger.warning(f"[GEMINI EAN] Erro ao consultar Gemini para EAN {ean}: {e}")
+            return {'sucesso': False, 'mensagem': str(e), 'fonte': 'GEMINI_IA'}
 
     def _buscar_cloudmersive(self, ean: str) -> Dict:
         """

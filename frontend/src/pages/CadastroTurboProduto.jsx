@@ -27,6 +27,7 @@ export default function CadastroTurboProduto() {
   const [precosRegionais, setPrecosRegionais] = useState(null);
   const [loadingPrecos, setLoadingPrecos] = useState(false);
   const [mensagemApi, setMensagemApi] = useState('');
+  const [fonteApi, setFonteApi] = useState('');
   
   const inputRef = useRef(null);
   const nomeRef = useRef(null);
@@ -141,6 +142,10 @@ export default function CadastroTurboProduto() {
       
       // Auto-focus if generic
       const isGeneric = response.data.is_generic === true;
+      const fonteResposta = response.data.fonte || '';
+      setFonteApi(fonteResposta);
+      setMensagemApi(response.data.mensagem || '');
+
       if (response.data.produto_existente) {
         toast.info('⚠️ Produto já cadastrado!');
         setProdutoExistente(true);
@@ -150,6 +155,8 @@ export default function CadastroTurboProduto() {
         setProdutoExistente(false);
         if (isGeneric) {
           toast.warning('📝 EAN não encontrado. Preencha os dados.');
+        } else if (fonteResposta === 'GEMINI_IA') {
+          toast.info('🤖 Produto identificado via IA — confira os dados antes de salvar.');
         } else {
           toast.success('✅ Produto encontrado!');
         }
@@ -728,6 +735,15 @@ export default function CadastroTurboProduto() {
                       <strong>EAN não encontrado nas bases de dados</strong><br />
                       Preencha o nome abaixo para cadastrar o produto manualmente.
                       Após salvar, ele ficará disponível no sistema.
+                    </Alert>
+                  )}
+
+                  {/* Alerta quando dados vieram do Gemini IA */}
+                  {!isProdutoGenerico && fonteApi === 'GEMINI_IA' && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      <strong>🤖 Dados identificados por Inteligência Artificial</strong><br />
+                      Nome, marca e categoria foram preenchidos automaticamente via IA.
+                      Confira as informações antes de salvar.
                     </Alert>
                   )}
                 </Box>

@@ -153,7 +153,7 @@ class PrecosRegionaisService:
             )
 
             response = client.models.generate_content(
-                model='models/gemini-2.5-flash-lite',
+                model='models/gemini-2.5-flash',
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     tools=[types.Tool(google_search=types.GoogleSearch())],

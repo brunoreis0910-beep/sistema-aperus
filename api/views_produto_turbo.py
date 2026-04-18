@@ -39,7 +39,7 @@ def _buscar_imagem_produto_ia(nome_produto, ean=''):
         )
 
         response = client.models.generate_content(
-            model='gemini-2.5-flash-lite',
+            model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())],
@@ -351,8 +351,9 @@ def salvar_produto_turbo(request):
         else:
             logger.warning(f"[TURBO] NCM '{ncm_raw}' com formato inválido ignorado.")
 
-    # Garante classificacao padrão se não informada
-    if not dados.get('classificacao'):
+    # Garante classificacao padrão se não informada ou se for dict (objeto da IA, não fiscal)
+    classificacao_val = dados.get('classificacao')
+    if not classificacao_val or isinstance(classificacao_val, dict):
         dados['classificacao'] = '00'  # Padrão: Mercadoria para Revenda
     
     # IMPORTANTE: Verifica se é UPDATE ou CREATE

@@ -39,7 +39,7 @@ class AIService:
     def __init__(self):
         """Inicializa o serviço de IA"""
         self.client = None
-        self.model_name = 'gemini-2.5-flash-preview-04-17'  # Modelo mais recente disponível
+        self.model_name = 'models/gemini-2.5-flash'  # Modelo mais recente disponível
         if GEMINI_AVAILABLE:
             # A chave da API agora é gerenciada centralmente
             api_key = settings.GEMINI_API_KEY
@@ -59,10 +59,10 @@ class AIService:
     
     # Modelos em ordem de preferência para fallback
     MODELOS_FALLBACK = [
-        'gemini-2.5-flash-preview-04-17',
-        'gemini-2.5-pro-preview-03-25',
-        'gemini-2.0-flash-lite',
-        'gemini-1.5-flash',
+        'models/gemini-2.5-flash',
+        'models/gemini-2.5-pro',
+        'models/gemini-2.0-flash',
+        'models/gemini-2.0-flash-lite',
     ]
 
     def _chamar_gemini_com_retry(self, prompt: str, max_tentativas: int = 3, delay_inicial: float = 2.0, config: dict = None) -> str:

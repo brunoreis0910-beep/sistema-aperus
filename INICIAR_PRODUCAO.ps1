@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 #  INICIAR_PRODUCAO.ps1  -  Iniciar o Sistema APERUS em Produção
 #  Executa: frontend build, collectstatic, migrate e Django server
 # ============================================================

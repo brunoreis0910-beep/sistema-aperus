@@ -531,10 +531,19 @@ const AIChat = () => {
       );
       setAnaliseIA(response.data);
     } catch (err) {
-      console.error('Erro ao buscar análise de negócio:', err);
+      const status = err.response?.status;
+      const mensagemServidor = err.response?.data?.mensagem;
+      let mensagem;
+      if (status === 503) {
+        mensagem = mensagemServidor || 'O serviço do Gemini está sobrecarregado. Tente novamente em 1-2 minutos.';
+      } else if (status === 401 || status === 403) {
+        mensagem = 'Sessão expirada. Faça login novamente.';
+      } else {
+        mensagem = mensagemServidor || 'Falha ao conectar com a IA.';
+      }
       setAnaliseIA({
         sucesso: false,
-        mensagem: err.response?.data?.mensagem || 'Falha ao conectar com a IA.',
+        mensagem,
       });
     } finally {
       setCarregandoAnalise(false);

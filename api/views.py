@@ -938,7 +938,7 @@ def consultar_placa(request, placa):
                     f'Se não encontrar dados reais, retorne {{"erro": "nao_encontrado"}}.'
                 )
                 response = gemini_client.models.generate_content(
-                    model='models/gemini-2.5-flash-lite',
+                    model='models/gemini-2.5-flash',
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         tools=[types.Tool(google_search=types.GoogleSearch())],

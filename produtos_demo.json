@@ -1,0 +1,32 @@
+{
+  "produtos": [
+    {
+      "ean": "7898938890076",
+      "nome": "ENERGÉTICO ZERO AÇÚCAR MONSTER LATA 473ML",
+      "marca": "Monster Energy / Coca-Cola",
+      "categoria": "Bebidas > Energéticos",
+      "ncm": "22029900",
+      "peso": 0.473,
+      "unidade": "UN",
+      "preco_sugerido": 12.99,
+      "imagem": "https://via.placeholder.com/300x300.png/1B1B1B/00D632?text=Monster+Zero",
+      "departamento": "Bebidas",
+      "grupo_id": null,
+      "grupo_nome": "Energéticos"
+    },
+    {
+      "ean": "7898938890083",
+      "nome": "ENERGÉTICO MONSTER LATA 473ML",
+      "marca": "Monster Energy / Coca-Cola",
+      "categoria": "Bebidas > Energéticos",
+      "ncm": "22029900",
+      "peso": 0.473,
+      "unidade": "UN",
+      "preco_sugerido": 12.99,
+      "imagem": "https://via.placeholder.com/300x300.png/1B5E20/FFFFFF?text=Monster+473ml",
+      "departamento": "Bebidas",
+      "grupo_id": null,
+      "grupo_nome": "Energéticos"
+    }
+  ]
+}
