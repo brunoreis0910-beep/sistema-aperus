@@ -128,19 +128,65 @@ Write-Host "  [OK] SERVIDOR ATUALIZADO COM SUCESSO!" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host ""
 
-# Verificar configuração da GEMINI_API_KEY
+# Verificar configurações do .env
 if (Test-Path ".env") {
     $envContent = Get-Content ".env" -Raw -ErrorAction SilentlyContinue
+    $avisos = @()
+
+    if ($envContent -notmatch "COSMOS_API_KEY\s*=\s*\S+") {
+        $avisos += "COSMOS_API_KEY nao configurada! (busca de produto por EAN nao funcionara)"
+    }
     if ($envContent -notmatch "GEMINI_API_KEY\s*=\s*\S+") {
-        Write-Host "  [AVISO] GEMINI_API_KEY nao configurada!" -ForegroundColor Yellow
-        Write-Host "  A classificacao IA nao funcionara sem ela." -ForegroundColor Yellow
+        $avisos += "GEMINI_API_KEY nao configurada! (classificacao IA nao funcionara)"
+    }
+
+    if ($avisos.Count -gt 0) {
         Write-Host ""
-        Write-Host "  Execute: .\CONFIGURAR_GEMINI.ps1" -ForegroundColor Cyan
+        Write-Host "  ============================================" -ForegroundColor Yellow
+        Write-Host "  [AVISO] Chaves de API nao configuradas:" -ForegroundColor Yellow
+        foreach ($aviso in $avisos) {
+            Write-Host "    - $aviso" -ForegroundColor Yellow
+        }
         Write-Host ""
+        Write-Host "  Para configurar, edite o arquivo .env e adicione:" -ForegroundColor Cyan
+        Write-Host "    COSMOS_API_KEY=QZxWcGM5bCOM8CZC4AF0YQ" -ForegroundColor White
+        Write-Host "    GEMINI_API_KEY=SUA_CHAVE_GEMINI_AQUI" -ForegroundColor White
+        Write-Host "  ============================================" -ForegroundColor Yellow
+        Write-Host ""
+
+        # Oferecer configuração automática do COSMOS_API_KEY se não estiver no .env
+        if ($envContent -notmatch "COSMOS_API_KEY\s*=\s*\S+") {
+            $resposta = Read-Host "  Deseja configurar COSMOS_API_KEY agora? (S/N)"
+            if ($resposta -match "^[Ss]") {
+                $chave = Read-Host "  Digite a chave Cosmos (Enter para usar a padrão)"
+                if ([string]::IsNullOrWhiteSpace($chave)) {
+                    $chave = "QZxWcGM5bCOM8CZC4AF0YQ"
+                }
+                # Adiciona ou atualiza no .env
+                if ($envContent -match "COSMOS_API_KEY") {
+                    $envContent = $envContent -replace "COSMOS_API_KEY\s*=.*", "COSMOS_API_KEY=$chave"
+                } else {
+                    $envContent += "`nCOSMOS_API_KEY=$chave`n"
+                }
+                Set-Content -Path ".env" -Value $envContent -Encoding UTF8
+                Write-Host "  COSMOS_API_KEY configurada!" -ForegroundColor Green
+            }
+        }
     }
 } else {
     Write-Host "  [AVISO] Arquivo .env nao encontrado!" -ForegroundColor Yellow
-    Write-Host "  Execute: .\CONFIGURAR_GEMINI.ps1" -ForegroundColor Cyan
+    Write-Host "  Criando .env basico..." -ForegroundColor Cyan
+    $envBasico = @"
+DEBUG=False
+SECRET_KEY=django-insecure-altere-esta-chave-em-producao-$(Get-Random)
+ALLOWED_HOSTS=localhost,127.0.0.1,*
+DB_ENGINE=django.db.backends.sqlite3
+DB_NAME=db.sqlite3
+COSMOS_API_KEY=QZxWcGM5bCOM8CZC4AF0YQ
+"@
+    Set-Content -Path ".env" -Value $envBasico -Encoding UTF8
+    Write-Host "  .env criado! Configure as chaves adicionais conforme necessario." -ForegroundColor Green
+    Write-Host "  Execute: .\CONFIGURAR_GEMINI.ps1 para configurar a IA." -ForegroundColor Cyan
     Write-Host ""
 }
 
