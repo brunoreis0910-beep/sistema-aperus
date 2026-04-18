@@ -131,7 +131,7 @@ if (Test-Path ".env") {
         if ($resposta -match "^[Ss]") {
             $chave = Read-Host "  Digite a chave Cosmos (Enter para usar a padrão)"
             if ([string]::IsNullOrWhiteSpace($chave)) {
-                $chave = "QZxWcGM5bCOM8CZC4AF0YQ"
+                $chave = "GL6eaojCxtAn2RMAFXFTjA"
             }
             if ($envContent -match "COSMOS_API_KEY") {
                 $envContent = $envContent -replace "COSMOS_API_KEY\s*=.*", "COSMOS_API_KEY=$chave"
@@ -152,7 +152,7 @@ SECRET_KEY=django-insecure-altere-esta-chave-em-producao-$(Get-Random)
 ALLOWED_HOSTS=localhost,127.0.0.1,*
 DB_ENGINE=django.db.backends.sqlite3
 DB_NAME=db.sqlite3
-COSMOS_API_KEY=QZxWcGM5bCOM8CZC4AF0YQ
+COSMOS_API_KEY=GL6eaojCxtAn2RMAFXFTjA
 "@
     Set-Content -Path ".env" -Value $envBasico -Encoding UTF8
     Write-Host "  .env criado com COSMOS_API_KEY configurada!" -ForegroundColor Green
