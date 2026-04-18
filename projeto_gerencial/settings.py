@@ -173,31 +173,34 @@ SIMPLE_JWT = {
 # SEGURANÇA: Em produção, especifique origens permitidas no .env
 # Em desenvolvimento, permite todas as origens
 
-# Permite todas as origens em modo DEBUG (desenvolvimento)
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # True em desenvolvimento
-CORS_ORIGIN_ALLOW_ALL = DEBUG  # Fallback para versões antigas do django-cors-headers
+# 🔥 TEMPORÁRIO: Permite TODAS as origens para depuração do APK
+# TODO: Remover após confirmar que o app funciona
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ORIGIN_ALLOW_ALL = True
 
 # Configuração via .env (sobrescreve em produção)
 CORS_ALLOWED_ORIGINS_STR = config('CORS_ALLOWED_ORIGINS', default='')
 
-if CORS_ALLOWED_ORIGINS_STR and not DEBUG:
-    # Em produção, usa apenas as origens especificadas no .env
-    CORS_ALLOW_ALL_ORIGINS = False
-    CORS_ORIGIN_ALLOW_ALL = False
-    CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_STR.split(',')
-else:
-    # Desenvolvimento: Permite TUDO explicitamente + lista específica como backup
-    CORS_ALLOW_ALL_ORIGINS = True
-    CORS_ORIGIN_ALLOW_ALL = True
-    # Lista explícita de origens permitidas (backup)
-    CORS_ALLOWED_ORIGINS = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ]
+# Lista explícita de origens permitidas (backup + app mobile)
+CORS_ALLOWED_ORIGINS = [
+    # Web browser (desenvolvimento)
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    
+    # Capacitor app (Android/iOS)
+    "https://localhost",  # ← Capacitor serve via HTTPS localhost
+    "http://localhost",   # ← Fallback HTTP
+    "capacitor://localhost",  # ← Capacitor custom scheme
+    "ionic://localhost",      # ← Ionic custom scheme
+    
+    # Domínio de produção
+    "https://sistema.aperus.com.br",
+    "http://sistema.aperus.com.br",
+]
 
 # Permite envio de cookies e credenciais
 CORS_ALLOW_CREDENTIALS = True

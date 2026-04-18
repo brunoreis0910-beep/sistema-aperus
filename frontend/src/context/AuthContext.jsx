@@ -125,8 +125,9 @@ export const AuthProvider = ({ children }) => {
       }
 
       const response = await axios.post(`${API_BASE_URL}/api/token/refresh/`, {
-        refresh: refreshTokenValue
-      });
+        refresh: refreshTokenValue      }, {
+        baseURL: '', // Força usar a URL completa sem baseURL
+        timeout: 40000      });
 
       sessionStorage.setItem('accessToken', response.data.access);
       localStorage.setItem('accessToken', response.data.access);
@@ -174,6 +175,9 @@ export const AuthProvider = ({ children }) => {
       const response = await axios.post(`${API_BASE_URL}/api/token/`, {
         username,
         password
+      }, {
+        baseURL: '', // Força usar a URL completa sem baseURL
+        timeout: 40000
       });
 
       logger.success('LOGIN TOKEN RECEBIDO', {

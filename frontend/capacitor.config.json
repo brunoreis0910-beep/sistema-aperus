@@ -1,0 +1,17 @@
+{
+  "appId": "com.petshop.gerencial",
+  "appName": "APERUS",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": true,
+    "useLegacyBridge": false
+  },
+  "server": {
+    "cleartext": true,
+    "androidScheme": "https",
+    "allowNavigation": [
+      "https://sistema.aperus.com.br",
+      "sistema.aperus.com.br"
+    ]
+  }
+}

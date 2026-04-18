@@ -57,7 +57,21 @@ const detectarIPDisponivel = async () => {
 };
 
 const getApiUrl = () => {
-  // PRIORIDADE 0: Se a página está em HTTPS no domínio público, usa a mesma origem
+  // ⚡ PRIORIDADE MÁXIMA: Variável de ambiente (produção/build)
+  // Esta DEVE ser verificada PRIMEIRO, antes de qualquer outra lógica
+  if (import.meta.env.VITE_API_URL) {
+    console.log('🔧 [PRIORIDADE 1] Usando VITE_API_URL:', import.meta.env.VITE_API_URL);
+    return import.meta.env.VITE_API_URL.replace('/api', '');
+  }
+
+  // PRIORIDADE 2: IP configurado manualmente pelo usuário (ConfiguracaoIP)
+  const ipManual = localStorage.getItem('servidor_ip');
+  if (ipManual) {
+    console.log('🔧 [PRIORIDADE 2] Usando IP manual:', ipManual);
+    return `http://${ipManual}:${SERVIDOR_PORTA}`;
+  }
+
+  // PRIORIDADE 3: Se a página está em HTTPS no domínio público, usa a mesma origem
   // para evitar Mixed Content (nginx deve ter proxy_pass /api/ → localhost:8005)
   const pageProtocol = window.location.protocol;
   const pageHostname = window.location.hostname;
@@ -66,34 +80,21 @@ const getApiUrl = () => {
     pageHostname !== 'localhost' &&
     pageHostname !== '127.0.0.1'
   ) {
-    console.log('🔒 HTTPS detectado - usando origem da página para evitar Mixed Content:', window.location.origin);
+    console.log('🔒 [PRIORIDADE 3] HTTPS detectado - usando origem da página:', window.location.origin);
     return window.location.origin;
   }
 
-  // PRIORIDADE 1: IP configurado manualmente pelo usuário (ConfiguracaoIP)
-  const ipManual = localStorage.getItem('servidor_ip');
-  if (ipManual) {
-    console.log('🔧 Usando IP manual:', ipManual);
-    return `http://${ipManual}:${SERVIDOR_PORTA}`;
-  }
-
-  // PRIORIDADE 2: Se estiver no Capacitor (app nativo) → usar IP fixo do servidor
+  // PRIORIDADE 4: Se estiver no Capacitor (app nativo) → usar IP fixo do servidor
   if (isCapacitorApp()) {
     // Verifica cache de IP auto-detectado primeiro
     const ipAutoCache = localStorage.getItem('servidor_ip_auto');
     if (ipAutoCache) {
-      console.log('📱 Capacitor - Usando IP auto-detectado (cache):', ipAutoCache);
+      console.log('📱 [PRIORIDADE 4] Capacitor - Usando IP auto-detectado (cache):', ipAutoCache);
       return `http://${ipAutoCache}:${SERVIDOR_PORTA}`;
     }
     const defaultIP = `http://${SERVIDOR_IP}:${SERVIDOR_PORTA}`;
-    console.log('📱 Capacitor detectado - Usando IP do servidor:', defaultIP);
+    console.log('📱 [PRIORIDADE 4] Capacitor detectado - Usando IP do servidor:', defaultIP);
     return defaultIP;
-  }
-
-  // PRIORIDADE 3: Variável de ambiente (desenvolvimento local no navegador)
-  if (import.meta.env.VITE_API_URL) {
-    console.log('🔧 Usando VITE_API_URL:', import.meta.env.VITE_API_URL);
-    return import.meta.env.VITE_API_URL.replace('/api', '');
   }
 
   // PRIORIDADE 4: Auto-detectar pelo hostname (navegador acessando pelo IP)

@@ -2184,14 +2184,33 @@ function CompraPage() {
                                       </Tooltip>
 
                                       {/* Botão 2: Cadastro Turbo (Automático) */}
-                                      <Tooltip title="Cadastro Turbo ⚡ (Busca Automática)">
+                                      <Tooltip title="Cadastro Turbo ⚡ (Busca Automática + Dados do XML)">
                                         <IconButton
                                           onClick={() => {
                                             const eanDoItem = item._ean || '';
                                             
                                             if (eanDoItem) {
-                                              // Com EAN: salvar no sessionStorage para busca automática
+                                              // 🔥 NOVO: Preparar TODOS os dados do XML para o Cadastro Turbo
+                                              const dadosXML = {
+                                                ean: eanDoItem,
+                                                nome: item._descricao || '',
+                                                ncm: item._ncm || '',
+                                                unidade: item._unidade || 'UN',
+                                                valor_unitario: item.valor_unitario || 0,
+                                                cfop: item._cfop || '',
+                                                cst: item._cst || '',
+                                                csosn: item._csosn || '',
+                                                vbc_icms: item._vbc_icms || '',
+                                                picms: item._picms || '',
+                                                vicms: item._vicms || '',
+                                                vipi: item._vipi || '',
+                                                vpis: item._vpis || '',
+                                                vcofins: item._vcofins || ''
+                                              };
+                                              
+                                              // Salvar dados completos do XML no sessionStorage
                                               sessionStorage.setItem('cadastro_turbo_ean_auto', eanDoItem);
+                                              sessionStorage.setItem('cadastro_turbo_dados_xml', JSON.stringify(dadosXML));
                                               sessionStorage.setItem('cadastro_turbo_origem', 'compra_form');
                                               sessionStorage.setItem('cadastro_turbo_item_index', index.toString());
                                               sessionStorage.setItem('cadastro_turbo_voltando', 'true');
@@ -2201,7 +2220,7 @@ function CompraPage() {
                                               sessionStorage.setItem('compra_form_backup', JSON.stringify(form));
                                               sessionStorage.setItem('compra_mostrar_formulario_backup', mostrarFormulario ? 'true' : 'false');
                                               
-                                              toast.info('⚡ Buscando produto automaticamente pelo EAN...', {
+                                              toast.info('⚡ Carregando dados do XML no Cadastro Turbo...', {
                                                 autoClose: 2500
                                               });
                                               

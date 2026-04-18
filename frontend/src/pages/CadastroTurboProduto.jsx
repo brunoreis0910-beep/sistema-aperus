@@ -39,21 +39,35 @@ export default function CadastroTurboProduto() {
     
     // 🌟 BUSCA AUTOMÁTICA: Detectar EAN vindo de importação de XML
     const eanAuto = sessionStorage.getItem('cadastro_turbo_ean_auto');
+    const dadosXMLStr = sessionStorage.getItem('cadastro_turbo_dados_xml');
+    
     if (eanAuto) {
       console.log('🎯 EAN automático detectado:', eanAuto);
+      
+      // 🔥 NOVO: Verificar se há dados completos do XML
+      let dadosXML = null;
+      if (dadosXMLStr) {
+        try {
+          dadosXML = JSON.parse(dadosXMLStr);
+          console.log('📄 Dados do XML recebidos:', dadosXML);
+        } catch (e) {
+          console.error('Erro ao parsear dados XML:', e);
+        }
+      }
       
       // Definir o EAN e fazer busca automática
       setEan(eanAuto);
       
       // Fazer busca após um pequeno delay para garantir que o estado foi atualizado
       setTimeout(() => {
-        buscarProdutoPorEan(eanAuto);
+        buscarProdutoPorEan(eanAuto, dadosXML);
       }, 100);
       
       // Limpar sessionStorage após usar
       sessionStorage.removeItem('cadastro_turbo_ean_auto');
+      sessionStorage.removeItem('cadastro_turbo_dados_xml');
       
-      toast.info('🔍 Buscando produto automaticamente...', {
+      toast.info(dadosXML ? '📦 Carregando dados do XML...' : '🔍 Buscando produto automaticamente...', {
         autoClose: 2000
       });
     } else {
@@ -106,7 +120,7 @@ export default function CadastroTurboProduto() {
     }
   };
 
-  const buscarProdutoPorEan = async (eanParam = null) => {
+  const buscarProdutoPorEan = async (eanParam = null, dadosXML = null) => {
     // Usa o EAN passado como parâmetro ou o do estado
     const eanBusca = eanParam || ean;
     
@@ -136,15 +150,46 @@ export default function CadastroTurboProduto() {
       
       const dados = response.data.dados || {};
       
-      // Se nome genérico, limpa para o user digitar
-      if (isGeneric) {
+      // 🔥 NOVO: Se há dados do XML e o produto não foi encontrado (genérico), mesclar dados do XML
+      if (dadosXML && isGeneric) {
+        console.log('📦 Mesclando dados do XML com resposta da API...');
+        
+        // Preencher com dados do XML (prioridade para dados reais)
+        dados.nome_produto = dadosXML.nome || dados.nome_produto || '';
+        dados.ncm = dadosXML.ncm || dados.ncm || '';
+        dados.unidade_medida = dadosXML.unidade || dados.unidade_medida || 'UN';
+        dados.preco_custo = parseFloat(dadosXML.valor_unitario || dados.preco_custo || 0);
+        
+        // Dados tributários do XML
+        dados.cfop = dadosXML.cfop || dados.cfop || '';
+        dados.cst_icms = dadosXML.cst || dados.cst_icms || '';
+        dados.csosn = dadosXML.csosn || dados.csosn || '';
+        dados.aliquota_icms = dadosXML.picms || dados.aliquota_icms || '';
+        dados.base_icms = dadosXML.vbc_icms || dados.base_icms || '';
+        dados.valor_icms = dadosXML.vicms || dados.valor_icms || '';
+        dados.valor_ipi = dadosXML.vipi || dados.valor_ipi || '';
+        dados.valor_pis = dadosXML.vpis || dados.valor_pis || '';
+        dados.valor_cofins = dadosXML.vcofins || dados.valor_cofins || '';
+        
+        // Calcular margem e preço de venda sugerido (50% de margem sobre custo)
+        if (dados.preco_custo > 0 && !dados.preco_venda) {
+          dados.preco_venda = parseFloat((dados.preco_custo * 1.5).toFixed(2));
+        }
+        
+        toast.success('📄 Dados do XML carregados com sucesso!', {
+          autoClose: 3000
+        });
+      }
+      
+      // Se nome genérico E NÃO TEM DADOS DO XML, limpa para o user digitar
+      if (isGeneric && !dadosXML) {
         dados.nome_produto = '';
         dados.marca = '';
       }
 
       // Libera a tela imediatamente com os dados do produto
       setDadosProduto(dados);
-      if (isGeneric) {
+      if (isGeneric && !dadosXML) {
         setTimeout(() => nomeRef.current?.focus(), 100);
       }
 

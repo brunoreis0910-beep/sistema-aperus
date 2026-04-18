@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">APERUS</string>
+    <string name="title_activity_main">APERUS</string>
+    <string name="package_name">com.petshop.gerencial</string>
+    <string name="custom_url_scheme">com.petshop.gerencial</string>
+</resources>

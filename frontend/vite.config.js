@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: './', // CRÍTICO: Paths relativos para funcionar no Capacitor
   plugins: [
     react()
     // PWA REMOVIDO COMPLETAMENTE PARA EVITAR CACHE
