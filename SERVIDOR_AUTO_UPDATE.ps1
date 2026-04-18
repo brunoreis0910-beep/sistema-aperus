@@ -175,6 +175,23 @@ try {
         Write-Log "   Dependências OK." "Green"
     }
 
+    # Build do frontend
+    if (Test-Path "frontend\package.json") {
+        if (Get-Command npm -ErrorAction SilentlyContinue) {
+            Write-Log "⚡ Executando build do frontend..." "Cyan"
+            Push-Location "frontend"
+            npm run build --silent 2>&1 | Out-Null
+            Pop-Location
+            if ($LASTEXITCODE -eq 0) {
+                Write-Log "   Build do frontend concluído." "Green"
+            } else {
+                Write-Log "   ⚠️  Aviso no build do frontend." "Yellow"
+            }
+        } else {
+            Write-Log "⚠️  npm não encontrado, pulando build do frontend." "Yellow"
+        }
+    }
+
     # Migrações
     if (Test-Path ".venv") {
         Write-Log "🗄️  Rodando migrações..." "Cyan"

@@ -133,6 +133,27 @@ function Run-Migrations {
     }
 }
 
+# ── Função: build do frontend ────────────────────────────────
+function Run-FrontendBuild {
+    if (-not (Test-Path "frontend\package.json")) { return }
+
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        Write-Host "  ⚠️  npm não encontrado. Pulando build do frontend." -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host ""
+    Write-Host "⚡ Executando build do frontend..." -ForegroundColor Cyan
+    Push-Location "frontend"
+    npm run build 2>&1
+    Pop-Location
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  ✅ Build do frontend concluído." -ForegroundColor Green
+    } else {
+        Write-Host "  ⚠️  Aviso no build do frontend (verifique manualmente)." -ForegroundColor Yellow
+    }
+}
+
 # ── Função: collectstatic ─────────────────────────────────────
 function Run-CollectStatic {
     if (-not (Test-Path ".venv")) { return }
@@ -164,6 +185,7 @@ switch ($opcao) {
             exit 1
         }
         Update-PythonDeps
+        Run-FrontendBuild
         Run-Migrations
         Run-CollectStatic
 
