@@ -20,6 +20,9 @@ else:
 # Agora carregado do arquivo .env
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-CHANGE-THIS-IN-PRODUCTION')
 
+# Chave da API do Google Gemini para IA
+GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
+
 # --- CORREÇÃO DO DEBUG ---
 # DEBUG agora é configurável via .env (True para desenvolvimento, False para produção)
 DEBUG = config('DEBUG', default=True, cast=bool)

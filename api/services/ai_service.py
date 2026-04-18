@@ -37,14 +37,15 @@ class AIService:
     def __init__(self):
         """Inicializa o serviço de IA"""
         self.client = None
-        self.model_name = 'models/gemini-2.5-flash-lite'  # Modelo ultra-rápido para classificação
+        self.model_name = 'gemini-2.0-flash'  # Modelo rápido para classificação
         if GEMINI_AVAILABLE:
-            api_key = config('GEMINI_API_KEY', default=None)
+            # A chave da API agora é gerenciada centralmente
+            api_key = settings.GEMINI_API_KEY
             if api_key:
                 self.client = genai.Client(api_key=api_key)
-                logger.info("Google Gemini configurado com sucesso")
+                logger.info("Google Gemini configurado com sucesso via settings")
             else:
-                logger.warning("GEMINI_API_KEY não configurada no .env")
+                logger.warning("GEMINI_API_KEY não configurada nas settings do Django")
     
     def is_available(self) -> bool:
         """Verifica se o serviço está disponível"""
@@ -52,9 +53,10 @@ class AIService:
     
     # Modelos em ordem de preferência para fallback
     MODELOS_FALLBACK = [
-        'models/gemini-2.5-flash-lite',
-        'models/gemini-2.5-flash',
-        'models/gemini-2.0-flash-lite',
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-lite',
+        'gemini-2.5-flash-preview-04-17',
+        'gemini-2.5-pro-preview-03-25',
     ]
 
     def _chamar_gemini_com_retry(self, prompt: str, max_tentativas: int = 3, delay_inicial: float = 2.0, config: dict = None) -> str:
@@ -71,20 +73,22 @@ class AIService:
                 try:
                     logger.info(f"Chamando Gemini modelo={modelo_atual} (tentativa {tentativa}/{max_tentativas})...")
                     
-                    call_params = {
-                        'model': modelo_atual,
-                        'contents': prompt
-                    }
-                    if config:
-                        call_params['config'] = config
+                    response = self.client.models.generate_content(
+                        model=modelo_atual,
+                        contents=prompt,
+                    )
                     
-                    response = self.client.models.generate_content(**call_params)
                     logger.info(f"Gemini respondeu com sucesso (modelo={modelo_atual}, tentativa {tentativa})")
                     return response.text
                     
                 except Exception as e:
                     erro_str = str(e)
                     
+                    # NOVO: Tratamento específico para API Key Expirada/Inválida
+                    if 'API key expired' in erro_str or 'API_KEY_INVALID' in erro_str:
+                        logger.error(f"A chave da API do Gemini expirou ou é inválida. {erro_str}")
+                        raise Exception(f"400 INVALID_ARGUMENT. {erro_str}")
+
                     # Erro 429 RESOURCE_EXHAUSTED (quota excedida)
                     if '429' in erro_str or 'RESOURCE_EXHAUSTED' in erro_str:
                         # Extrair tempo de retry sugerido pela API
@@ -127,6 +131,14 @@ class AIService:
                             time.sleep(delay)
                             continue
                         else:
+                            # Retries esgotados para este modelo; tenta o próximo se disponível
+                            if modelo_idx < len(modelos_para_tentar) - 1:
+                                proximo_modelo = modelos_para_tentar[modelo_idx + 1]
+                                logger.warning(
+                                    f"Gemini 503 após {max_tentativas} tentativas em {modelo_atual}. "
+                                    f"Tentando modelo alternativo: {proximo_modelo}"
+                                )
+                                break  # Sai do loop de tentativas, vai para próximo modelo
                             logger.error(f"Gemini ainda sobrecarregado após {max_tentativas} tentativas.")
                             raise Exception(
                                 "O serviço do Google Gemini está temporariamente sobrecarregado. "
