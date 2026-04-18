@@ -304,11 +304,22 @@ def salvar_produto_turbo(request):
     # Extrai dados da API para salvar separadamente
     fonte_api = dados.pop('fonte_api', 'COSMOS')
     imagem_url_externa = dados.pop('imagem_url_externa', None)
-    
+    imagem_job_id = dados.pop('imagem_job_id', None)
+
     # IMPORTANTE: Copia imagem_url_externa para o campo imagem_url do produto, se não houver
     if imagem_url_externa and not dados.get('imagem_url'):
         dados['imagem_url'] = imagem_url_externa
         print(f"[TURBO] Copiando imagem_url_externa para imagem_url: {imagem_url_externa[:50]}...")
+
+    # Se ainda sem imagem, verifica se o polling em background já encontrou uma
+    if not dados.get('imagem_url') and imagem_job_id:
+        from django.core.cache import cache
+        cached_img = cache.get(f'imagem_job_{imagem_job_id}')
+        if cached_img:
+            dados['imagem_url'] = cached_img
+            if not imagem_url_externa:
+                imagem_url_externa = cached_img
+            print(f"[TURBO] Imagem recuperada do cache do job: {cached_img[:50]}...")
 
     if dados.get('imagem_url'):
         print(f"[TURBO] Salvando produto com imagem: {dados['imagem_url'][:50]}...")

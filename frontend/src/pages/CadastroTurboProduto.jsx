@@ -195,6 +195,12 @@ export default function CadastroTurboProduto() {
         dados.marca = '';
       }
 
+      // ===== POLLING DE IMAGEM (se backend retornou job_id) — armazena no state =====
+      const jobId = response.data.imagem_job_id;
+      if (jobId) {
+        dados.imagem_job_id = jobId;  // Enviado ao backend no save para checar cache
+      }
+
       // Libera a tela imediatamente com os dados do produto
       setDadosProduto(dados);
       if (isGeneric && !dadosXML) {
@@ -242,8 +248,7 @@ export default function CadastroTurboProduto() {
       buscarPrecosBackground();
       classificarBackground();
 
-      // ===== POLLING DE IMAGEM (se backend retornou job_id) =====
-      const jobId = response.data.imagem_job_id;
+      // ===== POLLING DE IMAGEM em background (atualiza state quando pronto) =====
       if (jobId && !dados.imagem_url_externa) {
         const MAX_TENTATIVAS = 8;
         let tentativa = 0;
