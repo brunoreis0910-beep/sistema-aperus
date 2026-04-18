@@ -570,10 +570,11 @@ export default function CadastroTurboProduto() {
 
   // Auto-trigger search when EAN has sufficient length (bar code readers usually are fast)
   useEffect(() => {
-    if (ean.length >= 8 && !loading) {
+    if (ean.length >= 8) {
        // Debounce para evitar múltiplas buscas enquanto digita/bipe
+       // Não bloqueia por 'loading' - se o usuário escaneou um novo EAN, busca imediatamente após debounce
        const timer = setTimeout(() => {
-           buscarProdutoPorEan();
+           buscarProdutoPorEan(ean);
        }, 500); 
        return () => clearTimeout(timer);
     }
