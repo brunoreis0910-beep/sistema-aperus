@@ -223,7 +223,9 @@ export default function CadastroTurboProduto() {
       };
 
       const classificarBackground = () => {
-        if (dados.nome_produto && (!dados.id_grupo || !dados.ncm || !dados.classificacao)) {
+        // 🔥 Se veio do XML, SEMPRE classifica para preencher grupo e categoria
+        // Se não veio do XML, só classifica se estiver faltando dados
+        if (dados.nome_produto && (dadosXML || !dados.id_grupo || !dados.ncm || !dados.classificacao)) {
           autoClassificarComIA(dados.nome_produto);
         }
       };
