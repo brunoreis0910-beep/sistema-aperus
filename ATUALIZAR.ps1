@@ -8,10 +8,29 @@
 $Host.UI.RawUI.WindowTitle = "APERUS - ATUALIZAR SERVIDOR"
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ErrorActionPreference = "Continue"
 Clear-Host
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
+
+# Funcao para mostrar erro e pausar
+function Mostrar-Erro {
+    param([string]$Mensagem, [string]$Detalhe = "")
+    Write-Host ""
+    Write-Host "============================================================" -ForegroundColor Red
+    Write-Host "  [ERRO] $Mensagem" -ForegroundColor Red
+    Write-Host "============================================================" -ForegroundColor Red
+    if ($Detalhe) {
+        Write-Host ""
+        Write-Host "Detalhes:" -ForegroundColor Yellow
+        Write-Host $Detalhe -ForegroundColor White
+    }
+    Write-Host ""
+    Write-Host "Pressione qualquer tecla para sair..." -ForegroundColor Yellow
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    exit 1
+}
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
@@ -24,27 +43,30 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     $env:PATH += ";C:\Program Files\Git\cmd;C:\Program Files\Git\bin"
 }
 
+# Verificar se Git esta instalado
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Mostrar-Erro "Git nao encontrado!" "Instale o Git primeiro: winget install Git.Git --silent"
+}
+
 # Verificar se e repositorio Git
 if (-not (Test-Path ".git")) {
-    Write-Host "[ERRO] Nao e um repositorio Git." -ForegroundColor Red
-    Write-Host ""
-    Read-Host "Pressione ENTER para sair"
-    exit 1
+    Mostrar-Erro "Nao e um repositorio Git!" "Execute 'git init' primeiro ou veja INSTALACAO_SERVIDOR.md"
 }
 
 # Parar Django
 Write-Host "[>>] Parando servidor Django..." -ForegroundColor Yellow
-$pythonProcs = Get-Process -Name python, python3 -ErrorAction SilentlyContinue
-if ($pythonProcs) {
-    $pythonProcs | Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
-    Write-Host "     Processos Python encerrados." -ForegroundColor Green
-} else {
-    Write-Host "     Nenhum processo Python em execucao." -ForegroundColor DarkGray
+
+$fetchOutput = git fetch origin 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) {
+    Mostrar-Erro "Falha ao conectar no GitHub!" $fetchOutput
 }
 
-# Salvar alteracoes locais
-Write-Host ""
+$pullOutput = git pull origin main 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) {
+    $pullOutput = git pull origin master 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        Mostrar-Erro "Falha ao baixar atualizacao!" $pullOutput
+    } ""
 Write-Host "[>>] Verificando alteracoes locais..." -ForegroundColor Cyan
 $statusOutput = git status --porcelain
 if ($statusOutput) {
@@ -73,46 +95,57 @@ Write-Host ""
 Write-Host "     Ultimo commit:" -ForegroundColor DarkGray
 git log --oneline -1
 
-# Atualizar dependencias Python
-if (Test-Path ".venv") {
+# Atualizar dependen\Scripts\python.exe") {
     Write-Host ""
     Write-Host "[>>] Atualizando dependencias Python..." -ForegroundColor Cyan
-    & ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt --quiet 2>&1 | Out-Null
+    $pipOutput = & ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt --quiet 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0) {
         Write-Host "     Dependencias atualizadas." -ForegroundColor Green
+    } else {
+        Write-Host "     Aviso: Erro ao atualizar dependencias." -ForegroundColor Yellow
+        Write-Host "     $pipOutput" -ForegroundColor DarkGray
     }
+} else {
+    Write-Host ""
+    Write-Host "[AVISO] Python virtualenv nao encontrado." -ForegroundColor Yellow
 }
 
 # Rodar migracoes
-if (Test-Path ".venv") {
+if (Test-Path ".venv\Scripts\python.exe") {
     Write-Host ""
     Write-Host "[>>] Aplicando migracoes do banco de dados..." -ForegroundColor Cyan
-    & ".\.venv\Scripts\python.exe" manage.py migrate --run-syncdb 2>&1 | Out-Null
+    $migrateOutput = & ".\.venv\Scripts\python.exe" manage.py migrate --run-syncdb 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0) {
         Write-Host "     Migracoes aplicadas." -ForegroundColor Green
+    } else {
+        Write-Host "     Aviso: Erro nas migracoes." -ForegroundColor Yellow
+        Write-Host "     $($migrateOutput -split "`n" | Select-Object -Last 5 | Out-String)" -ForegroundColor DarkGray
     }
 }
 
 # Build do frontend
-if (Test-Path "frontend") {
+if (Test-Path "frontend\package.json") {
     Write-Host ""
     Write-Host "[>>] Fazendo build do frontend..." -ForegroundColor Cyan
     Push-Location frontend
-    npm run build --silent 2>&1 | Out-Null
+    $buildOutput = npm run build --silent 2>&1 | Out-String
+    Pop-Location
     if ($LASTEXITCODE -eq 0) {
         Write-Host "     Build concluido." -ForegroundColor Green
     } else {
         Write-Host "     Aviso: Build do frontend falhou (pode nao ser critico)." -ForegroundColor Yellow
     }
-    Pop-Location
 }
 
 # Collectstatic
-if (Test-Path ".venv") {
+if (Test-Path ".venv\Scripts\python.exe") {
     Write-Host ""
     Write-Host "[>>] Coletando arquivos estaticos..." -ForegroundColor Cyan
-    & ".\.venv\Scripts\python.exe" manage.py collectstatic --noinput --clear -v 0 2>&1 | Out-Null
+    $collectOutput = & ".\.venv\Scripts\python.exe" manage.py collectstatic --noinput --clear -v 0 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0) {
+        Write-Host "     Arquivos estaticos coletados." -ForegroundColor Green
+    } else {
+        Write-Host "     Aviso: Erro ao coletar estaticos." -ForegroundColor Yellow
         Write-Host "     Arquivos estaticos coletados." -ForegroundColor Green
     }
 }
@@ -127,8 +160,8 @@ $djangoCmd = ".\.venv\Scripts\python.exe manage.py runserver 0.0.0.0:8005 --nore
 try {
     Start-Process powershell -ArgumentList "-NonInteractive -WindowStyle Minimized -Command `"cd '$scriptDir'; $djangoCmd`"" -WindowStyle Minimized
     Write-Host "     Django iniciado na porta 8005." -ForegroundColor Green
-} catch {
-    Write-Host "     Aviso: Nao foi possivel iniciar Django automaticamente." -ForegroundColor Yellow
+Write-Host "Pressione qualquer tecla para sair..." -ForegroundColor DarkGray
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")ossivel iniciar Django automaticamente." -ForegroundColor Yellow
     Write-Host "     Execute manualmente: python manage.py runserver 0.0.0.0:8005" -ForegroundColor Yellow
 }
 

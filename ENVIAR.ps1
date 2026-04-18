@@ -6,10 +6,29 @@
 $Host.UI.RawUI.WindowTitle = "APERUS - ENVIAR ALTERACOES"
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ErrorActionPreference = "Continue"
 Clear-Host
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
+
+# Funcao para mostrar erro e pausar
+function Mostrar-Erro {
+    param([string]$Mensagem, [string]$Detalhe = "")
+    Write-Host ""
+    Write-Host "============================================================" -ForegroundColor Red
+    Write-Host "  [ERRO] $Mensagem" -ForegroundColor Red
+    Write-Host "============================================================" -ForegroundColor Red
+    if ($Detalhe) {
+        Write-Host ""
+        Write-Host "Detalhes:" -ForegroundColor Yellow
+        Write-Host $Detalhe -ForegroundColor White
+    }
+    Write-Host ""
+    Write-Host "Pressione qualquer tecla para sair..." -ForegroundColor Yellow
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    exit 1
+}
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
@@ -22,12 +41,14 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     $env:PATH += ";C:\Program Files\Git\cmd;C:\Program Files\Git\bin"
 }
 
+# Verificar se Git esta instalado
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Mostrar-Erro "Git nao encontrado!" "Instale o Git primeiro: winget install Git.Git --silent"
+}
+
 # Verificar se e repositorio Git
 if (-not (Test-Path ".git")) {
-    Write-Host "[ERRO] Nao e um repositorio Git." -ForegroundColor Red
-    Write-Host ""
-    Read-Host "Pressione ENTER para sair"
-    exit 1
+    Mostrar-Erro "Nao e um repositorio Git!" "Execute 'git init' primeiro"
 }
 
 # Verificar se ha alteracoes
@@ -38,7 +59,8 @@ if (-not $statusOutput) {
     Write-Host "Ultimo commit:" -ForegroundColor DarkGray
     git log --oneline -1
     Write-Host ""
-    Read-Host "Pressione ENTER para sair"
+    Write-Host "Pressione qualquer tecla para sair..." -ForegroundColor DarkGray
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     exit 0
 }
 
@@ -58,10 +80,9 @@ Write-Host "[>>] Criando commit: $mensagem" -ForegroundColor Cyan
 git commit -m $mensagem | Out-Null
 
 # Sincronizar antes de enviar
-Write-Host "[>>] Sincronizando com GitHub..." -ForegroundColor Cyan
-git fetch origin --quiet 2>&1 | Out-Null
+$fetchOutput = git fetch origin 2>&1 | Out-String
 
-$commitLocal  = git rev-parse HEAD
+$commitLocal  = git rev-parse HEAD 2>&1
 $commitRemoto = git rev-parse origin/main 2>$null
 if (-not $commitRemoto) {
     $commitRemoto = git rev-parse origin/master 2>$null
@@ -69,34 +90,22 @@ if (-not $commitRemoto) {
 
 if ($commitLocal -ne $commitRemoto) {
     Write-Host "     Fazendo pull..." -ForegroundColor Yellow
-    git pull origin main --rebase --quiet 2>&1 | Out-Null
+    $pullOutput = git pull origin main --rebase 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) {
-        git pull origin master --rebase --quiet 2>&1 | Out-Null
+        $pullOutput = git pull origin master --rebase 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            Mostrar-Erro "Falha ao sincronizar!" $pullOutput
+        }
     }
 }
 
 # Enviar
 Write-Host "[>>] Enviando para GitHub..." -ForegroundColor Cyan
-git push origin main 2>&1 | Out-Null
+$pushOutput = git push origin main 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0) {
-    git push origin master 2>&1 | Out-Null
+    $pushOutput = git push origin master 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        Mostrar-Erro "Falha ao enviar!" $pushOutput
+    }
 }
-
-if ($LASTEXITCODE -eq 0) {
-    Write-Host ""
-    Write-Host "============================================================" -ForegroundColor Green
-    Write-Host "  [OK] ENVIADO COM SUCESSO!" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "  Commit: " -NoNewline -ForegroundColor DarkGray
-    git log --oneline -1
-    Write-Host ""
-    Write-Host "  O servidor recebera a atualizacao em ate 5 minutos" -ForegroundColor White
-    Write-Host "  (se o auto-update estiver configurado)" -ForegroundColor DarkGray
-    Write-Host "============================================================" -ForegroundColor Green
-} else {
-    Write-Host ""
-    Write-Host "[ERRO] Falha ao enviar! Verifique sua conexao." -ForegroundColor Red
-}
-
-Write-Host ""
 Read-Host "Pressione ENTER para sair"
