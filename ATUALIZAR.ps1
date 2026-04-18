@@ -123,15 +123,25 @@ Write-Host "[>>] Verificando configuracoes do .env..." -ForegroundColor Cyan
 if (Test-Path ".env") {
     $envContent = Get-Content ".env" -Raw -ErrorAction SilentlyContinue
 
+    $tokenAtual = "GL6eaojCxtAn2RMAFXFTjA"
+    $tokenAntigo = "QZxWcGM5bCOM8CZC4AF0YQ"
+
+    # Atualizar token antigo automaticamente
+    if ($envContent -match "COSMOS_API_KEY=.*$tokenAntigo") {
+        Write-Host "  [INFO] Atualizando COSMOS_API_KEY (token desatualizado)..." -ForegroundColor Yellow
+        $envContent = $envContent -replace "COSMOS_API_KEY\s*=.*", "COSMOS_API_KEY=$tokenAtual"
+        Set-Content -Path ".env" -Value $envContent -Encoding UTF8
+        Write-Host "  COSMOS_API_KEY atualizada!" -ForegroundColor Green
+    }
     # Configurar COSMOS_API_KEY se ausente
-    if ($envContent -notmatch "COSMOS_API_KEY\s*=\s*\S+") {
+    elseif ($envContent -notmatch "COSMOS_API_KEY\s*=\s*\S+") {
         Write-Host ""
         Write-Host "  [AVISO] COSMOS_API_KEY nao configurada!" -ForegroundColor Yellow
         $resposta = Read-Host "  Deseja configurar COSMOS_API_KEY agora? (S/N)"
         if ($resposta -match "^[Ss]") {
             $chave = Read-Host "  Digite a chave Cosmos (Enter para usar a padrão)"
             if ([string]::IsNullOrWhiteSpace($chave)) {
-                $chave = "GL6eaojCxtAn2RMAFXFTjA"
+                $chave = $tokenAtual
             }
             if ($envContent -match "COSMOS_API_KEY") {
                 $envContent = $envContent -replace "COSMOS_API_KEY\s*=.*", "COSMOS_API_KEY=$chave"
