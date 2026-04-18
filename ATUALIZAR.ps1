@@ -154,6 +154,29 @@ if (Test-Path ".env") {
     } else {
         Write-Host "      COSMOS_API_KEY OK." -ForegroundColor Green
     }
+
+    # Configurar GEMINI_API_KEY se ausente
+    $envContent = Get-Content ".env" -Raw -ErrorAction SilentlyContinue
+    if ($envContent -notmatch "GEMINI_API_KEY\s*=\s*\S+") {
+        Write-Host ""
+        Write-Host "  [AVISO] GEMINI_API_KEY nao configurada! (IA de classificacao nao funcionara)" -ForegroundColor Yellow
+        Write-Host "  Obtenha sua chave gratuita em: aistudio.google.com" -ForegroundColor Cyan
+        $resposta = Read-Host "  Deseja configurar GEMINI_API_KEY agora? (S/N)"
+        if ($resposta -match "^[Ss]") {
+            $chaveGemini = Read-Host "  Digite a chave Gemini"
+            if (-not [string]::IsNullOrWhiteSpace($chaveGemini)) {
+                if ($envContent -match "GEMINI_API_KEY") {
+                    $envContent = $envContent -replace "GEMINI_API_KEY\s*=.*", "GEMINI_API_KEY=$chaveGemini"
+                } else {
+                    $envContent += "`nGEMINI_API_KEY=$chaveGemini`n"
+                }
+                Set-Content -Path ".env" -Value $envContent -Encoding UTF8
+                Write-Host "  GEMINI_API_KEY configurada!" -ForegroundColor Green
+            }
+        }
+    } else {
+        Write-Host "      GEMINI_API_KEY OK." -ForegroundColor Green
+    }
 } else {
     Write-Host "  [AVISO] Arquivo .env nao encontrado! Criando..." -ForegroundColor Yellow
     $envBasico = @"
