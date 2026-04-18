@@ -155,6 +155,7 @@ export default function CadastroTurboProduto() {
         console.log('📦 Mesclando dados do XML com resposta da API...');
         
         // Preencher com dados do XML (prioridade para dados reais)
+        dados.gtin = dadosXML.gtin || eanBusca || dados.gtin || '';
         dados.nome_produto = dadosXML.nome || dados.nome_produto || '';
         dados.ncm = dadosXML.ncm || dados.ncm || '';
         dados.unidade_medida = dadosXML.unidade || dados.unidade_medida || 'UN';
@@ -827,6 +828,16 @@ export default function CadastroTurboProduto() {
                         value={dadosProduto.peso_unitario || ''}
                         onChange={(e) => atualizarCampo('peso_unitario', e.target.value)}
                         inputProps={{ step: 0.001 }}
+                      />
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        label="GTIN / EAN"
+                        value={dadosProduto.gtin || ''}
+                        onChange={(e) => atualizarCampo('gtin', e.target.value)}
+                        helperText="Código de barras do produto"
                       />
                     </Grid>
 
