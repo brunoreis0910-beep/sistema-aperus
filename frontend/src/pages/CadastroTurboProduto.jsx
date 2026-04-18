@@ -129,8 +129,15 @@ export default function CadastroTurboProduto() {
 
     setLoading(true);
     try {
-      console.log('Fazendo requisição para:', `/api/produtos/cadastro-turbo/?ean=${eanBusca}`);
+      console.log('[GTIN] ===== INICIANDO BUSCA EAN =====');
+      console.log('[GTIN] eanParam:', eanParam, '| ean (estado):', ean, '| eanBusca:', eanBusca);
+      console.log('[GTIN] dadosXML:', dadosXML);
+      console.log('[GTIN] URL:', `/api/produtos/cadastro-turbo/?ean=${eanBusca}`);
       const response = await api.get(`/api/produtos/cadastro-turbo/?ean=${eanBusca}`);
+      console.log('[GTIN] Resposta HTTP status:', response.status);
+      console.log('[GTIN] Resposta completa:', JSON.stringify(response.data));
+      console.log('[GTIN] fonte:', response.data.fonte, '| is_generic:', response.data.is_generic);
+      console.log('[GTIN] dados.gtin:', response.data.dados?.gtin, '| dados.nome_produto:', response.data.dados?.nome_produto);
       
       // Auto-focus if generic
       const isGeneric = response.data.is_generic === true;
@@ -257,11 +264,13 @@ export default function CadastroTurboProduto() {
       }
 
     } catch (error) {
-      console.error('Erro ao buscar:', error);
-      // Não exibe erro toast a cada tecla, apenas loga
-      if (eanBusca.length > 12) {
-         toast.error(error.response?.data?.mensagem || 'Produto não encontrado');
-      }
+      console.error('[GTIN] ===== ERRO NA BUSCA =====');
+      console.error('[GTIN] EAN buscado:', eanBusca);
+      console.error('[GTIN] HTTP status:', error?.response?.status);
+      console.error('[GTIN] Resposta de erro:', JSON.stringify(error?.response?.data));
+      console.error('[GTIN] Mensagem:', error?.message);
+      console.error('[GTIN] Stack:', error?.stack);
+      toast.error(`[GTIN ERRO] ${error?.response?.data?.mensagem || error?.message || 'Erro desconhecido'}`);
       setDadosProduto(null);
     } finally {
       setLoading(false);
@@ -571,9 +580,11 @@ export default function CadastroTurboProduto() {
   // Auto-trigger search when EAN has sufficient length (bar code readers usually are fast)
   useEffect(() => {
     if (ean.length >= 8) {
+       console.log('[GTIN] useEffect disparado - ean:', ean, '| length:', ean.length);
        // Debounce para evitar múltiplas buscas enquanto digita/bipe
        // Não bloqueia por 'loading' - se o usuário escaneou um novo EAN, busca imediatamente após debounce
        const timer = setTimeout(() => {
+           console.log('[GTIN] Debounce concluído - chamando buscarProdutoPorEan com ean:', ean);
            buscarProdutoPorEan(ean);
        }, 500); 
        return () => clearTimeout(timer);
