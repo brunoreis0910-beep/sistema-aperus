@@ -2276,6 +2276,7 @@ function CompraPage() {
                                       }
                                     }}
                                     inputProps={{ min: 0, step: 0.1 }}
+                                    InputProps={{ readOnly: false }}
                                     variant="outlined"
                                     size="small"
                                     placeholder="Ex: 12"
