@@ -1,0 +1,186 @@
+{% extends 'api/base_site.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Gerenciamento de NF-e (Modelo 55)</h2>
+        <div>
+            <a href="/admin/api/venda/{{ venda.id_venda }}/change/" class="btn btn-outline-secondary">Voltar para Venda</a>
+            <span class="badge bg-{{ venda.status_nfe|yesno:'success,warning' }} fs-5">{{ venda.status_nfe }}</span>
+        </div>
+    </div>
+
+    <!-- Resumo da Venda -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Venda #{{ venda.numero_documento|default:venda.id_venda }} - {{ venda.id_cliente.nome_razao_social }}</h5>
+            <p class="card-text">
+                <strong>Data:</strong> {{ venda.data_documento|date:"d/m/Y H:i" }} | 
+                <strong>Valor Total:</strong> R$ {{ venda.valor_total }}
+            </p>
+            {% if venda.chave_nfe %}
+            <div class="alert alert-info py-2">
+                <strong>Chave:</strong> {{ venda.chave_nfe }} <br>
+                <strong>Protocolo:</strong> {{ venda.protocolo_nfe }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <form method="post" id="nfeForm">
+        {% csrf_token %}
+        
+        <ul class="nav nav-tabs" id="nfeTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="dados-tab" data-bs-toggle="tab" data-bs-target="#dados" type="button" role="tab">Dados Gerais</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="transporte-tab" data-bs-toggle="tab" data-bs-target="#transporte" type="button" role="tab">Transporte</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="obs-tab" data-bs-toggle="tab" data-bs-target="#obs" type="button" role="tab">Observações</button>
+            </li>
+        </ul>
+        
+        <div class="tab-content border border-top-0 p-3 mb-3 bg-white" id="nfeTabsContent">
+            <!-- Dados Gerais -->
+            <div class="tab-pane fade show active" id="dados" role="tabpanel">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Natureza da Operação</label>
+                        <input type="text" class="form-control" name="natureza_operacao" value="{{ venda.id_operacao.nome_operacao }}" readonly>
+                        <small class="text-muted">Definido na Operação da Venda</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transporte -->
+            <div class="tab-pane fade" id="transporte" role="tabpanel">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Modalidade do Frete</label>
+                        <select class="form-select" name="tipo_frete">
+                            <option value="0" {% if venda.tipo_frete == 0 %}selected{% endif %}>0 - Por conta do Remetente (CIF)</option>
+                            <option value="1" {% if venda.tipo_frete == 1 %}selected{% endif %}>1 - Por conta do Destinatário (FOB)</option>
+                            <option value="9" {% if venda.tipo_frete == 9 %}selected{% endif %}>9 - Sem Ocorrência de Frete</option>
+                        </select>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label">Transportadora</label>
+                        <select class="form-select" name="transportadora">
+                            <option value="">-- Selecione --</option>
+                            {% for transp in transportadoras %}
+                            <option value="{{ transp.id_cliente }}" {% if venda.transportadora_id == transp.id_cliente %}selected{% endif %}>{{ transp.nome_razao_social }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label">Placa Veículo</label>
+                        <input type="text" class="form-control" name="placa_veiculo" value="{{ venda.placa_veiculo|default:'' }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">UF Veículo</label>
+                        <input type="text" class="form-control" name="uf_veiculo" value="{{ venda.uf_veiculo|default:'' }}" maxlength="2">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">RNTRC</label>
+                        <input type="text" class="form-control" name="rntrc" value="{{ venda.rntrc|default:'' }}">
+                    </div>
+                    
+                    <div class="col-md-12"><hr><h6>Volumes</h6></div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label">Quantidade</label>
+                        <input type="number" class="form-control" name="quantidade_volumes" value="{{ venda.quantidade_volumes }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Espécie</label>
+                        <input type="text" class="form-control" name="especie_volumes" value="{{ venda.especie_volumes|default:'' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Marca</label>
+                        <input type="text" class="form-control" name="marca_volumes" value="{{ venda.marca_volumes|default:'' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Peso Bruto (kg)</label>
+                        <input type="number" step="0.001" class="form-control" name="peso_bruto" value="{{ venda.peso_bruto|stringformat:'.3f' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Peso Líquido (kg)</label>
+                        <input type="number" step="0.001" class="form-control" name="peso_liquido" value="{{ venda.peso_liquido|stringformat:'.3f' }}">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Observações -->
+            <div class="tab-pane fade" id="obs" role="tabpanel">
+                <div class="mb-3">
+                    <label class="form-label">Observações (Contribuinte)</label>
+                    <textarea class="form-control" name="observacao_contribuinte" rows="3">{{ venda.observacao_contribuinte|default:'' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Observações (Fisco)</label>
+                    <textarea class="form-control" name="observacao_fisco" rows="3">{{ venda.observacao_fisco|default:'' }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2 mb-5">
+            <button type="submit" name="action" value="salvar" class="btn btn-primary">Salvar Alterações</button>
+            
+            {% if venda.status_nfe != 'EMITIDA' %}
+            <button type="button" onclick="emitirNfe()" class="btn btn-success">
+                <i class="bi bi-send"></i> Transmitir NF-e
+            </button>
+            {% else %}
+            <a href="{% url 'venda-imprimir-danfe' venda.id_venda %}" target="_blank" class="btn btn-dark">
+                <i class="bi bi-printer"></i> Imprimir DANFE
+            </a>
+            <button type="button" onclick="cancelarNfe()" class="btn btn-danger">
+                Cancelar NF-e
+            </button>
+            <button type="button" onclick="cartaCorrecao()" class="btn btn-warning">
+                Carta de Correção
+            </button>
+            {% endif %}
+            
+            <a href="/api/vendas/{{ venda.id_venda }}/download_xml/" class="btn btn-info text-white" target="_blank">Download XML</a>
+            
+            <button type="button" class="btn btn-secondary">Email/WhatsApp</button>
+        </div>
+    </form>
+</div>
+
+<script>
+function emitirNfe() {
+    if(!confirm('Deseja realmente emitir a NF-e?')) return;
+    
+    // Primeiro salva
+    const form = document.getElementById('nfeForm');
+    const formData = new FormData(form);
+    formData.append('action', 'salvar');
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        body: formData
+    }).then(() => {
+        // Depois emite
+        fetch('/api/vendas/{{ venda.id_venda }}/emitir_nfe/', {
+            method: 'POST',
+            headers: {'X-CSRFToken': '{{ csrf_token }}'}
+        })
+        .then(r => r.json())
+        .then(data => {
+            if(data.sucesso) {
+                alert('NF-e Emitida com Sucesso!');
+                location.reload();
+            } else {
+                alert('Erro: ' + data.mensagem);
+            }
+        });
+    });
+}
+// Implementar outras funcoes similarmente
+</script>
+{% endblock %}

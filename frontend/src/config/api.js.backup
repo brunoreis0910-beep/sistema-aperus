@@ -1,0 +1,115 @@
+﻿// Configuração centralizada da API
+// Detecta automaticamente o IP do servidor (WiFi ou cabo)
+
+// Testa se um IP está acessível
+const testarIP = async (ip) => {
+  try {
+    const response = await fetch(`http://${ip}:8000/api/produtos/`, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(2000), // 2 segundos timeout
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
+// Tenta encontrar o IP correto testando WiFi e Cabo
+const detectarIPDisponivel = async () => {
+  console.log('🔍 Testando IPs disponíveis...');
+
+  // Lista de IPs para testar (WiFi e Cabo)
+  const ipsParaTestar = [
+    '192.168.1.8',  // IP atual WiFi
+    'localhost',    // Localhost
+  ];
+
+  for (const ip of ipsParaTestar) {
+    console.log(`  Testando ${ip}...`);
+    if (await testarIP(ip)) {
+      console.log(`  ✅ ${ip} respondeu!`);
+      // Salva o IP que funcionou
+      localStorage.setItem('servidor_ip_auto', ip);
+      return ip;
+    }
+  }
+
+  console.log('  ❌ Nenhum IP respondeu');
+  return null;
+};
+
+const getApiUrl = () => {
+  // PRIORIDADE 1: IP configurado manualmente pelo usuário
+  const ipManual = localStorage.getItem('servidor_ip');
+  if (ipManual) {
+    console.log('⚙️ Usando IP configurado pelo usuário:', ipManual);
+    return `http://${ipManual}:8000`;
+  }
+
+  // PRIORIDADE 2: IP auto-detectado anteriormente (cache)
+  const ipAutoCache = localStorage.getItem('servidor_ip_auto');
+  if (ipAutoCache) {
+    console.log('📌 Usando IP auto-detectado (cache):', ipAutoCache);
+    return `http://${ipAutoCache}:8000`;
+  }
+
+  // PRIORIDADE 3: Auto-detectar pelo hostname (funciona para WiFi e navegador)
+  const hostname = window.location.hostname;
+  if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    const autoUrl = `http://${hostname}:8000`;
+    console.log('🌐 IP auto-detectado pelo hostname:', autoUrl);
+    return autoUrl;
+  }
+
+  // PRIORIDADE 4: Se estiver rodando no Capacitor (app nativo Android/iOS)
+  if (window.Capacitor) {
+    // Vai tentar detectar na primeira requisição
+    console.log('📱 Capacitor - Vai tentar auto-detectar na primeira requisição');
+    return 'http://192.168.1.8:8000'; // Temporário
+  }
+
+  // PRIORIDADE 5: Variável de ambiente (apenas para desenvolvimento local no PC)
+  if (import.meta.env.VITE_API_URL && hostname === 'localhost') {
+    console.log('🔧 Usando VITE_API_URL (localhost):', import.meta.env.VITE_API_URL);
+    return import.meta.env.VITE_API_URL;
+  }
+
+  // FALLBACK: localhost (apenas quando está acessando de localhost mesmo)
+  console.log('🏠 Usando localhost');
+  return 'http://127.0.0.1:8000';
+};
+
+// FORÇA LIMPEZA DO CACHE DE IP ANTIGO NO CAPACITOR
+if (window.Capacitor) {
+  const ipCached = localStorage.getItem('servidor_ip_auto');
+
+  // Se o IP em cache for o antigo (192.168.1.3 ou 192.168.1.4), limpa
+  if (ipCached && (ipCached.includes('192.168.1.3') || ipCached.includes('192.168.1.4'))) {
+    console.log('🧹 LIMPANDO IP ANTIGO DO CACHE:', ipCached);
+    localStorage.removeItem('servidor_ip_auto');
+    localStorage.removeItem('servidor_ip');
+    console.log('✅ Cache limpo! IP será detectado novamente...');
+  }
+}
+
+// Auto-detecta na inicialização (apenas no Capacitor)
+if (window.Capacitor && !localStorage.getItem('servidor_ip') && !localStorage.getItem('servidor_ip_auto')) {
+  console.log('🚀 Primeira inicialização - detectando IP automaticamente...');
+  detectarIPDisponivel().then(ip => {
+    if (ip) {
+      console.log(`✅ IP detectado: ${ip} - Recarregue o app para usar`);
+      // Força reload para usar o IP detectado
+      setTimeout(() => window.location.reload(), 100);
+    }
+  });
+}
+
+export const API_BASE_URL = getApiUrl();
+export const API_ENDPOINT = `${API_BASE_URL}/api`;
+
+console.log('✅ API_BASE_URL configurada:', API_BASE_URL);
+
+export default {
+  BASE_URL: API_BASE_URL,
+  ENDPOINT: API_ENDPOINT,
+};

@@ -1,0 +1,65 @@
+{% extends 'api/base_site.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Emissão de NF-e (Modelo 55)</h2>
+        <a href="/fiscal/" class="btn btn-outline-secondary">Voltar ao Menu Principal</a>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Selecione uma Venda para Emitir Nota</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped">
+                    <thead>
+                        <tr>
+                            <th># ID</th>
+                            <th>Número Doc</th>
+                            <th>Data</th>
+                            <th>Cliente</th>
+                            <th>Valor</th>
+                            <th>Status NF-e</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for venda in vendas %}
+                        <tr>
+                            <td>{{ venda.id_venda }}</td>
+                            <td>{{ venda.numero_documento|default:venda.id_venda }}</td>
+                            <td>{{ venda.data_documento|date:"d/m/Y H:i" }}</td>
+                            <td>{{ venda.id_cliente.nome_razao_social|default:"Consumidor Final" }}</td>
+                            <td>R$ {{ venda.valor_total }}</td>
+                            <td>
+                                <span class="badge bg-{{ venda.status_nfe|yesno:'success,warning' }}">
+                                    {{ venda.status_nfe|default:"PENDENTE" }}
+                                </span>
+                            </td>
+                            <td>
+                                <a href="{% url 'nfe_painel' venda.id_venda %}" class="btn btn-sm btn-primary">
+                                    <i class="bi bi-gear"></i> Gerenciar NF-e
+                                </a>
+                                {% if venda.chave_nfe %}
+                                <a href="{% url 'venda-imprimir-danfe' venda.id_venda %}" target="_blank" class="btn btn-sm btn-outline-dark" title="Imprimir DANFE">
+                                    <i class="bi bi-printer"></i>
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">Nenhuma venda recente encontrada.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination logic could go here -->
+        </div>
+    </div>
+</div>
+{% endblock %}

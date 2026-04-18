@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Teste Simples Vue</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+<body>
+    <div id="app">
+        <h1>Teste: {{ mensagem }}</h1>
+        
+        <div v-if="dadosVenda">
+            <p>dadosVenda existe!</p>
+            <p v-if="dadosVenda.operacao">Operação: {{ dadosVenda.operacao.nome }}</p>
+            <p v-if="dadosVenda.vendedor">Vendedor: {{ dadosVenda.vendedor.nome }}</p>
+        </div>
+        <div v-else>
+            <p>dadosVenda é NULL</p>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        
+        createApp({
+            data() {
+                return {
+                    mensagem: 'Vue funcionando!',
+                    dadosVenda: {
+                        operacao: {
+                            nome: 'NFCE TESTE'
+                        },
+                        vendedor: {
+                            nome: 'VENDEDOR TESTE'
+                        }
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

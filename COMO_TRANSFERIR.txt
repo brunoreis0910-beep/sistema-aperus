@@ -1,0 +1,181 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║             COMO TRANSFERIR O SISTEMA PARA O SERVIDOR                        ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASSO 1: PREPARAR PARA TRANSFERÊNCIA
+═══════════════════════════════════════════════════════════════════════════════
+
+A pasta SistemaAperus está pronta em:
+  C:\Projetos\SistemaGerencial\SistemaAperus
+
+Tamanho: ~142 MB
+Arquivos: 810
+Pastas: 41
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASSO 2: COPIAR PARA O SERVIDOR
+═══════════════════════════════════════════════════════════════════════════════
+
+OPÇÃO A: Via Pendrive/HD Externo
+────────────────────────────────────────────────────────────────────────────
+
+1. Copie a pasta inteira: SistemaAperus
+
+2. Leve até o servidor
+
+3. Cole em: C:\Sistemas\Aperus\
+   (ou outro local de sua preferência)
+
+
+OPÇÃO B: Via Rede (Compartilhamento)
+────────────────────────────────────────────────────────────────────────────
+
+No PowerShell, execute:
+
+# Configure o IP do servidor
+$ServidorIP = "192.168.1.10"  # ← MUDE AQUI!
+$Usuario = "Administrador"     # ← Usuário do servidor
+
+# Origem e Destino
+$Origem = "C:\Projetos\SistemaGerencial\SistemaAperus"
+$Destino = "\\$ServidorIP\C$\Sistemas\Aperus"
+
+# Criar pasta no servidor
+New-Item -ItemType Directory -Path $Destino -Force
+
+# Copiar pasta inteira (pode demorar alguns minutos)
+Copy-Item -Path $Origem -Destination $Destino -Recurse -Force
+
+Write-Host "Cópia concluída!" -ForegroundColor Green
+
+
+OPÇÃO C: Compactar e Enviar
+────────────────────────────────────────────────────────────────────────────
+
+1. Compacte a pasta SistemaAperus em ZIP
+
+   No PowerShell:
+   Compress-Archive -Path "C:\Projetos\SistemaGerencial\SistemaAperus" -DestinationPath "C:\SistemaAperus.zip"
+
+2. Transfira o arquivo ZIP para o servidor (via rede, OneDrive, etc)
+
+3. No servidor, descompacte em: C:\Sistemas\Aperus\
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASSO 3: NO SERVIDOR - INSTALAÇÃO
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Navegue até a pasta onde copiou o sistema
+
+2. Abra MANUAL_INSTALACAO.txt e siga as instruções
+
+3. OU simplesmente:
+   - Clique 2x em: INSTALAR.bat
+   - Escolha opção [A] - Instalação Completa
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  ARQUIVOS IMPORTANTES NA PASTA
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ MANUAL_INSTALACAO.txt    → Manual completo (LEIA PRIMEIRO!)
+✓ INSTALAR.bat              → Instalador interativo
+✓ INICIAR.bat               → Iniciar o sistema
+✓ README.txt                → Informações gerais
+✓ requirements.txt          → Dependências Python
+✓ .env.example              → Modelo de configuração
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  CONFIGURAÇÃO NO SERVIDOR
+═══════════════════════════════════════════════════════════════════════════════
+
+IMPORTANTE! Antes de iniciar, você DEVE configurar:
+
+1. Banco de Dados PostgreSQL (já está instalado):
+   - Nome do banco
+   - Usuário
+   - Senha
+   - Host/Porta
+
+2. Arquivo .env:
+   - Copie .env.example para .env
+   - Configure as credenciais do banco
+   - Configure SECRET_KEY
+   - Configure ALLOWED_HOSTS
+   - Defina DEBUG=False
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  CHECKLIST - ANTES DE TRANSFERIR
+═══════════════════════════════════════════════════════════════════════════════
+
+[ ] Pasta SistemaAperus completa (142 MB)
+[ ] Todos os arquivos .bat estão presentes
+[ ] MANUAL_INSTALACAO.txt está presente
+[ ] README.txt está presente
+[ ] Pasta api/ está presente
+[ ] Pasta frontend/ está presente
+[ ] requirements.txt está presente
+[ ] .env.example está presente
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  CHECKLIST - NO SERVIDOR
+═══════════════════════════════════════════════════════════════════════════════
+
+[ ] Sistema copiado para C:\Sistemas\Aperus\ (ou outro local)
+[ ] PostgreSQL instalado e rodando
+[ ] Python 3.12 instalado (será instalado pelo INSTALAR.bat se não tiver)
+[ ] Node.js 20 instalado (será instalado pelo INSTALAR.bat se não tiver)
+[ ] Execute INSTALAR.bat opção [A]
+[ ] Configure .env com dados do banco
+[ ] Execute migrações: python manage.py migrate
+[ ] Crie superusuário: python manage.py createsuperuser
+[ ] Teste: INICIAR.bat
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  TEMPO ESTIMADO
+═══════════════════════════════════════════════════════════════════════════════
+
+Transferência:      5-15 minutos (depende da rede/pendrive)
+Instalação:         30-45 minutos (instalação completa)
+Configuração:       10-15 minutos (configurar .env e banco)
+──────────────────────────────────────────────────────────────────────────────
+TOTAL:              45-75 minutos
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PRÓXIMOS PASSOS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. ✓ Sistema está pronto na pasta SistemaAperus
+
+2. → Transfira para o servidor (escolha uma opção acima)
+
+3. → No servidor, abra MANUAL_INSTALACAO.txt
+
+4. → Execute INSTALAR.bat
+
+5. → Configure .env
+
+6. → Execute INICIAR.bat
+
+7. → Acesse: http://servidor:8005/admin/
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ PASTA DE PRODUÇÃO CRIADA COM SUCESSO!
+
+Todos os arquivos necessários estão em:
+C:\Projetos\SistemaGerencial\SistemaAperus
+
+═══════════════════════════════════════════════════════════════════════════════

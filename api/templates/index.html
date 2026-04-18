@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>APERUS</title>
+
+  <!-- PWA Meta Tags -->
+  <meta name="description" content="APERUS - Sistema de Gestão" />
+  <meta name="theme-color" content="#1976d2" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Pet Shop" />
+
+  <!-- Icons -->
+  <link rel="icon" type="image/png" href="/icons/icon-192x192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <script type="module" crossorigin src="/assets/index-Bc11qrvv.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/vendor-Cr2nE3UY.js">
+  <link rel="modulepreload" crossorigin href="/assets/mui-B_M3F7Sa.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-BhvBqYgs.css">
+</head>
+
+<body>
+  <div id="root"></div>
+  <script>
+    (function() {
+      console.log('--- INJECTOR FISCAL ATIVOS v2 ---');
+      
+      function injectBtn() {
+          // --- INJEÇÃO: Painel Fiscal (Menu Lateral) ---
+          if (!document.getElementById('fiscal-menu-custom-btn')) {
+              // Procura generica por elementos contendo "Produtos"
+              const items = Array.from(document.querySelectorAll('span, div, p, a, li'));
+              let foundNode = null;
+              
+              for(let node of items) {
+                 // Relaxar a busca: inclui "Produtos" e tem tamanho razoavel de texto
+                 if(node.textContent && node.textContent.includes('Produtos') && node.textContent.length < 20) {
+                     // Check se é visivel
+                     if(node.offsetParent !== null) {
+                        foundNode = node;
+                        break; // Pega o primeiro visivel
+                     }
+                 }
+              }
+
+              if (foundNode) {
+                  // Subir até encontrar o container clicável (MUI ButtonBase ou LI)
+                  let current = foundNode.parentElement;
+                  let itemContainer = null;
+                  
+                  for(let i=0; i<8; i++) {
+                      if(!current) break;
+                      // Identificadores comuns de botão no Material UI / HTML
+                      if(current.classList.contains('MuiButtonBase-root') || 
+                         current.getAttribute('role') === 'button' ||
+                         current.tagName === 'A' ||
+                         current.tagName === 'LI') {
+                          itemContainer = current;
+                          // Se for um botão dentro de um LI, prefira o LI para clonar a estrutura da lista
+                          if(current.parentElement && current.parentElement.tagName === 'LI') {
+                              itemContainer = current.parentElement;
+                          }
+                          break;
+                      }
+                      current = current.parentElement;
+                  }
+
+                  // Se achou o container, clona e insere
+                  if (itemContainer && itemContainer.parentElement) {
+                      try {
+                        const clone = itemContainer.cloneNode(true);
+                        clone.id = 'fiscal-menu-custom-btn';
+                        
+                        // Substituir textos recursivamente
+                        const replaceText = (elem) => {
+                            if(elem.childNodes) {
+                                elem.childNodes.forEach(child => {
+                                    if(child.nodeType === 3) { // Text Node
+                                        if(child.nodeValue.includes('Produtos')) child.nodeValue = 'Painel Fiscal';
+                                    } else {
+                                        replaceText(child);
+                                    }
+                                });
+                            }
+                        };
+                        replaceText(clone);
+
+                        // Tentar mudar cor do icone
+                        const svgs = clone.getElementsByTagName('svg');
+                        if(svgs.length > 0) {
+                            for(let svg of svgs) {
+                                svg.style.color = '#ed6c02';
+                                svg.style.fill = '#ed6c02';
+                            }
+                        }
+                        
+                        clone.onclick = function(e) {
+                            e.preventDefault(); e.stopPropagation();
+                            window.open('http://localhost:8000/api/fiscal/', '_blank');
+                        };
+                        
+                        // Inserir APÓS o item Produtos
+                        if(itemContainer.nextSibling) {
+                            itemContainer.parentElement.insertBefore(clone, itemContainer.nextSibling);
+                        } else {
+                            itemContainer.parentElement.appendChild(clone);
+                        }
+                        console.log('Botão Menu Fiscal Injetado!');
+                      } catch(e) { console.error('Erro ao injetar menu', e); }
+                  }
+              }
+          }
+
+          // --- INJEÇÃO: Botão na página de Configurações ---
+          if (window.location.href.includes('configuracoes') && !document.getElementById('page-fiscal-btn')) {
+             // Procura pelo subtitulo
+             const elements = Array.from(document.querySelectorAll('h4, h5, h6, span, div'));
+             let anchor = null;
+             
+             for(let el of elements) {
+                 if(el.textContent && el.textContent.includes('Gerencie as informações da sua empresa')) {
+                     anchor = el; break;
+                 }
+             }
+             
+             // Se não achar pelo subtitulo, tenta achar um container principal
+             if(!anchor) {
+                 const main = document.querySelector('main');
+                 if(main) anchor = main.firstElementChild;
+             }
+             
+             if(anchor && anchor.parentElement) {
+                 const container = document.createElement('div');
+                 container.innerHTML = `
+                    <a href="http://localhost:8000/api/fiscal/" target="_blank" id="page-fiscal-btn" style="
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center;
+                        background-color: #ed6c02; 
+                        color: white; 
+                        font-family: inherit;
+                        text-decoration: none;
+                        font-weight: bold; 
+                        padding: 15px; 
+                        border-radius: 8px; 
+                        margin: 20px 0;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                        transition: transform 0.2s;
+                        cursor: pointer;
+                    ">
+                        <span style="margin-right: 10px; font-size: 1.2rem;">📝</span>
+                        ACESSAR NFE / CTE / CERTIFICADO
+                    </a>
+                 `;
+                 
+                 anchor.parentElement.insertBefore(container, anchor.nextSibling);
+                 console.log('Botão Config Injetado!');
+             }
+          }
+      }
+      
+      // Tentar injetar repetidamente (SPA navigation)
+      setInterval(injectBtn, 1000);
+
+      // --- INJETOR DE BOTAO DANFE (V3 - SUPER ROBUSTO) ---
+      function injectDanfeBtn() {
+          try {
+              // Iterar por TODAS as linhas de tabela
+              const rows = Array.from(document.querySelectorAll('tr'));
+              
+              rows.forEach(row => {
+                  // 1. Text Content Check (Case Insensitive)
+                  const rowText = (row.innerText || "").toUpperCase();
+                  if (!rowText.includes('AUTORIZADA')) return;
+
+                  // 2. Prevent Duplicate Injection
+                  if (row.querySelector('.btn-imprimir-danfe-super')) return;
+
+                  // 3. Extract ID
+                  // Try to find "ID: 358" inside the row
+                  let vendaId = null;
+                  const idMatch = rowText.match(/ID:\s*(\d+)/);
+                  if (idMatch) {
+                      vendaId = idMatch[1];
+                  } else {
+                      // Fallback: Look for first cell numbers
+                      const firstCell = row.querySelector('td, th');
+                      if (firstCell) {
+                           const nums = firstCell.textContent.match(/\d+/g);
+                           if(nums && nums.length > 0) vendaId = nums[nums.length - 1]; 
+                      }
+                  }
+
+                  if (vendaId) {
+                      // 4. Find Action Column (Last Cell)
+                      const cells = row.querySelectorAll('td');
+                      if (cells.length === 0) return;
+                      const lastCell = cells[cells.length - 1];
+
+                      // 5. Create Button
+                      const btn = document.createElement('button');
+                      btn.className = 'btn-imprimir-danfe-super';
+                      btn.title = "Imprimir DANFE";
+                      // ROXO (Purple) style
+                      btn.style.cssText = "background: #8e24aa; color: white; border: none; border-radius: 4px; cursor: pointer; padding: 6px 12px; margin-right: 8px; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: all 0.2s; height: 32px;";
+                      btn.innerHTML = '<span style="margin-right:5px; font-size:14px">🖨️</span> DANFE';
+                      
+                      btn.onmouseover = () => { btn.style.background = '#7b1fa2'; btn.style.transform = 'translateY(-1px)'; };
+                      btn.onmouseout = () => { btn.style.background = '#8e24aa'; btn.style.transform = 'translateY(0)'; };
+
+                      // AÇÃO: Abrir endpoint validado em nova aba
+                      btn.onclick = (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.open(`http://localhost:8000/api/vendas/${vendaId}/imprimir_danfe/`, '_blank');
+                      };
+
+                      // 6. Insert at beginning of cell
+                      if (lastCell.firstChild) {
+                          lastCell.insertBefore(btn, lastCell.firstChild);
+                      } else {
+                          lastCell.appendChild(btn);
+                      }
+                  }
+              });
+          } catch(e) { console.error("injectDanfeBtn Error:", e); }
+      }
+      setInterval(injectDanfeBtn, 1000);
+
+    })();
+  </script>
+</body>
+
+</html>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />

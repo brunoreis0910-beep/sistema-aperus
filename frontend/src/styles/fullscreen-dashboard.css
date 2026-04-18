@@ -1,0 +1,129 @@
+/* CSS para Tela Cheia - Específico para Dashboard */
+
+/* Reset global para viewport completo */
+html,
+body {
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Container principal do dashboard */
+.dashboard-container {
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+/* AppBar ocupar largura total */
+.MuiAppBar-root {
+  width: 100vw !important;
+  left: 0 !important;
+  right: 0 !important;
+  position: static !important;
+}
+
+/* Container MUI forçar largura total */
+.MuiContainer-root {
+  max-width: none !important;
+  width: 100vw !important;
+  margin: 0 !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Paper principal ocupar espaço restante */
+.main-paper {
+  flex-grow: 1 !important;
+  width: 100% !important;
+  height: calc(100vh - 64px) !important;
+  /* 100vh menos altura do AppBar */
+  margin: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Área de conteúdo expandir */
+.content-area {
+  flex-grow: 1 !important;
+  width: 100% !important;
+  overflow: auto !important;
+  padding: 16px !important;
+}
+
+/* Tabs ocupar largura total */
+.MuiTabs-root {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* Grid containers largura total */
+.MuiGrid-container {
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+/* Otimizações para telas ultra-wide */
+@media screen and (min-width: 2560px) {
+  .MuiContainer-root {
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+  }
+
+  .content-area {
+    padding: 24px !important;
+  }
+}
+
+@media screen and (min-width: 3440px) {
+  .MuiContainer-root {
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+  }
+
+  .content-area {
+    padding: 32px !important;
+  }
+}
+
+@media screen and (min-width: 5120px) {
+  .MuiContainer-root {
+    padding-left: 48px !important;
+    padding-right: 48px !important;
+  }
+
+  .content-area {
+    padding: 48px !important;
+  }
+}
+
+/* Remover limitações de largura */
+.no-max-width {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+/* Força full viewport */
+.full-viewport {
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}

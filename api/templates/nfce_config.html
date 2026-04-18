@@ -1,0 +1,1116 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuração Fiscal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        body { background-color: #f8f9fa; padding-top: 20px; }
+        .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; }
+        .header { background-color: #1976d2; color: white; padding: 15px; border-radius: 5px 5px 0 0; }
+        .nav-tabs .nav-link.active { font-weight: bold; color: #1976d2; }
+        .nav-tabs .nav-link { color: #555; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <div class="card">
+                    <div class="header">
+                        <h4 class="mb-0">Configuração de Documentos Fiscais</h4>
+                    </div>
+                    <div class="card-body">
+                        {% if message %}
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                             {{ message }}
+                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                        {% endif %}
+                        
+                        <form method="post" id="configForm">
+                            {% csrf_token %}
+                            
+                            <!-- Tabs Navigation -->
+                            <ul class="nav nav-tabs mb-4" id="configTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="empresa-tab" data-bs-toggle="tab" data-bs-target="#empresa" type="button" role="tab" aria-controls="empresa" aria-selected="true">
+                                        🏢 Empresa
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="nfce-tab" data-bs-toggle="tab" data-bs-target="#nfce" type="button" role="tab" aria-controls="nfce" aria-selected="false">
+                                        🧾 NFC-e (Cupom)
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="nfe-tab" data-bs-toggle="tab" data-bs-target="#nfe" type="button" role="tab" aria-controls="nfe" aria-selected="false">
+                                        📄 NF-e (Modelo 55)
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="cte-tab" data-bs-toggle="tab" data-bs-target="#cte" type="button" role="tab" aria-controls="cte" aria-selected="false">
+                                        🚚 CT-e (Conhecimento)
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="nfse-tab" data-bs-toggle="tab" data-bs-target="#nfse" type="button" role="tab" aria-controls="nfse" aria-selected="false">
+                                        🔧 NFS-e (Serviço)
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="sped-tab" data-bs-toggle="tab" data-bs-target="#sped" type="button" role="tab" aria-controls="sped" aria-selected="false">
+                                        📊 SPED Fiscal
+                                    </button>
+                                </li>
+                            </ul>
+
+                            <!-- Tabs Content -->
+                            <div class="tab-content" id="configTabsContent">
+                                
+                                <!-- Tab 1: Empresa & Certificado -->
+                                <div class="tab-pane fade show active" id="empresa" role="tabpanel" aria-labelledby="empresa-tab">
+                                    <h5 class="text-secondary mb-3">Dados Cadastrais</h5>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label fw-bold">Razão Social</label>
+                                            <input type="text" class="form-control" name="nome_razao_social" id="nome_razao_social" value="{{ config.nome_razao_social }}" required>
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label fw-bold">CNPJ/CPF</label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control" name="cpf_cnpj" id="cpf_cnpj" value="{{ config.cpf_cnpj }}" required>
+                                                <button class="btn btn-outline-secondary" type="button" onclick="buscarCnpjEmpresa()" title="Buscar dados do CNPJ">
+                                                    <i class="bi bi-search"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label fw-bold">CPF do Responsável (SPED)</label>
+                                            <input type="text" class="form-control" name="cpf_responsavel" value="{{ config.cpf_responsavel|default:'' }}" placeholder="Apenas números">
+                                        </div>
+                                    </div>
+
+                                    <!-- Novos Campos de Endereço e Detalhes da Empresa -->
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label fw-bold">Nome Fantasia</label>
+                                            <input type="text" class="form-control" name="nome_fantasia" id="nome_fantasia" value="{{ config.nome_fantasia|default:'' }}">
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label fw-bold">Inscrição Estadual</label>
+                                            <input type="text" class="form-control" name="inscricao_estadual" id="inscricao_estadual" value="{{ config.inscricao_estadual|default:'' }}">
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label fw-bold">Inscrição Municipal</label>
+                                            <input type="text" class="form-control" name="inscricao_municipal" id="inscricao_municipal" value="{{ config.inscricao_municipal|default:'' }}">
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-2 mb-3">
+                                            <label class="form-label fw-bold">CEP</label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control" name="cep" id="cep" value="{{ config.cep|default:'' }}">
+                                                <button class="btn btn-outline-secondary" type="button" onclick="buscarCepEmpresa()" title="Buscar CEP">
+                                                    <i class="bi bi-search"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label fw-bold">Endereço (Logradouro)</label>
+                                            <input type="text" class="form-control" name="endereco" id="endereco" value="{{ config.endereco|default:'' }}">
+                                        </div>
+                                        <div class="col-md-1 mb-3">
+                                            <label class="form-label fw-bold">Número</label>
+                                            <input type="text" class="form-control" name="numero" id="numero" value="{{ config.numero|default:'' }}">
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label fw-bold">Bairro</label>
+                                            <input type="text" class="form-control" name="bairro" id="bairro" value="{{ config.bairro|default:'' }}">
+                                        </div>
+                                        <div class="col-md-2 mb-3">
+                                             <label class="form-label fw-bold">Cidade</label>
+                                             <input type="text" class="form-control" name="cidade" id="cidade" value="{{ config.cidade|default:'' }}">
+                                        </div>
+                                        <div class="col-md-1 mb-3" style="display:none;">
+                                             <label class="form-label fw-bold">UF</label>
+                                             <input type="text" class="form-control" name="estado" id="estado" value="{{ config.estado|default:'' }}">
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                         <div class="col-md-2 mb-3">
+                                             <label class="form-label fw-bold">UF</label>
+                                             <select class="form-select" name="estado_select" id="estado_select" onchange="document.getElementById('estado').value=this.value">
+                                                 <option value="">UF</option>
+                                                 <option value="AC" {% if config.estado == 'AC' %}selected{% endif %}>AC</option>
+                                                 <option value="AL" {% if config.estado == 'AL' %}selected{% endif %}>AL</option>
+                                                 <option value="AP" {% if config.estado == 'AP' %}selected{% endif %}>AP</option>
+                                                 <option value="AM" {% if config.estado == 'AM' %}selected{% endif %}>AM</option>
+                                                 <option value="BA" {% if config.estado == 'BA' %}selected{% endif %}>BA</option>
+                                                 <option value="CE" {% if config.estado == 'CE' %}selected{% endif %}>CE</option>
+                                                 <option value="DF" {% if config.estado == 'DF' %}selected{% endif %}>DF</option>
+                                                 <option value="ES" {% if config.estado == 'ES' %}selected{% endif %}>ES</option>
+                                                 <option value="GO" {% if config.estado == 'GO' %}selected{% endif %}>GO</option>
+                                                 <option value="MA" {% if config.estado == 'MA' %}selected{% endif %}>MA</option>
+                                                 <option value="MT" {% if config.estado == 'MT' %}selected{% endif %}>MT</option>
+                                                 <option value="MS" {% if config.estado == 'MS' %}selected{% endif %}>MS</option>
+                                                 <option value="MG" {% if config.estado == 'MG' %}selected{% endif %}>MG</option>
+                                                 <option value="PA" {% if config.estado == 'PA' %}selected{% endif %}>PA</option>
+                                                 <option value="PB" {% if config.estado == 'PB' %}selected{% endif %}>PB</option>
+                                                 <option value="PR" {% if config.estado == 'PR' %}selected{% endif %}>PR</option>
+                                                 <option value="PE" {% if config.estado == 'PE' %}selected{% endif %}>PE</option>
+                                                 <option value="PI" {% if config.estado == 'PI' %}selected{% endif %}>PI</option>
+                                                 <option value="RJ" {% if config.estado == 'RJ' %}selected{% endif %}>RJ</option>
+                                                 <option value="RN" {% if config.estado == 'RN' %}selected{% endif %}>RN</option>
+                                                 <option value="RS" {% if config.estado == 'RS' %}selected{% endif %}>RS</option>
+                                                 <option value="RO" {% if config.estado == 'RO' %}selected{% endif %}>RO</option>
+                                                 <option value="RR" {% if config.estado == 'RR' %}selected{% endif %}>RR</option>
+                                                 <option value="SC" {% if config.estado == 'SC' %}selected{% endif %}>SC</option>
+                                                 <option value="SP" {% if config.estado == 'SP' %}selected{% endif %}>SP</option>
+                                                 <option value="SE" {% if config.estado == 'SE' %}selected{% endif %}>SE</option>
+                                                 <option value="TO" {% if config.estado == 'TO' %}selected{% endif %}>TO</option>
+                                             </select>
+                                         </div>
+                                         <div class="col-md-3 mb-3">
+                                             <label class="form-label fw-bold">Telefone</label>
+                                             <input type="text" class="form-control" name="telefone" id="telefone" value="{{ config.telefone|default:'' }}">
+                                         </div>
+                                         <div class="col-md-4 mb-3">
+                                             <label class="form-label fw-bold">Email</label>
+                                             <input type="email" class="form-control" name="email" id="email" value="{{ config.email|default:'' }}">
+                                         </div>
+                                    </div>
+                                    <!-- Fim Novos Campos -->
+
+                                    <div class="row">
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label fw-bold">Índ. Atividade (SPED)</label>
+                                            <select class="form-select" name="ind_atividade">
+                                                <option value="0" {% if config.ind_atividade == '0' %}selected{% endif %}>0 - Industrial / Equiparado</option>
+                                                <option value="1" {% if config.ind_atividade == '1' %}selected{% endif %}>1 - Outros</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label fw-bold">Perfil SPED</label>
+                                            <select class="form-select" name="ind_perfil">
+                                                <option value="A" {% if config.ind_perfil == 'A' %}selected{% endif %}>Perfil A</option>
+                                                <option value="B" {% if config.ind_perfil == 'B' %}selected{% endif %}>Perfil B</option>
+                                                <option value="C" {% if config.ind_perfil == 'C' %}selected{% endif %}>Perfil C</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label fw-bold">Natureza PJ</label>
+                                            <select class="form-select" name="ind_nat_pj">
+                                                <option value="00" {% if config.ind_nat_pj == '00' %}selected{% endif %}>Não informado</option>
+                                                <option value="01" {% if config.ind_nat_pj == '01' %}selected{% endif %}>1 - Atividade Imobiliária</option>
+                                                <option value="02" {% if config.ind_nat_pj == '02' %}selected{% endif %}>2 - Entidade Sujeita a PIS/PASEP exclusivamente</option>
+                                                <option value="03" {% if config.ind_nat_pj == '03' %}selected{% endif %}>3 - Sociedade Cooperativa</option>
+                                                <option value="04" {% if config.ind_nat_pj == '04' %}selected{% endif %}>4 - Sociedade Empresarial em Geral</option>
+                                                <option value="05" {% if config.ind_nat_pj == '05' %}selected{% endif %}>5 - Outros</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label fw-bold">Nat. Jurídica (Código IBGE)</label>
+                                            <input type="text" class="form-control" name="natureza_juridica" id="natureza_juridica" value="{{ config.natureza_juridica|default:'' }}" placeholder="Ex: 2135">
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label fw-bold">CNAE (Fiscal)</label>
+                                            <input type="text" class="form-control" name="cnae" id="cnae" value="{{ config.cnae|default:'' }}" placeholder="Ex: 4712100">
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label fw-bold">CRT (Código de Regime Tributário)</label>
+                                            <select class="form-select" name="crt">
+                                                <option value="1" {% if config.crt == '1' %}selected{% endif %}>1 - Simples Nacional</option>
+                                                <option value="2" {% if config.crt == '2' %}selected{% endif %}>2 - Simples Nacional - excesso sublimite</option>
+                                                <option value="3" {% if config.crt == '3' %}selected{% endif %}>3 - Regime Normal</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label fw-bold">Suframa</label>
+                                            <input type="text" class="form-control" name="suframa" value="{{ config.suframa|default:'' }}" placeholder="Ex: 01.234.567">
+                                        </div>
+                                    </div>
+
+                                    <div class="card bg-light border-0 mb-3">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                <h6 class="card-title text-muted mb-0">Dados do Contador (SPED - Bloco 0100)</h6>
+                                                <div class="btn-group">
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="buscarCnpjContador()">
+                                                        <i class="bi bi-search"></i> Buscar CNPJ
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="row g-2">
+                                                <div class="col-md-2">
+                                                    <label class="form-label">CNPJ (Escritório)</label>
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="text" class="form-control" name="contador_cnpj" id="contador_cnpj" value="{{ config.contador_cnpj|default:'' }}" placeholder="Apenas números">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Nome / Razão Social</label>
+                                                    <input type="text" class="form-control form-control-sm" name="contador_nome" id="contador_nome" value="{{ config.contador_nome|default:'' }}">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">CPF (Contador)</label>
+                                                    <input type="text" class="form-control form-control-sm" name="contador_cpf" value="{{ config.contador_cpf|default:'' }}" placeholder="Apenas números">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">CRC</label>
+                                                    <input type="text" class="form-control form-control-sm" name="contador_crc" value="{{ config.contador_crc|default:'' }}" placeholder="Ex: SP-123456/O-0">
+                                                </div>
+                                                
+                                                <div class="col-md-2">
+                                                    <label class="form-label">CEP</label>
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="text" class="form-control" name="contador_cep" id="contador_cep" value="{{ config.contador_cep|default:'' }}" onblur="buscarCepContador(this.value)">
+                                                        <button class="btn btn-outline-secondary" type="button" onclick="buscarCepContador(document.getElementById('contador_cep').value)">
+                                                            <i class="bi bi-search"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Endereço</label>
+                                                    <input type="text" class="form-control form-control-sm" name="contador_endereco" id="contador_endereco" value="{{ config.contador_endereco|default:'' }}">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Nº</label>
+                                                    <input type="text" class="form-control form-control-sm" name="contador_numero" id="contador_numero" value="{{ config.contador_numero|default:'' }}">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Compl.</label>
+                                                    <input type="text" class="form-control form-control-sm" name="contador_complemento" id="contador_complemento" value="{{ config.contador_complemento|default:'' }}">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Bairro</label>
+                                                    <input type="text" class="form-control form-control-sm" name="contador_bairro" id="contador_bairro" value="{{ config.contador_bairro|default:'' }}">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Fone</label>
+                                                    <input type="text" class="form-control form-control-sm" name="contador_fone" id="contador_fone" value="{{ config.contador_fone|default:'' }}">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Fax</label>
+                                                    <input type="text" class="form-control form-control-sm" name="contador_fax" value="{{ config.contador_fax|default:'' }}">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Email</label>
+                                                    <input type="email" class="form-control form-control-sm" name="contador_email" id="contador_email" value="{{ config.contador_email|default:'' }}">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Cód. Mun. IBGE</label>
+                                                    <input type="text" class="form-control form-control-sm" name="contador_cod_mun" id="contador_cod_mun" value="{{ config.contador_cod_mun|default:'' }}">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <hr>
+                                    <h5 class="text-secondary mb-3">Certificado Digital (A1/A3)</h5>
+                                    <div class="mb-3">
+                                        <label class="form-label">Arquivo do Certificado (.pfx)</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" name="certificado_digital" id="certInput" 
+                                                   value="{{ config.certificado_digital|default_if_none:'' }}" 
+                                                   placeholder="Caminho do arquivo ou Base64...">
+                                            <button class="btn btn-outline-secondary" type="button" onclick="document.getElementById('fileUpload').click()">
+                                                📂 Localizar
+                                            </button>
+                                        </div>
+                                        <input type="file" id="fileUpload" accept=".pfx" style="display: none;" onchange="handleFileUpload(this)">
+                                        <div class="form-text">Este certificado será usado para ambos os modelos (55 e 65).</div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Senha do Certificado</label>
+                                        <input type="password" class="form-control" name="senha_certificado" value="{{ config.senha_certificado|default_if_none:'' }}">
+                                    </div>
+                                </div>
+
+                                <!-- Tab 2: NFC-e -->
+                                <div class="tab-pane fade" id="nfce" role="tabpanel" aria-labelledby="nfce-tab">
+                                    <h5 class="text-secondary mb-3">Configurações NFC-e (Consumidor)</h5>
+                                    
+                                    <div class="alert alert-info">
+                                        <small>Utilize esta aba para configurar a emissão de cupons fiscais.</small>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label fw-bold">Ambiente de Emissão</label>
+                                            <select class="form-select bg-light" name="ambiente_nfce">
+                                                <option value="2" {% if config.ambiente_nfce == '2' %}selected{% endif %}>🚧 Homologação (Testes)</option>
+                                                <option value="1" {% if config.ambiente_nfce == '1' %}selected{% endif %}>✅ Produção (Validade Jurídica)</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Valor Máx. Sem Identificação (R$)</label>
+                                            <input type="number" step="0.01" class="form-control" name="valor_maximo_nfce" value="{{ config.valor_maximo_nfce|stringformat:'.2f' }}">
+                                        </div>
+                                    </div>
+
+                                    <div class="form-check form-switch mb-3">
+                                        <input class="form-check-input" type="checkbox" id="controle_de_caixa" name="controle_de_caixa" {% if config.controle_de_caixa %}checked{% endif %}>
+                                        <label class="form-check-label fw-bold" for="controle_de_caixa">Ativar Controle de Caixa (Abertura/Fechamento/Sangria/Suprimento)</label>
+                                    </div>
+
+                                    <hr>
+                                    <h6 class="text-secondary">Credenciais CSC (Token de Segurança)</h6>
+                                    <div class="row">
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">ID Token (CSC ID)</label>
+                                            <input type="text" class="form-control" name="csc_token_id" value="{{ config.csc_token_id|default_if_none:'' }}" placeholder="ex: 000001">
+                                            <div class="form-text">Código numérico sequencial.</div>
+                                        </div>
+                                        <div class="col-md-8 mb-3">
+                                            <label class="form-label">Código CSC (Alfanumérico)</label>
+                                            <input type="text" class="form-control" name="csc_token_codigo" value="{{ config.csc_token_codigo|default_if_none:'' }}">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 3: NF-e -->
+                                <div class="tab-pane fade" id="nfe" role="tabpanel" aria-labelledby="nfe-tab">
+                                    <h5 class="text-secondary mb-3">Configurações NF-e (Modelo 55)</h5>
+                                    
+                                    <div class="alert alert-warning">
+                                        <small>Utilize esta aba para configurar a emissão de Notas Fiscais Eletrônicas (Notas Grandes).</small>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-12 mb-3">
+                                            <label class="form-label fw-bold">Ambiente de Emissão</label>
+                                            <select class="form-select" name="ambiente_nfe">
+                                                <option value="2" {% if config.ambiente_nfe == '2' or not config.ambiente_nfe %}selected{% endif %}>🚧 Homologação (Testes) - SEPARADO da NFC-e</option>
+                                                <option value="1" {% if config.ambiente_nfe == '1' %}selected{% endif %}>✅ Produção (Validade Jurídica)</option>
+                                            </select>
+                                            <div class="form-text mt-2">
+                                                Você pode manter a NF-e em Homologação enquanto a NFC-e já está em Produção.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Future NFe specific settings like logo, orientation, etc can go here -->
+                                </div>
+
+                                <!-- Tab 4: CT-e -->
+                                <div class="tab-pane fade" id="cte" role="tabpanel" aria-labelledby="cte-tab">
+                                    <h5 class="text-secondary mb-3">Configurações CT-e (Conhecimento de Transporte)</h5>
+                                    
+                                    <div class="alert alert-primary">
+                                        <small>Utilize esta aba para configurar a emissão de CT-e.</small>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-12 mb-3">
+                                            <label class="form-label fw-bold">Ambiente de Emissão</label>
+                                            <select class="form-select" name="ambiente_cte">
+                                                <option value="2" {% if config.ambiente_cte == '2' or not config.ambiente_cte %}selected{% endif %}>🚧 Homologação (Testes) - SEPARADO</option>
+                                                <option value="1" {% if config.ambiente_cte == '1' %}selected{% endif %}>✅ Produção (Validade Jurídica)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 5: NFS-e (Serviço) -->
+                                <div class="tab-pane fade" id="nfse" role="tabpanel" aria-labelledby="nfse-tab">
+                                    <h5 class="text-secondary mb-3">Configurações NFS-e (Nota de Serviço / DPS)</h5>
+                                    
+                                    <div class="alert alert-info">
+                                        <small>Configure aqui a emissão de Notas Fiscais de Serviço (Padrão Nacional).</small>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-12 mb-3">
+                                            <label class="form-label fw-bold">Ambiente de Emissão</label>
+                                            <select class="form-select" name="ambiente_nfse">
+                                                <option value="2" {% if config.ambiente_nfse == '2' or not config.ambiente_nfse %}selected{% endif %}>🚧 Homologação (Testes)</option>
+                                                <option value="1" {% if config.ambiente_nfse == '1' %}selected{% endif %}>✅ Produção (Validade Jurídica)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">Série da DPS</label>
+                                            <input type="text" class="form-control" name="serie_dps" value="{{ config.serie_dps|default:1 }}" placeholder="Ex: 1">
+                                            <div class="form-text">Normalmente '1'.</div>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">Último Número DPS Emitido</label>
+                                            <input type="number" class="form-control" name="ultimo_numero_dps" value="{{ config.ultimo_numero_dps|default:0 }}">
+                                            <div class="form-text">O sistema usará o Próximo (Ex: Se colocar 9, a próxima será 10).</div>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">Código IBGE Município</label>
+                                            <input type="text" class="form-control" name="codigo_municipio_ibge" value="{{ config.codigo_municipio_ibge|default:'3550308' }}">
+                                            <div class="form-text">Ex: 3550308 (São Paulo)</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 6: SPED Fiscal -->
+                                <div class="tab-pane fade" id="sped" role="tabpanel" aria-labelledby="sped-tab">
+                                    <h5 class="text-secondary mb-3">Geração de SPED Fiscal (EFD ICMS/IPI)</h5>
+                                    
+                                    <div class="alert alert-primary">
+                                        <i class="bi bi-info-circle"></i> O sistema irá incluir todas as Notas Fiscais (NFe/NFCe) emitidas e canceladas, gerando os registros 0000, 0150, 0200, C100, C170, C190, E100 e bloco 9.
+                                    </div>
+
+                                    <div class="card bg-light border-0 mb-3">
+                                        <div class="card-body">
+                                            <div class="row g-3">
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-bold">Versão do Layout</label>
+                                                    <select class="form-select" id="spedVersao">
+                                                        <option value="020" selected>020 (Atual)</option>
+                                                        <option value="019">019</option>
+                                                        <option value="018">018</option>
+                                                    </select>
+                                                    <div class="form-text">Versão do layout SPED conforme Receita Federal</div>
+                                                </div>
+                                                
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold">Blocos a Gerar</label>
+                                                    <div class="row">
+                                                        <div class="col-md-2">
+                                                            <div class="form-check">
+                                                                <input class="form-check-input" type="checkbox" id="blocoC" value="C" checked>
+                                                                <label class="form-check-label" for="blocoC">Bloco C</label>
+                                                                <div class="form-text">Documentos Fiscais</div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-2">
+                                                            <div class="form-check">
+                                                                <input class="form-check-input" type="checkbox" id="blocoD" value="D">
+                                                                <label class="form-check-label" for="blocoD">Bloco D</label>
+                                                                <div class="form-text">Serviços</div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-2">
+                                                            <div class="form-check">
+                                                                <input class="form-check-input" type="checkbox" id="blocoE" value="E" checked>
+                                                                <label class="form-check-label" for="blocoE">Bloco E</label>
+                                                                <div class="form-text">Apuração ICMS/IPI</div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-2">
+                                                            <div class="form-check">
+                                                                <input class="form-check-input" type="checkbox" id="blocoG" value="G">
+                                                                <label class="form-check-label" for="blocoG">Bloco G</label>
+                                                                <div class="form-text">CIAP</div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-2">
+                                                            <div class="form-check">
+                                                                <input class="form-check-input" type="checkbox" id="blocoH" value="H">
+                                                                <label class="form-check-label" for="blocoH">Bloco H</label>
+                                                                <div class="form-text">Inventário</div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-2">
+                                                            <div class="form-check">
+                                                                <input class="form-check-input" type="checkbox" id="blocoK" value="K">
+                                                                <label class="form-check-label" for="blocoK">Bloco K</label>
+                                                                <div class="form-text">Estoque/Produção</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="col-md-8">
+                                                    <label class="form-label fw-bold">Conjunto de Operações</label>
+                                                    {% if config.sped_conjuntos_selecionados %}
+                                                    <div class="alert alert-info alert-sm py-1 px-2 mb-1" style="font-size: 0.85rem;">
+                                                        <i class="bi bi-info-circle"></i> <strong>Atualmente salvos:</strong> {{ config.sped_conjuntos_selecionados }}
+                                                    </div>
+                                                    {% else %}
+                                                    <div class="alert alert-warning alert-sm py-1 px-2 mb-1" style="font-size: 0.85rem;">
+                                                        <i class="bi bi-exclamation-triangle"></i> Nenhum conjunto salvo ainda
+                                                    </div>
+                                                    {% endif %}
+                                                    <div class="card p-2" style="max-height: 200px; overflow-y: auto;">
+                                                        {% for conjunto in conjuntos %}
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" name="sped_conjuntos" value="{{ conjunto.id_conjunto }}" id="conjunto_{{ conjunto.id_conjunto }}" {% if conjunto.id_conjunto in conjuntos_selecionados_ids %}checked{% endif %}>
+                                                            <label class="form-check-label" for="conjunto_{{ conjunto.id_conjunto }}">
+                                                                {{ conjunto.nome_conjunto }}
+                                                            </label>
+                                                        </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                    <div class="form-text">Selecione quais conjuntos de operação incluir no SPED</div>
+                                                </div>
+                                                
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-bold">Código de Receita (ICMS E116) <span class="text-danger">*</span></label>
+                                                    <div class="input-group">
+                                                        <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+                                                        <input type="text" class="form-control" id="codReceita" name="codigo_receita_icms" list="listaCodigosReceita" value="{{ config.codigo_receita_icms|default:'' }}" required placeholder="Ex: 000-1 ou código específico da UF">
+                                                        <datalist id="listaCodigosReceita">
+                                                            <option value="000-1">ICMS Normal</option>
+                                                            <option value="063-2">ICMS Simples Nacional</option>
+                                                            <option value="100-6">ICMS Comunicação</option>
+                                                            <option value="115-4">ICMS Energia Elétrica</option>
+                                                            <option value="133-6">ICMS ST</option>
+                                                            <option value="146-8">ICMS Transporte</option>
+                                                            <option value="313-7">ICMS ST (Goiás)</option>
+                                                            <option value="620-6">ICMS Diferencial de Alíquota</option>
+                                                            <option value="820-9">ICMS Outros</option>
+                                                        </datalist>
+                                                    </div>
+                                                    <div class="form-text"><strong>Obrigatório!</strong> Digite ou selecione o Código da Receita Estadual para ICMS a recolher. Consulte a contabilidade para o código correto da sua UF.</div>
+                                                </div>
+
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold">Diretório de Saída</label>
+                                                    <input type="text" class="form-control" id="spedDiretorio" name="sped_diretorio" placeholder="Ex: C:\\SPED\\2026\\" value="{{ config.sped_diretorio_saida|default:'' }}">
+                                                    <div class="form-text">Caminho completo da pasta onde os arquivos SPED serão salvos</div>
+                                                </div>
+                                                
+                                                <div class="col-md-12">
+                                                    <button type="submit" class="btn btn-primary btn-lg w-100" form="configForm">
+                                                        <i class="bi bi-save"></i> Salvar Configurações SPED
+                                                    </button>
+                                                    <div class="form-text text-center mt-2">
+                                                        <i class="bi bi-info-circle"></i> Salva os conjuntos marcados acima. Para gerar o arquivo, use a página SPED.
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="form-text mt-2 text-center">
+                                                O arquivo gerado deve ser validado no PVA (Programa Validador e Assinador) da Receita Federal.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-4">
+                                        <h6>Registros Gerados:</h6>
+                                        <ul class="list-group list-group-flush text-muted small">
+                                            <li class="list-group-item bg-transparent">Block 0: Abertura, Identificação e Referências</li>
+                                            <li class="list-group-item bg-transparent">Block C: Documentos Fiscais de Mercadorias (ICMS/IPI)</li>
+                                            <li class="list-group-item bg-transparent">Block E: Apuração do ICMS e IPI</li>
+                                            <li class="list-group-item bg-transparent">Block 9: Controle e Encerramento</li>
+                                        </ul>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <hr class="mt-4">
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-success btn-lg">💾 Salvar Alterações</button>
+                            </div>
+                            
+                            <div class="text-center mt-3">
+                                <small class="text-muted">Sistema de Gestão - Versão 2.1</small>
+                            </div>
+                        
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        console.log('TESTE: Script carregado!');
+        
+        // Debug: Informacoes de carregamento da pagina
+        console.log('=== SPED CONFIG - Debug de Carregamento ===');
+        console.log('Conjuntos salvos no banco:', '{{ config.sped_conjuntos_selecionados|default:"(vazio)" }}');
+        console.log('IDs processados:', JSON.stringify({{ conjuntos_selecionados_ids|safe }}));
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOMContentLoaded disparado');
+            const checkboxes = document.querySelectorAll('input[name="sped_conjuntos"]');
+            const marcados = document.querySelectorAll('input[name="sped_conjuntos"]:checked');
+            console.log('Total de conjuntos disponiveis:', checkboxes.length);
+            console.log('Total de conjuntos marcados:', marcados.length);
+            if (marcados.length > 0) {
+                const ids = Array.from(marcados).map(cb => cb.value);
+                console.log('IDs marcados:', ids.join(', '));
+            }
+            
+            // Adicionar listener no formulario
+            const form = document.getElementById('configForm');
+            if (form) {
+                console.log('Formulario encontrado! Adicionando listener...');
+                form.addEventListener('submit', function(e) {
+                    console.log('=== FORMULARIO SENDO SUBMETIDO! ===');
+                    const checkboxesMarcados = document.querySelectorAll('input[name="sped_conjuntos"]:checked');
+                    const ids = Array.from(checkboxesMarcados).map(cb => cb.value);
+                    console.log('Total de conjuntos marcados:', ids.length);
+                    console.log('IDs que serao enviados:', ids.join(', ') || '(nenhum)');
+                });
+            } else {
+                console.error('ERRO: Formulario #configForm nao encontrado!');
+            }
+        });
+        
+        // Função para salvar configurações SPED
+        async function salvarConfigSped() {
+            // const conjuntosSelect = document.getElementById('spedConjuntos');
+            // const conjuntosSelecionados = Array.from(conjuntosSelect.selectedOptions).map(opt => opt.value);
+            const conjuntosSelecionados = Array.from(document.querySelectorAll('input[name="sped_conjuntos"]:checked')).map(cb => cb.value);
+            const diretorio = document.getElementById('spedDiretorio').value;
+            const codReceita = document.getElementById('codReceita').value;
+            
+            // Coleta blocos marcados
+            const blocos = [];
+            if(document.getElementById('blocoC').checked) blocos.push('C');
+            if(document.getElementById('blocoD').checked) blocos.push('D');
+            if(document.getElementById('blocoE').checked) blocos.push('E');
+            if(document.getElementById('blocoG').checked) blocos.push('G');
+            if(document.getElementById('blocoH').checked) blocos.push('H');
+            if(document.getElementById('blocoK').checked) blocos.push('K');
+            
+            console.log('💾 Salvando configuração SPED...');
+            console.log('   Conjuntos:', conjuntosSelecionados);
+            console.log('   Blocos:', blocos);
+            
+            // Helper para CSRF
+            const getCookie = (name) => {
+                let value = "; " + document.cookie;
+                let parts = value.split("; " + name + "=");
+                if (parts.length === 2) return parts.pop().split(";").shift();
+                return '';
+            }
+            
+            try {
+                const response = await fetch('/api/sped/salvar-config/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        conjuntos: conjuntosSelecionados.join(','),
+                        diretorio: diretorio,
+                        codigo_receita_icms: codReceita,
+                        bloco_c: blocos.includes('C'),
+                        bloco_d: blocos.includes('D'),
+                        bloco_e: blocos.includes('E'),
+                        bloco_g: blocos.includes('G'),
+                        bloco_h: blocos.includes('H'),
+                        bloco_k: blocos.includes('K')
+                    })
+                });
+                
+                if (response.ok) {
+                    alert('✅ Configurações SPED salvas com sucesso!');
+                    console.log('✅ Configuração salva');
+                } else {
+                    throw new Error('Erro ao salvar configurações');
+                }
+            } catch (e) {
+                console.error('❌ Erro ao salvar:', e);
+                alert('❌ Erro: ' + e.message);
+            }
+        }
+
+        async function buscarCnpjContador() {
+            let cnpj = document.getElementById('contador_cnpj').value.replace(/\D/g, '');
+            if (cnpj.length !== 14) {
+               // TENTA BUSCAR PELO CEP
+               let cep = document.getElementById('contador_cep').value.replace(/\D/g, '');
+               if(cep.length === 8) {
+                   buscarCepContador(cep);
+                   return;
+               }
+               alert('Por favor, informe o CNPJ (14 digitos) ou o CEP (8 digitos).');
+               return;
+            }
+            
+            try {
+                // CNPJ found
+                const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('contador_nome').value = data.razao_social || data.nome_fantasia;
+                    document.getElementById('contador_fone').value = data.ddd_telefone_1;
+                    document.getElementById('contador_email').value = data.email_1 || data.email;
+                    document.getElementById('contador_cep').value = data.cep;
+                    document.getElementById('contador_numero').value = data.numero;
+                    document.getElementById('contador_complemento').value = data.complemento;
+                    
+                    // Trigger address update
+                    if (data.cep) {
+                        // Limpa caracteres especiais do CEP
+                        const cepClean = String(data.cep).replace(/\D/g, '');
+                        // Chama ViaCEP para garantir IBGE e Endereço formatado e confiável
+                        buscarCepContador(cepClean);
+                    }
+                } else {
+                    alert('CNPJ não encontrado na base de dados pública.');
+                }
+            } catch (error) {
+                console.error(error);
+                alert('Erro ao buscar CNPJ.');
+            }
+        }
+        
+        // --- FUNÇÕES DE BUSCA DE DADOS ---
+
+        async function buscarCepEmpresa() {
+            let cep = document.getElementById('cep').value.replace(/\D/g, '');
+            if (cep.length !== 8) {
+                alert('Por favor, informe um CEP válido (8 dígitos).');
+                return;
+            }
+
+            try {
+                const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cep}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if(document.getElementById('endereco')) document.getElementById('endereco').value = data.street || '';
+                    if(document.getElementById('bairro')) document.getElementById('bairro').value = data.neighborhood || '';
+                    if(document.getElementById('cidade')) document.getElementById('cidade').value = data.city || '';
+                    
+                    if (data.state) {
+                         if(document.getElementById('estado')) document.getElementById('estado').value = data.state;
+                         if(document.getElementById('estado_select')) document.getElementById('estado_select').value = data.state;
+                    }
+                } else {
+                    alert('CEP não encontrado.');
+                }
+            } catch (error) {
+                console.error(error);
+                alert('Erro ao buscar CEP.');
+            }
+        }
+
+        async function buscarCnpjEmpresa() {
+            let cnpj = document.getElementById('cpf_cnpj').value.replace(/\D/g, '');
+            if (cnpj.length !== 14) {
+               alert('Por favor, informe um CNPJ válido (14 dígitos).');
+               return;
+            }
+            
+            const btn = document.querySelector('button[onclick="buscarCnpjEmpresa()"]');
+            const originalIcon = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            btn.disabled = true;
+
+            try {
+                // Tenta BrasilAPI primeiro (v1)
+                let data = null;
+                try {
+                    const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+                    if (response.ok) {
+                        data = await response.json();
+                    } else {
+                        throw new Error('BrasilAPI status ' + response.status);
+                    }
+                } catch (e) {
+                    console.warn("BrasilAPI falhou, tentando ReceitaWS...", e);
+                    // Fallback para ReceitaWS (requer HTTPS ou proxy se frontend for HTTPS)
+                    // ReceitaWS free limita 3 consultas por minuto / IP
+                    // Usando JSONP workaround ou fetch direto se CORS permitir (ReceitaWS permite GET)
+                    const respWs = await fetch(`https://receitaws.com.br/v1/cnpj/${cnpj}`);
+                    if (respWs.ok) {
+                        const dataWs = await respWs.json();
+                        if (dataWs.status === 'ERROR') throw new Error(dataWs.message);
+                        // Normaliza para formato similar
+                        data = {
+                            razao_social: dataWs.nome,
+                            nome_fantasia: dataWs.fantasia,
+                            cnae_fiscal: (dataWs.atividade_principal && dataWs.atividade_principal[0]) ? dataWs.atividade_principal[0].code.replace(/\D/g,'') : '',
+                            codigo_natureza_juridica: dataWs.natureza_juridica.split(' ')[0],
+                            logradouro: dataWs.logradouro,
+                            numero: dataWs.numero,
+                            complemento: dataWs.complemento,
+                            bairro: dataWs.bairro,
+                            municipio: dataWs.municipio,
+                            uf: dataWs.uf,
+                            cep: dataWs.cep,
+                            ddd_telefone_1: dataWs.telefone,
+                            email: dataWs.email,
+                            opcao_pelo_simples: null // ReceitaWS não retorna Simples confiável na free tier as vezes
+                        };
+                    } else {
+                         throw new Error('ReceitaWS indisponível.');
+                    }
+                }
+
+                if (data) {
+                    // Preencher Razão Social
+                    if (data.razao_social) {
+                        document.getElementById('nome_razao_social').value = data.razao_social;
+                    }
+                    
+                    // Preencher Nome Fantasia (se existir campo)
+                    if (document.getElementById('nome_fantasia') && data.nome_fantasia) {
+                        document.getElementById('nome_fantasia').value = data.nome_fantasia;
+                    }
+                    
+                    // Preencher CNAE Principal (Pedido Explicito do Usuário)
+                    if (data.cnae_fiscal) {
+                        // Remove a formatação do CNAE (ex: "4712-1/00" -> "4712100")
+                        const cnaeFormatado = String(data.cnae_fiscal).replace(/\D/g, '');
+                        if(document.getElementById('cnae')) {
+                             document.getElementById('cnae').value = cnaeFormatado;
+                        }
+                    }
+                    
+                    // Preencher Natureza Jurídica
+                    if (data.codigo_natureza_juridica && document.getElementById('natureza_juridica')) {
+                        document.getElementById('natureza_juridica').value = data.codigo_natureza_juridica;
+                    }
+                    
+                    // Preencher Endereço (Se campos existirem)
+                    if (data.cep && document.getElementById('cep')) document.getElementById('cep').value = data.cep.replace(/\D/g,'');
+                    if (data.logradouro && document.getElementById('endereco')) document.getElementById('endereco').value = data.logradouro;
+                    if (data.numero && document.getElementById('numero')) document.getElementById('numero').value = data.numero;
+                    if (data.bairro && document.getElementById('bairro')) document.getElementById('bairro').value = data.bairro;
+                    if (data.municipio && document.getElementById('cidade')) document.getElementById('cidade').value = data.municipio;
+                    if (data.uf) {
+                        if(document.getElementById('estado')) document.getElementById('estado').value = data.uf;
+                        if(document.getElementById('estado_select')) document.getElementById('estado_select').value = data.uf;
+                    } 
+                    if (data.complemento && document.getElementById('complemento')) document.getElementById('complemento').value = data.complemento;
+
+                    // Dados de Contato
+                    if (data.ddd_telefone_1 && document.getElementById('telefone')) document.getElementById('telefone').value = data.ddd_telefone_1;
+                    if (data.email && document.getElementById('email')) document.getElementById('email').value = data.email;
+
+                    // Determinar CRT baseado no porte (apenas se veio da BrasilAPI que tem esse dado confiavel)
+                    if (data.opcao_pelo_simples === true || data.opcao_pelo_simples === 'Sim') {
+                        const crtSelect = document.querySelector('select[name="crt"]');
+                        if (crtSelect) crtSelect.value = '1';
+                    } else if (data.opcao_pelo_simples === false || data.opcao_pelo_simples === 'Não') {
+                        const crtSelect = document.querySelector('select[name="crt"]');
+                        if (crtSelect) crtSelect.value = '3';
+                    }
+                    
+                    alert('✅ Dados encontrados com sucesso!\nRazão Social, CNAE, Endereço e Dados de Contato preenchidos.');
+                } else {
+                    alert('❌ CNPJ não encontrado na base de dados pública.');
+                }
+            } catch (error) {
+                console.error(error);
+                alert('❌ Erro ao buscar CNPJ: ' + error.message);
+            } finally {
+                btn.innerHTML = originalIcon;
+                btn.disabled = false;
+            }
+        }
+        
+        async function buscarCepContador(cepRaw) {
+            const cep = String(cepRaw).replace(/\D/g, '');
+            if (cep.length !== 8) return;
+            
+            try {
+                const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                const data = await response.json();
+                
+                if (data.erro) {
+                    alert('CEP não encontrado!');
+                    return;
+                }
+                
+                document.getElementById('contador_endereco').value = data.logradouro;
+                document.getElementById('contador_bairro').value = data.bairro;
+                document.getElementById('contador_cod_mun').value = data.ibge;
+                document.getElementById('contador_cep').value = data.cep; // Formatado
+                
+            } catch (error) {
+                console.error('Erro ao buscar CEP:', error);
+            }
+        }
+        
+        async function localizarPastaSped() {
+            const versao = document.getElementById('spedVersao').value;
+            // const conjuntosSelect = document.getElementById('spedConjuntos');
+            // const conjuntosSelecionados = Array.from(conjuntosSelect.selectedOptions).map(opt => parseInt(opt.value));
+            const conjuntosSelecionados = Array.from(document.querySelectorAll('input[name="sped_conjuntos"]:checked')).map(cb => parseInt(cb.value));
+            
+            // Coleta blocos marcados
+            const blocos = [];
+            if(document.getElementById('blocoC').checked) blocos.push('C');
+            if(document.getElementById('blocoD').checked) blocos.push('D');
+            if(document.getElementById('blocoE').checked) blocos.push('E');
+            if(document.getElementById('blocoG').checked) blocos.push('G');
+            if(document.getElementById('blocoH').checked) blocos.push('H');
+            if(document.getElementById('blocoK').checked) blocos.push('K');
+            
+            if(conjuntosSelecionados.length === 0) {
+                alert('Por favor, selecione pelo menos um conjunto de operação.');
+                return;
+            }
+            
+            if(blocos.length === 0) {
+                alert('Por favor, selecione pelo menos um bloco para gerar.');
+                return;
+            }
+            
+            const btn = document.querySelector('#sped button');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Gerando SPED...';
+            btn.disabled = true;
+
+            // Helper para CSRF
+            const getCookie = (name) => {
+                let value = "; " + document.cookie;
+                let parts = value.split("; " + name + "=");
+                if (parts.length === 2) return parts.pop().split(";").shift();
+                return '';
+            }
+
+            try {
+                // PRIMEIRO: Salvar a configuração dos conjuntos e blocos selecionados
+                const diretorio = document.getElementById('spedDiretorio').value;
+                const codReceita = document.getElementById('codReceita').value;
+                
+                console.log('💾 Salvando configuração SPED...');
+                console.log('   Conjuntos:', conjuntosSelecionados);
+                console.log('   Blocos:', blocos);
+                console.log('   Diretório:', diretorio);
+                
+                console.log(' ');
+                console.log('📡 Enviando requisição de salvamento...');
+                
+                await fetch('/api/sped/salvar-config/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        conjuntos: conjuntosSelecionados.join(','),
+                        diretorio: diretorio,
+                        codigo_receita_icms: codReceita,
+                        bloco_c: blocos.includes('C'),
+                        bloco_d: blocos.includes('D'),
+                        bloco_e: blocos.includes('E'),
+                        bloco_g: blocos.includes('G'),
+                        bloco_h: blocos.includes('H'),
+                        bloco_k: blocos.includes('K')
+                    })
+                });
+                
+                console.log(' ');
+                console.log('📄 Gerando arquivo SPED...');
+                console.log('   Usando conjuntos:', conjuntosSelecionados);
+                console.log('   Usando blocos:', blocos);
+                
+                // SEGUNDO: Gerar o SPED
+                const response = await fetch('/api/sped/gerar/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        versao: versao,
+                        conjuntos: conjuntosSelecionados,
+                        blocos: blocos,
+                        diretorio: diretorio
+                    })
+                });
+                
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.error || 'Erro ao gerar arquivo SPED');
+                }
+                
+                // Verificar se a resposta é JSON (arquivo salvo no servidor) ou blob (download)
+                const contentType = response.headers.get('Content-Type');
+                
+                if (contentType && contentType.includes('application/json')) {
+                    // Arquivo foi salvo no servidor no diretório configurado
+                    const result = await response.json();
+                    alert(`✅ ${result.message}\n\nArquivo: ${result.filename}\nLocal: ${result.filepath}`);
+                } else {
+                    // Download do arquivo
+                    const blob = await response.blob();
+                    
+                    // Tentar usar File System Access API (Chrome/Edge moderno)
+                    if ('showSaveFilePicker' in window) {
+                        try {
+                            // Extrair nome do arquivo
+                            const disposition = response.headers.get('Content-Disposition');
+                            let filename = `SPED_${versao}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.txt`;
+                            if (disposition && disposition.indexOf('filename=') !== -1) {
+                                const matches = /filename="([^"]*)"/.exec(disposition);
+                                if (matches != null && matches[1]) filename = matches[1];
+                            }
+                            
+                            const handle = await window.showSaveFilePicker({
+                                suggestedName: filename,
+                                types: [{
+                                    description: 'Arquivo SPED',
+                                    accept: {'text/plain': ['.txt']}
+                                }]
+                            });
+                            
+                            const writable = await handle.createWritable();
+                            await writable.write(blob);
+                            await writable.close();
+                            
+                            alert('✅ Arquivo SPED gerado e salvo com sucesso!');
+                        } catch (err) {
+                            if (err.name !== 'AbortError') {
+                                throw err;
+                            }
+                            // Usuário cancelou - não fazer nada
+                        }
+                    } else {
+                        // Fallback: download tradicional
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.style.display = 'none';
+                        a.href = url;
+                        
+                        const disposition = response.headers.get('Content-Disposition');
+                        let filename = `SPED_${versao}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.txt`;
+                        if (disposition && disposition.indexOf('filename=') !== -1) {
+                            const matches = /filename="([^"]*)"/.exec(disposition);
+                            if (matches != null && matches[1]) filename = matches[1];
+                        }
+                        
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        setTimeout(() => {
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                        }, 100);
+                        
+                        alert('✅ Arquivo SPED gerado! Verifique sua pasta de Downloads.');
+                    }
+                }
+                
+            } catch (e) {
+                alert('❌ Erro: ' + e.message);
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+        
+        function handleFileUpload(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                     document.getElementById('certInput').value = e.target.result; 
+                };
+                reader.readAsDataURL(input.files[0]); 
+            }
+        }
+    </script>
+</body>
+</html>

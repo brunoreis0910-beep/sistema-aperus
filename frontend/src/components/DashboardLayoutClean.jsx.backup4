@@ -1,0 +1,645 @@
+import React from 'react';
+import { Outlet, useLocation, Link as RouterLink, useNavigate } from 'react-router-dom';
+import {
+  Box,
+  Container,
+  Typography,
+  AppBar,
+  Toolbar,
+  IconButton,
+  Menu,
+  MenuItem,
+  useTheme,
+  useMediaQuery,
+  Tabs,
+  Tab,
+  Paper,
+  Button,
+  Divider
+} from '@mui/material';
+import {
+  Logout as LogoutIcon,
+  AccountCircle,
+  Dashboard as DashboardIcon,
+  ShoppingCart as VendasIcon,
+  FlashOn as VendaRapidaIcon,
+  People as ClientesIcon,
+  Inventory as ProdutosIcon,
+  LocalShipping as ComprasIcon,
+  AssignmentReturn as DevolucoesIcon,
+  SwapHoriz as TrocasIcon,
+  Business as FornecedoresIcon,
+  AccountBalance as FinanceiroIcon,
+  Lock as AprovacoesIcon,
+  Settings as ConfigIcon,
+  MenuBook as CatalogosIcon,
+  QrCode2 as QrCodeIcon,
+  Description as RelatoriosIcon,
+  BarChart as GraficosIcon,
+  Build as OrdemServicoIcon,
+  TableRestaurant as MesasIcon,
+  AddCircle as AddIcon,
+  Label as EtiquetasIcon,
+  Pets as PetIcon,
+  Tune as AjusteIcon,
+  History as LogIcon,
+  Menu as MenuIcon,
+  Backup as BackupIcon
+} from '@mui/icons-material';
+
+import { useAuth } from '../context/AuthContext';
+import { usePermissions } from '../hooks/usePermissions';
+
+import DashboardErrorBoundary from './DashboardErrorBoundary';
+import QRCodeFloating from './QRCodeFloating';
+import LogoutDialog from './LogoutDialog';
+import MobileMenuDrawer from './MobileMenuDrawer';
+import ShortcutManager from './ShortcutManager';
+
+const DashboardLayoutClean = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const { can } = usePermissions();
+  const theme = useTheme();
+
+  // Detectar tela ultrawide e forçar modo desktop
+  const isUltraWide = window.innerWidth >= 2560;
+  const isMobile = !isUltraWide && useMediaQuery(theme.breakpoints.down('md'));
+
+  const [anchorEl, setAnchorEl] = React.useState(null);
+  const [logoutDialogOpen, setLogoutDialogOpen] = React.useState(false);
+  const [trocasMenuAnchor, setTrocasMenuAnchor] = React.useState(null);
+  const [opcoesMenuAnchor, setOpcoesMenuAnchor] = React.useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [shortcutManagerOpen, setShortcutManagerOpen] = React.useState(false);
+
+  // Define todos os itens de menu com suas permissões (usando nomes do banco de dados)
+  const allMenuItems = [
+    { key: 'home', label: 'Dashboard', icon: <DashboardIcon />, path: '/home', color: '#9C27B0', permission: null }, // Todos têm acesso
+    { key: 'vendas', label: 'Vendas', icon: <VendasIcon />, path: '/vendas', color: '#2196F3', permission: 'vendas_acessar' },
+    { key: 'venda-rapida', label: 'Venda Rápida', icon: <VendaRapidaIcon />, path: '/venda-rapida', color: '#FF9800', permission: 'vendas_criar' },
+    { key: 'ordem-servico', label: 'Ordem Serviço', icon: <OrdemServicoIcon />, path: '/ordem-servico', color: '#00BCD4', permission: 'ordens_acessar' },
+    { key: 'mesas', label: 'Controle de Mesas', icon: <MesasIcon />, path: '/comandas', color: '#E91E63', permission: 'comandas_acessar' },
+    { key: 'clientes', label: 'Clientes', icon: <ClientesIcon />, path: '/clientes', color: '#4CAF50', permission: 'clientes_acessar' },
+    { key: 'produtos', label: 'Produtos', icon: <ProdutosIcon />, path: '/produtos', color: '#F44336', permission: 'produtos_acessar' },
+    { key: 'compras', label: 'Compras', icon: <ComprasIcon />, path: '/compras', color: '#00BCD4', permission: 'compras_acessar' },
+    { key: 'devolucoes', label: 'Devoluções', icon: <DevolucoesIcon />, path: '/devolucoes', color: '#FF5722', permission: 'devolucoes_acessar' },
+    { key: 'trocas', label: 'Trocas', icon: <TrocasIcon />, path: '/trocas', hasSubmenu: true, color: '#FFC107', permission: 'trocas_acessar' },
+    { key: 'catalogos', label: 'Catálogos', icon: <CatalogosIcon />, path: '/catalogos', color: '#795548', permission: 'catalogo_acessar' },
+    { key: 'relatorios', label: 'Relatórios', icon: <RelatoriosIcon />, path: '/relatorios', color: '#607D8B', permission: 'relatorios_acessar' },
+    { key: 'graficos', label: 'Gráficos', icon: <GraficosIcon />, path: '/graficos', color: '#E91E63', permission: 'relatorios_acessar' }, // Usa mesma permissão de relatórios
+    { key: 'fornecedores', label: 'Fornecedores', icon: <FornecedoresIcon />, path: '/fornecedores', color: '#3F51B5', permission: 'produtos_acessar' }, // Usa mesma permissão de produtos
+    { key: 'financeiro', label: 'Financeiro', icon: <FinanceiroIcon />, path: '/financeiro', color: '#4CAF50', permission: 'financeiro_acessar' },
+    { key: 'aprovacoes', label: 'Autorização', icon: <AprovacoesIcon />, path: '/aprovacoes', color: '#F44336', permission: 'config_acessar' },
+    { key: 'acesso-mobile', label: 'Acesso Mobile', icon: <QrCodeIcon />, path: '/acesso-mobile', color: '#00BCD4', permission: null }, // Todos têm acesso
+    { key: 'opcoes', label: '+Opções', icon: <AddIcon />, hasSubmenu: true, color: '#FF5722', permission: null }, // Todos têm acesso
+    { key: 'backup', label: 'Backup', icon: <BackupIcon />, path: '/backup', color: '#FF9800', permission: 'config_acessar' },
+    { key: 'configuracoes', label: 'Config', icon: <ConfigIcon />, path: '/configuracoes', color: '#9E9E9E', permission: 'config_acessar' }
+  ];
+
+  // Filtra itens de menu baseado nas permissões
+  const menuItems = allMenuItems.filter(item => {
+    // Se não tem permissão definida, mostra para todos
+    if (!item.permission) return true;
+    // Usa o hook de permissões
+    const hasPermission = can(item.permission);
+    console.log(`🔐 Menu item "${item.label}": permission="${item.permission}" -> ${hasPermission ? '✅' : '❌'}`);
+    return hasPermission;
+  });
+
+  console.log(`📋 Total de itens no menu: ${menuItems.length} de ${allMenuItems.length}`);
+
+  const handleProfileMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleProfileMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleLogout = () => {
+    handleProfileMenuClose();
+    setLogoutDialogOpen(true);
+  };
+
+  const handleConfirmLogout = () => {
+    setLogoutDialogOpen(false);
+    logout();
+  };
+
+  const handleCancelLogout = () => {
+    setLogoutDialogOpen(false);
+  };
+
+  // Listener global para atalhos de teclado (F1, F2 e Esc)
+  React.useEffect(() => {
+    const handler = (e) => {
+      try {
+        // Ignorar quando o usuário estiver digitando em um input/textarea ou elemento editável
+        const active = document.activeElement;
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
+          return;
+        }
+
+        const key = e.key;
+
+        if (key === 'Escape') {
+          e.preventDefault();
+          navigate(-1);
+          return;
+        }
+
+        // Tratar teclas de função (F1, F2, ...)
+        if (key && key.startsWith('F')) {
+          // ⚠️ NÃO bloquear F12 (DevTools) e F5 (Refresh)
+          if (key === 'F12' || key === 'F5') {
+            return; // Deixa o navegador processar normalmente
+          }
+
+          // Evitar ação padrão do navegador para outras teclas F
+          e.preventDefault();
+
+          const raw = localStorage.getItem('appShortcuts_v1');
+          let map = {};
+          try { map = JSON.parse(raw || '{}'); } catch (err) { map = {}; }
+
+          const path = map[key];
+          if (path) {
+            navigate(path);
+          }
+        }
+      } catch (err) {
+        console.error('Erro no handler de atalho:', err);
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [navigate]);
+
+  // Define a aba atual lendo a URL
+  const getCurrentTab = () => {
+    const path = location.pathname.split('/')[1];
+
+    // Páginas que pertencem ao submenu "+Opções"
+    if (['etiquetas', 'status-ordem-servico'].includes(path)) {
+      return 'opcoes';
+    }
+
+    // Páginas que pertencem ao submenu "Trocas"
+    if (path === 'trocas') {
+      return 'trocas';
+    }
+
+    // Mapeia "comandas" para "mesas" (aba "Controle de Mesas")
+    if (path === 'comandas') {
+      return 'mesas';
+    }
+
+    // Páginas que são abas diretas
+    if (['clientes', 'produtos', 'financeiro', 'vendas', 'venda-rapida', 'ordem-servico', 'mesas', 'compras', 'catalogos', 'devolucoes', 'relatorios', 'graficos', 'fornecedores', 'aprovacoes', 'acesso-mobile', 'configuracoes'].includes(path)) {
+      return path;
+    }
+
+    return 'home';
+  };
+  const currentTab = getCurrentTab();
+
+  return (
+    <Box
+      className="dashboard-container full-viewport"
+      sx={{
+        minHeight: '100vh',
+        width: '100vw',
+        backgroundColor: '#f5f5f5',
+        display: 'flex',
+        flexDirection: 'column',
+        margin: 0,
+        padding: 0
+      }}
+    >
+      {/* App Bar Superior */}
+      <AppBar
+        position="static"
+        sx={{
+          backgroundColor: '#1976d2',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}
+      >
+        <Toolbar>
+          {/* Botão Menu Hambúrguer (Mobile) */}
+          {isMobile && (
+            <IconButton
+              color="inherit"
+              edge="start"
+              onClick={() => setMobileMenuOpen(true)}
+              sx={{ mr: 2 }}
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
+
+          <Typography
+            variant="h6"
+            component="div"
+            sx={{ flexGrow: 1, fontWeight: 'bold' }}
+          >
+            Sistema Gerencial
+            {user && (
+              <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                Bem-vindo, {user?.first_name || user?.username}
+              </Typography>
+            )}
+          </Typography>
+
+          {/* Bot�o de Logout Direto */}
+          <Button
+            color="inherit"
+            startIcon={<LogoutIcon />}
+            onClick={handleLogout}
+            sx={{
+              mr: 2,
+              textTransform: 'none',
+              '&:hover': {
+                backgroundColor: 'rgba(255, 255, 255, 0.1)'
+              }
+            }}
+          >
+            Sair
+          </Button>
+
+          <IconButton
+            size="large"
+            edge="end"
+            aria-label="account of current user"
+            aria-haspopup="true"
+            onClick={handleProfileMenuOpen}
+            color="inherit"
+          >
+            <AccountCircle />
+          </IconButton>
+
+          <Menu
+            anchorEl={anchorEl}
+            anchorOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
+            keepMounted
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
+            open={Boolean(anchorEl)}
+            onClose={handleProfileMenuClose}
+          >
+            <MenuItem disabled>
+              <AccountCircle sx={{ mr: 1 }} />
+              {user?.first_name || user?.username}
+            </MenuItem>
+            <Divider />
+            <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/configuracoes'); }}>
+              <ConfigIcon sx={{ mr: 1 }} />
+              Configura��es
+            </MenuItem>
+            <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/database-test'); }}>
+              <DashboardIcon sx={{ mr: 1 }} />
+              Teste de Banco
+            </MenuItem>
+            <Divider />
+            <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
+              <LogoutIcon sx={{ mr: 1 }} />
+              Sair do Sistema
+            </MenuItem>
+          </Menu>
+        </Toolbar>
+      </AppBar>
+
+      {/* Container Principal */}
+      <Container
+        className="no-max-width"
+        maxWidth={false}
+        sx={{
+          flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          py: 2,
+          px: { xs: 2, sm: 3, md: 4 },
+          width: '100vw',
+          maxWidth: 'none',
+          margin: 0
+        }}
+      >
+        <Paper
+          className="main-paper"
+          sx={{
+            flexGrow: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: '#ffffff',
+            borderRadius: 2,
+            overflow: 'hidden',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            width: '100%',
+            height: 'calc(100vh - 100px)'
+          }}
+        >
+          {/* Navega��o por Tabs - Desktop */}
+          {!isMobile && (
+            <Box sx={{
+              borderBottom: 1,
+              borderColor: 'divider',
+              backgroundColor: '#fafafa'
+            }}>
+              <Tabs
+                value={currentTab}
+                variant="scrollable"
+                scrollButtons="auto"
+                allowScrollButtonsMobile
+                sx={{
+                  '& .MuiTab-root': {
+                    minWidth: 120,
+                    fontSize: '1.1rem',
+                    fontWeight: 500
+                  },
+                  '& .MuiTabs-indicator': {
+                    height: 3,
+                    backgroundColor: '#1976d2'
+                  }
+                }}
+              >
+                {menuItems.map((item) => (
+                  item.hasSubmenu ? (
+                    <Tab
+                      key={item.key}
+                      label={item.label}
+                      value={item.key}
+                      icon={React.cloneElement(item.icon, {
+                        sx: {
+                          color: item.color,
+                          fontSize: '1.5rem'
+                        }
+                      })}
+                      iconPosition="start"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (item.key === 'trocas') {
+                          setTrocasMenuAnchor(e.currentTarget);
+                        } else if (item.key === 'opcoes') {
+                          setOpcoesMenuAnchor(e.currentTarget);
+                        }
+                      }}
+                      sx={{
+                        color: item.color,
+                        '&.Mui-selected': {
+                          color: item.color,
+                          fontWeight: 'bold'
+                        },
+                        '&:hover': {
+                          backgroundColor: item.color + '15'
+                        }
+                      }}
+                    />
+                  ) : (
+                    <Tab
+                      key={item.key}
+                      label={item.label}
+                      value={item.key}
+                      to={item.path}
+                      component={RouterLink}
+                      icon={React.cloneElement(item.icon, {
+                        sx: {
+                          color: item.color,
+                          fontSize: '1.5rem'
+                        }
+                      })}
+                      iconPosition="start"
+                      sx={{
+                        color: item.color,
+                        '&.Mui-selected': {
+                          color: item.color,
+                          fontWeight: 'bold'
+                        },
+                        '&:hover': {
+                          backgroundColor: item.color + '15'
+                        }
+                      }}
+                    />
+                  )
+                ))}
+              </Tabs>
+
+              {/* Submenu de Trocas */}
+              <Menu
+                anchorEl={trocasMenuAnchor}
+                open={Boolean(trocasMenuAnchor)}
+                onClose={() => setTrocasMenuAnchor(null)}
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'left',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'left',
+                }}
+              >
+                <MenuItem
+                  onClick={() => {
+                    setTrocasMenuAnchor(null);
+                    navigate('/trocas');
+                  }}
+                >
+                  <TrocasIcon sx={{ mr: 1 }} />
+                  Listar Trocas
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    setTrocasMenuAnchor(null);
+                    navigate('/trocas/nova');
+                  }}
+                >
+                  <TrocasIcon sx={{ mr: 1 }} />
+                  Nova Troca
+                </MenuItem>
+              </Menu>
+
+              {/* Submenu de +Opções */}
+              <Menu
+                anchorEl={opcoesMenuAnchor}
+                open={Boolean(opcoesMenuAnchor)}
+                onClose={() => setOpcoesMenuAnchor(null)}
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'left',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'left',
+                }}
+              >
+                {can('produtos_acessar') && (
+                  <MenuItem
+                    onClick={() => {
+                      setOpcoesMenuAnchor(null);
+                      navigate('/etiquetas');
+                    }}
+                  >
+                    <EtiquetasIcon sx={{ mr: 1 }} />
+                    Etiquetas
+                  </MenuItem>
+                )}
+                {can('produtos_editar') && (
+                  <MenuItem
+                    onClick={() => {
+                      setOpcoesMenuAnchor(null);
+                      navigate('/estoque-config');
+                    }}
+                  >
+                    <AjusteIcon sx={{ mr: 1, color: '#FFA500' }} />
+                    Ajustar Estoque
+                  </MenuItem>
+                )}
+                {can('produtos_editar') && (
+                  <MenuItem
+                    onClick={() => {
+                      setOpcoesMenuAnchor(null);
+                      navigate('/tabela-comercial');
+                    }}
+                  >
+                    💰
+                    <span style={{ marginLeft: '8px' }}>Tabela Comercial</span>
+                  </MenuItem>
+                )}
+                <MenuItem
+                  onClick={() => {
+                    setOpcoesMenuAnchor(null);
+                    navigate('/mapa-promocao');
+                  }}
+                >
+                  <AddIcon sx={{ mr: 1, color: '#FF5722' }} />
+                  Mapa de Promoção
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    setOpcoesMenuAnchor(null);
+                    setShortcutManagerOpen(true);
+                  }}
+                >
+                  ⌨️
+                  <span style={{ marginLeft: '8px' }}>Configurar Atalhos (F1–F12)</span>
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    setOpcoesMenuAnchor(null);
+                    navigate('/pet-shop');
+                  }}
+                >
+                  <PetIcon sx={{ mr: 1, color: '#FF69B4' }} />
+                  Pet Shop - Banho e Tosa
+                </MenuItem>
+                {can('ordens_acessar') && (
+                  <MenuItem
+                    onClick={() => {
+                      setOpcoesMenuAnchor(null);
+                      navigate('/status-ordem-servico');
+                    }}
+                  >
+                    ⚙️
+                    <span style={{ marginLeft: '8px' }}>Status Ordem de Serviço</span>
+                  </MenuItem>
+                )}
+                {can('config_acessar') && (
+                  <MenuItem
+                    onClick={() => {
+                      console.log('🖱️ Clicou em Log de Auditoria!');
+                      setOpcoesMenuAnchor(null);
+
+                      // O sistema usa sessionStorage.setItem('accessToken') - verificar todas as variantes
+                      const token = sessionStorage.getItem('accessToken') ||
+                        sessionStorage.getItem('access_token') ||
+                        localStorage.getItem('accessToken') ||
+                        localStorage.getItem('access_token');
+
+                      const refreshToken = sessionStorage.getItem('refreshToken') ||
+                        sessionStorage.getItem('refresh_token') ||
+                        localStorage.getItem('refreshToken') ||
+                        localStorage.getItem('refresh_token');
+
+                      console.log('🔑 Token encontrado:', token ? 'SIM' : 'NÃO');
+                      console.log('🔄 Refresh Token:', refreshToken ? 'SIM' : 'NÃO');
+
+                      if (token) {
+                        // Salvar em todas as variantes para garantir compatibilidade
+                        sessionStorage.setItem('accessToken', token);
+                        sessionStorage.setItem('access_token', token);
+                        if (refreshToken) {
+                          sessionStorage.setItem('refreshToken', refreshToken);
+                          sessionStorage.setItem('refresh_token', refreshToken);
+                        }
+                        console.log('💾 Tokens salvos no sessionStorage');
+                        console.log('🚀 Navegando para /log_auditoria.html...');
+
+                        // Usar setTimeout para garantir que sessionStorage foi salvo
+                        setTimeout(() => {
+                          window.location.href = '/log_auditoria.html';
+                        }, 100);
+                      } else {
+                        console.error('❌ Token não encontrado!');
+                        alert('Token não encontrado. Faça login novamente.');
+                      }
+                    }}
+                  >
+                    <LogIcon sx={{ mr: 1, color: '#667eea' }} />
+                    Log de Auditoria
+                  </MenuItem>
+                )}
+              </Menu>
+            </Box>
+          )}
+
+          {/* �rea de Conte�do */}
+          <Box
+            className="content-area"
+            sx={{
+              flexGrow: 1,
+              p: 3,
+              backgroundColor: '#ffffff',
+              minHeight: 'calc(100vh - 200px)',
+              width: '100%',
+              overflow: 'auto'
+            }}
+          >
+            <DashboardErrorBoundary>
+              <Outlet />
+            </DashboardErrorBoundary>
+          </Box>
+        </Paper>
+      </Container>
+
+      {/* Dialog de Confirmação de Logout */}
+      <LogoutDialog
+        open={logoutDialogOpen}
+        onClose={handleCancelLogout}
+        onConfirm={handleConfirmLogout}
+        userName={user?.first_name || user?.username}
+      />
+
+      {/* Gerenciador de Atalhos */}
+      <ShortcutManager open={shortcutManagerOpen} onClose={() => setShortcutManagerOpen(false)} />
+
+      {/* Menu Mobile Drawer */}
+      <MobileMenuDrawer
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        menuItems={menuItems}
+        currentTab={currentTab}
+      />
+
+      {/* Botão Flutuante de QR Code */}
+      <QRCodeFloating />
+    </Box>
+  );
+}
+
+export default DashboardLayoutClean;

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#1976d2" rx="80"/>
+  <g fill="#ffffff">
+    <!-- Pata de cachorro -->
+    <circle cx="256" cy="200" r="60"/>
+    <circle cx="180" cy="280" r="40"/>
+    <circle cx="220" cy="320" r="40"/>
+    <circle cx="292" cy="320" r="40"/>
+    <circle cx="332" cy="280" r="40"/>
+    
+    <!-- Texto -->
+    <text x="256" y="420" font-family="Arial, sans-serif" font-size="80" font-weight="bold" text-anchor="middle" fill="#ffffff">
+      PET
+    </text>
+  </g>
+</svg>

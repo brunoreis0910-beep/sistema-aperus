@@ -1,0 +1,1164 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  Button,
+  Grid,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
+  Alert,
+  CircularProgress,
+  Card,
+  CardContent,
+  Divider
+} from '@mui/material';
+import {
+  Add as AddIcon,
+  Delete as DeleteIcon,
+  Save as SaveIcon,
+  Print as PrintIcon,
+  List as ListIcon,
+  Clear as ClearIcon,
+  PictureAsPdf as PdfIcon,
+  WhatsApp as WhatsAppIcon
+} from '@mui/icons-material';
+import axios from 'axios';
+import mockAPI from '../services/mockAPI';
+import useImpressaoVenda from '../hooks/useImpressaoVenda';
+import VendasDebugButton from './VendasDebugButton';
+import { useAuth } from '../context/AuthContext';
+
+// Configura??o de baseURL removida - usar axiosInstance do AuthContext
+
+// Configurar interceptor do axios para incluir token
+axios.interceptors.request.use(
+  (config) => {
+    // Debug completo do localStorage
+    console.log('🔍 DEBUG COMPLETO DO LOCALSTORAGE:');
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      const value = localStorage.getItem(key);
+      console.log(`   ${key}:`, value ? value.substring(0, 50) + '...' : 'null');
+    }
+    
+    // Tentar várias chaves de token possíveis (accessToken PRIMEIRO!)
+    const possibleTokenKeys = [
+      'accessToken', 'access_token', 'token', 'authToken', 'access', 'jwt', 'user_token',
+      'auth_token', 'sessionToken', 'bearer_token', 'apiToken', 'refreshToken'
+    ];
+    
+    let token = null;
+    let tokenKey = null;
+    
+    for (const key of possibleTokenKeys) {
+      const foundToken = localStorage.getItem(key);
+      if (foundToken && foundToken !== 'null' && foundToken !== 'undefined') {
+        token = foundToken;
+        tokenKey = key;
+        console.log(`🔑 TOKEN ENCONTRADO na chave '${key}':`, token.substring(0, 30) + '...');
+        break;
+      }
+    }
+    
+    // Verificar também se há um objeto user com token dentro
+    const userStr = localStorage.getItem('user');
+    if (!token && userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        if (user.token) {
+          token = user.token;
+          tokenKey = 'user.token';
+          console.log('🔑 TOKEN ENCONTRADO no objeto user:', token.substring(0, 30) + '...');
+        }
+      } catch (e) {
+        console.log('❌ Erro ao parsear user do localStorage:', e);
+      }
+    }
+    
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+      console.log(`✅ Header Authorization adicionado (fonte: ${tokenKey})`);
+    } else {
+      console.log('❌ NENHUM TOKEN VÁLIDO ENCONTRADO em nenhuma chave!');
+      console.log('🔍 Chaves testadas:', possibleTokenKeys.join(', '));
+    }
+    
+    console.log('📡 Requisição para:', config.baseURL + config.url);
+    return config;
+  },
+  (error) => {
+    console.error('❌ Erro no interceptor:', error);
+    return Promise.reject(error);
+  }
+);
+
+const Vendas = () => {
+  // Hook de impressão
+  const { 
+    loading: loadingImpressao, 
+    gerarPDF, 
+    imprimirDireto, 
+    compartilharWhatsApp 
+  } = useImpressaoVenda();
+
+  // Hook de autenticação
+  const { axiosInstance } = useAuth();
+
+  // Estados principais
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  
+  // Modo atual: 'lista' ou 'nova'
+  const [modo, setModo] = useState('lista');
+  
+  // Dados para formulário
+  const [venda, setVenda] = useState({
+    numero_documento: '',
+    data_venda: new Date().toISOString().split('T')[0],
+    id_operacao: '',
+    id_cliente: '',
+    id_vendedor: '',
+    observacoes: '',
+    desconto: 0,
+    valor_total: 0,
+    itens: []
+  });
+  
+  // Dados das listas
+  const [operacoes, setOperacoes] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [vendedores, setVendedores] = useState([]);
+  const [produtos, setProdutos] = useState([]);
+  const [vendas, setVendas] = useState([]);
+  
+  // Item sendo adicionado
+  const [novoItem, setNovoItem] = useState({
+    id_produto: '',
+    quantidade: 1,
+    valor_unitario: 0,
+    desconto: 0
+  });
+
+  // Carregar dados iniciais
+  useEffect(() => {
+    carregarDados();
+    gerarNumeroDocumento();
+  }, []);
+
+  // Recalcular totais quando itens mudam
+  useEffect(() => {
+    calcularTotais();
+  }, [venda.itens]);
+
+  // Função auxiliar para buscar nome do cliente pelo ID
+  const buscarNomeCliente = (idCliente) => {
+    if (!idCliente || !clientes.length) return 'Cliente não encontrado';
+    
+    const cliente = clientes.find(cli => {
+      const id = String(cli.id || cli.pk || cli.ID || cli.id_cliente);
+      return id === String(idCliente);
+    });
+    
+    if (cliente) {
+      return cliente.razao_social || cliente.nome_fantasia || cliente.empresa ||
+             cliente.nome || cliente.name || cliente.cliente || cliente.title || cliente.nome_cliente || `Cliente ${idCliente}`;
+    }
+    
+    return `Cliente ${idCliente}`;
+  };
+
+  // Função auxiliar para buscar nome do vendedor pelo ID
+  const buscarNomeVendedor = (idVendedor) => {
+    if (!idVendedor || !vendedores.length) return 'Vendedor não encontrado';
+    
+    const vendedor = vendedores.find(vend => {
+      const id = String(vend.id || vend.pk || vend.ID || vend.id_vendedor);
+      return id === String(idVendedor);
+    });
+    
+    if (vendedor) {
+      return vendedor.nome || vendedor.name || vendedor.first_name || vendedor.username || `Vendedor ${idVendedor}`;
+    }
+    
+    return `Vendedor ${idVendedor}`;
+  };
+
+  // Função para filtrar produtos disponíveis (evitar duplicação)
+  const getProdutosDisponiveis = () => {
+    if (!produtos.length) return [];
+    
+    // IDs dos produtos já adicionados na venda
+    const produtosJaAdicionados = venda.itens.map(item => String(item.id_produto));
+    
+    // Filtrar produtos que ainda não foram adicionados
+    return produtos.filter(prod => {
+      const id = String(prod.id_produto || prod.id || prod.pk || prod.ID);
+      return !produtosJaAdicionados.includes(id);
+    });
+  };
+
+  // Função auxiliar para formatar data de forma segura
+  const formatarDataSegura = (data) => {
+    if (!data) return 'Data não informada';
+    
+    try {
+      const date = new Date(data);
+      if (isNaN(date.getTime())) {
+        return 'Data inválida';
+      }
+      return date.toLocaleDateString('pt-BR');
+    } catch (error) {
+      return 'Data inválida';
+    }
+  };
+
+  // Função auxiliar melhorada para buscar nome do cliente
+  const buscarNomeClienteSeguro = (venda) => {
+    // Se já tem o nome na venda, usar ele
+    if (venda.nome_cliente && typeof venda.nome_cliente === 'string') {
+      return venda.nome_cliente;
+    }
+    
+    // Senão, buscar pelo ID
+    const idCliente = venda.id_cliente;
+    if (!idCliente) return 'Cliente não informado';
+    if (!clientes.length) return 'Carregando clientes...';
+    
+    const cliente = clientes.find(cli => {
+      const id = String(cli.id || cli.pk || cli.ID || cli.id_cliente);
+      return id === String(idCliente);
+    });
+    
+    if (cliente) {
+      const nome = cliente.razao_social || cliente.nome_fantasia || cliente.empresa ||
+                   cliente.nome || cliente.name || cliente.cliente || cliente.title || cliente.nome_cliente;
+      return nome || `Cliente ${idCliente}`;
+    }
+    
+    return `Cliente não encontrado (ID: ${idCliente})`;
+  };
+
+  // Função auxiliar melhorada para buscar nome do vendedor
+  const buscarNomeVendedorSeguro = (venda) => {
+    // Se já tem o nome na venda, usar ele
+    if (venda.nome_vendedor && typeof venda.nome_vendedor === 'string') {
+      return venda.nome_vendedor;
+    }
+    
+    // Senão, buscar pelo ID
+    const idVendedor = venda.id_vendedor;
+    if (!idVendedor) return 'Vendedor não informado';
+    if (!vendedores.length) return 'Carregando vendedores...';
+    
+    const vendedor = vendedores.find(vend => {
+      const id = String(vend.id || vend.pk || vend.ID || vend.id_vendedor);
+      return id === String(idVendedor);
+    });
+    
+    if (vendedor) {
+      const nome = vendedor.nome || vendedor.name || vendedor.first_name || vendedor.username;
+      return nome || `Vendedor ${idVendedor}`;
+    }
+    
+    return `Vendedor não encontrado (ID: ${idVendedor})`;
+  };
+
+  // Gerar número de documento automático
+  const gerarNumeroDocumento = async () => {
+    try {
+      const response = await axios.get('/api/vendas/proximo-numero/');
+      setVenda(prev => ({
+        ...prev,
+        numero_documento: response.data.proximo_numero
+      }));
+    } catch (err) {
+      // Se não conseguir gerar via API, usar número baseado em vendas existentes
+      const numeroSequencial = vendas.length + 1;
+      const numero = `VND-${String(numeroSequencial).padStart(3, '0')}`;
+      setVenda(prev => ({
+        ...prev,
+        numero_documento: numero
+      }));
+      console.log('Usando numeração automática local:', numero);
+    }
+  };
+
+  const carregarDados = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      setSuccess('');
+      
+      console.log('🚀 Carregando dados usando AuthContext...');
+      
+      try {
+        // Usar axiosInstance do AuthContext (já cuida da autenticação automaticamente)
+        console.log('📡 Carregando dados reais...');
+        
+        const [opRes, cliRes, vendRes, prodRes, vendasRes] = await Promise.all([
+          axiosInstance.get('/operacoes/'),
+          axiosInstance.get('/clientes/'),
+          axiosInstance.get('/vendedores/'),
+          axiosInstance.get('/produtos/'),
+          axiosInstance.get('/vendas/')
+        ]);
+        
+        // Extrair dados (considerando paginação)
+        setOperacoes(opRes.data.results || opRes.data);
+        setClientes(cliRes.data.results || cliRes.data);
+        setVendedores(vendRes.data.results || vendRes.data);
+        setProdutos(prodRes.data.results || prodRes.data);
+        setVendas(vendasRes.data.results || vendasRes.data);
+        
+        console.log('🎉 Dados reais carregados com sucesso!');
+        console.log('  Operações:', opRes.data.results || opRes.data);
+        console.log('  Clientes:', cliRes.data.results || cliRes.data);
+        console.log('  Vendedores:', vendRes.data.results || vendRes.data);
+        console.log('  Produtos:', prodRes.data.results || prodRes.data);
+        
+        setSuccess('✅ Dados reais carregados do seu banco de dados!');
+        
+      } catch (apiError) {
+        console.error('❌ Erro nas APIs:', apiError);
+        
+        if (apiError.response?.status === 401) {
+          setError('🔐 Token expirado! Faça login novamente para acessar seus dados.');
+        } else {
+          setError(`❌ Erro no servidor: ${apiError.message}`);
+        }
+        
+        console.log('🔄 Carregando dados mock como fallback...');
+        
+        // Fallback para dados mock
+        const [opRes, cliRes, vendRes, prodRes, vendasRes] = await Promise.all([
+          mockAPI.getOperacoes(),
+          mockAPI.getClientes(),
+          mockAPI.getVendedores(),
+          mockAPI.getProdutos(),
+          mockAPI.getVendas()
+        ]);
+        
+        setOperacoes(opRes.data);
+        setClientes(cliRes.data);
+        setVendedores(vendRes.data);
+        setProdutos(prodRes.data);
+        setVendas(vendasRes.data);
+      }
+      
+    } catch (err) {
+      console.error('💥 Erro geral:', err);
+      setError(`Erro geral: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calcular totais
+  const calcularTotais = () => {
+    const total = venda.itens.reduce((acc, item) => {
+      const subtotal = (item.quantidade * item.valor_unitario) - item.desconto;
+      return acc + subtotal;
+    }, 0);
+    
+    setVenda(prev => ({
+      ...prev,
+      valor_total: total - prev.desconto
+    }));
+  };
+
+  // Adicionar item
+  const adicionarItem = () => {
+    if (!novoItem.id_produto) {
+      setError('Selecione um produto');
+      return;
+    }
+    
+    // Buscar produto com flexibilidade para diferentes estruturas de ID
+    const produto = produtos.find(p => {
+      const id = String(p.id_produto || p.id || p.pk || p.ID);
+      return id === String(novoItem.id_produto);
+    });
+    
+    if (!produto) {
+      setError('Produto não encontrado');
+      console.error('Produto não encontrado. ID procurado:', novoItem.id_produto);
+      console.error('Produtos disponíveis:', produtos.map(p => ({
+        id: p.id_produto || p.id || p.pk || p.ID,
+        nome: p.nome_produto || p.nome
+      })));
+      return;
+    }
+    
+    // Validar estoque se disponível
+    const estoque = produto.estoque_atual || produto.estoque || produto.stock || produto.quantidade;
+    if (estoque !== undefined && estoque < parseFloat(novoItem.quantidade)) {
+      setError(`Estoque insuficiente. Disponível: ${estoque}`);
+      return;
+    }
+    
+    // Criar item com flexibilidade para diferentes estruturas
+    const item = {
+      id: Date.now(), // ID temporário
+      id_produto: novoItem.id_produto,
+      codigo_produto: produto.codigo_produto || produto.codigo || produto.code || produto.sku || `P${produto.id_produto || produto.id}`,
+      nome_produto: produto.nome_produto || produto.nome || produto.name || produto.title,
+      quantidade: parseFloat(novoItem.quantidade),
+      valor_unitario: parseFloat(novoItem.valor_unitario || produto.valor_venda || produto.preco_venda || produto.preco || 0),
+      desconto: parseFloat(novoItem.desconto || 0),
+      subtotal: (parseFloat(novoItem.quantidade) * parseFloat(novoItem.valor_unitario || produto.valor_venda || produto.preco_venda || produto.preco || 0)) - parseFloat(novoItem.desconto || 0)
+    };
+    
+    console.log('✅ Item adicionado:', item);
+    
+    setVenda(prev => ({
+      ...prev,
+      itens: [...prev.itens, item]
+    }));
+    
+    // Limpar formulário do item
+    setNovoItem({
+      id_produto: '',
+      quantidade: 1,
+      valor_unitario: 0,
+      desconto: 0
+    });
+    
+    setError('');
+    
+    // Forçar recálculo de totais
+    setTimeout(() => calcularTotais(), 100);
+  };
+
+  // Remover item
+  const removerItem = (index) => {
+    console.log('🗑️ Removendo item no índice:', index);
+    setVenda(prev => ({
+      ...prev,
+      itens: prev.itens.filter((_, i) => i !== index)
+    }));
+    
+    // Forçar recálculo de totais
+    setTimeout(() => calcularTotais(), 100);
+  };
+
+  // Recalcular quando itens mudarem
+  useEffect(() => {
+    calcularTotais();
+  }, [venda.itens, venda.desconto]);
+
+  // Salvar venda
+  const salvarVenda = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      // Validações básicas
+      if (!venda.id_operacao || !venda.id_cliente || !venda.id_vendedor) {
+        setError('Preencha todos os campos obrigatórios');
+        return;
+      }
+      
+      if (venda.itens.length === 0) {
+        setError('Adicione pelo menos um item à venda');
+        return;
+      }
+      
+      console.log('💾 Salvando venda:', venda);
+      
+      try {
+        // Usar axiosInstance do AuthContext (já cuida da autenticação)
+        const response = await axiosInstance.post('/vendas/', venda);
+        console.log('✅ Venda salva na API:', response.data);
+        setSuccess('✅ Venda salva com sucesso no seu banco de dados!');
+      } catch (apiError) {
+        console.log('❌ Erro ao salvar na API:', apiError);
+        
+        if (apiError.response?.status === 401) {
+          setError('🔐 Token expirado! Faça login novamente.');
+        } else {
+          // Usar mock como fallback
+          await mockAPI.createVenda(venda);
+          setSuccess('✅ Venda salva nos dados de teste!');
+        }
+      }
+      
+      setModo('lista');
+      limparFormulario();
+      carregarDados(); // Recarregar lista
+      
+    } catch (err) {
+      console.error('❌ Erro ao salvar:', err);
+      setError(`Erro ao salvar venda: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Limpar formulário
+  const limparFormulario = () => {
+    setVenda({
+      numero_documento: '',
+      data_venda: new Date().toISOString().split('T')[0],
+      id_operacao: '',
+      id_cliente: '',
+      id_vendedor: '',
+      observacoes: '',
+      desconto: 0,
+      valor_total: 0,
+      itens: []
+    });
+    setNovoItem({
+      id_produto: '',
+      quantidade: 1,
+      valor_unitario: 0,
+      desconto: 0
+    });
+    setError('');
+    setSuccess('');
+    
+    // Gerar novo número de documento
+    gerarNumeroDocumento();
+  };
+
+  // Imprimir venda
+  const imprimirVenda = async (venda) => {
+    // Transformar dados da venda para o formato esperado
+    const dadosImpressao = {
+      numero_documento: venda.numero_documento,
+      data_venda: venda.data_venda,
+      valor_total: venda.valor_total,
+      nome_cliente: buscarNomeClienteSeguro(venda),
+      nome_vendedor: buscarNomeVendedorSeguro(venda),
+      itens: venda.itens || [] // Se não tiver itens, usar array vazio
+    };
+
+    const resultado = await imprimirDireto(dadosImpressao);
+    if (resultado.success) {
+      setSuccess(resultado.message);
+    } else {
+      setError(resultado.message);
+    }
+  };
+
+  // Gerar PDF
+  const gerarPDFVenda = async (venda) => {
+    // Transformar dados da venda para o formato esperado
+    const dadosImpressao = {
+      numero_documento: venda.numero_documento,
+      data_venda: venda.data_venda,
+      valor_total: venda.valor_total,
+      nome_cliente: buscarNomeClienteSeguro(venda),
+      nome_vendedor: buscarNomeVendedorSeguro(venda),
+      itens: venda.itens || [] // Se não tiver itens, usar array vazio
+    };
+
+    const resultado = await gerarPDF(dadosImpressao);
+    if (resultado.success) {
+      setSuccess(resultado.message);
+    } else {
+      setError(resultado.message);
+    }
+  };
+
+  // Compartilhar WhatsApp
+  const compartilharVenda = async (venda) => {
+    // Transformar dados da venda para o formato esperado
+    const dadosImpressao = {
+      numero_documento: venda.numero_documento,
+      data_venda: venda.data_venda,
+      valor_total: venda.valor_total,
+      nome_cliente: buscarNomeClienteSeguro(venda),
+      nome_vendedor: buscarNomeVendedorSeguro(venda),
+      itens: venda.itens || [] // Se não tiver itens, usar array vazio
+    };
+
+    const resultado = await compartilharWhatsApp(dadosImpressao);
+    if (resultado.success) {
+      setSuccess(resultado.message);
+    } else {
+      setError(resultado.message);
+    }
+  };
+
+  if (loading && modo === 'lista') {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ p: 3 }}>
+      <VendasDebugButton />
+      
+      {/* Header */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Typography variant="h4" component="h1">
+            Sistema de Vendas
+          </Typography>
+          <Box>
+            <Button
+              variant={modo === 'lista' ? 'contained' : 'outlined'}
+              startIcon={<ListIcon />}
+              onClick={() => setModo('lista')}
+              sx={{ mr: 1 }}
+            >
+              Listar
+            </Button>
+            <Button
+              variant={modo === 'nova' ? 'contained' : 'outlined'}
+              startIcon={<AddIcon />}
+              onClick={() => { setModo('nova'); limparFormulario(); }}
+              sx={{ mr: 1 }}
+            >
+              Nova Venda
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={carregarDados}
+              disabled={loading}
+              color="primary"
+              sx={{ mr: 1 }}
+            >
+              {loading ? '⏳ Carregando...' : '🔄 Recarregar Dados'}
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => {
+                console.log('🔍 DEBUG COMPLETO - LOCALSTORAGE:');
+                console.log('Todas as chaves:');
+                for (let i = 0; i < localStorage.length; i++) {
+                  const key = localStorage.key(i);
+                  const value = localStorage.getItem(key);
+                  console.log(`  ${key}:`, value);
+                }
+                
+                // Tentar fazer requisição manual
+                const testToken = localStorage.getItem('accessToken') || localStorage.getItem('access_token') || localStorage.getItem('token');
+                if (testToken) {
+                  console.log('🧪 Testando token manualmente...');
+                  axios.get('/api/clientes/')
+                    .then(res => console.log('✅ Teste manual OK:', res.data))
+                    .catch(err => console.error('❌ Teste manual FALHOU:', err.response?.data || err.message));
+                } else {
+                  console.log('❌ Nenhum token para testar');
+                }
+                
+                alert('Debug executado! Veja o console (F12)');
+              }}
+              size="small"
+              color="secondary"
+            >
+              🐛 Debug localStorage
+            </Button>
+          </Box>
+        </Box>
+      </Paper>
+
+      {/* Mensagens */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
+      
+      {success && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>
+          {success}
+        </Alert>
+      )}
+
+      {/* Debug - informações de carregamento */}
+      {!loading && (
+        <Alert 
+          severity={operacoes.length > 0 && clientes.length > 0 ? "success" : "warning"} 
+          sx={{ mb: 2 }}
+        >
+          <strong>Status dos Dados:</strong>
+          <div>📋 {operacoes.length} operações da tabela 'operacoes'</div>
+          <div>👥 {clientes.length} clientes</div>
+          <div>👨‍💼 {vendedores.length} vendedores</div>
+          <div>📦 {produtos.length} produtos</div>
+          <div>💰 {vendas.length} vendas</div>
+          
+          {operacoes.length > 0 && (
+            <details style={{ marginTop: '8px' }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 'bold' }}>
+                🔍 Ver detalhes das operações ({operacoes.length})
+              </summary>
+              <div style={{ marginTop: '4px', fontSize: '0.9em' }}>
+                {operacoes.slice(0, 3).map((op, idx) => {
+                  const id = op.id || op.pk || op.ID || op.id_operacao;
+                  const nome = op.nome || op.name || op.description || op.descricao || op.title || op.nome_operacao;
+                  const tipo = op.tipo || op.type || op.categoria;
+                  return (
+                    <div key={idx}>
+                      • ID: {id}, Nome: "{nome}", Tipo: "{tipo}"
+                    </div>
+                  );
+                })}
+                {operacoes.length > 3 && <div>... e mais {operacoes.length - 3} operações</div>}
+              </div>
+            </details>
+          )}
+          
+          {operacoes.length === 0 && (
+            <div style={{marginTop: '8px'}}>
+              <strong>⚠️ Nenhuma operação encontrada na tabela 'operacoes'.</strong> 
+              <br />Verifique se a tabela existe e possui dados, ou faça LOGIN para acessar dados reais.
+            </div>
+          )}
+        </Alert>
+      )}
+
+      {/* Conteúdo principal */}
+      {modo === 'lista' ? (
+        // MODO LISTA
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            Lista de Vendas ({vendas.length})
+          </Typography>
+          
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Documento</TableCell>
+                  <TableCell>Data</TableCell>
+                  <TableCell>Cliente</TableCell>
+                  <TableCell>Vendedor</TableCell>
+                  <TableCell align="right">Valor Total</TableCell>
+                  <TableCell align="center">Ações</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {vendas.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} align="center">
+                      <Typography color="textSecondary">
+                        Nenhuma venda encontrada
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  vendas.map((v) => (
+                    <TableRow key={v.id}>
+                      <TableCell>{v.numero_documento || 'N/A'}</TableCell>
+                      <TableCell>{formatarDataSegura(v.data_venda)}</TableCell>
+                      <TableCell>{buscarNomeClienteSeguro(v)}</TableCell>
+                      <TableCell>{buscarNomeVendedorSeguro(v)}</TableCell>
+                      <TableCell align="right">
+                        R$ {parseFloat(v.valor_total || 0).toFixed(2)}
+                      </TableCell>
+                      <TableCell align="center">
+                        <IconButton
+                          size="small"
+                          onClick={() => imprimirVenda(v)}
+                          title="Imprimir"
+                          disabled={loadingImpressao}
+                        >
+                          <PrintIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => gerarPDFVenda(v)}
+                          title="Gerar PDF"
+                          disabled={loadingImpressao}
+                        >
+                          <PdfIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => compartilharVenda(v)}
+                          title="WhatsApp"
+                          disabled={loadingImpressao}
+                        >
+                          <WhatsAppIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      ) : (
+        // MODO NOVA VENDA
+        <Grid container spacing={3}>
+          {/* Dados da venda */}
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Dados da Venda
+                </Typography>
+                
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      fullWidth
+                      label="Número do Documento"
+                      value={venda.numero_documento}
+                      onChange={(e) => setVenda(prev => ({ ...prev, numero_documento: e.target.value }))}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      fullWidth
+                      type="date"
+                      label="Data da Venda"
+                      value={venda.data_venda}
+                      onChange={(e) => setVenda(prev => ({ ...prev, data_venda: e.target.value }))}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} md={3}>
+                    <FormControl fullWidth>
+                      <InputLabel>Operação *</InputLabel>
+                      <Select
+                        value={venda.id_operacao || ''}
+                        onChange={(e) => {
+                          console.log('🔧 Operação selecionada:', e.target.value);
+                          const operacaoSelecionada = operacoes.find(op => 
+                            String(op.id || op.pk || op.ID || op.id_operacao) === String(e.target.value)
+                          );
+                          console.log('🔧 Dados da operação selecionada:', operacaoSelecionada);
+                          setVenda(prev => ({ ...prev, id_operacao: e.target.value }));
+                        }}
+                        error={!venda.id_operacao}
+                      >
+                        <MenuItem value="" disabled>
+                          {operacoes.length === 0 ? 'Carregando operações...' : 'Selecione uma operação'}
+                        </MenuItem>
+                        {operacoes.length > 0 ? operacoes.map(op => {
+                          console.log('📋 Operação no map:', op);
+                          // Flexibilidade para diferentes nomes de propriedades
+                          const id = String(op.id || op.pk || op.ID || op.id_operacao);
+                          const nome = op.nome || op.name || op.description || op.descricao || op.title || op.nome_operacao;
+                          const tipo = op.tipo || op.type || op.categoria || '';
+                          const status = op.status || op.ativo || op.active;
+                          
+                          return (
+                            <MenuItem key={`operacao-${id}`} value={id}>
+                              {nome || `Operação ${id}`}
+                              {tipo && ` (${tipo})`}
+                              {status === false && ' - INATIVO'}
+                            </MenuItem>
+                          );
+                        }) : (
+                          <MenuItem disabled>
+                            {loading ? 'Carregando...' : 'Nenhuma operação encontrada'}
+                          </MenuItem>
+                        )}
+                      </Select>
+                      {!venda.id_operacao && (
+                        <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
+                          Campo obrigatório
+                        </Typography>
+                      )}
+                    </FormControl>
+                  </Grid>
+                  
+                  <Grid item xs={12} md={3}>
+                    <FormControl fullWidth>
+                      <InputLabel>Cliente *</InputLabel>
+                      <Select
+                        value={venda.id_cliente || ''}
+                        onChange={(e) => {
+                          console.log('🔧 Cliente selecionado:', e.target.value);
+                          setVenda(prev => ({ ...prev, id_cliente: e.target.value }));
+                        }}
+                      >
+                        <MenuItem value="" disabled>Selecione um cliente</MenuItem>
+                        {clientes.length > 0 ? clientes.map(cli => {
+                          console.log('👤 Cliente no map:', cli);
+                          // Flexibilidade para diferentes nomes de propriedades
+                          const id = String(cli.id || cli.pk || cli.ID || cli.id_cliente);
+                          const nome = cli.nome || cli.name || cli.razao_social || cli.cliente || cli.title || cli.nome_cliente;
+                          return (
+                            <MenuItem key={`cliente-${id}`} value={id}>
+                              {nome || `Cliente ${id}`}
+                            </MenuItem>
+                          );
+                        }) : <MenuItem disabled>Nenhum cliente encontrado</MenuItem>}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  
+                  <Grid item xs={12} md={3}>
+                    <FormControl fullWidth>
+                      <InputLabel>Vendedor *</InputLabel>
+                      <Select
+                        value={venda.id_vendedor || ''}
+                        onChange={(e) => {
+                          console.log('🔧 Vendedor selecionado:', e.target.value);
+                          setVenda(prev => ({ ...prev, id_vendedor: e.target.value }));
+                        }}
+                      >
+                        <MenuItem value="" disabled>Selecione um vendedor</MenuItem>
+                        {vendedores.length > 0 ? vendedores.map(vend => {
+                          console.log('👨‍💼 Vendedor no map:', vend);
+                          // Flexibilidade para diferentes nomes de propriedades
+                          const id = String(vend.id || vend.pk || vend.ID || vend.id_vendedor);
+                          const nome = vend.nome || vend.name || vend.vendedor || vend.title || vend.nome_vendedor;
+                          return (
+                            <MenuItem key={`vendedor-${id}`} value={id}>
+                              {nome || `Vendedor ${id}`}
+                            </MenuItem>
+                          );
+                        }) : <MenuItem disabled>Nenhum vendedor encontrado</MenuItem>}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth
+                      label="Observações"
+                      multiline
+                      rows={2}
+                      value={venda.observacoes}
+                      onChange={(e) => setVenda(prev => ({ ...prev, observacoes: e.target.value }))}
+                    />
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Adicionar item */}
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Adicionar Item
+                </Typography>
+                
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={12} md={4}>
+                    <FormControl fullWidth>
+                      <InputLabel>Produto</InputLabel>
+                      <Select
+                        value={novoItem.id_produto || ''}
+                        onChange={(e) => {
+                          const produtoId = e.target.value;
+                          const produto = produtos.find(p => String(p.id_produto || p.id || p.pk || p.ID) === String(produtoId));
+                          const preco = produto ? parseFloat(produto.valor_venda || produto.preco_venda || produto.preco || produto.price || produto.valor || 0) : 0;
+                          console.log('🔧 Produto selecionado:', produtoId, produto, 'Preço:', preco);
+                          setNovoItem(prev => ({
+                            ...prev,
+                            id_produto: produtoId,
+                            valor_unitario: preco
+                          }));
+                        }}
+                      >
+                        <MenuItem value="" disabled>Selecione um produto</MenuItem>
+                        {getProdutosDisponiveis().length > 0 ? getProdutosDisponiveis().map(prod => {
+                          console.log('🛒 Produto no map:', prod);
+                          // Ajustar para estrutura real dos dados
+                          const id = String(prod.id_produto || prod.id || prod.pk || prod.ID);
+                          const nome = prod.nome_produto || prod.nome || prod.name || prod.produto || prod.title;
+                          const codigo = prod.codigo_produto || prod.codigo || prod.code || prod.sku || id;
+                          const preco = prod.valor_venda || prod.preco_venda || prod.preco || prod.price || prod.valor || 0;
+                          const estoque = prod.estoque_atual || prod.estoque || prod.stock || prod.quantidade;
+                          
+                          return (
+                            <MenuItem key={`produto-${id}`} value={id}>
+                              {codigo} - {nome || `Produto ${id}`}
+                              {estoque !== undefined && (
+                                <span style={{ color: parseFloat(estoque) > 0 ? 'green' : 'red', marginLeft: '8px' }}>
+                                  (Estoque: {estoque})
+                                </span>
+                              )}
+                            </MenuItem>
+                          );
+                        }) : (
+                          <MenuItem disabled>
+                            {loading ? 'Carregando...' : 
+                             venda.itens.length > 0 ? 'Todos os produtos foram adicionados' : 
+                             'Nenhum produto encontrado'}
+                          </MenuItem>
+                        )}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  
+                  <Grid item xs={12} md={2}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Quantidade"
+                      value={novoItem.quantidade}
+                      onChange={(e) => setNovoItem(prev => ({ ...prev, quantidade: e.target.value }))}
+                      inputProps={{ min: 0.01, step: 0.01 }}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} md={2}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Valor Unitário"
+                      value={novoItem.valor_unitario}
+                      onChange={(e) => setNovoItem(prev => ({ ...prev, valor_unitario: e.target.value }))}
+                      inputProps={{ min: 0, step: 0.01 }}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} md={2}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Desconto"
+                      value={novoItem.desconto}
+                      onChange={(e) => setNovoItem(prev => ({ ...prev, desconto: e.target.value }))}
+                      inputProps={{ min: 0, step: 0.01 }}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} md={2}>
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      startIcon={<AddIcon />}
+                      onClick={adicionarItem}
+                    >
+                      Adicionar
+                    </Button>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Itens da venda */}
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Itens da Venda ({venda.itens.length})
+                </Typography>
+                
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Produto</TableCell>
+                        <TableCell align="center">Qtd</TableCell>
+                        <TableCell align="right">Valor Unit.</TableCell>
+                        <TableCell align="right">Desconto</TableCell>
+                        <TableCell align="right">Subtotal</TableCell>
+                        <TableCell align="center">Ação</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {venda.itens.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} align="center">
+                            <Typography color="textSecondary">
+                              Nenhum item adicionado
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        venda.itens.map((item, index) => (
+                          <TableRow key={item.id}>
+                            <TableCell>
+                              {item.codigo_produto} - {item.nome_produto}
+                            </TableCell>
+                            <TableCell align="center">{item.quantidade}</TableCell>
+                            <TableCell align="right">R$ {parseFloat(item.valor_unitario || 0).toFixed(2)}</TableCell>
+                            <TableCell align="right">R$ {parseFloat(item.desconto || 0).toFixed(2)}</TableCell>
+                            <TableCell align="right">R$ {parseFloat(item.subtotal || 0).toFixed(2)}</TableCell>
+                            <TableCell align="center">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => removerItem(index)}
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Totais e ações */}
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Desconto Geral"
+                      value={venda.desconto}
+                      onChange={(e) => setVenda(prev => ({ ...prev, desconto: parseFloat(e.target.value) || 0 }))}
+                      inputProps={{ min: 0, step: 0.01 }}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      fullWidth
+                      label="Valor Total"
+                      value={`R$ ${parseFloat(venda.valor_total || 0).toFixed(2)}`}
+                      InputProps={{ readOnly: true }}
+                      variant="filled"
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} md={6}>
+                    <Box display="flex" gap={1} justifyContent="flex-end">
+                      <Button
+                        variant="outlined"
+                        startIcon={<ClearIcon />}
+                        onClick={limparFormulario}
+                      >
+                        Limpar
+                      </Button>
+                      <Button
+                        variant="contained"
+                        startIcon={<SaveIcon />}
+                        onClick={salvarVenda}
+                        disabled={loading}
+                      >
+                        {loading ? 'Salvando...' : 'Salvar Venda'}
+                      </Button>
+                    </Box>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      )}
+    </Box>
+  );
+};
+
+export default Vendas;

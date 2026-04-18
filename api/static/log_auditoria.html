@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log de Auditoria - APERUS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .back-btn {
+            position: absolute;
+            left: 30px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .back-btn:hover {
+            background: white;
+            color: #667eea;
+        }
+
+        .filters {
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #495057;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .buttons-row {
+            display: flex;
+            gap: 15px;
+            grid-column: 1 / -1;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        .stats {
+            padding: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            background: #f8f9fa;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            border-left: 4px solid #667eea;
+        }
+
+        .stat-card .number {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .label {
+            color: #6c757d;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+            color: #6c757d;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+
+            0%,
+            20% {
+                content: '.';
+            }
+
+            40% {
+                content: '..';
+            }
+
+            60%,
+            100% {
+                content: '...';
+            }
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 20px;
+        }
+
+        thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.85em;
+        }
+
+        tbody tr {
+            background: white;
+            transition: all 0.3s;
+        }
+
+        tbody tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        tbody tr:hover {
+            background: #e7f3ff;
+            transform: scale(1.01);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-create {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-update {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-delete {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-estorno {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+
+        .badge-cancelamento {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-aprovacao {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .badge-baixa {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .badge-export {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .details-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+
+        .details-btn:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2em;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            background: #c82333;
+        }
+
+        .detail-row {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .detail-label {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+        }
+
+        .detail-value {
+            color: #212529;
+            font-size: 1em;
+            word-break: break-word;
+        }
+
+        .json-viewer {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+            max-height: 300px;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 30px;
+            align-items: center;
+        }
+
+        .pagination button {
+            padding: 10px 20px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: #667eea;
+            color: white;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination span {
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+
+        .empty-state svg {
+            width: 150px;
+            height: 150px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .filters {
+                grid-template-columns: 1fr;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+            table {
+                font-size: 0.85em;
+            }
+
+            th,
+            td {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <button class="back-btn" onclick="window.location.href='/'">← Voltar ao Sistema</button>
+            <h1>📊 Log de Auditoria</h1>
+            <p>Rastreamento completo de todas as ações no sistema</p>
+        </div>
+
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="number" id="totalLogs">-</div>
+                <div class="label">Total de Registros</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="totalUsuarios">-</div>
+                <div class="label">Usuários Ativos</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="totalHoje">-</div>
+                <div class="label">Ações Hoje</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="moduloMaisUsado">-</div>
+                <div class="label">Módulo Mais Usado</div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label for="dataInicio">Data Início</label>
+                <input type="date" id="dataInicio">
+            </div>
+
+            <div class="filter-group">
+                <label for="dataFim">Data Fim</label>
+                <input type="date" id="dataFim">
+            </div>
+
+            <div class="filter-group">
+                <label for="usuario">Usuário</label>
+                <select id="usuario">
+                    <option value="">Todos os usuários</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="tipoAcao">Tipo de Ação</label>
+                <select id="tipoAcao">
+                    <option value="">Todos</option>
+                    <option value="CREATE">Criação</option>
+                    <option value="UPDATE">Edição</option>
+                    <option value="DELETE">Exclusão</option>
+                    <option value="ESTORNO">Estorno</option>
+                    <option value="CANCELAMENTO">Cancelamento</option>
+                    <option value="APROVACAO">Aprovação</option>
+                    <option value="BAIXA">Baixa</option>
+                    <option value="EXPORT">Exportação</option>
+                    <option value="PRINT">Impressão</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="modulo">Módulo / Descrição</label>
+                <input type="text" id="modulo" placeholder="Ex: Vendas, criou, editou...">
+            </div>
+
+            <div class="filter-group">
+                <label for="periodo">Período Rápido</label>
+                <select id="periodo">
+                    <option value="">Selecione...</option>
+                    <option value="1">Último dia</option>
+                    <option value="7">Últimos 7 dias</option>
+                    <option value="15">Últimos 15 dias</option>
+                    <option value="30">Últimos 30 dias</option>
+                    <option value="90">Últimos 90 dias</option>
+                </select>
+            </div>
+
+            <div class="buttons-row">
+                <button class="btn btn-primary" onclick="buscarLogs()">🔍 Buscar</button>
+                <button class="btn btn-secondary" onclick="limparFiltros()">🗑️ Limpar</button>
+                <button class="btn btn-primary" onclick="exportarCSV()">📥 Exportar CSV</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="loading" id="loading">Carregando dados</div>
+
+            <div id="tableContainer" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data/Hora</th>
+                            <th>Usuário</th>
+                            <th>Ação</th>
+                            <th>Módulo</th>
+                            <th>Descrição</th>
+                            <th>IP</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    </tbody>
+                </table>
+
+                <div class="pagination" id="pagination"></div>
+            </div>
+
+            <div id="emptyState" style="display: none;" class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <h3>Nenhum registro encontrado</h3>
+                <p>Tente ajustar os filtros de busca</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Detalhes -->
+    <div class="modal" id="detailsModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="fecharModal()">×</button>
+            <h2 style="margin-bottom: 20px; color: #667eea;">Detalhes do Log</h2>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // Detecta se está rodando localmente no Frontend (Vite) ou Backend (Django)
+        // Se estiver no frontend (3001, 5173, 5174), usa o proxy '/api'
+        // Se estiver no backend (8005), usa '/api' direto
+        // Fallback para 127.0.0.1:8005 apenas se necessário
+        const API_URL = ['3001', '5173', '5174', '8005'].includes(window.location.port)
+            ? '/api' 
+            : 'http://127.0.0.1:8005/api';
+            
+        console.log('🔗 Usando API URL:', API_URL);
+
+        let currentPage = 1;
+        let totalPages = 1;
+        let allLogs = [];
+
+        // Função para obter token de qualquer storage
+        function getToken() {
+            // Buscar todas as variantes possíveis
+            const token = sessionStorage.getItem('accessToken') ||
+                sessionStorage.getItem('access_token') ||
+                localStorage.getItem('accessToken') ||
+                localStorage.getItem('access_token') ||
+                null;
+
+            console.log('🔍 Debug Token:');
+            console.log('  sessionStorage.accessToken:', sessionStorage.getItem('accessToken') ? 'SIM' : 'NÃO');
+            console.log('  sessionStorage.access_token:', sessionStorage.getItem('access_token') ? 'SIM' : 'NÃO');
+            console.log('  localStorage.accessToken:', localStorage.getItem('accessToken') ? 'SIM' : 'NÃO');
+            console.log('  localStorage.access_token:', localStorage.getItem('access_token') ? 'SIM' : 'NÃO');
+            console.log('  Token final:', token ? 'ENCONTRADO' : 'NÃO ENCONTRADO');
+
+            return token;
+        }
+
+        // Carregar ao iniciar
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Log de Auditoria carregado!');
+
+            // Aguardar um pouco para garantir que sessionStorage está disponível
+            setTimeout(() => {
+                const token = getToken();
+
+                if (!token) {
+                    console.error('❌ Token não encontrado!');
+                    alert('Sessão não encontrada! Por favor, faça login.');
+                    window.location.href = '/';
+                    return;
+                }
+
+                console.log('✅ Token encontrado! Carregando dados...');
+                carregarUsuarios();
+                carregarEstatisticas();
+                buscarLogs();
+            }, 200);
+        });
+
+        async function carregarUsuarios() {
+            try {
+                const token = getToken();
+                const response = await fetch(`${API_URL}/usuarios/`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.status === 401) {
+                    alert('Sessão expirada! Faça login novamente.');
+                    localStorage.removeItem('access_token');
+                    localStorage.removeItem('refresh_token');
+                    window.location.href = '/login.html';
+                    return;
+                }
+
+                if (response.ok) {
+                    const usuarios = await response.json();
+                    const selectUsuario = document.getElementById('usuario');
+
+                    // Limpar opções existentes (exceto a primeira)
+                    selectUsuario.innerHTML = '<option value="">Todos os usuários</option>';
+
+                    // Adicionar usuários
+                    usuarios.forEach(user => {
+                        const option = document.createElement('option');
+                        option.value = user.username;
+                        option.textContent = `${user.first_name} ${user.last_name} (${user.username})`.trim();
+                        selectUsuario.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Erro ao carregar usuários:', error);
+            }
+        }
+
+        async function carregarEstatisticas() {
+            try {
+                const token = getToken();
+                const response = await fetch(`${API_URL}/logs-auditoria/estatisticas/`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.status === 401) {
+                    alert('Sessão expirada! Faça login novamente.');
+                    localStorage.removeItem('access_token');
+                    localStorage.removeItem('refresh_token');
+                    window.location.href = '/login.html';
+                    return;
+                }
+
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('totalLogs').textContent = data.total_logs.toLocaleString();
+                    document.getElementById('totalUsuarios').textContent = data.por_usuario.length;
+
+                    // Total de hoje (últimos 1 dia)
+                    const responseHoje = await fetch(`${API_URL}/logs-auditoria/?periodo=1`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    if (responseHoje.ok) {
+                        const dataHoje = await responseHoje.json();
+                        document.getElementById('totalHoje').textContent = dataHoje.count || dataHoje.results?.length || 0;
+                    }
+
+                    // Módulo mais usado
+                    if (data.por_modulo.length > 0) {
+                        document.getElementById('moduloMaisUsado').textContent = data.por_modulo[0].modulo;
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao carregar estatísticas:', error);
+            }
+        }
+
+        async function buscarLogs() {
+            const loading = document.getElementById('loading');
+            const tableContainer = document.getElementById('tableContainer');
+            const emptyState = document.getElementById('emptyState');
+
+            loading.style.display = 'block';
+            tableContainer.style.display = 'none';
+            emptyState.style.display = 'none';
+
+            try {
+                const token = getToken();
+                const params = new URLSearchParams();
+
+                // Adicionar filtros
+                const dataInicio = document.getElementById('dataInicio').value;
+                const dataFim = document.getElementById('dataFim').value;
+                const usuario = document.getElementById('usuario').value;
+                const tipoAcao = document.getElementById('tipoAcao').value;
+                const modulo = document.getElementById('modulo').value;
+                const periodo = document.getElementById('periodo').value;
+
+                if (dataInicio) params.append('data_inicio', dataInicio);
+                if (dataFim) params.append('data_fim', dataFim);
+                if (usuario) params.append('username', usuario);
+                if (tipoAcao) params.append('tipo_acao', tipoAcao);
+                // Usar search para buscar em múltiplos campos (módulo, descrição, etc)
+                if (modulo) params.append('search', modulo);
+                if (periodo) params.append('periodo', periodo);
+
+                const response = await fetch(`${API_URL}/logs-auditoria/?${params}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.status === 401) {
+                    alert('Sessão expirada! Faça login novamente.');
+                    localStorage.removeItem('access_token');
+                    localStorage.removeItem('refresh_token');
+                    window.location.href = '/login.html';
+                    return;
+                }
+
+                if (response.ok) {
+                    const data = await response.json();
+                    allLogs = data.results || data;
+
+                    if (allLogs.length === 0) {
+                        emptyState.style.display = 'block';
+                    } else {
+                        renderizarTabela(allLogs);
+                        tableContainer.style.display = 'block';
+                    }
+                } else {
+                    alert('Erro ao buscar logs. Verifique sua autenticação.');
+                }
+            } catch (error) {
+                console.error('Erro ao buscar logs:', error);
+                alert('Erro ao carregar dados.');
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function renderizarTabela(logs) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            logs.forEach(log => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${log.data_hora_formatada || new Date(log.data_hora).toLocaleString('pt-BR')}</td>
+                    <td><strong>${log.usuario_nome}</strong></td>
+                    <td><span class="badge badge-${log.tipo_acao.toLowerCase()}">${log.tipo_acao_display}</span></td>
+                    <td>${log.modulo}</td>
+                    <td>${log.descricao}</td>
+                    <td>${log.ip_address || '-'}</td>
+                    <td>
+                        <button class="details-btn" onclick='verDetalhes(${JSON.stringify(log).replace(/'/g, "&apos;")})'>
+                            👁️ Ver Detalhes
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function verDetalhes(log) {
+            const modal = document.getElementById('detailsModal');
+            const content = document.getElementById('modalContent');
+
+            let dadosNovosHTML = '';
+            if (log.dados_novos) {
+                try {
+                    const dados = JSON.parse(log.dados_novos);
+                    dadosNovosHTML = `
+                        <div class="detail-row">
+                            <div class="detail-label">Dados da Operação:</div>
+                            <div class="json-viewer">${JSON.stringify(dados, null, 2)}</div>
+                        </div>
+                    `;
+                } catch (e) {
+                    dadosNovosHTML = `
+                        <div class="detail-row">
+                            <div class="detail-label">Dados da Operação:</div>
+                            <div class="detail-value">${log.dados_novos}</div>
+                        </div>
+                    `;
+                }
+            }
+
+            content.innerHTML = `
+                <div class="detail-row">
+                    <div class="detail-label">ID do Log:</div>
+                    <div class="detail-value">${log.id_log}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Data e Hora:</div>
+                    <div class="detail-value">${log.data_hora_formatada || new Date(log.data_hora).toLocaleString('pt-BR')}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Usuário:</div>
+                    <div class="detail-value">${log.usuario_nome} (${log.usuario_username || 'N/A'})</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Tipo de Ação:</div>
+                    <div class="detail-value"><span class="badge badge-${log.tipo_acao.toLowerCase()}">${log.tipo_acao_display}</span></div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Módulo:</div>
+                    <div class="detail-value">${log.modulo}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Descrição:</div>
+                    <div class="detail-value">${log.descricao}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Tabela Afetada:</div>
+                    <div class="detail-value">${log.tabela || 'N/A'}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">ID do Registro:</div>
+                    <div class="detail-value">${log.registro_id || 'N/A'}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Endereço IP:</div>
+                    <div class="detail-value">${log.ip_address || 'N/A'}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Navegador/Dispositivo:</div>
+                    <div class="detail-value" style="font-size: 0.85em;">${log.user_agent || 'N/A'}</div>
+                </div>
+                ${dadosNovosHTML}
+            `;
+
+            modal.classList.add('active');
+        }
+
+        function fecharModal() {
+            document.getElementById('detailsModal').classList.remove('active');
+        }
+
+        function limparFiltros() {
+            document.getElementById('dataInicio').value = '';
+            document.getElementById('dataFim').value = '';
+            document.getElementById('usuario').value = '';
+            document.getElementById('tipoAcao').value = '';
+            document.getElementById('modulo').value = '';
+            document.getElementById('periodo').value = '';
+            buscarLogs();
+        }
+
+        function exportarCSV() {
+            if (allLogs.length === 0) {
+                alert('Não há dados para exportar');
+                return;
+            }
+
+            const headers = ['Data/Hora', 'Usuário', 'Tipo Ação', 'Módulo', 'Descrição', 'IP', 'Tabela', 'ID Registro'];
+            const rows = allLogs.map(log => [
+                log.data_hora_formatada || new Date(log.data_hora).toLocaleString('pt-BR'),
+                log.usuario_nome,
+                log.tipo_acao_display,
+                log.modulo,
+                log.descricao,
+                log.ip_address || '',
+                log.tabela || '',
+                log.registro_id || ''
+            ]);
+
+            let csv = headers.join(',') + '\n';
+            rows.forEach(row => {
+                csv += row.map(cell => `"${cell}"`).join(',') + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `log_auditoria_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+        }
+
+        // Fechar modal ao clicar fora
+        document.getElementById('detailsModal').addEventListener('click', (e) => {
+            if (e.target.id === 'detailsModal') {
+                fecharModal();
+            }
+        });
+    </script>
+</body>
+
+</html>

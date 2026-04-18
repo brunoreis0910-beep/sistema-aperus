@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TESTE MDF-e - Documentos Disponíveis</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        h1 { color: #1976d2; }
+        .doc { padding: 10px; margin: 5px 0; background: #e3f2fd; border-left: 4px solid #1976d2; }
+        .cte { border-left-color: #ff9800; background: #fff3e0; }
+        .nfe { border-left-color: #4caf50; background: #e8f5e9; }
+        button { padding: 10px 20px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #1565c0; }
+        .loading { color: #666; font-style: italic; }
+        .error { color: red; padding: 10px; background: #ffebee; border-radius: 4px; }
+        .success { color: green; padding: 10px; background: #e8f5e9; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚛 TESTE MDF-e - Documentos Disponíveis</h1>
+        <p>Esta página testa DIRETAMENTE o backend, sem cache do React.</p>
+        
+        <button onclick="buscarDocumentos()">🔍 Buscar Documentos</button>
+        
+        <div id="resultado"></div>
+    </div>
+
+    <script>
+        async function buscarDocumentos() {
+            const resultado= document.getElementById('resultado');
+            resultado.innerHTML = '<p class="loading">🔄 Buscando documentos...</p>';
+            
+            try {
+                // Pegar token do localStorage
+                const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+                
+                if (!token) {
+                    resultado.innerHTML = '<p class="error">❌ Token não encontrado! Faça login no sistema primeiro.</p>';
+                    return;
+                }
+                
+                // Fazer requisição
+                const response = await fetch('http://127.0.0.1:8005/api/mdfe/listar_documentos_disponiveis/', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // Mostrar resultados
+                let html = `<div class="success">✅ Requisição bem-sucedida!</div>`;
+                html += `<h2>📊 Resumo:</h2>`;
+                html += `<p><strong>CT-e encontrados:</strong> ${data.ctes?.length || 0}</p>`;
+                html += `<p><strong>NF-e encontradas:</strong> ${data.nfes?.length || 0}</p>`;
+                html += `<p><strong>TOTAL:</strong> ${(data.ctes?.length || 0) + (data.nfes?.length || 0)}</p>`;
+                
+                // Listar CT-e
+                if (data.ctes && data.ctes.length > 0) {
+                    html += `<h3>🚛 CT-e Disponíveis:</h3>`;
+                    data.ctes.forEach(cte => {
+                        html += `<div class="doc cte">
+                            <strong>CT-e Nº ${cte.numero_cte}/${cte.serie_cte}</strong><br>
+                            Chave: ${cte.chave_cte}<br>
+                            Destinatário: ${cte.destinatario__nome_razao_social || 'N/A'}<br>
+                            Valor: R$ ${(cte.valor_total_servico || 0).toFixed(2)}
+                        </div>`;
+                    });
+                }
+                
+                // Listar NF-e
+                if (data.nfes && data.nfes.length > 0) {
+                    html += `<h3>📄 NF-e Disponíveis (primeiras 10):</h3>`;
+                    data.nfes.slice(0, 10).forEach(nfe => {
+                        html += `<div class="doc nfe">
+                            <strong>NF-e Nº ${nfe.numero_nfe}/${nfe.serie_nfe}</strong><br>
+                            Chave: ${nfe.chave_nfe || 'N/A'}<br>
+                            Cliente: ${nfe.id_cliente__nome_razao_social || 'N/A'}<br>
+                            Valor: R$ ${(nfe.valor_total || 0).toFixed(2)}
+                        </div>`;
+                    });
+                }
+                
+                if ((data.ctes?.length || 0) === 0 && (data.nfes?.length || 0) === 0) {
+                    html += '<p class="error">⚠️ Nenhum documento disponível para MDF-e</p>';
+                }
+                
+                // Mostrar JSON bruto
+                html += `<h3>📋 Resposta JSON Bruta:</h3>`;
+                html += `<pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">${JSON.stringify(data, null, 2)}</pre>`;
+                
+                resultado.innerHTML = html;
+                
+            } catch (error) {
+                resultado.innerHTML = `<p class="error">❌ ERRO: ${error.message}</p>
+                    <p>Verifique se:</p>
+                    <ul>
+                        <li>O servidor Django está rodando em http://127.0.0.1:8005</li>
+                        <li>Você está logado no sistema (token JWT válido)</li>
+                        <li>Não há erros no Console (F12)</li>
+                    </ul>`;
+                console.error('Erro completo:', error);
+            }
+        }
+    </script>
+</body>
+</html>

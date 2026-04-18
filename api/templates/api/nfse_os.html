@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emissão de NFS-e (Serviços)</title>
+    <!-- Vue.js 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        body { background-color: #f5f5f5; font-family: 'Roboto', sans-serif; }
+        .card-os { transition: transform 0.2s; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card-os:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+        .status-badge { font-size: 0.8em; padding: 5px 10px; border-radius: 12px; }
+        .bg-gradient-header { background: linear-gradient(135deg, #1976d2 0%, #0d47a1 100%); color: white; padding: 20px 0; margin-bottom: 30px; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        {% verbatim %}
+        <header class="bg-gradient-header">
+            <div class="container d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 m-0">Emissor NFS-e Nacional</h1>
+                    <small>Gestão de Notas Fiscais de Serviço Eletrônicas</small>
+                </div>
+                <div>
+                    <a href="/config-nfce/" class="btn btn-outline-light btn-sm me-2">
+                        <span class="material-icons align-middle" style="font-size: 18px;">settings</span> Configurar
+                    </a>
+                    <button @click="carregarOS" class="btn btn-light btn-sm">
+                        <span class="material-icons align-middle" style="font-size: 18px;">refresh</span> Atualizar
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="container">
+            <!-- Filtros -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Buscar OS</label>
+                            <input type="text" v-model="filtros.search" class="form-control" placeholder="Número, Cliente...">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Status OS</label>
+                            <select v-model="filtros.status" class="form-select">
+                                <option value="">Todas</option>
+                                <option value="Finalizada">Finalizada</option>
+                                <option value="Aberta">Aberta</option>
+                                <option value="Em Andamento">Em Andamento</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button @click="carregarOS" class="btn btn-primary w-100">Filtrar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de OS -->
+            <div v-if="loading" class="text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">Carregando ordens de serviço...</p>
+            </div>
+
+            <div v-else-if="listaOS.length === 0" class="text-center py-5 text-muted">
+                <span class="material-icons" style="font-size: 48px;">inbox</span>
+                <p>Nenhuma Ordem de Serviço encontrada.</p>
+            </div>
+
+            <div v-else class="row">
+                <div v-for="os in listaOS" :key="os.id_os" class="col-lg-6">
+                    <div class="card card-os">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div>
+                                    <h5 class="card-title fw-bold text-primary mb-1">OS #{{ os.id_os }}</h5>
+                                    <span class="text-muted small">{{ formatarData(os.data_abertura) }}</span>
+                                </div>
+                                <span class="badge" :class="getBadgeClass(os.status_os)">{{ os.status_os }}</span>
+                            </div>
+
+                            <div class="mb-3">
+                                <p class="mb-1"><strong>Cliente:</strong> {{ os.id_cliente_nome || 'Consumidor Final' }}</p>
+                                <p class="mb-1"><strong>Total Serviços:</strong> R$ {{ formatarMoeda(os.valor_total_servicos) }}</p>
+                                <p class="mb-0 text-truncate" v-if="os.descricao_problema">
+                                    <small class="text-muted">{{ os.descricao_problema }}</small>
+                                </p>
+                            </div>
+
+                            <div class="border-top pt-3 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span v-if="os.nfse_status" class="badge bg-success me-2">NFS-e Emitida</span>
+                                    <span v-else class="badge bg-secondary me-2">Não Emitida</span>
+                                </div>
+                                <button 
+                                    @click="emitirNFSe(os)" 
+                                    class="btn btn-success btn-sm d-flex align-items-center"
+                                    :disabled="os.valor_total_servicos <= 0 || issuingId === os.id_os">
+                                    <span class="material-icons me-1" style="font-size: 18px;">send</span>
+                                    {{ issuingId === os.id_os ? 'Emitindo...' : 'Emitir NFS-e' }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Resultado -->
+        <div class="modal fade" id="modalResultado" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" :class="modal.success ? 'text-success' : 'text-danger'">
+                            {{ modal.title }}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>{{ modal.message }}</p>
+                        <pre v-if="modal.details" class="bg-light p-2 small">{{ modal.details }}</pre>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endverbatim %}
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const listaOS = ref([]);
+                const loading = ref(false);
+                const issuingId = ref(null);
+                const filtros = ref({ search: '', status: '' });
+                const modal = ref({ title: '', message: '', details: '', success: false });
+                let bsModal = null;
+
+                onMounted(() => {
+                    const modalEl = document.getElementById('modalResultado');
+                    if(window.bootstrap) bsModal = new bootstrap.Modal(modalEl);
+                    carregarOS();
+                });
+
+                const carregarOS = async () => {
+                    loading.value = true;
+                    try {
+                        const params = {};
+                        if(filtros.value.search) params.search = filtros.value.search;
+                        if(filtros.value.status) params.status = filtros.value.status;
+
+                        // Busca na API de OS
+                        const response = await axios.get('/api/ordem-servico/', { params });
+                        listaOS.value = response.data;
+                    } catch (error) {
+                        console.error("Erro ao carregar OS:", error);
+                        mostrarModal('Erro', 'Falha ao buscar ordens de serviço.', false);
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const emitirNFSe = async (os) => {
+                    if (!confirm(`Confirma a emissão de NFS-e para a OS #${os.id_os}?`)) return;
+
+                    issuingId.value = os.id_os;
+                    try {
+                        const response = await axios.post(`/api/ordem-servico/${os.id_os}/emitir_nfse/`);
+                        mostrarModal('Sucesso', 'NFS-e emitida e transmitida com sucesso!', true, JSON.stringify(response.data, null, 2));
+                        carregarOS(); // Recarrega para atualizar status
+                    } catch (error) {
+                        console.error("Erro emissão:", error);
+                        const msg = error.response?.data?.error || error.message;
+                        mostrarModal('Erro na Emissão', msg, false);
+                    } finally {
+                        issuingId.value = null;
+                    }
+                };
+
+                const mostrarModal = (title, message, success, details = '') => {
+                    modal.value = { title, message, details, success };
+                    if(bsModal) bsModal.show();
+                };
+
+                const formatarMoeda = (val) => {
+                    return parseFloat(val).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                };
+
+                const formatarData = (val) => {
+                    if(!val) return '';
+                    return new Date(val).toLocaleDateString('pt-BR');
+                };
+
+                const getBadgeClass = (status) => {
+                    switch(status) {
+                        case 'Finalizada': return 'bg-success';
+                        case 'Cancelada': return 'bg-danger';
+                        case 'Aberta': return 'bg-primary';
+                        default: return 'bg-secondary';
+                    }
+                };
+
+                return {
+                    listaOS,
+                    loading,
+                    issuingId,
+                    filtros,
+                    modal,
+                    carregarOS,
+                    emitirNFSe,
+                    formatarMoeda,
+                    formatarData,
+                    getBadgeClass
+                };
+            }
+        }).mount('#app');
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

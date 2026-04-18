@@ -1,0 +1,274 @@
+/* Otimizações globais para monitores ultra-wide */
+
+/* Reset global para tela cheia - FORÇADO */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  overflow-x: auto;
+}
+
+#root {
+  width: 100vw !important;
+  min-height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
+}
+
+/* Forçar containers a usar largura total */
+.MuiContainer-root {
+  max-width: none !important;
+  width: 100% !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  margin: 0 !important;
+}
+
+/* Forçar fundo branco para Paper (formulários) */
+.MuiPaper-root {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+/* Forçar visibilidade dos campos de input */
+.MuiInputBase-root {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+.MuiInputBase-input {
+  color: #000000 !important;
+}
+
+.MuiFormLabel-root {
+  color: #666666 !important;
+}
+
+/* Forçar Grid containers a usar largura total */
+.MuiGrid-container {
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+/* Remover limitações de largura do Box */
+.MuiBox-root {
+  max-width: none !important;
+}
+
+/* Variáveis CSS dinâmicas (controladas pelo JavaScript) */
+:root {
+  --container-max-width: none;
+  --container-padding: 8px 16px;
+  --grid-spacing: 8px;
+  --content-width: 98%;
+}
+
+/* Container principal otimizado */
+.MuiContainer-root {
+  max-width: none !important;
+  width: 100% !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+  margin: 0 !important;
+}
+
+/* Otimizações específicas para 5120x1440 */
+@media screen and (min-width: 5120px) {
+  .MuiContainer-root {
+    max-width: none !important;
+    width: 100vw !important;
+    padding: 0 12px !important;
+    margin: 0 !important;
+  }
+
+  .MuiGrid-container {
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .MuiGrid-item {
+    padding: 4px !important;
+  }
+
+  /* Forçar Box a usar largura total */
+  .MuiBox-root {
+    max-width: none !important;
+    width: 100% !important;
+  }
+
+  /* Otimização especial para super ultra-wide */
+  body {
+    zoom: 0.9;
+    /* Zoom ligeiramente menor para caber mais conteúdo */
+  }
+}
+
+/* Otimizações para ultra-wide (3440px+) */
+@media screen and (min-width: 3440px) and (max-width: 5119px) {
+  .MuiContainer-root {
+    max-width: none !important;
+    width: 95% !important;
+    padding: 0 20px !important;
+  }
+
+  .MuiTab-root {
+    min-width: 180px !important;
+    font-size: 1rem !important;
+  }
+}
+
+/* Otimizações de performance para telas grandes */
+@media screen and (min-width: 3440px) {
+
+  /* Reduzir blur em transformações */
+  .MuiCard-root {
+    backface-visibility: hidden;
+    transform: translateZ(0);
+  }
+
+  /* Otimizar animações */
+  .MuiLinearProgress-root {
+    will-change: transform;
+  }
+
+  /* Reduzir reflows */
+  .MuiGrid-container {
+    contain: layout;
+  }
+}
+
+/* Scrollbar customizada para telas grandes */
+@media screen and (min-width: 2560px) {
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 6px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 6px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+  }
+}
+
+/* Classe utilitária para debug de resolução */
+.screen-debug {
+  position: fixed;
+  top: 70px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* Ocultar debug em produção */
+body:not(.debug-mode) .screen-debug {
+  display: none;
+}
+
+/* Otimizações para impressão */
+@media print {
+
+  .MuiAppBar-root,
+  .MuiDrawer-root,
+  .screen-debug {
+    display: none !important;
+  }
+
+  .MuiContainer-root {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+}
+
+/* Modo escuro otimizado para ultra-wide - REMOVIDO para evitar conflitos */
+/* Comentado para corrigir problemas de visibilidade no login */
+/*
+@media (prefers-color-scheme: dark) and (min-width: 3440px) {
+  .MuiPaper-root {
+    background-color: rgba(18, 18, 18, 0.95) !important;
+    backdrop-filter: blur(10px);
+  }
+}
+*/
+
+/* Animações reduzidas para usuários com preferência */
+@media (prefers-reduced-motion: reduce) {
+  .MuiCard-root {
+    transition: none !important;
+  }
+
+  .MuiCard-root:hover {
+    transform: none !important;
+  }
+}
+
+/* FORÇA MÁXIMA - Regras finais para tela inteira */
+.MuiContainer-root,
+.MuiContainer-maxWidthXl,
+.MuiContainer-maxWidthLg,
+.MuiContainer-maxWidthMd {
+  max-width: none !important;
+  width: 100vw !important;
+  margin: 0 !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+/* Força Box principal a usar toda largura */
+[role="main"],
+main {
+  width: 100vw !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+/* Força Grid containers a usar toda largura */
+.MuiGrid-root {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* Ultra-wide específico: força usar 100% da tela */
+@media screen and (min-width: 3440px) {
+  * {
+    max-width: none !important;
+  }
+
+  html {
+    width: 100vw !important;
+  }
+
+  body {
+    width: 100vw !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  #root {
+    width: 100vw !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}

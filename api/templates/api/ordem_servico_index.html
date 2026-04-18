@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ordens de Serviço</title>
+    <!-- Vue.js 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        body { background-color: #f5f5f5; font-family: 'Roboto', sans-serif; }
+        .card-os { transition: transform 0.2s; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card-os:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+        .status-badge { font-size: 0.8em; padding: 5px 10px; border-radius: 12px; }
+        .bg-gradient-header { background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%); color: white; padding: 20px 0; margin-bottom: 30px; }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white; }
+            .card-os { box-shadow: none; border: 1px solid #ddd; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        {% verbatim %}
+        <header class="bg-gradient-header no-print">
+            <div class="container d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 m-0">Ordens de Serviço</h1>
+                    <small>Gestão e Impressão de Notas de Serviço</small>
+                </div>
+                <div>
+                    <button @click="carregarOS" class="btn btn-light btn-sm">
+                        <span class="material-icons align-middle" style="font-size: 18px;">refresh</span> Atualizar
+                    </button>
+                    <!-- Link para voltar ao menu principal se houver -->
+                    <a href="/" class="btn btn-outline-light btn-sm ms-2">Voltar</a>
+                </div>
+            </div>
+        </header>
+
+        <div class="container no-print">
+            <!-- Filtros -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Buscar (Nome, Placa, Número)</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><span class="material-icons">search</span></span>
+                                <input type="text" class="form-control" v-model="filtros.search" @keyup.enter="carregarOS" placeholder="Digite para buscar...">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select" v-model="filtros.status" @change="carregarOS">
+                                <option value="">Todos</option>
+                                <option value="aberto">Aberto</option>
+                                <option value="fechado">Fechado</option>
+                                <option value="cancelado">Cancelado</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button class="btn btn-primary w-100" @click="carregarOS">Filtrar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de OS -->
+            <div v-if="loading" class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Carregando...</span>
+                </div>
+            </div>
+
+            <div v-else-if="ordens.length === 0" class="alert alert-info text-center">
+                Nenhuma ordem de serviço encontrada com os filtros atuais.
+            </div>
+
+            <div v-else class="row">
+                <div class="col-md-6 col-lg-4" v-for="os in ordens" :key="os.id_os">
+                    <div class="card card-os h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
+                            <h5 class="card-title m-0">#{{ formatarNumeroOS(os.numero) }}</h5>
+                            <span class="badge" 
+                                :class="{
+                                    'bg-success': os.status === 'fechado', 
+                                    'bg-warning text-dark': os.status === 'aberto',
+                                    'bg-danger': os.status === 'cancelado'
+                                }">
+                                {{ os.status.toUpperCase() }}
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-1"><strong>Cliente:</strong> {{ os.cliente_nome || 'Consumidor Final' }}</p>
+                            <p class="mb-1" v-if="os.veiculo"><strong>Veículo:</strong> {{ os.veiculo }}</p>
+                            <p class="mb-1" v-if="os.data_abertura"><strong>Data:</strong> {{ formatarData(os.data_abertura) }}</p>
+                            <p class="mb-0 mt-2 text-muted small" v-if="os.itens_servicos.length > 0">
+                                {{ os.itens_servicos.length }} serviço(s) adicionado(s)
+                            </p>
+                        </div>
+                        <div class="card-footer bg-white border-top-0 pb-3">
+                             <div class="d-grid gap-2">
+                                <button @click="imprimirOS(os)" class="btn btn-outline-primary btn-sm">
+                                    <span class="material-icons align-middle fs-6">print</span> Imprimir Nota
+                                </button>
+                                <div class="btn-group" role="group">
+                                    <button @click="emitirNFSe(os)" class="btn btn-sm btn-outline-success" title="Emitir NFS-e">
+                                        <span class="material-icons align-middle fs-6">receipt_long</span> NFS-e
+                                    </button>
+                                    <button @click="abrirModalNFe(os)" class="btn btn-sm btn-outline-warning text-dark" title="Gerar NFe (Produtos)">
+                                        <span class="material-icons align-middle fs-6">inventory_2</span> NFe
+                                    </button>
+                                    <button @click="baixarXML(os)" class="btn btn-sm btn-outline-secondary" title="Baixar XML">
+                                        <span class="material-icons align-middle fs-6">download</span> XML
+                                    </button>
+                                    <button @click="enviarEmail(os)" class="btn btn-sm btn-outline-info" title="Enviar por E-mail">
+                                        <span class="material-icons align-middle fs-6">email</span> Email
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal de Impressão (Simplificado como visualização apenas para print) -->
+        <div v-if="osImpressao" class="print-area mt-4 p-4 bg-white d-none d-print-block">
+            <div class="text-center mb-4">
+                <h2>NOTA DE SERVIÇO</h2>
+                <h3>OS #{{ formatarNumeroOS(osImpressao.numero) }}</h3>
+            </div>
+            
+            <div class="row mb-4">
+                <div class="col-6">
+                    <p><strong>Cliente:</strong> {{ osImpressao.cliente_nome }}</p>
+                    <p><strong>Data Abertura:</strong> {{ formatarData(osImpressao.data_abertura) }}</p>
+                </div>
+                <div class="col-6 text-end">
+                    <p><strong>Status:</strong> {{ osImpressao.status.toUpperCase() }}</p>
+                </div>
+            </div>
+
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Serviço/Produto</th>
+                        <th class="text-center">Qtd</th>
+                        <th class="text-end">Valor Unit.</th>
+                        <th class="text-end">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="item in osImpressao.itens_servicos" :key="'s'+item.id">
+                        <td>(Serviço) {{ item.descricao_servico }}</td>
+                        <td class="text-center">{{ item.quantidade }}</td>
+                        <td class="text-end">{{ formatarMoeda(item.valor_unitario) }}</td>
+                        <td class="text-end">{{ formatarMoeda(item.valor_total) }}</td>
+                    </tr>
+                    <tr v-for="item in osImpressao.itens_produtos" :key="'p'+item.id">
+                        <td>(Produto) {{ item.produto_nome }}</td>
+                        <td class="text-center">{{ item.quantidade }}</td>
+                        <td class="text-end">{{ formatarMoeda(item.valor_unitario) }}</td>
+                        <td class="text-end">{{ formatarMoeda(item.valor_total) }}</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="3" class="text-end fw-bold">TOTAL:</td>
+                        <td class="text-end fw-bold">{{ formatarMoeda(calcularTotal(osImpressao)) }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+            
+            <div class="mt-5 text-center border-top pt-3">
+                <p>Assinatura do Cliente</p>
+            </div>
+        </div>
+
+        <!-- Modal NFe (Operação) -->
+        <div class="modal fade" id="modalNFe" tabindex="-1" role="dialog" aria-labelledby="modalNFeLabel" aria-hidden="true">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="modalNFeLabel">Gerar NFe de Produtos da OS</h5>
+                        <button type="button" class="btn-close" @click="fecharModalNFe" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body" v-if="nfeOsSelected">
+                        <p class="mb-2">Selecione a operação para gerar a Nota Fiscal:</p>
+                        <select class="form-select mb-3" v-model="nfeOperacaoSelected">
+                            <option :value="null" disabled>Selecione uma operação (Modelo 55 - Saída)...</option>
+                            <option v-for="op in nfeOperacoes" :key="op.id_operacao" :value="op.id_operacao">
+                                {{ op.nome_operacao }} (Série: {{ op.serie_nf }} - Próximo: {{ op.proximo_numero_nf }})
+                            </option>
+                        </select>
+                        
+                        <div class="alert alert-warning small">
+                            <i class="material-icons fs-6 align-middle">warning</i>
+                            Apenas itens de <strong>PRODUTO (Revenda)</strong> serão copiados para a Nota Fiscal. <br>
+                            Serviços serão ignorados pois devem ser faturados via NFS-e.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @click="fecharModalNFe">Cancelar</button>
+                        <button type="button" class="btn btn-primary" @click="confirmarNFe" :disabled="!nfeOperacaoSelected || nfeLoading">
+                            <span v-if="nfeLoading" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            {{ nfeLoading ? 'Gerando...' : 'Gerar Nota Fiscal' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% endverbatim %}
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const ordens = ref([]);
+                const loading = ref(false);
+                const filtros = ref({
+                    search: '',
+                    status: ''
+                });
+                const osImpressao = ref(null);
+                
+                // NFe Logic
+                const nfeOsSelected = ref(null);
+                const nfeOperacoes = ref([]);
+                const nfeOperacaoSelected = ref(null);
+                const nfeLoading = ref(false);
+                let modalNFeInstance = null;
+
+                const carregarOperacoes = async () => {
+                    try {
+                        const token = getAuthToken();
+                        const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+                        const response = await axios.get('/api/operacoes/', config);
+                        const allOps = response.data.results || response.data;
+                        // Filter for Model 55 and Output operations (Saida, Venda, etc)
+                        // Adjust logic based on your exact Operacao model 'transacao' or 'tipo'
+                        nfeOperacoes.value = allOps.filter(op => 
+                            String(op.modelo_documento) === '55' && 
+                            // Permissive match for 'saida' or 'venda' logic
+                            (
+                              (op.transacao && ['SAIDA', 'VENDA', 'DEVOLUÇÃO', 'REMESSA'].some(t => op.transacao.toUpperCase().includes(t)))
+                              ||
+                              (op.nome_operacao && ['VENDA', 'SAIDA'].some(t => op.nome_operacao.toUpperCase().includes(t)))
+                            )
+                        );
+                        
+                        // Fallback: If strict filtering returns empty, show all Model 55
+                        if(nfeOperacoes.value.length === 0) {
+                             nfeOperacoes.value = allOps.filter(op => String(op.modelo_documento) === '55');
+                        }
+                    } catch (e) {
+                        console.error("Erro ao carregar operações", e);
+                    }
+                };
+
+                const abrirModalNFe = (os) => {
+                    nfeOsSelected.value = os;
+                    nfeOperacaoSelected.value = null;
+                    if(!modalNFeInstance) {
+                        const el = document.getElementById('modalNFe');
+                        if(window.bootstrap) { 
+                            modalNFeInstance = new bootstrap.Modal(el);
+                        } else {
+                            // Fallback if bootstrap JS object logic is different
+                            // Try to just show class
+                            el.classList.add('show');
+                            el.style.display = 'block';
+                            el.classList.add('d-block');
+                        }
+                    }
+                    if(modalNFeInstance) modalNFeInstance.show();
+                    
+                    if(nfeOperacoes.value.length === 0) carregarOperacoes();
+                };
+
+                const fecharModalNFe = () => {
+                    if(modalNFeInstance) modalNFeInstance.hide();
+                    else {
+                         const el = document.getElementById('modalNFe');
+                         if(el) {
+                            el.classList.remove('show');
+                            el.style.display = 'none';
+                            el.classList.remove('d-block');
+                         }
+                    }
+                    nfeOsSelected.value = null;
+                };
+
+                const confirmarNFe = async () => {
+                    if(!nfeOperacaoSelected.value || !nfeOsSelected.value) return;
+                    nfeLoading.value = true;
+                    try {
+                        const token = getAuthToken();
+                        const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+                        
+                        const payload = { operacao_id: nfeOperacaoSelected.value };
+                        const response = await axios.post(`/api/ordem-servico/${nfeOsSelected.value.id_os}/converter_para_nfe/`, payload, config);
+                        
+                        fecharModalNFe();
+                        alert('NFe gerada com sucesso! Você será redirecionado para a nota.');
+                        
+                        if(response.data.redirect_url) {
+                            window.location.href = response.data.redirect_url;
+                        } else {
+                            // Fallback
+                            window.location.href = `/vendas/${response.data.id_venda}/nfe/`; 
+                        }
+                        
+                    } catch (error) {
+                        console.error(error);
+                        alert('Erro ao gerar NFe: ' + (error.response?.data?.error || error.message));
+                    } finally {
+                        nfeLoading.value = false;
+                    }
+                };
+
+                const getAuthToken = () => {
+                    return localStorage.getItem('token') || ''; 
+                };
+
+                const carregarOS = async () => {
+                    loading.value = true;
+                    try {
+                        const params = {};
+                        if (filtros.value.search) params.search = filtros.value.search;
+                        if (filtros.value.status) params.status = filtros.value.status;
+
+                        // Tenta pegar token local ou da sessão (se houver)
+                        // Para simplificar, assumimos acesso público ou sessão cookie por enquanto
+                        // ou usamos o token se disponível
+                        const config = {};
+                        const token = getAuthToken();
+                        if(token) config.headers = { Authorization: `Bearer ${token}` };
+
+                        const response = await axios.get('/api/ordem-servico/', { params, ...config });
+                        ordens.value = response.data.results || response.data;
+                    } catch (error) {
+                        console.error('Erro ao carregar OS:', error);
+                        // Fallback data para teste visual
+                        if(error.response && error.response.status === 401) {
+                             alert('Não autorizado. Por favor faça login.');
+                        }
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const formatarNumeroOS = (num) => {
+                    return num ? num.toString().padStart(6, '0') : '000000';
+                };
+
+                const formatarData = (data) => {
+                    if (!data) return '-';
+                    return new Date(data).toLocaleDateString('pt-BR');
+                };
+
+                const formatarMoeda = (valor) => {
+                    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
+                };
+                
+                const calcularTotal = (os) => {
+                    let total = 0;
+                    if(os.itens_servicos) os.itens_servicos.forEach(i => total += parseFloat(i.valor_total));
+                    if(os.itens_produtos) os.itens_produtos.forEach(i => total += parseFloat(i.valor_total));
+                    return total;
+                };
+
+                const imprimirOS = (os) => {
+                    osImpressao.value = os;
+                    // Pequeno delay para renderizar a área de impressão
+                    setTimeout(() => {
+                        window.print();
+                    }, 500);
+                };
+
+                const emitirNFSe = async (os) => {
+                    if(!confirm('Deseja emitir NFS-e para esta OS?')) return;
+                    try {
+                        const token = getAuthToken();
+                        const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+                        
+                        await axios.post(`/api/ordem-servico/${os.id_os}/emitir_nfse/`, {}, config);
+                        alert('NFS-e emitida com sucesso!');
+                        carregarOS();
+                    } catch (error) {
+                        console.error(error);
+                        alert('Erro ao emitir NFS-e: ' + (error.response?.data?.error || error.message));
+                    }
+                };
+
+                const baixarXML = (os) => {
+                    const token = getAuthToken();
+                    const config = { responseType: 'blob' };
+                    if(token) config.headers = { Authorization: `Bearer ${token}` };
+
+                    axios.get(`/api/ordem-servico/${os.id_os}/download_xml/`, config)
+                        .then(response => {
+                            const url = window.URL.createObjectURL(new Blob([response.data]));
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.setAttribute('download', `nfse_${os.numero || os.id_os}.xml`);
+                            document.body.appendChild(link);
+                            link.click();
+                            link.remove();
+                        })
+                        .catch(error => {
+                            console.error(error);
+                            alert('Erro ao baixar XML.');
+                        });
+                };
+
+                const enviarEmail = async (os) => {
+                    const email = prompt('Digite o e-mail de destino:', os.cliente_email || '');
+                    if (email === null) return; 
+                    
+                    try {
+                        const token = getAuthToken();
+                        const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+                        
+                        await axios.post(`/api/ordem-servico/${os.id_os}/enviar_email/`, { email }, config);
+                        alert('E-mail enviado com sucesso!');
+                    } catch (error) {
+                         console.error(error);
+                        alert('Erro ao enviar e-mail: ' + (error.response?.data?.error || error.message));
+                    }
+                };
+
+                onMounted(() => {
+                    carregarOS();
+                });
+
+                return {
+                    ordens,
+                    loading,
+                    filtros,
+                    carregarOS,
+                    formatarNumeroOS,
+                    formatarData,
+                    formatarMoeda,
+                    imprimirOS,
+                    calcularTotal,
+                    osImpressao,
+                    emitirNFSe,
+                    baixarXML,
+                    enviarEmail,
+                    // NFe
+                    nfeOsSelected,
+                    nfeOperacoes,
+                    nfeOperacaoSelected,
+                    nfeLoading,
+                    abrirModalNFe,
+                    fecharModalNFe,
+                    confirmarNFe
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

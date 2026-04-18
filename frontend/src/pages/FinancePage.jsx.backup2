@@ -1,0 +1,712 @@
+// Em: src/pages/FinancePage.jsx
+// --- VERSÃO ANTERIOR (Sem lógica de FormaPgto automática e com correção do Fade) ---
+
+import React, { useState, useEffect } from 'react';
+import {
+  Box, TextField, Button, Typography, Fade, CircularProgress,
+  List, ListItem, ListItemText, IconButton, Divider, Grid,
+  Select, MenuItem, FormControl, InputLabel,
+  Dialog, DialogActions, DialogContent, DialogTitle, 
+  Tabs, Tab,
+  Radio, RadioGroup, FormControlLabel, Checkbox, Tooltip
+} from '@mui/material';
+// Grid from @mui/material is used (Unstable_Grid2 not available in this environment)
+// Ícones
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'; 
+import LockIcon from '@mui/icons-material/Lock'; 
+import SendIcon from '@mui/icons-material/Send'; 
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+// Helpers
+import TabPanel from '../components/TabPanel'; 
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import SolicitacaoDialog from '../components/SolicitacaoDialog'; 
+
+// --- Função Helper para data ---
+const formatarDataInput = (data) => {
+  if (!data) return '';
+  try { return new Date(data).toISOString().split('T')[0]; } 
+  catch (e) { return ''; }
+};
+
+function FinancePage() {
+  const { user, permissions, axiosInstance, isLoading: authLoading } = useAuth();
+  const navigate = useNavigate();
+
+  // --- Estados do Financeiro ---
+  const [contasPagar, setContasPagar] = useState([]);
+  const [contasReceber, setContasReceber] = useState([]);
+  const [loadingFinanceiro, setLoadingFinanceiro] = useState(true);
+  const [showContaForm, setShowContaForm] = useState(false);
+  const [editingConta, setEditingConta] = useState(null);
+  
+  const today = formatarDataInput(new Date()); // Data de hoje
+  
+  const [contaFormData, setContaFormData] = useState({
+    tipo_conta: 'Receber', id_cliente_fornecedor: '', descricao: '',
+    valor_parcela: '', data_vencimento: today, status_conta: 'Pendente',
+    forma_pagamento: '', centro_custo: '',
+    operacao: '', departamento: '', conta_cobranca: '', documento_numero: '',
+    parcela_numero: 1, parcela_total: 1,
+    valor_juros: 0, valor_multa: 0, valor_desconto: 0,
+    gerencial: false, 
+    data_pagamento: null, conta_baixa: '', valor_liquidado: 0
+  });
+  
+  const [savingConta, setSavingConta] = useState(false);
+  const [financeiroTabValue, setFinanceiroTabValue] = useState(0); 
+  const [contaFormTabValue, setContaFormTabValue] = useState(0); 
+  const [showPagas, setShowPagas] = useState(false); 
+  const [valorLiquidadoSugestao, setValorLiquidadoSugestao] = useState(false);
+
+  // --- Estados dos Cadastros de Apoio (para os dropdowns) ---
+  const [clientes, setClientes] = useState([]);
+  const [operacoes, setOperacoes] = useState([]); 
+  const [departamentos, setDepartamentos] = useState([]);
+  const [centrosCusto, setCentrosCusto] = useState([]);
+  const [contasBancarias, setContasBancarias] = useState([]);
+  const [formasPagamento, setFormasPagamento] = useState([]);
+  // Removido: const [formasPagamento, setFormasPagamento] = useState([]); 
+
+  // --- Estados da Solicitação (Fase 3) ---
+  const [showSolicitacao, setShowSolicitacao] = useState(false);
+  const [itemParaSolicitar, setItemParaSolicitar] = useState(null);
+  const [supervisores, setSupervisores] = useState([]);
+
+  // --- Funções de Busca ---
+  
+  const fetchSupportData = async () => {
+    try {
+      const [cliRes, opRes, depRes, ccRes, cbRes, fpRes] = await Promise.all([ // incluiu fpRes
+        axiosInstance.get('/clientes/'),
+        axiosInstance.get('/operacoes/'),
+        axiosInstance.get('/departamentos/'),
+        axiosInstance.get('/centro-custo/'),
+        axiosInstance.get('/contas-bancarias/'),
+        axiosInstance.get('/formas-pagamento/'),
+      ]);
+      setClientes(cliRes.data);
+      setOperacoes(opRes.data);
+      setDepartamentos(depRes.data);
+      setCentrosCusto(ccRes.data);
+      setContasBancarias(cbRes.data);
+      // Normaliza formas de pagamento para uso no select
+      const normalizeForma = (it) => ({
+        id: it.id_forma_pagamento || it.id || it.pk || null,
+        nome: it.nome_forma_pagamento || it.nome_forma || it.nome || it.descricao || '—',
+        quantidade_dias: it.quantidade_dias ?? it.dias ?? it.qtd_dias ?? null,
+        raw: it,
+      });
+      setFormasPagamento(Array.isArray(fpRes.data) ? fpRes.data.map(normalizeForma) : []);
+    } catch (error) {
+      console.error("Erro ao buscar dados de apoio para o financeiro", error);
+    }
+  };
+
+  const fetchContas = async (tipo) => {
+    setLoadingFinanceiro(true);
+    const statusFilter = showPagas ? 'Paga' : 'Pendente';
+    
+    try {
+      const response = await axiosInstance.get(`/contas/?tipo=${tipo}&status=${statusFilter}`);
+      let data = response.data;
+      
+      if (showPagas) {
+         const responseCanceladas = await axiosInstance.get(`/contas/?tipo=${tipo}&status=Cancelada`);
+         data = [...data, ...responseCanceladas.data];
+      }
+      
+      if (tipo === 'Pagar') setContasPagar(data);
+      else setContasReceber(data);
+    } catch (error) { 
+      console.error("Erro ao buscar contas:", error);
+    } 
+    finally { setLoadingFinanceiro(false); }
+  };
+  
+  const fetchSupervisores = async () => {
+    try {
+      const res = await axiosInstance.get('/usuarios/?is_staff=True');
+      setSupervisores(res.data);
+    } catch (error) {
+      console.error("Erro ao buscar supervisores:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!authLoading) {
+      if (permissions.financeiro_acessar || user.is_staff) {
+        fetchContas('Receber');
+        fetchContas('Pagar');
+        fetchSupportData(); 
+        if (!user.is_staff) {
+          fetchSupervisores();
+        }
+      } else {
+        setLoadingFinanceiro(false); 
+      }
+    }
+  }, [authLoading, showPagas, user, permissions]); 
+  
+  // --- Funções do Formulário Financeiro ---
+  
+  const handleFinanceiroTabChange = (event, newValue) => { setFinanceiroTabValue(newValue); };
+  const handleContaFormTabChange = (event, newValue) => { setContaFormTabValue(newValue); };
+  
+  const handleContaFormChange = (event) => {
+    const { name, value, type, checked } = event.target;
+    const valorFinal = type === 'checkbox' ? checked : value;
+    
+  // LÓGICA DE AUTO-NUMERAÇÃO (OPERAÇÃO)
+    if (name === 'operacao') {
+        const opSelecionada = operacoes.find(o => o.id_operacao === valorFinal);
+        
+        if (opSelecionada && opSelecionada.usa_auto_numeracao) {
+            setContaFormData(prevData => ({ 
+                ...prevData, 
+                [name]: valorFinal,
+                documento_numero: opSelecionada.proximo_numero_nf 
+            }));
+        } else {
+            setContaFormData(prevData => ({ 
+                ...prevData, 
+                [name]: valorFinal,
+                documento_numero: '' 
+            }));
+        }
+    } 
+  // Quando o status muda para 'Paga' sugerimos o valor líquido = parcela + juros + multa - desconto
+  else if (name === 'status_conta') {
+    setContaFormData(prevData => {
+      const novo = { ...prevData, [name]: valorFinal };
+      if (valorFinal === 'Paga') {
+        const parcela = parseFloat(prevData.valor_parcela || 0) || 0;
+        const juros = parseFloat(prevData.valor_juros || 0) || 0;
+        const multa = parseFloat(prevData.valor_multa || 0) || 0;
+        const desconto = parseFloat(prevData.valor_desconto || 0) || 0;
+        // Só sugere se usuário ainda não informou um valor_liquidado
+        if (!prevData.valor_liquidado || parseFloat(prevData.valor_liquidado) === 0) {
+          novo.valor_liquidado = parcela + juros + multa - desconto;
+          setValorLiquidadoSugestao(true);
+        }
+      }
+      return novo;
+    });
+  }
+  // Se o usuário estiver editando manualmente o valor_liquidado, desativa a sugestão automática
+  else if (name === 'valor_liquidado') {
+    setValorLiquidadoSugestao(false);
+    setContaFormData(prevData => ({ ...prevData, [name]: valorFinal }));
+  }
+  // Recalcula automaticamente enquanto a sugestão estiver ativa quando campos de valores mudam
+  else if (['valor_parcela', 'valor_juros', 'valor_multa', 'valor_desconto'].includes(name)) {
+    setContaFormData(prevData => {
+      const novo = { ...prevData, [name]: valorFinal };
+      if (prevData.status_conta === 'Paga' && valorLiquidadoSugestao) {
+        const parcela = parseFloat(name === 'valor_parcela' ? valorFinal : prevData.valor_parcela || 0) || 0;
+        const juros = parseFloat(name === 'valor_juros' ? valorFinal : prevData.valor_juros || 0) || 0;
+        const multa = parseFloat(name === 'valor_multa' ? valorFinal : prevData.valor_multa || 0) || 0;
+        const desconto = parseFloat(name === 'valor_desconto' ? valorFinal : prevData.valor_desconto || 0) || 0;
+        novo.valor_liquidado = parcela + juros + multa - desconto;
+      }
+      return novo;
+    });
+  }
+  // Removido: Lógica de Forma de Pagamento
+  else {
+    // Comportamento normal para outros campos
+    setContaFormData(prevData => ({ ...prevData, [name]: valorFinal }));
+  }
+  };
+  
+  const handleOpenContaForm = (conta = null, irParaBaixa = false) => {
+    if (conta && !(permissions.financeiro_editar || user.is_staff)) {
+        alert('Você não tem permissão para editar/baixar contas.');
+        return;
+    }
+    
+    setContaFormTabValue(irParaBaixa ? 1 : 0); 
+    
+    if (conta) {
+      setEditingConta(conta);
+      // Quando abrimos para baixa, se não houver valor_liquidado definido, sugerimos o cálculo
+      let suggestedValor = null;
+      if (irParaBaixa) {
+        const parcela = parseFloat(conta.valor_parcela || 0) || 0;
+        const juros = parseFloat(conta.valor_juros || 0) || 0;
+        const multa = parseFloat(conta.valor_multa || 0) || 0;
+        const desconto = parseFloat(conta.valor_desconto || 0) || 0;
+        suggestedValor = parcela + juros + multa - desconto;
+      }
+      setContaFormData({
+        tipo_conta: conta.tipo_conta || 'Receber',
+        id_cliente_fornecedor: conta.id_cliente_fornecedor || '',
+        descricao: conta.descricao || '',
+        valor_parcela: conta.valor_parcela || 0,
+        data_vencimento: formatarDataInput(conta.data_vencimento), 
+        status_conta: conta.status_conta || 'Pendente',
+        forma_pagamento: conta.forma_pagamento || '',
+        centro_custo: conta.id_centro_custo || '', 
+        operacao: conta.id_operacao || '', 
+        departamento: conta.id_departamento || '', 
+        conta_cobranca: conta.id_conta_cobranca || '', 
+        conta_baixa: conta.id_conta_baixa || '',
+        documento_numero: conta.documento_numero || '',
+        parcela_numero: conta.parcela_numero || 1,
+        parcela_total: conta.parcela_total || 1,
+        valor_juros: conta.valor_juros || 0,
+        valor_multa: conta.valor_multa || 0,
+        valor_desconto: conta.valor_desconto || 0,
+        gerencial: conta.gerencial ? true : false,
+        data_pagamento: formatarDataInput(conta.data_pagamento) || (irParaBaixa ? today : null), 
+        valor_liquidado: (conta.valor_liquidado && parseFloat(conta.valor_liquidado) > 0) ? conta.valor_liquidado : (irParaBaixa ? suggestedValor : 0)
+      });
+      // marca sugestão ativa se usamos suggestedValor
+      if (irParaBaixa && (!conta.valor_liquidado || parseFloat(conta.valor_liquidado) === 0)) {
+        setValorLiquidadoSugestao(true);
+      } else {
+        setValorLiquidadoSugestao(false);
+      }
+    } else { 
+      setEditingConta(null);
+      // abertura de novo lançamento
+      const defaultData = {
+        tipo_conta: financeiroTabValue === 0 ? 'Receber' : 'Pagar', 
+        id_cliente_fornecedor: '', descricao: '', valor_parcela: '',
+        data_vencimento: today,
+        status_conta: 'Pendente', forma_pagamento: '', centro_custo: '',
+        operacao: '', departamento: '', conta_cobranca: '', documento_numero: '',
+        parcela_numero: 1, parcela_total: 1,
+        valor_juros: 0, valor_multa: 0, valor_desconto: 0,
+        gerencial: false,
+        data_pagamento: null, conta_baixa: '', valor_liquidado: 0
+      };
+      // se abrindo diretamente para baixa, preenche data_pagamento e sugere valor
+      if (irParaBaixa) {
+        const parcela = parseFloat(defaultData.valor_parcela || 0) || 0;
+        const juros = parseFloat(defaultData.valor_juros || 0) || 0;
+        const multa = parseFloat(defaultData.valor_multa || 0) || 0;
+        const desconto = parseFloat(defaultData.valor_desconto || 0) || 0;
+        defaultData.data_pagamento = today;
+        defaultData.valor_liquidado = parcela + juros + multa - desconto;
+        setValorLiquidadoSugestao(true);
+      } else {
+        setValorLiquidadoSugestao(false);
+      }
+      setContaFormData(defaultData);
+    }
+    setShowContaForm(true);
+  };
+  
+  const handleOpenBaixaForm = (conta) => {
+    if (!(permissions.financeiro_baixar || user.is_staff)) {
+        alert('Você não tem permissão para dar baixa em contas.');
+        return;
+    }
+    handleOpenContaForm(conta, true);
+  };
+  
+  const handleCloseContaForm = () => { setShowContaForm(false); setEditingConta(null); };
+
+  const handleSaveConta = async () => {
+    
+    // Validação de Campos Obrigatórios
+    if (!contaFormData.descricao || !contaFormData.valor_parcela || !contaFormData.data_vencimento) {
+      alert('Preencha os campos obrigatórios: Descrição, Valor da Parcela e Vencimento.');
+      return;
+    }
+    if (!contaFormData.id_cliente_fornecedor) {
+      alert('O campo Cliente/Fornecedor é obrigatório.');
+      return;
+    }
+    if (!contaFormData.operacao) {
+      alert('O campo Operação é obrigatório.');
+      return;
+    }
+    if (!contaFormData.departamento) {
+      alert('O campo Departamento é obrigatório.');
+      return;
+    }
+    if (!contaFormData.centro_custo) {
+      alert('O campo Centro de Custo é obrigatório.');
+      return;
+    }
+    if (!contaFormData.conta_cobranca) {
+      alert('O campo Conta de Cobrança é obrigatório.');
+      return;
+    }
+
+    if (!(editingConta ? permissions.financeiro_editar : permissions.financeiro_criar) && !user.is_staff) {
+        alert('Você não tem permissão para salvar esta conta.');
+        return;
+    }
+
+    setSavingConta(true);
+    const dataToSend = {
+      ...contaFormData,
+      id_cliente_fornecedor: parseInt(contaFormData.id_cliente_fornecedor),
+      valor_parcela: parseFloat(contaFormData.valor_parcela) || 0,
+      valor_juros: parseFloat(contaFormData.valor_juros) || 0,
+      valor_multa: parseFloat(contaFormData.valor_multa) || 0,
+      valor_desconto: parseFloat(contaFormData.valor_desconto) || 0,
+      parcela_numero: parseInt(contaFormData.parcela_numero) || 1,
+      parcela_total: parseInt(contaFormData.parcela_total) || 1,
+      gerencial: contaFormData.gerencial,
+      data_pagamento: contaFormData.data_pagamento || null,
+      id_operacao: parseInt(contaFormData.operacao),
+      id_departamento: parseInt(contaFormData.departamento),
+      id_centro_custo: parseInt(contaFormData.centro_custo),
+      id_conta_cobranca: parseInt(contaFormData.conta_cobranca),
+      id_conta_baixa: contaFormData.conta_baixa ? parseInt(contaFormData.conta_baixa) : null,
+      forma_pagamento: contaFormData.forma_pagamento, // Salva o texto digitado
+    };
+    
+    if (dataToSend.status_conta === 'Paga' && (!contaFormData.valor_liquidado || parseFloat(contaFormData.valor_liquidado) === 0)) {
+      dataToSend.valor_liquidado = dataToSend.valor_parcela + dataToSend.valor_juros + dataToSend.valor_multa - dataToSend.valor_desconto;
+    }
+    if (dataToSend.status_conta === 'Pendente') {
+        dataToSend.data_pagamento = null;
+        dataToSend.valor_liquidado = 0;
+        dataToSend.id_conta_baixa = null;
+        dataToSend.forma_pagamento = ''; 
+    }
+
+    try {
+      if (editingConta) {
+        await axiosInstance.put(`/contas/${editingConta.id_conta}/`, dataToSend);
+        alert('Conta atualizada!');
+      } else {
+        await axiosInstance.post('/contas/', dataToSend);
+        alert('Conta criada!');
+      }
+      handleCloseContaForm();
+      fetchContas(dataToSend.tipo_conta); 
+    } catch (error) {
+      console.error('Erro ao salvar conta:', error.response ? error.response.data : error.message);
+      alert('Erro ao salvar conta.');
+    } finally {
+      setSavingConta(false);
+    }
+  };
+  
+  const handleDeleteContaClick = async (conta) => {
+    if (!window.confirm(`Excluir: ${conta.descricao}\nValor: R$ ${conta.valor_parcela}`)) return;
+    setLoadingFinanceiro(true);
+    try {
+      await axiosInstance.delete(`/contas/${conta.id_conta}/`);
+      alert('Conta excluída!');
+      fetchContas(conta.tipo_conta);
+    } catch (error) {
+      alert('Erro ao excluir conta.');
+      setLoadingFinanceiro(false);
+    }
+  };
+
+  const handleRequestExclusion = (conta) => {
+    const itemFormatado = {
+        id_cliente: conta.id_conta, 
+        nome_razao_social: conta.descricao,
+        cpf_cnpj: `R$ ${conta.valor_parcela}` 
+    };
+    setItemParaSolicitar(itemFormatado);
+    setShowSolicitacao(true);
+  };
+  
+  // Lógica de Auto-Numeração (para o JSX)
+  const opSelecionada = operacoes.find(o => o.id_operacao === contaFormData.operacao);
+  const autoNumEnabled = opSelecionada && opSelecionada.usa_auto_numeracao;
+
+  // --- Renderização ---
+
+  if (authLoading) {
+    return <CircularProgress />;
+  }
+  
+  if (!user.is_staff && !permissions.financeiro_acessar) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography variant="h4" color="error" gutterBottom>
+          <LockIcon sx={{ fontSize: 40, verticalAlign: 'middle', mr: 1 }} />
+          Acesso Negado
+        </Typography>
+        <Typography variant="body1">
+          Você não tem permissão para acessar o módulo Financeiro.
+        </Typography>
+      </Box>
+    )
+  }
+  
+  return (
+    <React.Fragment> {/* <-- CORREÇÃO: <React.Fragment> por fora */}
+      <Fade in={true} timeout={500}>
+        <Box sx={{width: '100%'}}>
+          <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, width: '100%'}}>
+            <Box>
+              {(permissions.financeiro_criar || user.is_staff) && (
+                <Button variant="contained" color="primary" onClick={() => handleOpenContaForm(null, false)} startIcon={<AddIcon />} sx={{ mr: 1 }}>
+                    Adicionar Novo Lançamento
+                </Button>
+              )}
+              {(permissions.financeiro_acessar || user.is_staff) && (
+                <Button variant="outlined" startIcon={<AccountBalanceIcon />} onClick={() => navigate('/bancario')}>
+                  Bancário
+                </Button>
+              )}
+            </Box>
+
+            <FormControlLabel
+              control={<Checkbox checked={showPagas} onChange={(e) => setShowPagas(e.target.checked)} />}
+              label="Exibir contas pagas/recebidas (Histórico)"
+            />
+          </Box>
+          
+          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs value={financeiroTabValue} onChange={handleFinanceiroTabChange}>
+              <Tab label="Contas a Receber" />
+              <Tab label="Contas a Pagar" />
+            </Tabs>
+          </Box>
+          
+          {/* Painel Contas a Receber */}
+          <TabPanel value={financeiroTabValue} index={0}>
+            {loadingFinanceiro ? ( <CircularProgress sx={{ mt: 2 }} /> )
+             : contasReceber.length === 0 ? ( <Typography sx={{ mt: 2 }}>(Nenhuma conta a receber {showPagas ? 'nao pendente' : 'pendente'})</Typography> )
+             : (
+                <List sx={{ width: '100%', bgcolor: 'background.paper', mt: 1, border: '1px solid #ddd', borderRadius: 1 }}>
+                  {contasReceber.map((conta, index) => (
+                    <React.Fragment key={conta.id_conta}>
+                      <ListItem secondaryAction={ 
+                        <> 
+                          {conta.status_conta === 'Pendente' && (permissions.financeiro_baixar || user.is_staff) && ( 
+                            <Tooltip title="Dar Baixa">
+                              <IconButton edge="end" aria-label="baixar" onClick={() => handleOpenBaixaForm(conta)} sx={{ mr: 0.5 }}>
+                                <CheckCircleIcon color="success" />
+                              </IconButton> 
+                            </Tooltip>
+                          )}
+                          
+                          {(permissions.financeiro_editar || user.is_staff) && (
+                            <Tooltip title="Editar">
+                              <IconButton edge="end" aria-label="edit" onClick={() => handleOpenContaForm(conta, false)}>
+                                <EditIcon />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+
+                          {(permissions.financeiro_excluir || user.is_staff) ? (
+                            <Tooltip title="Excluir">
+                              <IconButton edge="end" aria-label="delete" sx={{ ml: 1 }} onClick={() => handleDeleteContaClick(conta)}>
+                                <DeleteIcon color="error"/>
+                              </IconButton>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip title="Solicitar Exclusão">
+                              <IconButton edge="end" aria-label="request-delete" sx={{ ml: 1 }} onClick={() => handleRequestExclusion(conta)}>
+                                <LockIcon fontSize="small" color="error"/>
+                              </IconButton> 
+                            </Tooltip>
+                          )}
+                        </> 
+                      }>
+                        <ListItemText
+                          primary={`${conta.descricao} - R$ ${conta.valor_parcela}`}
+                          secondary={`Venc: ${new Date(conta.data_vencimento + 'T00:00:00-03:00').toLocaleDateString('pt-BR')} | Doc: ${conta.documento_numero || '-'} | Parcela: ${conta.parcela_numero}/${conta.parcela_total} | Status: ${conta.status_conta}`}
+                          sx={{ color: conta.status_conta !== 'Pendente' ? 'text.disabled' : 'text.primary' }}
+                        />
+                      </ListItem>
+                      {index < contasReceber.length - 1 && <Divider component="li" />}
+                    </React.Fragment>
+                  ))}
+                </List>
+             )}
+          </TabPanel>
+          
+          {/* Painel Contas a Pagar */}
+          <TabPanel value={financeiroTabValue} index={1}>
+            {loadingFinanceiro ? ( <CircularProgress sx={{ mt: 2 }} /> )
+             : contasPagar.length === 0 ? ( <Typography sx={{ mt: 2 }}>(Nenhuma conta a pagar {showPagas ? 'nao pendente' : 'pendente'})</Typography> )
+             : (
+                <List sx={{ width: '100%', bgcolor: 'background.paper', mt: 1, border: '1px solid #ddd', borderRadius: 1 }}>
+                  {contasPagar.map((conta, index) => (
+                    <React.Fragment key={conta.id_conta}>
+                      <ListItem secondaryAction={ 
+                        <> 
+                          {conta.status_conta === 'Pendente' && (permissions.financeiro_baixar || user.is_staff) && ( 
+                            <Tooltip title="Dar Baixa (Pagar)">
+                              <IconButton edge="end" aria-label="baixar" onClick={() => handleOpenBaixaForm(conta)} sx={{ mr: 0.5 }}>
+                                <CheckCircleIcon color="success" />
+                              </IconButton> 
+                            </Tooltip>
+                          )}
+                          
+                          {(permissions.financeiro_editar || user.is_staff) && (
+                            <Tooltip title="Editar">
+                              <IconButton edge="end" aria-label="edit" onClick={() => handleOpenContaForm(conta, false)}>
+                                <EditIcon />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          
+                          {(permissions.financeiro_excluir || user.is_staff) ? (
+                            <Tooltip title="Excluir">
+                              <IconButton edge="end" aria-label="delete" sx={{ ml: 1 }} onClick={() => handleDeleteContaClick(conta)}>
+                                <DeleteIcon color="error"/>
+                              </IconButton>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip title="Solicitar Exclusão">
+                              <IconButton edge="end" aria-label="request-delete" sx={{ ml: 1 }} onClick={() => handleRequestExclusion(conta)}>
+                                <LockIcon fontSize="small" color="error"/>
+                              </IconButton> 
+                            </Tooltip>
+                          )}
+                        </> 
+                      }>
+                        <ListItemText
+                          primary={`${conta.descricao} - R$ ${conta.valor_parcela}`}
+                          secondary={`Venc: ${new Date(conta.data_vencimento + 'T00:00:00-03:00').toLocaleDateString('pt-BR')} | Doc: ${conta.documento_numero || '-'} | Parcela: ${conta.parcela_numero}/${conta.parcela_total} | Status: ${conta.status_conta}`}
+                          sx={{ color: conta.status_conta !== 'Pendente' ? 'text.disabled' : 'text.primary' }}
+                        />
+                      </ListItem>
+                      {index < contasPagar.length - 1 && <Divider component="li" />}
+                    </React.Fragment>
+                  ))}
+                </List>
+             )}
+          </TabPanel>
+        </Box>
+      </Fade>
+      
+      {/* Popup (Modal) para Lançamento FINANCEIRO */}
+      <Dialog open={showContaForm} onClose={handleCloseContaForm} fullWidth maxWidth="lg">
+        <DialogTitle>{editingConta ? 'Editar Lançamento' : 'Novo Lançamento Financeiro'}</DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          <Box component="form" onSubmit={(e) => e.preventDefault()}> 
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
+              <Tabs value={contaFormTabValue} onChange={handleContaFormTabChange}>
+                <Tab label="Lançamento" />
+                <Tab label="Baixa/Pagamento" />
+              </Tabs>
+            </Box>
+
+            {/* Aba 0 (Lançamento, Valores e Classificação JUNTOS) */}
+            <TabPanel value={contaFormTabValue} index={0}>
+              <Grid container spacing={2}>
+                {/* Dados Principais */}
+                <Grid item xs={12}><FormControl component="fieldset"><RadioGroup row name="tipo_conta" value={contaFormData.tipo_conta} onChange={handleContaFormChange} disabled={savingConta || !!editingConta}><FormControlLabel value="Receber" control={<Radio />} label="A Receber" /><FormControlLabel value="Pagar" control={<Radio />} label="A Pagar" /></RadioGroup></FormControl></Grid>
+                <Grid item xs={12}><TextField name="descricao" label="Descrição *" value={contaFormData.descricao} onChange={handleContaFormChange} disabled={savingConta} required fullWidth /></Grid>
+                
+                {/* Campo "Tipo de pagamento" (Selecionável a partir do cadastro de formas) */}
+                <Grid item xs={12} sm={8}>
+                  <FormControl fullWidth>
+                    <InputLabel id="tipo-pgto-label">Tipo de pagamento</InputLabel>
+                    <Select
+                      labelId="tipo-pgto-label"
+                      name="forma_pagamento"
+                      value={contaFormData.forma_pagamento || ''}
+                      label="Tipo de pagamento"
+                      onChange={handleContaFormChange}
+                      disabled={savingConta}
+                    >
+                      <MenuItem value=""><em>Selecione</em></MenuItem>
+                      {formasPagamento.map((f) => (
+                        <MenuItem key={f.id || f.nome} value={f.nome}>{f.nome}{f.quantidade_dias !== null ? ` (Dias: ${f.quantidade_dias})` : ''}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                
+                <Grid item xs={12} sm={6}><TextField name="data_vencimento" label="Data de Vencimento *" type="date" value={formatarDataInput(contaFormData.data_vencimento)} onChange={handleContaFormChange} disabled={savingConta} required fullWidth InputLabelProps={{ shrink: true }}/></Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField 
+                    name="documento_numero" 
+                    label="Número do Documento" 
+                    value={contaFormData.documento_numero} 
+                    onChange={handleContaFormChange} 
+                    disabled={savingConta || autoNumEnabled} 
+                    helperText={autoNumEnabled ? "Número automático definido pela Operação" : ""}
+                    fullWidth 
+                  />
+                </Grid>
+                <Grid item xs={12} sm={3}><TextField name="parcela_numero" label="Nº da Parcela" type="number" value={contaFormData.parcela_numero} onChange={handleContaFormChange} disabled={savingConta} fullWidth InputProps={{ inputProps: { min: 1 } }}/></Grid>
+                <Grid item xs={12} sm={3}><TextField name="parcela_total" label="Total de Parcelas" type="number" value={contaFormData.parcela_total} onChange={handleContaFormChange} disabled={savingConta} fullWidth InputProps={{ inputProps: { min: 1 } }}/></Grid>
+                
+                <Grid item xs={12}><Divider sx={{ my: 2 }}><Typography variant="overline">Valores</Typography></Divider></Grid>
+
+                {/* Campos de Valores */}
+                <Grid item xs={12} sm={6} md={3}><TextField name="valor_parcela" label="Valor da Parcela (R$) *" type="number" value={contaFormData.valor_parcela} onChange={handleContaFormChange} disabled={savingConta} required fullWidth InputProps={{ inputProps: { min: 0, step: 0.01 } }}/></Grid>
+                <Grid item xs={12} sm={6} md={3}><TextField name="valor_desconto" label="Desconto (R$)" type="number" value={contaFormData.valor_desconto} onChange={handleContaFormChange} disabled={savingConta} fullWidth InputProps={{ inputProps: { min: 0, step: 0.01 } }}/></Grid>
+                <Grid item xs={12} sm={6} md={3}><TextField name="valor_juros" label="Juros (R$)" type="number" value={contaFormData.valor_juros} onChange={handleContaFormChange} disabled={savingConta} fullWidth InputProps={{ inputProps: { min: 0, step: 0.01 } }}/></Grid>
+                <Grid item xs={12} sm={6} md={3}><TextField name="valor_multa" label="Multa (R$)" type="number" value={contaFormData.valor_multa} onChange={handleContaFormChange} disabled={savingConta} fullWidth InputProps={{ inputProps: { min: 0, step: 0.01 } }}/></Grid>
+
+                <Grid item xs={12}><Divider sx={{ my: 2 }}><Typography variant="overline">Classificação (Obrigatório)</Typography></Divider></Grid>
+
+                {/* Campos de Classificação (Layout Corrigido) */}
+                <Grid item xs={12} sm={12}><FormControl fullWidth required><InputLabel id="c-f-label">Cliente / Fornecedor *</InputLabel><Select labelId="c-f-label" name="id_cliente_fornecedor" value={contaFormData.id_cliente_fornecedor} label="Cliente / Fornecedor *" onChange={handleContaFormChange} disabled={savingConta}><MenuItem value=""><em>Nenhum (Avulso)</em></MenuItem>{clientes.map((c) => (<MenuItem key={c.id_cliente} value={c.id_cliente}>{c.nome_razao_social}</MenuItem>))}</Select></FormControl></Grid>
+                <Grid item xs={12} sm={12}><FormControl fullWidth required><InputLabel id="op-label">Operação *</InputLabel><Select labelId="op-label" name="operacao" value={contaFormData.operacao} label="Operação *" onChange={handleContaFormChange} disabled={savingConta}><MenuItem value=""><em>Nenhuma</em></MenuItem>{operacoes.map((o) => (<MenuItem key={o.id_operacao} value={o.id_operacao}>{o.nome_operacao}</MenuItem>))}</Select></FormControl></Grid>
+                <Grid item xs={12} sm={12}><FormControl fullWidth required><InputLabel id="dep-label">Departamento *</InputLabel><Select labelId="dep-label" name="departamento" value={contaFormData.departamento} label="Departamento *" onChange={handleContaFormChange} disabled={savingConta}><MenuItem value=""><em>Nenhum</em></MenuItem>{departamentos.map((d) => (<MenuItem key={d.id_departamento} value={d.id_departamento}>{d.nome_departamento}</MenuItem>))}</Select></FormControl></Grid>
+                <Grid item xs={12} sm={12}><FormControl fullWidth required><InputLabel id="cc-label">Centro de Custo *</InputLabel><Select labelId="cc-label" name="centro_custo" value={contaFormData.centro_custo} label="Centro de Custo *" onChange={handleContaFormChange} disabled={savingConta}><MenuItem value=""><em>Nenhum</em></MenuItem>{centrosCusto.map((cc) => (<MenuItem key={cc.id_centro_custo} value={cc.id_centro_custo}>{cc.nome_centro_custo}</MenuItem>))}</Select></FormControl></Grid>
+                <Grid item xs={12} sm={12}><FormControl fullWidth required><InputLabel id="ccob-label">Conta de Cobrança *</InputLabel><Select labelId="ccob-label" name="conta_cobranca" value={contaFormData.conta_cobranca} label="Conta de Cobrança *" onChange={handleContaFormChange} disabled={savingConta}><MenuItem value=""><em>Nenhuma</em></MenuItem>{contasBancarias.map((cb) => (<MenuItem key={cb.id_conta_bancaria} value={cb.id_conta_bancaria}>{cb.nome_conta}</MenuItem>))}</Select></FormControl></Grid>
+                <Grid item xs={12} sm={12}><FormControlLabel control={<Checkbox name="gerencial" checked={contaFormData.gerencial} onChange={handleContaFormChange} disabled={savingConta} />} label="Lançamento Gerencial (Non Financeiro)" /></Grid>
+              </Grid>
+            </TabPanel>
+
+            {/* Aba 1 (Baixa/Pagamento) */}
+            <TabPanel value={contaFormTabValue} index={1}>
+              <Typography variant="body2" sx={{mb: 2}}>Preencha estes campos para liquidar (dar baixa) na conta.</Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}><FormControl fullWidth><InputLabel id="status-label">Status</InputLabel><Select labelId="status-label" name="status_conta" value={contaFormData.status_conta} label="Status" onChange={handleContaFormChange} disabled={savingConta}><MenuItem value="Pendente">Pendente</MenuItem><MenuItem value="Paga">Paga</MenuItem><MenuItem value="Cancelada">Cancelada</MenuItem></Select></FormControl></Grid>
+                 <Grid item xs={12} sm={6}><TextField name="data_pagamento" label="Data de Pagamento/Recebimento" type="date" value={formatarDataInput(contaFormData.data_pagamento)} onChange={handleContaFormChange} disabled={savingConta} fullWidth InputLabelProps={{ shrink: true }}/></Grid>
+                 <Grid item xs={12} sm={6}><TextField name="valor_liquidado" label="Valor Liquidado (R$)" type="number" value={contaFormData.valor_liquidado} onChange={handleContaFormChange} disabled={savingConta} fullWidth InputProps={{ inputProps: { min: 0, step: 0.01 } }} helperText="Se 0, será calculado automaticamente ao salvar como 'Paga'"/></Grid>
+                 
+                 <Grid item xs={12} sm={12} md={6}>
+                   <FormControl fullWidth>
+                     <InputLabel id="tipo-pgto-baixa-label">Tipo de pagamento</InputLabel>
+                     <Select
+                       labelId="tipo-pgto-baixa-label"
+                       name="forma_pagamento"
+                       value={contaFormData.forma_pagamento || ''}
+                       label="Tipo de pagamento"
+                       onChange={handleContaFormChange}
+                       disabled={savingConta}
+                     >
+                       <MenuItem value=""><em>Selecione</em></MenuItem>
+                       {formasPagamento.map((f) => (
+                         <MenuItem key={f.id || f.nome} value={f.nome}>{f.nome}{f.quantidade_dias !== null ? ` (Dias: ${f.quantidade_dias})` : ''}</MenuItem>
+                       ))}
+                     </Select>
+                   </FormControl>
+                 </Grid>
+                 
+                 <Grid item xs={12} sm={12} md={6}><FormControl fullWidth><InputLabel id="cbaixa-label">Conta de Baixa (Ex: Caixa, Banco)</InputLabel><Select labelId="cbaixa-label" name="conta_baixa" value={contaFormData.conta_baixa} label="Conta de Baixa (Ex: Caixa, Banco)" onChange={handleContaFormChange} disabled={savingConta}><MenuItem value=""><em>Nenhuma</em></MenuItem>{contasBancarias.map((cb) => (<MenuItem key={cb.id_conta_bancaria} value={cb.id_conta_bancaria}>{cb.nome_conta}</MenuItem>))}</Select></FormControl></Grid>
+              </Grid>
+            </TabPanel>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 3, pt: 1 }}>
+          <Button startIcon={<CloseIcon />} onClick={handleCloseContaForm} disabled={savingConta}>Cancelar</Button>
+          <Button startIcon={<SaveIcon />} onClick={handleSaveConta} variant="contained" disabled={savingConta}>
+            {savingConta ? <CircularProgress size={24} /> : 'Salvar Lançamento'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* --- Popup de Solicitação (Fase 3) --- */}
+      <SolicitacaoDialog
+        open={showSolicitacao}
+        onClose={() => setShowSolicitacao(false)}
+        itemParaSolicitar={itemParaSolicitar} 
+        tipoAcao="EXCLUIR_CONTA" 
+        supervisores={supervisores}
+      />
+
+    </React.Fragment>
+  );
+}
+
+export default FinancePage;

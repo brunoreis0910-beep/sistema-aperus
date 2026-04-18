@@ -1,0 +1,92 @@
+import React from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { MenuStateProvider } from './context/MenuStateContext'
+import { GruposProdutoProvider } from './context/GruposProdutoContext'
+
+// Importa estilos - APENAS CSS LIMPO
+import './styles/clean.css'
+import './styles/fullscreen-dashboard.css'
+import './styles/vendor-fix.css'
+
+// Importa nossas páginas e componentes
+import LoginPage from './components/LoginPage'
+import LoginSimple from './components/LoginSimple'
+import LoginClean from './components/LoginClean'
+import AutoLogin from './components/AutoLogin'
+import UltraWideDemo from './components/UltraWideDemo'
+import FullScreenTest from './components/FullScreenTest'
+import LoginDebug from './components/LoginDebug'
+import LayoutSelector from './components/LayoutSelector'
+import DatabaseTest from './components/DatabaseTest';
+import APITester from './components/APITester';
+import UltraWideConfig from './components/UltraWideConfig';
+import FullScreenDashboardTest from './components/FullScreenDashboardTest';
+import DashboardHome from './pages/DashboardHome'
+import DashboardHomeClean from './pages/DashboardHomeClean'
+import DashboardLayout from './components/DashboardLayout'
+import DashboardLayoutClean from './components/DashboardLayoutClean'
+import ProtectedRoute from './components/ProtectedRoute'
+import ClientePageResponsive from './pages/ClientePageResponsive'
+import ClientePageComplete from './pages/ClientePageComplete'
+import ClientePageCompleteFixed from './pages/ClientePageCompleteFixed'
+import ProdutoPageResponsive from './pages/ProdutoPageResponsive'
+import FornecedorPage from './pages/FornecedorPage'
+import FinancePage from './pages/FinancePage'
+import CompraPage from './pages/CompraPage'
+import SettingsPage from './pages/SettingsPageNew'
+import AprovacoesPage from './pages/AprovacoesPage'
+import Vendas from './components/Vendas'
+import OperacaoTester from './components/OperacaoTester'
+import DebugVendas from './components/DebugVendas'
+import AutoLoginDev from './components/AutoLoginDev'
+
+export default function App() {
+  return (
+    <UltraWideConfig>
+      <GruposProdutoProvider>
+        <MenuStateProvider>
+          <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login-simple" element={<LoginSimple />} />
+        <Route path="/login-clean" element={<LoginClean />} />
+        <Route path="/auto-login" element={<AutoLogin />} />
+        <Route path="/demo" element={<UltraWideDemo />} />
+        <Route path="/fullscreen-test" element={<FullScreenTest />} />
+        <Route path="/login-debug" element={<LoginDebug />} />
+        <Route path="/layout-selector" element={<LayoutSelector />} />
+                      <Route path="/dashboard-fullscreen-test" element={<FullScreenDashboardTest />} />
+              <Route path="/database-test" element={<DatabaseTest />} />
+              <Route path="/api-tester" element={<APITester />} />
+              <Route path="/operacao-tester" element={<OperacaoTester />} />
+              <Route path="/debug-vendas" element={<DebugVendas />} />
+              <Route path="/auto-login-dev" element={<AutoLoginDev />} />
+              
+              {/* Rotas protegidas */}
+
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <DashboardLayoutClean />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<DashboardHomeClean />} />
+          <Route path="home" element={<DashboardHomeClean />} />
+          <Route path="clientes" element={<ClientePageCompleteFixed />} />
+          <Route path="fornecedores" element={<FornecedorPage />} />
+          <Route path="produtos" element={<ProdutoPageResponsive />} />
+          <Route path="vendas" element={<Vendas />} />
+          <Route path="compras" element={<CompraPage />} />
+          <Route path="financeiro" element={<FinancePage />} />
+          <Route path="aprovacoes" element={<AprovacoesPage />} />
+          <Route path="configuracoes" element={<SettingsPage />} />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </MenuStateProvider>
+    </GruposProdutoProvider>
+    </UltraWideConfig>
+  )
+}

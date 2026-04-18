@@ -1,0 +1,50 @@
+═══════════════════════════════════════════════════════════════
+         SISTEMA APERUS - INSTALAÇÃO EM 3 PASSOS
+═══════════════════════════════════════════════════════════════
+
+
+PASSO 1: Transfira esta pasta para o servidor
+─────────────────────────────────────────────────────────────
+
+  Via pendrive, rede ou compactando em ZIP
+
+
+PASSO 2: No servidor, clique 2x em:
+─────────────────────────────────────────────────────────────
+
+  INSTALAR.bat → Opção [A] - Instalação Completa
+
+
+PASSO 3: Configure e inicie
+─────────────────────────────────────────────────────────────
+
+  1. Copie .env.example para .env
+  2. Configure dados do banco PostgreSQL no .env
+  3. Clique 2x em: INICIAR.bat
+
+
+═══════════════════════════════════════════════════════════════
+
+✓ PRONTO! Sistema rodando!
+
+Acesse: http://localhost:8005/admin/
+
+═══════════════════════════════════════════════════════════════
+
+
+TEM DÚVIDAS?
+
+→ Abra: MANUAL_INSTALACAO.txt (manual completo)
+→ Abra: README.txt (informações gerais)
+→ Abra: COMO_TRANSFERIR.txt (guia de transferência)
+
+
+═══════════════════════════════════════════════════════════════
+
+IMPORTANTE:
+
+✓ Banco de dados PostgreSQL já deve estar instalado
+✓ Configure o .env antes de iniciar
+✓ Use DEBUG=False em produção
+
+═══════════════════════════════════════════════════════════════

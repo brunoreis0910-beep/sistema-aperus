@@ -1,0 +1,371 @@
+{% extends 'api/base_site.html' %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+    <div class="alert alert-info border-info">
+        <strong><i class="bi bi-truck"></i> Módulo CT-e (Homologação)</strong> - Sistema Django Backend
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>
+            {% if cte.id_cte %}Editar CT-e #{{ cte.id_cte }} (Modelo {{ cte.modelo }})
+            {% else %}Novo CT-e (Modelo 57){% endif %}
+        </h2>
+        <a href="{% url 'cte_list' %}" class="btn btn-outline-secondary">Voltar</a>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        
+        <!-- Status Bar -->
+        {% if cte.id_cte %}
+        <div class="card mb-3 border-{{ cte.status_cte|yesno:'success,warning' }}">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <strong>Status:</strong> {{ cte.status_cte }} <span class="mx-2">|</span>
+                    <strong>Chave:</strong> {{ cte.chave_cte|default:"-" }}
+                </div>
+                <div>
+                   {% if cte.status_cte != 'AUTORIZADO' %}
+                   <button type="button" class="btn btn-success" onclick="emitirCTe()">Transmitir Sefaz</button>
+                   {% else %}
+                   <button type="button" class="btn btn-danger" onclick="cancelarCTe()">Cancelar</button>
+                   <button type="button" class="btn btn-secondary">CCe</button>
+                   {% endif %}
+
+                   {% if cte.status_cte == 'AUTORIZADO' or cte.status_cte == 'EMITIDO' or cte.status_cte == 'ERRO' or cte.status_cte == 'REJEITADO' or cte.chave_cte or cte.xml_cte %}
+                   <a href="/api/ctes/{{ cte.id_cte }}/imprimir_dacte/" target="_blank" class="btn btn-dark"><i class="bi bi-printer"></i> DACTE</a>
+                   <a href="/api/ctes/{{ cte.id_cte }}/baixar_xml/" target="_blank" class="btn btn-warning"><i class="bi bi-filetype-xml"></i> XML</a>
+                   {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <ul class="nav nav-tabs" id="cteTabs" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-target="#geral" data-bs-toggle="tab">Geral</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-target="#pessoas" data-bs-toggle="tab">Atores</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-target="#percurso" data-bs-toggle="tab">Percurso</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-target="#veiculo" data-bs-toggle="tab">Veículo/Condutor</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-target="#carga" data-bs-toggle="tab">Carga</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-target="#valores" data-bs-toggle="tab">Valores</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-target="#impostos" data-bs-toggle="tab">Impostos</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-target="#seguro" data-bs-toggle="tab">Seguro</button></li>
+        </ul>
+
+        <div class="tab-content border border-top-0 p-3 bg-white mb-3">
+            
+            <!-- Geral -->
+            <div class="tab-pane fade show active" id="geral">
+                <div class="row g-3">
+                     <div class="col-md-3">
+                        <label class="form-label">Modelo</label>
+                        <select class="form-select" name="modelo">
+                            <option value="57">57 - CT-e Rodoviário</option>
+                            <option value="67">67 - CT-e OS</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Tipo de Serviço</label>
+                        <select class="form-select" name="tipo_servico">
+                            <option value="0">0 - Normal</option>
+                            <option value="1">1 - Subcontratação</option>
+                            <option value="2">2 - Redespacho</option>
+                            <option value="3">3 - Redespacho Interm.</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Finalidade</label>
+                        <select class="form-select" name="tipo_cte">
+                            <option value="0" {% if cte.tipo_cte == 0 %}selected{% endif %}>0 - Normal</option>
+                            <option value="1" {% if cte.tipo_cte == 1 %}selected{% endif %}>1 - Complementar</option>
+                            <option value="3" {% if cte.tipo_cte == 3 %}selected{% endif %}>3 - Substituição</option>
+                            <option value="2" {% if cte.tipo_cte == 2 %}selected{% endif %}>2 - Anulação</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">CFOP</label>
+                        <input type="text" class="form-control" name="cfop" value="{{ cte.cfop|default:'5353' }}">
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">Natureza da Operação</label>
+                        <input type="text" class="form-control" name="natureza_operacao" value="{{ cte.natureza_operacao|default:'Transporte Rodoviário de Cargas' }}">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pessoas -->
+            <div class="tab-pane fade" id="pessoas">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Remetente</label>
+                        <select class="form-select" name="remetente">
+                            <option value="">Selecione...</option>
+                            {% for c in clientes %}
+                            <option value="{{ c.id_cliente }}" {% if cte.remetente_id == c.id_cliente %}selected{% endif %}>{{ c.nome_razao_social }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Destinatário</label>
+                        <select class="form-select" name="destinatario">
+                            <option value="">Selecione...</option>
+                            {% for c in clientes %}
+                            <option value="{{ c.id_cliente }}" {% if cte.destinatario_id == c.id_cliente %}selected{% endif %}>{{ c.nome_razao_social }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Expedidor (Opcional)</label>
+                        <select class="form-select" name="expedidor">
+                            <option value="">Selecione...</option>
+                            {% for c in clientes %}
+                            <option value="{{ c.id_cliente }}" {% if cte.expedidor_id == c.id_cliente %}selected{% endif %}>{{ c.nome_razao_social }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                     <div class="col-md-6">
+                        <label class="form-label">Recebedor (Opcional)</label>
+                        <select class="form-select" name="recebedor">
+                            <option value="">Selecione...</option>
+                            {% for c in clientes %}
+                            <option value="{{ c.id_cliente }}" {% if cte.recebedor_id == c.id_cliente %}selected{% endif %}>{{ c.nome_razao_social }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-12"><hr></div>
+                    
+                    <div class="col-md-4">
+                        <label class="form-label">Tomador do Serviço (Pagador)</label>
+                        <select class="form-select" name="tomador_servico">
+                            <option value="0" {% if cte.tomador_servico == 0 %}selected{% endif %}>Remetente</option>
+                            <option value="3" {% if cte.tomador_servico == 3 %}selected{% endif %}>Destinatário</option>
+                            <option value="1" {% if cte.tomador_servico == 1 %}selected{% endif %}>Expedidor</option>
+                            <option value="2" {% if cte.tomador_servico == 2 %}selected{% endif %}>Recebedor</option>
+                            <option value="4" {% if cte.tomador_servico == 4 %}selected{% endif %}>Outros</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Percurso -->
+            <div class="tab-pane fade" id="percurso">
+                <h5 class="mt-3">Origem (Início da Prestação)</h5>
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label class="form-label">Cidade Início</label>
+                        <input type="text" class="form-control" name="cidade_origem_nome" value="{{ cte.cidade_origem_nome }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">UF Início</label>
+                        <input type="text" class="form-control" name="cidade_origem_uf" value="{{ cte.cidade_origem_uf }}" maxlength="2">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">IBGE Início</label>
+                        <input type="text" class="form-control" name="cidade_origem_ibge" value="{{ cte.cidade_origem_ibge }}" maxlength="7">
+                    </div>
+                </div>
+
+                <h5 class="mt-4">Destino (Fim da Prestação)</h5>
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label class="form-label">Cidade Fim</label>
+                        <input type="text" class="form-control" name="cidade_destino_nome" value="{{ cte.cidade_destino_nome }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">UF Fim</label>
+                        <input type="text" class="form-control" name="cidade_destino_uf" value="{{ cte.cidade_destino_uf }}" maxlength="2">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">IBGE Fim</label>
+                        <input type="text" class="form-control" name="cidade_destino_ibge" value="{{ cte.cidade_destino_ibge }}" maxlength="7">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Veículo -->
+            <div class="tab-pane fade" id="veiculo">
+                <h5 class="mt-3">Dados do Veículo</h5>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Placa</label>
+                        <input type="text" class="form-control" name="placa_veiculo" value="{{ cte.placa_veiculo }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">UF Placa</label>
+                        <input type="text" class="form-control" name="veiculo_uf" value="{{ cte.veiculo_uf }}" maxlength="2">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">RNTRC</label>
+                        <input type="text" class="form-control" name="rntrc" value="{{ cte.rntrc }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Renavam</label>
+                        <input type="text" class="form-control" name="veiculo_renavam" value="{{ cte.veiculo_renavam }}">
+                    </div>
+                </div>
+
+                <h5 class="mt-4">Condutor</h5>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Nome do Motorista</label>
+                        <input type="text" class="form-control" name="condutor_nome" value="{{ cte.condutor_nome }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">CPF Motorista</label>
+                        <input type="text" class="form-control" name="condutor_cpf" value="{{ cte.condutor_cpf }}">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Carga -->
+            <div class="tab-pane fade" id="carga">
+                <h5 class="mt-3">Documentos Originários (Notas Fiscais)</h5>
+                <div class="mb-3">
+                    <label class="form-label">Chaves das NF-e (Uma por linha)</label>
+                    <textarea class="form-control" name="nfe_chaves" rows="3" placeholder="Cole as chaves de acesso aqui...">{% for doc in cte.documentos_originarios.all %}{{ doc.chave_nfe }}&#10;{% endfor %}</textarea>
+                    <small class="text-muted">Informe as chaves das Notas Fiscais que estão sendo transportadas.</small>
+                </div>
+
+                <h5 class="mt-3">Dados da Carga</h5>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Produto Predominante</label>
+                        <input type="text" class="form-control" name="produto_predominante" value="{{ cte.produto_predominante }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Valor da Carga</label>
+                        <input type="number" step="0.01" class="form-control" name="valor_carga" value="{{ cte.valor_carga|stringformat:'.2f' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Peso Bruto (KG)</label>
+                        <input type="number" step="0.0001" class="form-control" name="peso_bruto" value="{{ cte.peso_bruto|stringformat:'.4f' }}">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Valores -->
+            <div class="tab-pane fade" id="valores">
+               <h5 class="mt-3">Componentes do Valor da Prestação</h5>
+               <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <label class="form-label">Frete Valor (R$)</label>
+                        <input type="number" step="0.01" class="form-control componente-valor" name="componente_frete_valor" value="{{ cte.componente_frete_valor|stringformat:'.2f' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Frete Peso (R$)</label>
+                        <input type="number" step="0.01" class="form-control componente-valor" name="componente_frete_peso" value="{{ cte.componente_frete_peso|stringformat:'.2f' }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Sec/Cat (R$)</label>
+                        <input type="number" step="0.01" class="form-control componente-valor" name="componente_sec_cat" value="{{ cte.componente_sec_cat|stringformat:'.2f' }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Pedágio (R$)</label>
+                        <input type="number" step="0.01" class="form-control componente-valor" name="componente_pedagio" value="{{ cte.componente_pedagio|stringformat:'.2f' }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Outros (R$)</label>
+                        <input type="number" step="0.01" class="form-control componente-valor" name="componente_outros" value="{{ cte.componente_outros|stringformat:'.2f' }}">
+                    </div>
+               </div>
+
+               <h5 class="mt-3">Totais</h5>
+               <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Valor Total do Serviço (R$)</label>
+                        <input type="number" step="0.01" class="form-control" name="valor_total_servico" id="valor_total_servico" value="{{ cte.valor_total_servico|stringformat:'.2f' }}">
+                        <div class="form-text">Soma dos componentes acima.</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Valor a Receber (R$)</label>
+                        <input type="number" step="0.01" class="form-control" name="valor_receber" value="{{ cte.valor_receber|stringformat:'.2f' }}">
+                    </div>
+               </div>
+            </div>
+
+            <!-- Impostos -->
+            <div class="tab-pane fade" id="impostos">
+               <h5 class="mt-3">ICMS</h5>
+               <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">CST ICMS</label>
+                        <select class="form-select" name="cst_icms">
+                            <option value="00" {% if cte.cst_icms == '00' %}selected{% endif %}>00 - Trib. Integral</option>
+                            <option value="20" {% if cte.cst_icms == '20' %}selected{% endif %}>20 - Redução BC</option>
+                            <option value="40" {% if cte.cst_icms == '40' %}selected{% endif %}>40 - Isento</option>
+                            <option value="41" {% if cte.cst_icms == '41' %}selected{% endif %}>41 - Não Tributado</option>
+                            <option value="60" {% if cte.cst_icms == '60' %}selected{% endif %}>60 - Cob. Ant. Subst. Trib</option>
+                            <option value="90" {% if cte.cst_icms == '90' %}selected{% endif %}>90 - Outros</option>
+                            <option value="SN" {% if cte.cst_icms == 'SN' %}selected{% endif %}>Simples Nacional</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Alíquota (%)</label>
+                        <input type="number" step="0.01" class="form-control" name="p_icms" value="{{ cte.p_icms|stringformat:'.2f' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Base de Cálculo (R$)</label>
+                        <input type="number" step="0.01" class="form-control" name="v_bc_icms" value="{{ cte.v_bc_icms|stringformat:'.2f' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Valor ICMS (R$)</label>
+                        <input type="number" step="0.01" class="form-control" name="v_icms" value="{{ cte.v_icms|stringformat:'.2f' }}">
+                    </div>
+               </div>
+            </div>
+
+            <!-- Seguro -->
+            <div class="tab-pane fade" id="seguro">
+               <h5 class="mt-3">Responsável pelo Seguro</h5>
+               <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Responsável</label>
+                        <select class="form-select" name="resp_seguro">
+                            <option value="0" {% if cte.resp_seguro == 0 %}selected{% endif %}>0 - Remetente</option>
+                            <option value="4" {% if cte.resp_seguro == 4 %}selected{% endif %}>4 - Emitente do CT-e</option>
+                            <option value="5" {% if cte.resp_seguro == 5 %}selected{% endif %}>5 - Tomador de Serviço</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Nome da Seguradora</label>
+                        <input type="text" class="form-control" name="nome_seguradora" value="{{ cte.nome_seguradora|default:'' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Número da Apólice</label>
+                        <input type="text" class="form-control" name="numero_apolice" value="{{ cte.numero_apolice|default:'' }}">
+                    </div>
+               </div>
+            </div>
+            
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg">Salvar CT-e</button>
+    </form>
+</div>
+
+<script>
+    function emitirCTe() {
+        if(!confirm("Deseja transmitir o CT-e para a Sefaz?")) return;
+        alert("Chamaria API de Emissão aqui. Backend pendente de integração ACBrCTe.");
+    }
+
+    // Auto-calculo dos componentes
+    const componentes = document.querySelectorAll('.componente-valor');
+    const totalInput = document.getElementById('valor_total_servico');
+
+    function calcularTotal() {
+        let total = 0;
+        componentes.forEach(input => {
+            total += parseFloat(input.value || 0);
+        });
+        totalInput.value = total.toFixed(2);
+    }
+
+    componentes.forEach(input => {
+        input.addEventListener('input', calcularTotal);
+    });
+</script>
+{% endblock %}

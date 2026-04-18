@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Venda Rápida NFC-e</title>
+    <!-- Roboto Font & Icons -->
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Mui CSS (Lightweight Material Design) -->
+    <link href="//cdn.muicss.com/mui-0.10.3/css/mui.min.css" rel="stylesheet" type="text/css" />
+    <style>
+        body { font-family: 'Roboto', sans-serif; background-color: #f4f6f8; height: 100vh; overflow: hidden; margin: 0; display: flex; flex-direction: column; }
+        
+        /* Layout */
+        .app-bar { background-color: #1976d2; color: white; padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 10; }
+        .app-bar h1 { margin: 0; font-size: 1.25rem; font-weight: 500; display: flex; align-items: center; gap: 10px; }
+        
+        .main-content { display: flex; flex: 1; padding: 16px; gap: 16px; overflow: hidden; }
+        
+        /* Left: List */
+        .section-left { flex: 2; background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); display: flex; flex-direction: column; overflow: hidden; }
+        
+        .product-list-header { display: grid; grid-template-columns: 50px 1fr 100px 120px 120px 60px; padding: 12px 16px; background: #f5f5f5; font-weight: 500; color: #666; border-bottom: 1px solid #e0e0e0; }
+        .product-list-body { flex: 1; overflow-y: auto; }
+        .product-item { display: grid; grid-template-columns: 50px 1fr 100px 120px 120px 60px; padding: 12px 16px; border-bottom: 1px solid #eee; align-items: center; transition: background 0.2s; cursor: pointer; }
+        .product-item:hover { background-color: #f5f5f5; }
+        .product-item.selected { background-color: #e3f2fd; }
+        
+        /* Right: Sidebar */
+        .section-right { flex: 1; display: flex; flex-direction: column; gap: 16px; max-width: 400px; }
+        
+        .card-panel { background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); padding: 16px; display: flex; flex-direction: column; }
+        
+        /* Search */
+        .search-box { position: relative; margin-bottom: 15px; }
+        .search-input { width: 100%; border: 1px solid #ccc; border-radius: 4px; padding: 12px 40px 12px 12px; font-size: 1rem; outline: none; transition: border 0.3s; }
+        .search-input:focus { border-color: #1976d2; }
+        .search-icon { position: absolute; right: 10px; top: 12px; color: #757575; }
+        
+        /* Suggestions */
+        .suggestions-popover { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; box-shadow: 0 4px 6px rgba(0,0,0,0.2); z-index: 100; max-height: 300px; overflow-y: auto; }
+        .suggestion-row { padding: 10px 15px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; }
+        .suggestion-row:hover, .suggestion-row.active { background-color: #e3f2fd; }
+        
+        /* Totals */
+        .total-display { background-color: #2c3e50; color: white; padding: 20px; border-radius: 4px; text-align: center; margin-bottom: 10px; }
+        .total-label { font-size: 0.9rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px; }
+        .total-value { font-size: 2.5rem; font-weight: 500; margin-top: 5px; }
+        
+        /* Buttons */
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .action-btn { border: none; border-radius: 4px; padding: 15px; font-size: 1rem; font-weight: 500; cursor: pointer; text-transform: uppercase; display: flex; align-items: center; justify-content: center; gap: 8px; transition: filter 0.2s; color: white; }
+        .btn-cancel { background-color: #d32f2f; }
+        .btn-client { background-color: #0288d1; }
+        .btn-finish { background-color: #2e7d32; grid-column: span 2; font-size: 1.2rem; padding: 20px; }
+        .action-btn:hover { filter: brightness(110%); }
+        .action-btn:disabled { background-color: #bdbdbd; cursor: not-allowed; }
+        
+        /* Client Badge */
+        .client-badge { display: flex; align-items: center; justify-content: space-between; background: #e3f2fd; color: #1565c0; padding: 8px 12px; border-radius: 4px; font-size: 0.9rem; margin-bottom: 10px; }
+        
+        /* Modal Overlay */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+        .modal-card { background: white; padding: 24px; border-radius: 4px; width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+        .modal-title { font-size: 1.25rem; font-weight: 500; margin-bottom: 16px; color: #333; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; color: #666; font-size: 0.9rem; }
+        .form-control { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        
+        /* Result Icon */
+        .result-icon { font-size: 64px; margin-bottom: 16px; display: block; text-align: center; }
+        .text-success { color: #2e7d32; }
+        .text-error { color: #d32f2f; }
+        
+        /* Responsive */
+        @media (max-width: 900px) {
+            .main-content { flex-direction: column-reverse; overflow-y: auto; }
+            .section-left { min-height: 300px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- App Bar -->
+        <header class="app-bar">
+            <h1>
+                <span class="material-icons">point_of_sale</span>
+                Venda Rápida NFC-e
+            </h1>
+            <div style="font-size: 0.9rem;">
+                <span class="material-icons" style="font-size: 16px; vertical-align: middle;">wifi</span> ACBr Online
+                &nbsp;|&nbsp;
+                <span class="material-icons" style="font-size: 16px; vertical-align: middle;">person</span> Operador
+            </div>
+        </header>
+
+        <!-- Info Bar: Operação, Cliente, Vendedor -->
+        <div v-if="dadosVenda" style="background-color: #4CAF50; color: white; padding: 12px 20px; display: flex; gap: 20px; align-items: center; border-bottom: 2px solid #388E3C;">
+            <div v-if="dadosVenda.operacao" style="flex: 1;">
+                <small style="opacity: 0.9; font-size: 0.7rem;">🏷️ OPERAÇÃO</small>
+                <div style="font-weight: bold; font-size: 0.95rem;">{{ dadosVenda.operacao.nome }}</div>
+            </div>
+            <div v-if="dadosVenda.cliente" style="flex: 1;">
+                <small style="opacity: 0.9; font-size: 0.7rem;">👤 CLIENTE</small>
+                <div style="font-weight: bold; font-size: 0.95rem;">{{ dadosVenda.cliente.nome || 'CONSUMIDOR' }}</div>
+            </div>
+            <div v-if="dadosVenda.vendedor" style="flex: 1;">
+                <small style="opacity: 0.9; font-size: 0.7rem;">💼 VENDEDOR</small>
+                <div style="font-weight: bold; font-size: 0.95rem;">{{ dadosVenda.vendedor.nome || 'N/A' }}</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- Left Panel: Product List -->
+            <div class="section-left">
+                <div class="product-list-header">
+                    <span>#</span>
+                    <span>Produto</span>
+                    <span style="text-align: right;">Qtd</span>
+                    <span style="text-align: right;">Vl. Unit</span>
+                    <span style="text-align: right;">Total</span>
+                    <span></span>
+                </div>
+                <div class="product-list-body">
+                    <div class="product-item" v-for="(item, index) in cart" :key="index" :class="{selected: index === selectedIndex}" @click="selectedIndex = index">
+                        <span style="color: #888;">{{ index + 1 }}</span>
+                        <div>
+                            <div style="font-weight: 500; color: #333;">{{ item.nome_produto }}</div>
+                            <div style="font-size: 0.8rem; color: #888;">{{ item.codigo_produto }}</div>
+                        </div>
+                        <div style="text-align: right;">{{ formatNumber(item.quantidade, 3) }}</div>
+                        <div style="text-align: right;">{{ formatNumber(item.preco_unitario, 2) }}</div>
+                        <div style="text-align: right; font-weight: 500;">{{ formatNumber(item.subtotal, 2) }}</div>
+                        <div style="text-align: center;">
+                            <span class="material-icons" style="color: #e57373; cursor: pointer; font-size: 20px;" @click.stop="removeItem(index)">delete</span>
+                        </div>
+                    </div>
+                    <div v-if="cart.length === 0" style="padding: 40px; text-align: center; color: #999;">
+                        <span class="material-icons" style="font-size: 48px; opacity: 0.5;">shopping_cart</span>
+                        <p>Nenhum item adicionado</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Controls -->
+            <div class="section-right">
+                <!-- Product Search -->
+                <div class="card-panel" style="overflow: visible;">
+                    <div class="search-box">
+                        <input type="text" class="search-input" placeholder="Buscar produto (F2)..." v-model="searchQuery" ref="searchInput" @input="debouncedSearch" @keydown.down="moveSuggestion(1)" @keydown.up="moveSuggestion(-1)" @keydown.enter="selectSuggestion">
+                        <span class="material-icons search-icon">search</span>
+                        
+                        <!-- Suggestions List -->
+                        <div class="suggestions-popover" v-if="suggestions.length > 0">
+                            <div class="suggestion-row" v-for="(prod, idx) in suggestions" :key="prod.id_produto" :class="{active: idx === suggestionIndex}" @click="addToCart(prod)">
+                                <div>
+                                    <div style="font-weight: 500;">{{ prod.nome_produto }}</div>
+                                    <small style="color: #666;">{{ prod.codigo_produto }}</small>
+                                </div>
+                                <div style="font-weight: bold; color: #2e7d32;">R$ {{ prod.preco_venda }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Last Item Display -->
+                    <div v-if="lastAddedItem" style="padding: 10px; background: #f9f9f9; border-radius: 4px; border-left: 4px solid #1976d2;">
+                        <small style="color: #666; display: block; margin-bottom: 4px;">Último Item:</small>
+                        <div style="font-weight: 500; margin-bottom: 4px;">{{ lastAddedItem.nome_produto }}</div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>{{ formatNumber(lastAddedItem.quantidade, 0) }} x {{ formatNumber(lastAddedItem.preco_unitario, 2) }}</span>
+                            <span style="font-weight: bold;">R$ {{ formatNumber(lastAddedItem.subtotal, 2) }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Spacer -->
+                <div style="flex: 1;"></div>
+
+                <!-- Client Info -->
+                <div class="client-badge" v-if="clientName || clientCpf">
+                    <div>
+                        <span style="font-weight: bold;">Cliente:</span> {{ clientName || 'Consumidor' }}
+                        <div style="font-size: 0.8rem;" v-if="clientCpf">CPF/CNPJ: {{ clientCpf }}</div>
+                    </div>
+                    <span class="material-icons" style="cursor: pointer;" @click="clientCpf = ''; clientName = '';">close</span>
+                </div>
+
+                <!-- Totals & Actions -->
+                <div class="card-panel" style="background: transparent; box-shadow: none; padding: 0;">
+                    <div class="total-display">
+                        <div class="total-label">Subtotal</div>
+                        <div class="total-value">R$ {{ formatNumber(cartTotalValue, 2) }}</div>
+                        <div style="margin-top: 10px; font-size: 0.9rem; opacity: 0.8;">
+                            {{ cartTotalItems }} Itens
+                        </div>
+                    </div>
+
+                    <div class="btn-grid">
+                        <button class="action-btn btn-cancel" @click="cancelSale" title="F4">
+                            <span class="material-icons">cancel</span> Cancelar
+                        </button>
+                        <button class="action-btn btn-client" @click="showClientModal = true" title="F5">
+                            <span class="material-icons">person_add</span> Cliente
+                        </button>
+                        <button class="action-btn btn-finish" @click="finalizeSale" :disabled="cart.length === 0 || processing" title="F3">
+                            <span class="material-icons" v-if="!processing">check_circle</span>
+                            <span class="material-icons" v-if="processing">sync</span>
+                            {{ processing ? 'Processando...' : 'FINALIZAR VENDA' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Client Modal -->
+        <div class="modal-overlay" v-if="showClientModal">
+            <div class="modal-card">
+                <div class="modal-title">Identificar Cliente</div>
+                <div class="form-group">
+                    <label>CPF / CNPJ</label>
+                    <input type="text" class="form-control" v-model="tempClientCpf" placeholder="Digite apenas números" id="cpfInput">
+                </div>
+                <div class="form-group">
+                    <label>Nome (Opcional)</label>
+                    <input type="text" class="form-control" v-model="tempClientName" placeholder="Nome do cliente">
+                </div>
+                <div class="modal-actions">
+                    <button class="action-btn" style="background: #e0e0e0; color: #333;" @click="showClientModal = false">Cancelar</button>
+                    <button class="action-btn btn-client" @click="confirmClient">Confirmar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Result Modal -->
+        <div class="modal-overlay" v-if="resultModal.show" style="backdrop-filter: blur(2px);">
+            <div class="modal-card" style="text-align: center; width: 450px;">
+                <span class="material-icons result-icon" :class="resultModal.success ? 'text-success' : 'text-error'">
+                    {{ resultModal.success ? 'check_circle' : 'error' }}
+                </span>
+                <div class="modal-title">{{ resultModal.success ? 'NFC-e Emitida!' : 'Erro na Emissão' }}</div>
+                
+                <p style="color: #555; margin-bottom: 20px;">{{ resultModal.message }}</p>
+                
+                <div v-if="resultModal.success" style="background: #f1f8e9; padding: 10px; border-radius: 4px; margin-bottom: 20px; text-align: left; font-size: 0.9rem;">
+                    <div><strong>Chave:</strong> {{ resultModal.data.chave }}</div>
+                    <div><strong>Protocolo:</strong> {{ resultModal.data.protocolo }}</div>
+                </div>
+
+                <div class="modal-actions" style="justify-content: center;">
+                    <button v-if="!resultModal.success" class="action-btn btn-cancel" @click="resultModal.show = false">Fechar</button>
+                    <button v-if="resultModal.success" class="action-btn btn-finish" @click="resetSale">Nova Venda</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vue 3 & Axios -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    cart: [],
+                    searchQuery: '',
+                    suggestions: [],
+                    suggestionIndex: -1,
+                    
+                    // Client Logic
+                    showClientModal: false,
+                    clientCpf: '',
+                    clientName: '',
+                    tempClientCpf: '',
+                    tempClientName: '',
+                    
+                    // State
+                    processing: false,
+                    selectedIndex: -1,
+                    debugMsg: '',
+                    
+                    // Dados da Venda (retornados pelo backend)
+                    dadosVenda: null,
+                    
+                    // Config
+                    defaultOperacaoId: 1,
+
+                    // Result Modal
+                    resultModal: {
+                        show: false,
+                        success: false,
+                        message: '',
+                        data: null
+                    }
+                }
+            },
+            computed: {
+                cartTotalValue() {
+                    return this.cart.reduce((acc, item) => acc + item.subtotal, 0);
+                },
+                cartTotalItems() {
+                    return this.cart.length;
+                },
+                lastAddedItem() {
+                    return this.cart.length > 0 ? this.cart[this.cart.length - 1] : null;
+                }
+            },
+            mounted() {
+                this.$refs.searchInput.focus();
+                
+                // Keyboard Shortcuts
+                window.addEventListener('keydown', (e) => {
+                    // Ignore if modal is open (except ESC)
+                    if (this.showClientModal || this.resultModal.show) {
+                        if (e.key === 'Escape') {
+                            this.showClientModal = false;
+                            if(!this.resultModal.success) this.resultModal.show = false;
+                        }
+                        return;
+                    }
+
+                    if (e.key === 'F2') { e.preventDefault(); this.$refs.searchInput.focus(); }
+                    if (e.key === 'F3') { e.preventDefault(); this.finalizeSale(); }
+                    if (e.key === 'F4') { e.preventDefault(); this.cancelSale(); }
+                    if (e.key === 'F5') { e.preventDefault(); this.openClientModal(); }
+                    if (e.key === 'Escape') { 
+                         this.suggestions = []; 
+                         this.$refs.searchInput.focus();
+                    }
+                });
+
+                this.initSetup();
+            },
+            methods: {
+                async initSetup() {
+                    // Fetch CSRF
+                    const getCookie = (name) => {
+                        let cookieValue = null;
+                        if (document.cookie && document.cookie !== '') {
+                            const cookies = document.cookie.split(';');
+                            for (let i = 0; i < cookies.length; i++) {
+                                const cookie = cookies[i].trim();
+                                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                                    break;
+                                }
+                            }
+                        }
+                        return cookieValue;
+                    };
+                    axios.defaults.headers.common['X-CSRFToken'] = getCookie('csrftoken');
+
+                    // Try fetch default operation
+                    try {
+                        const ops = await axios.get('/api/operacoes/');
+                        if (ops.data.results && ops.data.results.length > 0) {
+                             const bestOp = ops.data.results.find(o => o.nome_operacao && (o.nome_operacao.toLowerCase().includes('nfc') || o.nome_operacao.toLowerCase().includes('rapida')));
+                             this.defaultOperacaoId = bestOp ? bestOp.id_operacao : ops.data.results[0].id_operacao;
+                        }
+                    } catch (e) { console.warn("Ops fetch fail", e); }
+                },
+
+                // Search
+                debouncedSearch() {
+                    clearTimeout(this.timer);
+                    this.timer = setTimeout(this.fetchProducts, 300);
+                },
+                async fetchProducts() {
+                    if (this.searchQuery.length < 2) {
+                        this.suggestions = [];
+                        return;
+                    }
+                    try {
+                        const res = await axios.get(`/api/produtos/?search=${this.searchQuery}`);
+                        this.suggestions = res.data.results || [];
+                        this.suggestionIndex = 0;
+                    } catch (e) {
+                         console.error(e);
+                    }
+                },
+                moveSuggestion(step) {
+                    if (this.suggestions.length === 0) return;
+                    this.suggestionIndex += step;
+                    if (this.suggestionIndex < 0) this.suggestionIndex = this.suggestions.length - 1;
+                    if (this.suggestionIndex >= this.suggestions.length) this.suggestionIndex = 0;
+                },
+                selectSuggestion() {
+                    if (this.suggestions.length > 0 && this.suggestionIndex >= 0) {
+                        this.addToCart(this.suggestions[this.suggestionIndex]);
+                    }
+                },
+                
+                // Cart
+                addToCart(prod) {
+                    this.cart.push({
+                        id_produto: prod.id_produto,
+                        nome_produto: prod.nome_produto,
+                        codigo_produto: prod.codigo_produto,
+                        quantidade: 1,
+                        preco_unitario: parseFloat(prod.preco_venda),
+                        subtotal: parseFloat(prod.preco_venda)
+                    });
+                    this.searchQuery = '';
+                    this.suggestions = [];
+                    this.$refs.searchInput.focus();
+                },
+                removeItem(idx) {
+                    this.cart.splice(idx, 1);
+                },
+                formatNumber(val, decimals) {
+                    if (val === undefined || val === null) return '0,00';
+                    return val.toFixed(decimals).replace('.', ',');
+                },
+
+                // Client
+                openClientModal() {
+                    this.tempClientCpf = this.clientCpf;
+                    this.tempClientName = this.clientName;
+                    this.showClientModal = true;
+                    setTimeout(() => document.getElementById('cpfInput').focus(), 100);
+                },
+                confirmClient() {
+                    this.clientCpf = this.tempClientCpf;
+                    this.clientName = this.tempClientName;
+                    this.showClientModal = false;
+                    this.$refs.searchInput.focus();
+                },
+
+                // Sale
+                cancelSale() {
+                    if (confirm('Deseja limpar a venda atual?')) {
+                        this.resetSale();
+                    }
+                },
+                resetSale() {
+                    this.cart = [];
+                    this.clientCpf = '';
+                    this.clientName = '';
+                    this.dadosVenda = null;  // Limpar dados da venda anterior
+                    this.resultModal.show = false;
+                    this.processing = false;
+                    setTimeout(() => this.$refs.searchInput.focus(), 100);
+                },
+                async finalizeSale() {
+                    if (this.cart.length === 0 || this.processing) return;
+
+                    this.processing = true;
+                    try {
+                         const customPayload = {
+                             venda: {
+                                valor_total: this.cartTotalValue,
+                                id_operacao: this.defaultOperacaoId,
+                                id_cliente: 1,
+                                cpf_cnpj: this.clientCpf,
+                                nome_cliente: this.clientName,
+                                id_usuario: null  // O backend detectará automaticamente do token/sessão
+                             },
+                             itens: this.cart
+                         };
+                         
+                         const magicRes = await axios.post('/api/vendas/salvar_pdv_nfce/', customPayload);
+                         
+                         if (magicRes.data.sucesso) {
+                             // Capturar dados_venda retornados pelo backend
+                             if (magicRes.data.dados_venda) {
+                                 this.dadosVenda = magicRes.data.dados_venda;
+                                 console.log('✅ Dados da Venda recebidos:', this.dadosVenda);
+                                 console.log('   Operação:', this.dadosVenda.operacao);
+                                 console.log('   Cliente:', this.dadosVenda.cliente);
+                                 console.log('   Vendedor:', this.dadosVenda.vendedor);
+                             }
+                             
+                             this.resultModal = {
+                                 show: true, 
+                                 success: true, 
+                                 message: 'Nota fiscal emitida com sucesso!',
+                                 data: magicRes.data
+                             };
+                         } else {
+                             throw new Error(magicRes.data.mensagem);
+                         }
+
+                    } catch (e) {
+                         console.error(e);
+                         const msg = e.response?.data?.mensagem || e.message || JSON.stringify(e.response?.data);
+                         this.resultModal = { show: true, success: false, message: 'Erro: ' + msg };
+                    } finally {
+                        this.processing = false;
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

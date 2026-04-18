@@ -1,0 +1,59 @@
+/* Estilos para impressão */
+@media print {
+  /* Ocultar elementos que não devem aparecer na impressão */
+  .no-print,
+  .MuiAppBar-root,
+  .MuiTabs-root,
+  .MuiButton-root,
+  .MuiIconButton-root,
+  .MuiDialog-root,
+  nav,
+  header,
+  footer {
+    display: none !important;
+  }
+  
+  /* Mostrar apenas o conteúdo de impressão */
+  .print-only {
+    display: block !important;
+  }
+  
+  /* Configurações gerais de impressão */
+  body {
+    margin: 0;
+    padding: 0;
+    background: white !important;
+  }
+  
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  
+  /* Garantir que tabelas quebrem corretamente */
+  table {
+    page-break-inside: auto;
+  }
+  
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  
+  /* Evitar quebra de página em títulos e cabeçalhos */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+  
+  /* Margens da página */
+  @page {
+    margin: 1cm;
+    size: A4;
+  }
+  
+  /* Remover sombras e bordas desnecessárias */
+  .MuiPaper-root {
+    box-shadow: none !important;
+  }
+}

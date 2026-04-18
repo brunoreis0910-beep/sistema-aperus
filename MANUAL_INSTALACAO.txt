@@ -1,0 +1,413 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║              MANUAL DE INSTALAÇÃO - SISTEMA APERUS (PRODUÇÃO)               ║
+║                                                                              ║
+║                         Versão: 1.0 | Abril 2026                            ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  IMPORTANTE: BANCO DE DADOS JÁ ESTÁ INSTALADO                               │
+│                                                                              │
+│  Este manual assume que PostgreSQL já está configurado e rodando            │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  REQUISITOS DO SERVIDOR
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ Windows Server 2016+ ou Windows 10/11
+✓ Python 3.11 ou 3.12 (com pip)
+✓ Node.js 18+ ou 20+
+✓ PostgreSQL 14+ (JÁ INSTALADO E CONFIGURADO)
+✓ 4 GB RAM mínimo (8 GB recomendado)
+✓ 10 GB espaço em disco
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASSO 1: INSTALAR PYTHON E NODE.JS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. PYTHON 3.12
+   ──────────────────────────────────────────────────────────────────────────
+   
+   Clique 2x em: INSTALAR.bat
+   
+   Escolha opção [1] - Instalar Python
+   
+   IMPORTANTE: Durante a instalação, marque:
+   [X] Add Python to PATH
+   [X] Install for all users
+
+
+2. NODE.JS 20
+   ──────────────────────────────────────────────────────────────────────────
+   
+   Clique 2x em: INSTALAR.bat
+   
+   Escolha opção [2] - Instalar Node.js
+   
+   Aceite as configurações padrão
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASSO 2: CONFIGURAR AMBIENTE PYTHON
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Abra PowerShell como Administrador nesta pasta
+
+2. Execute:
+
+   # Criar ambiente virtual
+   python -m venv .venv
+
+3. Ative o ambiente:
+
+   .\.venv\Scripts\Activate.ps1
+
+4. Instale as dependências:
+
+   python -m pip install --upgrade pip
+   pip install -r requirements.txt
+
+   (Aguarde 5-10 minutos)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASSO 3: CONFIGURAR BANCO DE DADOS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Copie o arquivo de exemplo:
+
+   Copy-Item .env.example .env
+
+2. Abra o arquivo .env com Bloco de Notas
+
+3. Configure conforme seu banco PostgreSQL:
+
+   # Banco de Dados (JÁ INSTALADO)
+   DB_ENGINE=django.db.backends.postgresql
+   DB_NAME=aperus_producao
+   DB_USER=aperus_user
+   DB_PASSWORD=SuaSenhaAqui
+   DB_HOST=localhost
+   DB_PORT=5432
+
+   # Segurança (IMPORTANTE!)
+   SECRET_KEY=gere-uma-chave-secreta-unica-aqui
+   DEBUG=False
+   ENVIRONMENT=production
+   ALLOWED_HOSTS=seu-dominio.com,192.168.1.10
+
+   # Onde o sistema está instalado
+   STATIC_ROOT=C:\Sistemas\Aperus\staticfiles
+   MEDIA_ROOT=C:\Sistemas\Aperus\media
+
+4. GERAR SECRET_KEY:
+
+   Execute no PowerShell:
+   
+   python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+   
+   Copie o resultado e cole em SECRET_KEY no .env
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASSO 4: EXECUTAR MIGRAÇÕES DO BANCO
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Com o ambiente virtual ativo (.venv):
+
+   python manage.py migrate
+
+   (Aguarde criar todas as tabelas)
+
+2. Criar superusuário (administrador):
+
+   python manage.py createsuperuser
+
+   Digite:
+   - Usuário: admin (ou outro)
+   - Email: seu@email.com
+   - Senha: (digite uma senha forte)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASSO 5: INSTALAR DEPENDÊNCIAS DO FRONTEND
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Entre na pasta frontend:
+
+   cd frontend
+
+2. Instale as dependências:
+
+   npm install
+
+   (Aguarde 5-10 minutos)
+
+3. Faça o build de produção:
+
+   npm run build
+
+4. Volte para a pasta principal:
+
+   cd ..
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASSO 6: COLETAR ARQUIVOS ESTÁTICOS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Execute:
+
+   python manage.py collectstatic --noinput
+
+   (Isso copia CSS, JS, imagens para a pasta static)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASSO 7: TESTAR O SISTEMA
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Inicie o servidor:
+
+   python manage.py runserver 0.0.0.0:8005
+
+2. Abra o navegador:
+
+   http://localhost:8005/admin/
+
+3. Faça login com o superusuário criado
+
+4. Se tudo funcionou, pressione Ctrl+C para parar
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASSO 8: CONFIGURAR PARA RODAR AUTOMATICAMENTE
+═══════════════════════════════════════════════════════════════════════════════
+
+OPÇÃO A: Usar INICIAR.bat
+──────────────────────────────────────────────────────────────────────────────
+
+1. Clique 2x em: INICIAR.bat
+
+2. O sistema será iniciado automaticamente
+
+
+OPÇÃO B: Criar Serviço do Windows (RECOMENDADO)
+──────────────────────────────────────────────────────────────────────────────
+
+1. Baixe NSSM (Non-Sucking Service Manager):
+   https://nssm.cc/download
+
+2. Extraia nssm.exe para: C:\Windows\System32\
+
+3. Abra PowerShell como Admin e execute:
+
+   nssm install Aperus_Backend
+
+4. Configure:
+   Path: C:\Sistemas\Aperus\.venv\Scripts\python.exe
+   Startup directory: C:\Sistemas\Aperus
+   Arguments: manage.py runserver 0.0.0.0:8005
+
+5. Clique em "Install Service"
+
+6. Inicie o serviço:
+
+   Start-Service Aperus_Backend
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  COMANDOS ÚTEIS
+═══════════════════════════════════════════════════════════════════════════════
+
+Ativar ambiente virtual:
+  .\.venv\Scripts\Activate.ps1
+
+Iniciar sistema:
+  python manage.py runserver 0.0.0.0:8005
+
+Verificar banco de dados:
+  python manage.py showmigrations
+
+Criar backup:
+  python manage.py dumpdata > backup.json
+
+Restaurar backup:
+  python manage.py loaddata backup.json
+
+Ver logs:
+  Get-Content logs\error.log -Tail 50
+
+Verificar porta em uso:
+  netstat -ano | findstr :8005
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  SOLUÇÃO DE PROBLEMAS
+═══════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA: "Python não encontrado"
+──────────────────────────────────────────────────────────────────────────────
+SOLUÇÃO:
+  - Verifique: python --version
+  - Reinstale marcando "Add to PATH"
+  - Reinicie o computador
+
+
+PROBLEMA: "Erro ao conectar no banco"
+──────────────────────────────────────────────────────────────────────────────
+SOLUÇÃO:
+  1. Verifique se PostgreSQL está rodando:
+     Get-Service postgresql*
+  
+  2. Teste conexão:
+     psql -U aperus_user -d aperus_producao
+  
+  3. Verifique configurações no .env
+
+
+PROBLEMA: "Porta 8005 já em uso"
+──────────────────────────────────────────────────────────────────────────────
+SOLUÇÃO:
+  1. Ver o que está usando:
+     netstat -ano | findstr :8005
+  
+  2. Matar processo (substitua PID):
+     taskkill /PID 1234 /F
+
+
+PROBLEMA: "Acesso negado ao executar scripts"
+──────────────────────────────────────────────────────────────────────────────
+SOLUÇÃO:
+  PowerShell como Admin:
+  Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+
+PROBLEMA: "Erro 500 ao acessar o sistema"
+──────────────────────────────────────────────────────────────────────────────
+SOLUÇÃO:
+  1. Verifique logs:
+     Get-Content logs\error.log -Tail 50
+  
+  2. Verifique se DEBUG=False no .env
+  
+  3. Verifique se ALLOWED_HOSTS está correto
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  SEGURANÇA EM PRODUÇÃO
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ DEBUG=False no .env (SEMPRE!)
+✓ SECRET_KEY única e forte
+✓ Use HTTPS em produção
+✓ Configure firewall:
+  - Permita apenas porta 8005 (ou sua porta)
+  - Bloqueie acesso direto ao banco (5432)
+✓ Backups automáticos diários
+✓ Atualizações de segurança regulares
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  MANUTENÇÃO
+═══════════════════════════════════════════════════════════════════════════════
+
+BACKUPS DIÁRIOS
+──────────────────────────────────────────────────────────────────────────────
+
+Execute diariamente:
+
+  # Backup do banco
+  pg_dump -U aperus_user aperus_producao > backup_$(Get-Date -Format 'yyyyMMdd').sql
+
+  # Backup dos arquivos
+  python manage.py dumpdata > backup_$(Get-Date -Format 'yyyyMMdd').json
+
+
+LOGS
+──────────────────────────────────────────────────────────────────────────────
+
+Verifique regularmente:
+  - logs\error.log
+  - logs\access.log
+  - logs\debug.log
+
+
+ATUALIZAR O SISTEMA
+──────────────────────────────────────────────────────────────────────────────
+
+1. Fazer backup completo
+2. Ativar ambiente: .\.venv\Scripts\Activate.ps1
+3. Atualizar código (substituir arquivos)
+4. Atualizar dependências: pip install -r requirements.txt --upgrade
+5. Executar migrações: python manage.py migrate
+6. Coletar estáticos: python manage.py collectstatic --noinput
+7. Reiniciar sistema
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  CHECKLIST PÓS-INSTALAÇÃO
+═══════════════════════════════════════════════════════════════════════════════
+
+[ ] Python 3.12 instalado e funcionando
+[ ] Node.js 20 instalado e funcionando
+[ ] Ambiente virtual criado (.venv)
+[ ] Dependências Python instaladas
+[ ] Dependências Node.js instaladas
+[ ] Arquivo .env configurado corretamente
+[ ] DEBUG=False no .env
+[ ] SECRET_KEY gerada e configurada
+[ ] ALLOWED_HOSTS configurado
+[ ] Migrações executadas (python manage.py migrate)
+[ ] Superusuário criado
+[ ] Frontend buildado (npm run build)
+[ ] Arquivos estáticos coletados (collectstatic)
+[ ] Sistema inicia sem erros
+[ ] Consegue acessar /admin/
+[ ] Consegue fazer login
+[ ] Serviço do Windows configurado (opcional)
+[ ] Firewall configurado
+[ ] Backups automáticos configurados
+[ ] Documentação revisada
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  ACESSOS DO SISTEMA
+═══════════════════════════════════════════════════════════════════════════════
+
+Backend API:        http://seu-servidor:8005/api/
+Admin Django:       http://seu-servidor:8005/admin/
+Sistema Principal:  http://seu-servidor:8005/
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  INFORMAÇÕES DE SUPORTE
+═══════════════════════════════════════════════════════════════════════════════
+
+Localização dos arquivos importantes:
+  - Configuração: .env
+  - Logs: logs/
+  - Banco SQLite (se usar): db.sqlite3
+  - Arquivos estáticos: staticfiles/
+  - Uploads: media/
+
+Comandos de diagnóstico:
+  python manage.py check
+  python manage.py showmigrations
+  python manage.py test (executar testes)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ INSTALAÇÃO COMPLETA! SISTEMA APERUS PRONTO PARA PRODUÇÃO!
+
+Qualquer dúvida, consulte este manual ou contate o suporte técnico.
+
+═══════════════════════════════════════════════════════════════════════════════

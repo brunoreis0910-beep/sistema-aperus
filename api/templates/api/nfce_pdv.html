@@ -1,0 +1,2366 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Venda Rápida NFC-e</title>
+    <!-- Roboto Font & Icons -->
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Mui CSS (Lightweight Material Design) -->
+    <link href="//cdn.muicss.com/mui-0.10.3/css/mui.min.css" rel="stylesheet" type="text/css" />
+    <style>
+        body { 
+            font-family: 'Roboto', sans-serif; 
+            background-color: #f4f6f8; 
+            height: 100vh; 
+            overflow: hidden; 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            transition: background 0.5s ease;
+        }
+        
+        /* Layout Moderno - Compacto */
+        .app-bar { 
+            background: linear-gradient(135deg, #039be5 0%, #0277bd 100%);
+            backdrop-filter: blur(5px);
+            color: white; 
+            padding: 4px 12px; /* Pad. reduzido */
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+            z-index: 10;
+            height: 40px; /* Altura fixa menor */
+        }
+        .app-bar h1 { margin: 0; font-size: 1.0rem; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+        
+        .main-content { 
+            display: flex; 
+            flex: 1; 
+            padding: 6px; /* Pad. reduzido */
+            gap: 6px; 
+            overflow: hidden; 
+            background-color: transparent; 
+        }
+        
+        /* Left: List */
+        .section-left { 
+            flex: 1; 
+            background: rgba(255, 255, 255, 0.50); 
+            backdrop-filter: blur(8px);
+            border-radius: 6px; 
+            box-shadow: 0 4px 16px rgba(0,0,0,0.05); 
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden; 
+            border: 1px solid rgba(255,255,255,0.4);
+        }
+        
+        /* Grid Columns Compacted */
+        .product-list-header { 
+            display: grid; 
+            grid-template-columns: 40px 80px 1fr 60px 80px 80px 80px;
+            padding: 6px 10px; 
+            background: rgba(248, 249, 250, 0.5);
+            font-weight: 600; 
+            color: #5f6368; 
+            border-bottom: 2px solid rgba(234, 236, 240, 0.5); 
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+        .product-list-body { flex: 1; overflow-y: auto; }
+        
+        .product-item { 
+            display: grid; 
+            grid-template-columns: 40px 80px 1fr 60px 80px 80px 80px;
+            padding: 4px 10px; /* More compact */
+            border-bottom: 1px solid rgba(240, 240, 240, 0.3); 
+            align-items: center; 
+            transition: all 0.2s; 
+            font-size: 0.8rem;
+            color: #333;
+        }
+        .product-item:hover { background-color: rgba(255, 255, 255, 0.3); transform: translateX(2px); }
+        .product-item.selected { background-color: rgba(232, 240, 254, 0.6); border-left: 4px solid #1a73e8; }
+
+        /* Actions inside row */
+        .row-actions { display: flex; gap: 8px; justify-content: center; }
+        .icon-btn {
+            border: none;
+            background: transparent;
+            color: #757575;
+            cursor: pointer;
+            border-radius: 50%;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .icon-btn:hover { background-color: #eee; color: #333; }
+        .icon-btn.danger:hover { background-color: #ffebee; color: #d32f2f; }
+        .icon-btn.info:hover { background-color: #e3f2fd; color: #1976d2; }
+        
+        /* Right: Sidebar */
+        .section-right { 
+            flex: 0 0 380px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px; 
+            max-width: 400px; 
+            overflow: visible; /* Fix Popover Cutoff */
+        }
+        
+        .card-panel { 
+            background: rgba(255, 255, 255, 0.50); 
+            backdrop-filter: blur(8px);
+            border-radius: 8px; 
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
+            padding: 15px; 
+            display: flex; 
+            flex-direction: column; 
+            border: 1px solid rgba(255,255,255,0.4);
+        }
+        
+        /* Search */
+        .search-box { position: relative; margin-bottom: 0; }
+        .search-input { 
+            width: 100%; 
+            border: 2px solid #e0e0e0; 
+            border-radius: 6px; 
+            padding: 10px 40px 10px 12px; 
+            font-size: 1rem; 
+            outline: none; 
+            transition: border 0.3s, box-shadow 0.3s; 
+            background-color: #f8f9fa;
+        }
+        .search-input:focus { border-color: #7b1fa2; background-color: white; box-shadow: 0 0 0 4px rgba(123, 31, 162, 0.1); }
+        .search-icon { position: absolute; right: 12px; top: 12px; color: #757575; }
+        
+        /* Suggestions */
+        .suggestions-popover { 
+            position: absolute; 
+            top: 105%; 
+            left: 0; 
+            right: 0; 
+            background: white; 
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
+            z-index: 100; 
+            max-height: 300px; 
+            overflow-y: auto; 
+            border: 1px solid #eee;
+        }
+        .suggestion-row { padding: 10px 15px; border-bottom: 1px solid #f5f5f5; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; }
+        .suggestion-row:hover, .suggestion-row.active { background-color: #f3e5f5; color: #4a148c; }
+        
+        /* Totals */
+        .total-display { 
+            background: linear-gradient(135deg, #039be5 0%, #0277bd 100%); /* Azul igual do botão Cliente */
+            color: white; 
+            padding: 15px; 
+            border-radius: 8px; 
+            text-align: center; 
+            margin-bottom: 10px; 
+            box-shadow: 0 4px 10px rgba(1, 87, 155, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        .total-label { font-size: 0.75rem; opacity: 0.9; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
+        .total-value { font-size: 2.5rem; font-weight: 700; margin: 0; letter-spacing: -1px; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        
+        /* Change Display (Troco) */
+        .change-display {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            margin-top: 8px;
+            border: 1px solid #c8e6c9;
+            animation: slideUp 0.3s ease;
+        }
+        .change-value { font-size: 1.2rem; font-weight: bold; }
+
+        /* Buttons Grid */
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+        .action-btn { 
+            border: none; 
+            border-radius: 6px; 
+            padding: 12px; 
+            font-size: 0.85rem; 
+            font-weight: 600; 
+            cursor: pointer; 
+            text-transform: uppercase; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 6px; 
+            transition: all 0.2s; 
+            color: white; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .action-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        .action-btn:active { transform: translateY(0); }
+        
+        .btn-cancel { background: linear-gradient(135deg, #e53935 0%, #c62828 100%); }
+        .btn-client { background: linear-gradient(135deg, #039be5 0%, #0277bd 100%); }
+        .btn-discount { background: linear-gradient(135deg, #fb8c00 0%, #ef6c00 100%); color: white; }
+        .btn-reprint { background: linear-gradient(135deg, #757575 0%, #616161 100%); }
+        
+        .btn-finish { 
+            background: linear-gradient(135deg, #43a047 0%, #2e7d32 100%); 
+            grid-column: span 2; 
+            font-size: 1.1rem; 
+            padding: 16px; 
+            margin-top: 8px;
+        }
+        
+        .key-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            margin-left: auto;
+        }
+
+        /* Modal Improved */
+        .modal-overlay { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100vw; 
+            height: 100vh; 
+            background: rgba(0,0,0,0.6); 
+            backdrop-filter: blur(2px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-card { 
+            border-radius: 12px; 
+            width: 450px; 
+            padding: 30px; 
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            max-height: 90vh;
+            overflow-y: auto;
+            background: white; /* Ensure modal is readable */
+        }
+        .modal-title { font-size: 1.5rem; font-weight: 600; color: #4a148c; border-bottom: 2px solid #f3e5f5; padding-bottom: 15px; margin-bottom: 20px; }
+        
+        /* Payment List in Modal */
+        .payment-list {
+            margin-bottom: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+        .payment-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background: #f9f9f9;
+            border-bottom: 1px solid #eee;
+        }
+        .payment-item:last-child { border-bottom: none; }
+        .payment-amount { font-weight: bold; color: #2e7d32; }
+        
+        /* Rest of styles */
+        .form-group label { font-weight: 500; color: #424242; }
+        .form-control { padding: 12px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 1rem; transition: border 0.3s; }
+        .form-control:focus { border-color: #7b1fa2; }
+        
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Badge Discount */
+        .badge-discount {
+            background-color: #ffe0b2;
+            color: #e65100;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
+
+        /* PRINT STYLES */
+        @media print {
+            body * { visibility: hidden; }
+            #printable-receipt, #printable-receipt * { visibility: visible; }
+            #printable-receipt {
+                position: absolute;
+                left: 0 !important;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                display: block !important;
+                font-family: 'Courier New', Courier, monospace;
+            }
+            
+            /* Report Print Support - Otimizado para 72mm */
+            .printable-report, .printable-report * { visibility: visible; }
+            .printable-report {
+                position: absolute;
+                left: 0 !important;
+                top: 0 !important;
+                width: 70mm !important; /* 72mm paper safe area */
+                max-width: 70mm !important;
+                background: white !important;
+                color: black !important;
+                border: none !important;
+                z-index: 9999;
+                font-family: 'Courier New', Courier, monospace;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            
+            .printable-report h4 {
+                font-size: 10px !important;
+                margin-bottom: 2mm !important;
+            }
+            .printable-report div {
+                font-size: 9px !important;
+                line-height: 1.1 !important;
+            }
+
+            @page { 
+                margin: 0; 
+                size: 72mm auto; /* Define paper size */
+            }
+        }
+        
+        /* DANFE NFCe - 80mm e 72mm Compativel */
+        .receipt-container {
+            position: absolute;
+            left: -9999px; /* Oculto fora da tela ao invés de display:none */
+            top: 0;
+            width: 70mm; /* width reduced */
+            max-width: 70mm;
+            padding: 0mm;
+            font-size: 8px; /* font size reduced further */
+            line-height: 1.0; /* even tighter lines */
+            color: #000;
+            background: white;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .receipt-header { 
+            text-align: center; 
+            margin-bottom: 2px;
+            border-bottom: 1px dashed #000; 
+            padding-bottom: 2px; 
+        }
+        .receipt-header h3 { 
+            margin: 0; 
+            font-size: 10px; /* Reduced title */
+            font-weight: bold; 
+            text-transform: uppercase; 
+        }
+        .receipt-header .company-info { 
+            font-size: 8px; 
+            line-height: 1.0; 
+            margin: 2px 0; 
+        }
+        .receipt-section {
+            margin: 2px 0;
+            padding: 0;
+        }
+        .receipt-section-title {
+            font-weight: bold;
+            font-size: 8px;
+            margin-bottom: 2px;
+            border-bottom: 1px solid #000;
+            padding-top: 2px;
+        }
+        .receipt-body { margin: 2px 0; }
+        .receipt-item { 
+            margin-bottom: 2px; 
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        .receipt-item-line {
+            display: flex;
+            justify-content: space-between;
+            font-size: 8px;
+        }
+        .receipt-item-desc {
+            font-weight: bold;
+            font-size: 8px;
+            margin-bottom: 0px;
+            white-space: nowrap; /* Tenta manter em uma linha quando der */
+            overflow: hidden;
+            text-overflow: ellipsis; 
+            max-width: 100%;
+        }
+        .receipt-total-section {
+            border-top: 1px dashed #000;
+            border-bottom: 1px dashed #000;
+            padding: 2px 0;
+            margin: 2px 0;
+        }
+        .receipt-total-line {
+            display: flex;
+            justify-content: space-between;
+            margin: 0;
+            font-size: 8px;
+        }
+        .receipt-total-grand {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            font-size: 10px;
+            margin-top: 2px;
+            padding-top: 2px;
+            border-top: 1px solid #000;
+        }
+        .receipt-payment {
+            border-top: 1px dashed #000;
+            padding-top: 2px;
+            margin-top: 2px;
+        }
+        .receipt-nfce-info {
+            text-align: center;
+            padding: 2px 0;
+            border-top: 1px dashed #000;
+            border-bottom: 1px dashed #000;
+            margin: 2px 0;
+            font-size: 7px;
+        }
+        .receipt-nfce-info strong {
+            font-size: 8px;
+            display: block;
+            margin-bottom: 1px;
+        }
+        .receipt-qrcode {
+            text-align: center;
+            padding: 2px 0;
+        }
+        .receipt-qrcode img {
+            width: 25mm !important; /* Force smaller QR */
+            height: 25mm !important;
+            margin: 1px auto;
+        }
+        .receipt-chave {
+            font-size: 6px;
+            word-break: break-all;
+            text-align: center;
+            margin: 1px 0;
+            padding: 0;
+            letter-spacing: -0.5px; /* Condense chars */
+        }
+        .receipt-footer { 
+            border-top: 1px dashed #000; 
+            padding-top: 2px; 
+            text-align: center; 
+            font-size: 7px;
+            line-height: 1.0;
+        }
+        .receipt-footer-msg {
+            margin-top: 2px;
+            font-style: italic;
+        }
+        
+        /* Reimprimir Modal */
+        .venda-item:hover {
+            background: #f5f5f5 !important;
+        }
+        .venda-item.selected {
+            background: #e3f2fd !important;
+            border-left: 4px solid #1976d2;
+        }
+
+    </style>
+</head>
+<body>
+    {% verbatim %}
+    <div id="app">
+        <!-- PRINTABLE RECEIPT HIDDEN ON SCREEN -->
+        <div id="printable-receipt" class="receipt-container">
+            <!-- CABEÇALHO DA EMPRESA -->
+            <div class="receipt-header">
+                <h3>{{ empresa.nome_fantasia || empresa.razao_social || 'EMPRESA' }}</h3>
+                <div class="company-info">
+                    {{ empresa.razao_social || '' }}<br>
+                    CNPJ: {{ formatCnpjCpf(empresa.cpf_cnpj) || '' }}<br>
+                    IE: {{ empresa.inscricao_estadual || 'ISENTO' }}<br>
+                    <span v-if="empresa.endereco">{{ empresa.endereco }}</span>
+                    <span v-if="empresa.numero">, {{ empresa.numero }}</span>
+                    <span v-if="empresa.complemento"> - {{ empresa.complemento }}</span><br>
+                    <span v-if="empresa.bairro">{{ empresa.bairro }} - </span>
+                    <span v-if="empresa.cidade">{{ empresa.cidade }}</span>
+                    <span v-if="empresa.uf"> / {{ empresa.uf }}</span><br>
+                    <span v-if="empresa.cep">CEP: {{ formatCep(empresa.cep) }}</span><br>
+                    <span v-if="empresa.telefone">Fone: {{ empresa.telefone }}</span>
+                </div>
+            </div>
+            
+            <!-- IDENTIFICAÇÃO NFCe -->
+            <div class="receipt-nfce-info" v-if="resultModal.success && resultModal.data">
+                <strong>DANFE NFC-e - DOCUMENTO AUXILIAR<br>DA NOTA FISCAL DE CONSUMIDOR ELETRÔNICA</strong>
+                <div style="font-size: 8px; margin-top: 2mm;">
+                    Não permite aproveitamento de crédito de ICMS
+                </div>
+            </div>
+            
+            <!-- INFORMAÇÕES DA NFCe (após emissão) -->
+            <div class="receipt-section" v-if="resultModal.success && resultModal.data">
+                <div style="font-size: 8px; text-align: center;">
+                    <strong>Nº {{ resultModal.data.numero || '' }}</strong> - 
+                    <strong>Série {{ resultModal.data.serie || '1' }}</strong><br>
+                    Emissão: {{ new Date().toLocaleString('pt-BR') }}<br>
+                    Protocolo: {{ resultModal.data.protocolo || '' }}<br>
+                    <span v-if="clientName || clientCpf">
+                        Consumidor: {{ clientName || 'CONSUMIDOR' }}<br>
+                        <span v-if="clientCpf">CPF/CNPJ: {{ formatCnpjCpf(clientCpf) }}</span>
+                    </span>
+                </div>
+            </div>
+            
+            <!-- PRODUTOS -->
+            <div class="receipt-section">
+                <div class="receipt-section-title">PRODUTOS / SERVIÇOS</div>
+                <div class="receipt-body">
+                    <div v-for="(item, i) in cart" :key="i" class="receipt-item">
+                        <div class="receipt-item-desc">
+                            {{ formatItemNumber(i + 1) }} - {{ item.nome_produto }}
+                        </div>
+                        <div class="receipt-item-line">
+                            <span>Cód: {{ item.codigo_produto }}</span>
+                        </div>
+                        <div class="receipt-item-line">
+                            <span>Qtd: {{ formatNumber(item.quantidade, 3) }} x R$ {{ formatNumber(item.preco_unitario, 2) }}</span>
+                            <strong>R$ {{ formatNumber(item.subtotal, 2) }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- TOTALIZADORES -->
+            <div class="receipt-total-section">
+                <div class="receipt-total-line">
+                    <span>Qtd. Itens:</span>
+                    <strong>{{ cart.length }}</strong>
+                </div>
+                <div class="receipt-total-line">
+                    <span>Subtotal:</span>
+                    <span>R$ {{ formatNumber(cartSubtotal, 2) }}</span>
+                </div>
+                <div class="receipt-total-line" v-if="totalDiscount > 0">
+                    <span>Descontos:</span>
+                    <span>-R$ {{ formatNumber(totalDiscount, 2) }}</span>
+                </div>
+                <div class="receipt-total-grand">
+                    <span>VALOR TOTAL:</span>
+                    <span>R$ {{ formatNumber(finalTotalToPay, 2) }}</span>
+                </div>
+                
+                <div class="receipt-total-line" style="margin-top: 1mm;">
+                    <span>Valor Pago:</span>
+                    <span>R$ {{ formatNumber(totalPaid, 2) }}</span>
+                </div>
+                <div class="receipt-total-line" v-if="changeValue > 0">
+                    <span>TROCO:</span>
+                    <strong>R$ {{ formatNumber(changeValue, 2) }}</strong>
+                </div>
+            </div>
+            
+            <!-- FORMA DE PAGAMENTO -->
+            <div class="receipt-payment">
+                <div class="receipt-section-title">FORMAS DE PAGAMENTO</div>
+                <div class="receipt-total-line" v-for="(pay, idx) in paymentList" :key="idx">
+                    <span>{{ getPaymentLabel(pay) }}</span>
+                    <strong>R$ {{ formatNumber(pay.valor, 2) }}</strong>
+                </div>
+            </div>
+            
+            <!-- QR CODE (após emissão) -->
+            <div class="receipt-qrcode" v-if="resultModal.success && resultModal.data && resultModal.data.qrcode">
+                <div style="font-size: 9px; font-weight: bold; margin-bottom: 2mm;">
+                    CONSULTE PELA LEITURA DO QR CODE
+                </div>
+                <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(resultModal.data.qrcode)" alt="QR Code">
+                <div style="font-size: 7px; margin-top: 2mm;">
+                    Consulta via leitor de QR Code
+                </div>
+            </div>
+            
+            <!-- CHAVE DE ACESSO -->
+            <div class="receipt-section" v-if="resultModal.success && resultModal.data && resultModal.data.chave">
+                <div class="receipt-section-title" style="text-align: center;">CHAVE DE ACESSO</div>
+                <div class="receipt-chave">
+                    {{ formatChave(resultModal.data.chave) }}
+                </div>
+                <div style="font-size: 7px; text-align: center; margin-top: 2mm;">
+                    Consulta em: {{ resultModal.data.url_consulta || 'portalsped.fazenda.mg.gov.br' }}
+                </div>
+            </div>
+            
+            <!-- INFORMAÇÕES FISCAIS -->
+            <div class="receipt-section" v-if="resultModal.success">
+                <div style="font-size: 7px; text-align: center; padding: 2mm 0;">
+                    <strong>TRIBUTOS TOTAIS INCIDENTES (Lei Federal 12.741/2012)</strong><br>
+                    Valor Aproximado dos Tributos: R$ {{ formatNumber(cartTotalValue * 0.25, 2) }}
+                </div>
+            </div>
+            
+            <!-- RODAPÉ -->
+            <div class="receipt-footer">
+                <div v-if="resultModal.success && resultModal.data">
+                    <strong style="font-size: 8px;">NFC-e AUTORIZADA</strong><br>
+                    Protocolo: {{ resultModal.data.protocolo }}<br>
+                    {{ new Date().toLocaleString('pt-BR') }}
+                </div>
+                <div v-else>
+                    <strong>CUPOM NÃO FISCAL - VENDA EM ANDAMENTO</strong>
+                </div>
+                <div class="receipt-footer-msg">
+                    Obrigado pela preferência!<br>
+                    Volte sempre!
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modal Caixa -->
+        <div class="modal-overlay" v-if="showCaixaModal">
+            <div class="modal-card" style="width: 500px; max-width: 90%;">
+                <h3 class="modal-title">Controle de Caixa</h3>
+                
+                <div v-if="caixaLoading" style="text-align: center; padding: 20px;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Carregando...</span>
+                    </div>
+                </div>
+                
+                <div v-else-if="caixaRelatorio">
+                    <!-- Relatório de Fechamento -->
+                    <div class="printable-report" style="padding: 10px; background: white;">
+                        <h4 style="text-align: center; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 5px;">FECHAMENTO DE CAIXA</h4>
+                        
+                        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+                            <!-- Fix Vue Template Parser Error: Using Django variable outside binding -->
+                            <span>Operador:</span> 
+                            <strong>
+                                <span v-if="caixaRelatorio.operador">{{ caixaRelatorio.operador }}</span>
+                                <span v-else>{% endverbatim %}{{ request.user.username|default:"Sistema" }}{% verbatim %}</span>
+                            </strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 15px;">
+                            <span>Data:</span> <strong>{{ formatDatetime(caixaRelatorio.data_fechamento || new Date()) }}</strong>
+                        </div>
+
+                        <div style="font-size: 0.95rem;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span>Abertura:</span> 
+                                <strong>R$ {{ formatNumber(caixaRelatorio.valor_abertura) }}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span>+ Vendas:</span> 
+                                <strong>R$ {{ formatNumber(caixaRelatorio.total_vendas) }}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span>+ Suprimentos:</span> 
+                                <strong>R$ {{ formatNumber(caixaRelatorio.total_suprimentos) }}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                                <span>- Sangrias:</span> 
+                                <strong>R$ {{ formatNumber(caixaRelatorio.total_sangrias) }}</strong>
+                            </div>
+                            
+                            <div style="border-top: 1px dashed #000; padding-top: 5px; margin-bottom: 5px;">
+                                <div style="display: flex; justify-content: space-between; font-weight: bold;">
+                                    <span>SALDO FINAL:</span> 
+                                    <strong>R$ {{ formatNumber(caixaRelatorio.saldo_final_teorico) }}</strong>
+                                </div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span>Informado:</span> 
+                                <strong>R$ {{ formatNumber(caixaRelatorio.saldo_final_informado) }}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                                <span>Diferença:</span> 
+                                <strong>R$ {{ formatNumber(caixaRelatorio.diferenca) }}</strong>
+                            </div>
+                            
+                            <h6 style="margin-top: 15px; border-bottom: 1px solid #000; padding-bottom: 2px;">Pagamentos</h6>
+                            <div v-for="(pag, idx) in caixaRelatorio.detalhe_pagamentos" :key="idx" style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+                                <span>{{ pag.forma }}:</span> 
+                                <span>R$ {{ formatNumber(pag.valor) }}</span>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 20px; border-top: 1px dashed #000; padding-top: 10px; text-align: center; font-size: 0.8rem;">
+                            <br><br>
+                            __________________________<br>
+                            Assinatura do Responsável
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 15px; display: grid; gap: 10px;">
+                        <button class="action-btn" style="background: #455a64; color: white;" @click="window.print()">
+                            <span class="material-icons">print</span> IMPRIMIR RELATÓRIO
+                        </button>
+                        <button class="action-btn" style="background: #e0e0e0; color: #333;" @click="showCaixaModal = false">
+                            FECHAR JANELA
+                        </button>
+                    </div>
+                </div>
+                
+                <div v-else>
+                    <!-- Tela de Ações -->
+                    <div v-if="!caixaHistoricoMode" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                        <button class="action-btn" 
+                            :style="caixaTipoMovimentacao === 'ABERTURA' ? 'background: #2e7d32; color: white;' : 'background: #f1f8e9; color: #333; border: 1px solid #c8e6c9;'"
+                            @click="setCaixaMode('ABERTURA')" 
+                            :disabled="caixaInfo && caixaInfo.status === 'ABERTO'">
+                            <span class="material-icons">lock_open</span> ABERTURA
+                        </button>
+                        
+                        <button class="action-btn" 
+                            :style="caixaTipoMovimentacao === 'FECHAMENTO' ? 'background: #d32f2f; color: white;' : 'background: #ffebee; color: #333; border: 1px solid #ffcdd2;'"
+                            @click="setCaixaMode('FECHAMENTO')" 
+                            :disabled="!caixaInfo || caixaInfo.status !== 'ABERTO'">
+                            <span class="material-icons">lock</span> FECHAMENTO
+                        </button>
+                        
+                        <button class="action-btn" 
+                            :style="caixaTipoMovimentacao === 'SUPRIMENTO' ? 'background: #1976d2; color: white;' : 'background: #e3f2fd; color: #333; border: 1px solid #bbdefb;'"
+                            @click="setCaixaMode('SUPRIMENTO')" 
+                            :disabled="!caixaInfo || caixaInfo.status !== 'ABERTO'">
+                            <span class="material-icons">add_circle</span> SUPRIMENTO
+                        </button>
+                        
+                        <button class="action-btn" 
+                            :style="caixaTipoMovimentacao === 'SANGRIA' ? 'background: #ff9800; color: white;' : 'background: #fff3e0; color: #333; border: 1px solid #ffe0b2;'"
+                            @click="setCaixaMode('SANGRIA')" 
+                            :disabled="!caixaInfo || caixaInfo.status !== 'ABERTO'">
+                            <span class="material-icons">remove_circle</span> SANGRIA
+                        </button>
+                    </div>
+
+                    <!-- Botão de Historico -->
+                    <div style="margin-bottom: 15px;">
+                        <button class="action-btn" style="width: 100%; background: #607d8b; color: white; padding: 12px;" @click="toggleHistorico()">
+                            <span class="material-icons">history</span> 
+                            {{ caixaHistoricoMode ? 'VOLTAR PARA OPERAÇÕES' : 'HISTÓRICO DE FECHAMENTOS / REIMPRESSÃO' }}
+                        </button>
+                    </div>
+                    
+                    <!-- Area de Historico -->
+                    <div v-if="caixaHistoricoMode" style="margin-bottom: 20px;">
+                        <input type="date" class="form-control" v-model="caixaHistoricoData" style="margin-bottom: 10px;" @change="fetchHistorico">
+                        
+                        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px;">
+                            <table class="table" style="width: 100%; font-size: 0.9rem; border-collapse: collapse;">
+                                <thead style="background: #f5f5f5; position: sticky; top: 0;">
+                                    <tr>
+                                        <th style="padding: 8px; text-align: left;">Data Fechamento</th>
+                                        <th style="padding: 8px; text-align: right;">Valor</th>
+                                        <th style="padding: 8px; text-align: center;">Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="h in caixaHistoricoList" :key="h.id_caixa" style="border-bottom: 1px solid #eee;">
+                                        <td style="padding: 8px;">{{ formatDatetime(h.data_fechamento) }}</td>
+                                        <td style="padding: 8px; text-align: right;">R$ {{ formatNumber(h.valor_fechamento) }}</td>
+                                        <td style="padding: 8px; text-align: center;">
+                                            <button @click="reimprimirHistorico(h.id_caixa)" style="border: none; background: transparent; cursor: pointer; color: #1976d2;" title="Reimprimir">
+                                                <span class="material-icons">print</span>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="caixaHistoricoList.length === 0">
+                                        <td colspan="3" style="padding: 15px; text-align: center; color: #999;">
+                                            Nenhum fechamento encontrado.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                
+                    <!-- Formulário de Operações -->
+                    <div v-if="!caixaHistoricoMode">
+                        <h5 style="margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 5px;">
+                            {{ getCaixaTitulo() }}
+                        </h5>
+                        
+                        <div class="form-group mb-3" style="margin-bottom: 15px;">
+                            <label v-if="caixaTipoMovimentacao === 'ABERTURA'">Valor de Fundo de Caixa (Troco Inicial)</label>
+                            <label v-if="caixaTipoMovimentacao === 'FECHAMENTO'">Valor em Caixa (Contagem Física)</label>
+                            <label v-if="caixaTipoMovimentacao === 'SUPRIMENTO'">Valor do Suprimento</label>
+                            <label v-if="caixaTipoMovimentacao === 'SANGRIA'">Valor da Sangria (Retirada)</label>
+                            
+                            <div style="position: relative;">
+                                <span style="position: absolute; left: 10px; top: 12px; font-weight: bold; color: #666;">R$</span>
+                                <input type="number" step="0.01" class="form-control" style="padding-left: 40px; font-size: 1.2rem; font-weight: bold;" v-model="caixaValorInput" ref="caixaValorInput">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group mb-3" style="margin-bottom: 20px;">
+                            <label>Observações / Justificativa</label>
+                            <textarea class="form-control" v-model="caixaObservacao" rows="2" placeholder="Opcional"></textarea>
+                        </div>
+                        
+                        <div style="display: grid; gap: 10px;">
+                            <button class="action-btn" style="background: #1976d2; color: white;" @click="realizarOperacaoCaixa" :disabled="processing">
+                                <span class="material-icons" style="margin-right: 8px;">check</span> CONFIRMAR
+                            </button>
+                            <button class="action-btn" style="background: #e0e0e0; color: #333;" @click="showCaixaModal = false">
+                                CANCELAR
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- App Bar -->
+        <header class="app-bar">
+            <div style="display: flex; align-items: center; gap: 20px; flex: 1;">
+                <h1 style="margin: 0;">
+                    <span class="material-icons">point_of_sale</span>
+                    Venda Rápida NFC-e
+                </h1>
+                
+                <!-- Informações: Operação, Vendedor, Cliente -->
+                <div v-if="dadosVenda" style="display: flex; gap: 25px; font-size: 0.85rem; margin-left: 30px;">
+                    <div v-if="dadosVenda.operacao" style="display: flex; align-items: center; gap: 6px;">
+                        <span class="material-icons" style="font-size: 18px;">local_offer</span>
+                        <div>
+                            <small style="opacity: 0.8; font-size: 0.7rem;">OPERAÇÃO</small><br>
+                            <strong style="font-size: 0.9rem;">{{ dadosVenda.operacao.nome }}</strong>
+                        </div>
+                    </div>
+                    <div v-if="dadosVenda.vendedor" style="display: flex; align-items: center; gap: 6px; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 25px;">
+                        <span class="material-icons" style="font-size: 18px;">badge</span>
+                        <div>
+                            <small style="opacity: 0.8; font-size: 0.7rem;">VENDEDOR</small><br>
+                            <strong style="font-size: 0.9rem;">{{ dadosVenda.vendedor.nome }}</strong>
+                        </div>
+                    </div>
+                    <div v-if="dadosVenda.cliente" style="display: flex; align-items: center; gap: 6px; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 25px;">
+                        <span class="material-icons" style="font-size: 18px;">person</span>
+                        <div>
+                            <small style="opacity: 0.8; font-size: 0.7rem;">CLIENTE</small><br>
+                            <strong style="font-size: 0.9rem;">{{ dadosVenda.cliente.nome || 'CONSUMIDOR' }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="font-size: 0.9rem; display: flex; align-items: center; gap: 15px;">
+                <span class="material-icons" style="font-size: 16px; vertical-align: middle;">wifi</span> Online
+                &nbsp;|&nbsp;
+                <!-- Using Django variable outside verbatim block -->
+                <span class="material-icons" style="font-size: 16px; vertical-align: middle;">person</span> 
+                {% endverbatim %}
+                {% if request.user.is_authenticated %}
+                    {{ request.user.username }}
+                {% else %}
+                    Operador (Visitante)
+                {% endif %}
+                
+                <!-- DEBUG INFO: Config: {{ empresa_config }} | Controle: {{ empresa_config.controle_de_caixa }} -->
+                
+                {% if empresa_config.controle_de_caixa %}
+                <button class="icon-btn" style="color: white; margin-left: 10px; background: rgba(255, 255, 255, 0.2); width: auto; padding: 5px 15px; border-radius: 20px; gap: 5px;" @click="abrirModalCaixa()" title="Controle de Caixa (F10)">
+                    <span class="material-icons">point_of_sale</span>
+                    <span style="font-weight: bold; font-size: 0.9rem;">CONTROLE DE CAIXA</span>
+                </button>
+                {% else %}
+                    <!-- Debug: controle_de_caixa disabled in {{ empresa_config }} -->
+                {% endif %}
+                {% verbatim %}
+                
+                <button class="icon-btn" style="color: white; margin-left: 10px;" @click="showConfigModal = true" title="Opções de Visual">
+                    <span class="material-icons">settings</span>
+                </button>
+                <a href="javascript:void(0)" onclick="window.history.back()" class="icon-btn" style="color: white; margin-left: 10px; text-decoration: none; display: flex; align-items: center; gap: 5px; background: rgba(255, 255, 255, 0.2); padding: 5px 15px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.3);" title="Sair do PDV">
+                    <span class="material-icons" style="font-size: 18px;">logout</span>
+                    <span style="font-weight: bold; font-size: 0.9rem;">SAIR</span>
+                </a>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Left Panel: Product List -->
+            <div class="section-left">
+                <!-- CABEÇALHO DA LISTA (GRID 7 Colunas) -->
+                <div class="product-list-header">
+                    <span>#</span>
+                    <span>Cód.</span>
+                    <span>Produto</span>
+                    <span style="text-align: center;">Qtd</span>
+                    <span style="text-align: right;">Unitário</span>
+                    <span style="text-align: right;">Total</span>
+                    <span style="text-align: center;">Ações</span>
+                </div>
+
+                <!-- CORPO DA LISTA -->
+                <div class="product-list-body" ref="productList">
+                    <div class="product-item" v-for="(item, index) in cart" :key="index" :class="{selected: index === selectedIndex}" @click="selectedIndex = index">
+                        <!-- 1. Índice -->
+                        <span style="color: #888; font-weight: bold;">{{ index + 1 }}</span>
+                        
+                        <!-- 2. Código -->
+                        <span style="color: #666; font-size: 0.9em;">{{ item.codigo_produto }}</span>
+                        
+                        <!-- 3. Nome e Badge Desconto -->
+                        <div>
+                            <div style="font-weight: 600; color: #333;">{{ item.nome_produto }}</div>
+                            <span v-if="item.desconto > 0" class="badge-discount" title="Desconto aplicado">
+                                <span class="material-icons" style="font-size: 10px; vertical-align: middle;">arrow_downward</span>
+                                -R$ {{ formatNumber(item.valor_desconto, 2) }}
+                            </span>
+                        </div>
+                        
+                        <!-- 4. Qtd -->
+                        <div style="text-align: center; font-weight: 500;">{{ formatNumber(item.quantidade, 3) }}</div>
+                        
+                        <!-- 5. Unitário (com riscado se tiver desconto) -->
+                        <div style="text-align: right;">
+                            <div v-if="item.preco_original > item.preco_unitario" style="text-decoration: line-through; color: #999; font-size: 0.8em;">
+                                {{ formatNumber(item.preco_original, 2) }}
+                            </div>
+                            <div :style="item.preco_original > item.preco_unitario ? 'color: #2e7d32; font-weight:bold;' : ''">
+                                {{ formatNumber(item.preco_unitario, 2) }}
+                            </div>
+                        </div>
+                        
+                        <!-- 6. Subtotal -->
+                        <div style="text-align: right; font-weight: 700; color: #1565c0;">{{ formatNumber(item.subtotal, 2) }}</div>
+                        
+                        <!-- 7. Ações (Desconto e Lixeira) -->
+                        <div class="row-actions">
+                            <button class="icon-btn info" @click.stop="openItemDiscount(index)" title="Desconto no Item">
+                                <span class="material-icons">local_offer</span>
+                            </button>
+                            <button class="icon-btn danger" @click.stop="removeItem(index)" title="Remover Item [DEL]">
+                                <span class="material-icons">delete_outline</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Empty State -->
+                    <div v-if="cart.length === 0" style="padding: 60px; text-align: center; color: #b0bec5; display: flex; flex-direction: column; align-items: center;">
+                        <span class="material-icons" style="font-size: 80px; opacity: 0.3; margin-bottom: 20px;">shopping_cart</span>
+                        <p style="font-size: 1.2rem; font-weight: 500;">O carrinho está vazio</p>
+                        <p style="font-size: 0.9rem;">Busque um produto ou use o leitor de código de barras</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Controls -->
+            <div class="section-right" style="overflow: visible !important;">
+                <!-- Product Search (Fixed Top) -->
+                <div class="card-panel" style="overflow: visible; flex: 0 0 auto; z-index: 200; position: relative; margin-bottom: 20px;">
+                    <!-- Campo de Quantidade -->
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; font-weight: bold; font-size: 1.1rem; color: #1976d2; margin-bottom: 8px;">
+                            <span class="material-icons" style="vertical-align: middle; margin-right: 5px;">tag</span>
+                            QUANTIDADE:
+                        </label>
+                        <input 
+                            type="number" 
+                            v-model.number="quantidadeInput" 
+                            min="1" 
+                            step="0.001"
+                            ref="quantidadeInput"
+                            @keydown.f2="$refs.searchInput.focus()"
+                            style="
+                                width: 100%;
+                                padding: 15px;
+                                font-size: 1.5rem;
+                                font-weight: bold;
+                                border: 3px solid #1976d2;
+                                border-radius: 8px;
+                                background: #e3f2fd;
+                                color: #0d47a1;
+                                text-align: center;
+                                box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+                                transition: all 0.2s;
+                            "
+                            @focus="$event.target.select()"
+                        >
+                    </div>
+                    <div class="search-box">
+                        <input type="text" class="search-input" placeholder="Buscar produto (F2)..." v-model="searchQuery" ref="searchInput" @input="debouncedSearch" @keydown.down="moveSuggestion(1)" @keydown.up="moveSuggestion(-1)" @keydown.enter="selectSuggestion">
+                        <span class="material-icons search-icon">search</span>
+                        
+                        <!-- Suggestions List -->
+                        <div class="suggestions-popover" v-if="suggestions.length > 0">
+                            <div class="suggestion-row" v-for="(prod, idx) in suggestions" :key="prod.id_produto" :class="{active: idx === suggestionIndex}" @click="addToCart(prod)">
+                                <div>
+                                    <div style="font-weight: 500;">{{ prod.nome_produto }}</div>
+                                    <small style="color: #666;">{{ prod.codigo_produto }}</small>
+                                </div>
+                                <div style="font-weight: bold; color: #2e7d32;">R$ {{ prod.preco_venda }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Last Item Display -->
+                    <div v-if="lastAddedItem" style="padding: 10px; background: #f9f9f9; border-radius: 4px; border-left: 4px solid #1976d2;">
+                        <small style="color: #666; display: block; margin-bottom: 4px;">Último Item:</small>
+                        <div style="font-weight: 500; margin-bottom: 4px;">{{ lastAddedItem.nome_produto }}</div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>{{ formatNumber(lastAddedItem.quantidade, 0) }} x {{ formatNumber(lastAddedItem.preco_unitario, 2) }}</span>
+                            <span style="font-weight: bold;">R$ {{ formatNumber(lastAddedItem.subtotal, 2) }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scrolling Bottom Content (Totals & Actions) -->
+                <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding-right: 5px; margin-right: -5px;">
+                    <!-- Spacer pushes content to bottom if there is space, or allows scrolling if not -->
+                    <div style="flex: 1;"></div>
+
+                    <!-- Client Info -->
+                    <div class="client-badge" v-if="clientName || clientCpf">
+                        <div>
+                            <span style="font-weight: bold;">Cliente:</span> {{ clientName || 'Consumidor' }}
+                            <div style="font-size: 0.8rem;" v-if="clientCpf">CPF/CNPJ: {{ clientCpf }}</div>
+                        </div>
+                        <span class="material-icons" style="cursor: pointer;" @click="clientCpf = ''; clientName = '';">close</span>
+                    </div>
+
+                    <!-- Totals & Actions -->
+                    <div class="card-panel" style="background: transparent; box-shadow: none; padding: 0;">
+                        <div class="total-display">
+                            <div class="total-label">Total a Pagar</div>
+                            <div class="total-value">R$ {{ formatNumber(finalTotalToPay, 2) }}</div>
+                            <div style="margin-top: 5px; font-size: 0.9rem; color: #ffe0b2;" v-if="totalDiscount > 0">
+                                (Desc: R$ {{ formatNumber(totalDiscount, 2) }})
+                            </div>
+                            <div style="margin-top: 10px; font-size: 0.9rem; opacity: 0.8;">
+                                {{ cartTotalItems }} Itens
+                            </div>
+                        </div>
+
+                        <div class="btn-grid">
+                        <!-- Linha 1 -->
+                        <button class="action-btn btn-cancel" @click="cancelSale" title="Cancelar Venda [F4]" :disabled="cart.length === 0">
+                            <span class="material-icons">cancel</span> CANC. VENDA
+                            <span class="key-badge">F4</span>
+                        </button>
+                        <button class="action-btn" style="background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);" @click="removeSelectedItem" title="Cancelar Item Selecionado [DEL]" :disabled="selectedIndex < 0">
+                            <span class="material-icons">remove_shopping_cart</span> CANC. ITEM
+                            <span class="key-badge">DEL</span>
+                        </button>
+                        
+                        <!-- Linha 2 -->
+                        <button class="action-btn btn-client" @click="showClientModal = true" title="Identificar Cliente [F5]">
+                            <span class="material-icons">person</span> CLIENTE
+                            <span class="key-badge">F5</span>
+                        </button>
+                        <button class="action-btn btn-discount" @click="openGeneralDiscount" :disabled="cart.length === 0" title="Desconto Geral [F7]">
+                            <span class="material-icons">local_offer</span> DESCONTO
+                            <span class="key-badge">F7</span>
+                        </button>
+
+                        <!-- Linha 3 -->
+                        <button class="action-btn btn-reprint" style="grid-column: span 2;" @click="openReimprimirModal" title="Reimprimir Última [F6]">
+                            <span class="material-icons">print</span> REIMPRIMIR ÚLTIMA
+                            <span class="key-badge">F6</span>
+                        </button>
+
+                        <!-- Botão Finalizar Grande -->
+                        <button class="action-btn btn-finish" @click="openPaymentModal" :disabled="cart.length === 0 || processing" title="Pagamento [F3]" style="pointer-events: auto; position: relative; z-index: 10;">
+                            <span class="material-icons" v-if="!processing" style="font-size: 1.5rem;">payments</span>
+                            <span class="material-icons" v-if="processing">sync</span>
+                            <span style="flex: 1; text-align: center;">{{ processing ? 'PROCESSANDO...' : 'PAGAR E EMITIR' }}</span>
+                            <span class="key-badge" style="font-size: 0.9rem; padding: 4px 8px;">F3</span>
+                        </button>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Client Modal -->
+        <div class="modal-overlay" v-if="showClientModal">
+            <div class="modal-card" style="position: relative;">
+                <button class="icon-btn" style="position: absolute; right: 10px; top: 10px; z-index: 50; background-color: #ffcdd2; border-radius: 50%; padding: 8px; color: #c62828; border: 1px solid #e57373;" @click="showClientModal = false">
+                    <span style="font-weight: bold; font-family: sans-serif; font-size: 1.2rem;">✕</span>
+                </button>
+                <div class="modal-title">Identificar Cliente</div>
+                <div class="form-group">
+                    <label>CPF / CNPJ</label>
+                    <input type="text" class="form-control" v-model="tempClientCpf" placeholder="Digite apenas números" id="cpfInput">
+                </div>
+                <div class="form-group">
+                    <label>Nome (Opcional)</label>
+                    <input type="text" class="form-control" v-model="tempClientName" placeholder="Nome do cliente">
+                </div>
+                <div class="modal-actions">
+                    <button class="action-btn" style="background: #e0e0e0; color: #333;" @click="showClientModal = false">Cancelar</button>
+                    <button class="action-btn btn-client" @click="confirmClient">Confirmar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Desconto no Item -->
+        <div class="modal-overlay" v-if="showItemDiscountModal">
+            <div class="modal-card" style="position: relative;">
+                <button class="icon-btn" style="position: absolute; right: 10px; top: 10px; z-index: 50; background-color: #ffcdd2; border-radius: 50%; padding: 8px; color: #c62828; border: 1px solid #e57373;" @click="showItemDiscountModal = false">
+                    <span style="font-weight: bold; font-family: sans-serif; font-size: 1.2rem;">✕</span>
+                </button>
+                <div class="modal-title">Desconto no Item</div>
+                <p style="margin-bottom: 15px; font-weight: 500;">
+                    {{ cart[selectedDiscountIndex]?.nome_produto }}
+                </p>
+                <div class="form-group">
+                    <label>Valor do Desconto (R$)</label>
+                    <input type="number" class="form-control" v-model.number="tempItemDiscount" ref="itemDiscountInput" @keyup.enter="confirmItemDiscount" step="0.01" min="0">
+                </div>
+                <div class="modal-actions">
+                    <button class="action-btn btn-cancel" @click="showItemDiscountModal = false">Cancelar</button>
+                    <button class="action-btn btn-finish" @click="confirmItemDiscount">Aplicar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Desconto Geral -->
+        <div class="modal-overlay" v-if="showGeneralDiscountModal">
+            <div class="modal-card" style="position: relative;">
+                <button class="icon-btn" style="position: absolute; right: 10px; top: 10px; z-index: 50; background-color: #ffcdd2; border-radius: 50%; padding: 8px; color: #c62828; border: 1px solid #e57373;" @click="showGeneralDiscountModal = false">
+                    <span style="font-weight: bold; font-family: sans-serif; font-size: 1.2rem;">✕</span>
+                </button>
+                <div class="modal-title">Desconto Geral</div>
+                <div class="form-group">
+                    <label>Valor Total do Desconto (R$)</label>
+                    <input type="number" class="form-control" v-model.number="tempGeneralDiscount" ref="generalDiscountInput" @keyup.enter="confirmGeneralDiscount" step="0.01" min="0">
+                </div>
+                <div class="modal-actions">
+                    <button class="action-btn btn-cancel" @click="showGeneralDiscountModal = false">Cancelar</button>
+                    <button class="action-btn btn-finish" @click="confirmGeneralDiscount">Aplicar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Pagamento Múltiplo -->
+        <div class="modal-overlay" v-if="showPaymentModal">
+            <div class="modal-card" style="width: 600px; position: relative;">
+                <button class="icon-btn" style="position: absolute; right: 10px; top: 10px; z-index: 50; background-color: #ffcdd2; border-radius: 50%; padding: 8px; color: #c62828; border: 1px solid #e57373;" @click="showPaymentModal = false">
+                    <span style="font-weight: bold; font-family: sans-serif; font-size: 1.2rem;">✕</span>
+                </button>
+                <div class="modal-title">Pagamento</div>
+                
+                <!-- Resumo -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                    <div class="total-display" style="padding: 15px; margin-bottom: 0;">
+                        <div class="total-label">Falta Pagar</div>
+                        <div class="total-value" style="font-size: 2rem;">R$ {{ formatNumber(remainingTotal, 2) }}</div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; justify-content: center;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <span>Total Itens:</span> <strong>R$ {{ formatNumber(cartTotalValue, 2) }}</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: #ef6c00;" v-if="totalDiscount > 0">
+                            <span>Descontos:</span> <strong>-R$ {{ formatNumber(totalDiscount, 2) }}</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 1.2rem; font-weight: bold; padding-top: 5px; border-top: 1px solid #ddd;">
+                            <span>A Pagar:</span> <span>R$ {{ formatNumber(finalTotalToPay, 2) }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Adicionar Pagamento -->
+                <div class="form-group" style="background: #f5f5f5; padding: 15px; border-radius: 8px;">
+                    <div style="display: flex; gap: 10px; margin-bottom: 5px;">
+                        <label style="flex: 2;">Forma de Pagamento</label>
+                        <label style="flex: 1;">Valor Recebido</label>
+                        <div style="width: 52px;"></div>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <select class="form-control" v-model="selectedPaymentMethod" style="flex: 2;">
+                            <option v-for="pm in paymentMethods" :key="pm.id_forma_pagamento" :value="pm.id_forma_pagamento">
+                                {{ pm.nome_forma }}
+                            </option>
+                        </select>
+                        <input type="number" class="form-control" v-model.number="paymentAmount" style="flex: 1;" step="0.01" @keyup.enter="addPayment" ref="paymentAmountInput" placeholder="Valor">
+                        <button class="action-btn" style="background: #2e7d32; padding: 0 15px;" @click="addPayment" title="Adicionar Pagamento">
+                            <span class="material-icons">add</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Lista de Pagamentos -->
+                <div class="payment-list">
+                    <div class="payment-item" v-for="(pay, idx) in paymentList" :key="idx">
+                        <div>
+                            <strong>{{ getPaymentName(pay.id) }}</strong>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="payment-amount">R$ {{ formatNumber(pay.valor, 2) }}</span>
+                            <span class="material-icons" style="color: #d32f2f; cursor: pointer; font-size: 18px;" @click="removePayment(idx)">delete</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Troco -->
+                <div class="change-display" v-if="changeValue > 0">
+                    <div>💰 TROCO PARA O CLIENTE</div>
+                    <div class="change-value">R$ {{ formatNumber(changeValue, 2) }}</div>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="action-btn btn-cancel" @click="showPaymentModal = false">Voltar</button>
+                    <!-- Button logic updated: Allows click if list is empty (Quick Sale) OR if fully paid -->
+                    <button class="action-btn btn-finish" @click="finalizeSale" 
+                            :disabled="processing || (paymentList.length > 0 && remainingTotal > 0.01)"
+                            style="pointer-events: auto; position: relative; z-index: 10;">
+                        {{ processing ? 'AGUARDANDO TRANSMISSÃO...' : 'EMITIR NFC-e (F3)' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Result Modal -->
+        <div class="modal-overlay" v-if="resultModal.show" style="backdrop-filter: blur(2px);">
+            <div class="modal-card" style="text-align: center; width: 450px; position: relative;">
+                <button class="icon-btn" style="position: absolute; right: 10px; top: 10px; z-index: 50; background-color: #ffcdd2; border-radius: 50%; padding: 8px; color: #c62828; border: 1px solid #e57373;" @click="resultModal.success ? resetSale() : resultModal.show = false">
+                    <span style="font-weight: bold; font-family: sans-serif; font-size: 1.2rem;">✕</span>
+                </button>
+                
+                <span class="material-icons result-icon" :class="resultModal.success ? (resultModal.isOffline ? 'text-warning' : 'text-success') : 'text-error'">
+                    {{ resultModal.success ? (resultModal.isOffline ? 'warning' : 'check_circle') : 'error' }}
+                </span>
+                <div class="modal-title">{{ resultModal.success ? (resultModal.isOffline ? 'Venda Salva (Offline)' : 'NFC-e Emitida!') : 'Erro na Emissão' }}</div>
+                
+                <p style="color: #555; margin-bottom: 20px;">{{ resultModal.message }}</p>
+                
+                <div v-if="resultModal.success && resultModal.data && !resultModal.isOffline" style="background: #f1f8e9; padding: 10px; border-radius: 4px; margin-bottom: 20px; text-align: left; font-size: 0.9rem;">
+                    <div><strong>Chave:</strong> {{ resultModal.data.chave }}</div>
+                    <div><strong>Protocolo:</strong> {{ resultModal.data.protocolo }}</div>
+                </div>
+
+
+                <div class="modal-actions" style="justify-content: center; gap: 10px;">
+                    <button v-if="!resultModal.success" class="action-btn btn-cancel" @click="resultModal.show = false">Fechar</button>
+                    
+                    <!-- Print Button -->
+                    <button v-if="resultModal.success" class="action-btn" style="background-color: #555;" @click="printReceipt">
+                        <span class="material-icons">print</span> Imprimir
+                    </button>
+
+                    <button v-if="resultModal.success" class="action-btn btn-finish" @click="resetSale">Fechar</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modal Reimprimir Venda -->
+        <div class="modal-overlay" v-if="showReimprimirModal">
+            <div class="modal-card" style="width: 700px; max-height: 80vh; display: flex; flex-direction: column; position: relative;">
+                <button class="icon-btn" style="position: absolute; right: 10px; top: 10px; z-index: 50; background-color: #ffcdd2; border-radius: 50%; padding: 8px; color: #c62828; border: 1px solid #e57373;" @click="showReimprimirModal = false">
+                    <span style="font-weight: bold; font-family: sans-serif; font-size: 1.2rem;">✕</span>
+                </button>
+                <div class="modal-title">Histórico de Vendas / Reimprimir</div>
+                
+                <!-- Busca -->
+                <div class="form-group">
+                    <input type="text" class="form-control" v-model="reimprimirSearch" @input="buscarVendasReimprimir" placeholder="Buscar por número, cliente, chave..." autofocus>
+                </div>
+                
+                <!-- Lista de Vendas -->
+                <div style="flex: 1; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 15px;">
+                    <div v-if="vendasReimprimir.length === 0" style="padding: 40px; text-align: center; color: #999;">
+                        <span class="material-icons" style="font-size: 48px; opacity: 0.5;">history</span>
+                        <p>Nenhuma venda encontrada</p>
+                    </div>
+                    
+                    <div v-for="venda in vendasReimprimir" :key="venda.id_venda" 
+                         :class="['venda-item', {selected: vendaSelecionadaReimprimir === venda.id_venda}]"
+                         @click="vendaSelecionadaReimprimir = venda.id_venda"
+                         style="padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; transition: background 0.2s;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-weight: 500; font-size: 1rem; color: #333;">
+                                    <span class="material-icons" style="font-size: 16px; vertical-align: middle; color: #2e7d32;" v-if="venda.status_nfe === 'EMITIDA'">check_circle</span>
+                                    <span class="material-icons" style="font-size: 16px; vertical-align: middle; color: #f57c00;" v-else>warning</span>
+                                    Venda #{{ venda.id_venda }} - NFCe #{{ venda.numero_nfe || 'N/A' }}
+                                </div>
+                                <div style="font-size: 0.85rem; color: #666; margin-top: 3px;">
+                                    {{ venda.nome_cliente || 'Cliente não informado' }} | {{ formatDatetime(venda.data_emissao) }}
+                                </div>
+                                <div style="font-size: 0.8rem; color: #888; margin-top: 2px;" v-if="venda.chave_nfe">
+                                    Chave: {{ venda.chave_nfe.substring(0, 20) }}...
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 1.2rem; font-weight: bold; color: #2e7d32;">
+                                    R$ {{ formatNumber(venda.valor_total, 2) }}
+                                </div>
+                                <div style="font-size: 0.75rem; color: #666; margin-top: 2px;">
+                                    {{ venda.status_nfe || 'PENDENTE' }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button class="action-btn" style="background: #e0e0e0; color: #333;" @click="showReimprimirModal = false">Cancelar</button>
+                    <button class="action-btn" style="background-color: #f57c00;" @click="reimprimirVenda" :disabled="!vendaSelecionadaReimprimir">
+                        <span class="material-icons">print</span> Reimprimir
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- Modal: Configuração Visual -->
+        <div class="modal-overlay" v-if="showConfigModal">
+            <div class="modal-card" style="position: relative;">
+                <button class="icon-btn" style="position: absolute; right: 10px; top: 10px; z-index: 50; background-color: #ffcdd2; border-radius: 50%; padding: 8px; color: #c62828; border: 1px solid #e57373;" @click="showConfigModal = false">
+                    <span style="font-weight: bold; font-family: sans-serif; font-size: 1.2rem;">✕</span>
+                </button>
+                <div class="modal-title">Personalização</div>
+                <div class="form-group">
+                    <label>Imagem de Fundo (Do Computador)</label>
+                    <input type="file" class="form-control" @change="handleFileUpload" accept="image/*">
+                    <small style="display: block; margin-top: 5px; color: #666;">Selecione uma imagem do seu computador.</small>
+                    
+                    <label style="margin-top: 15px; display: block;">Ou usar URL</label>
+                    <input type="text" class="form-control" v-model="backgroundUrl" placeholder="https://exemplo.com/imagem.jpg">
+                    
+                    <div style="margin-top: 15px; display: flex; gap: 10px;">
+                        <button class="action-btn" style="background: #ef5350; padding: 5px 10px; font-size: 0.8rem;" @click="clearBackground">Limpar Fundo</button>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="action-btn" style="background: #e0e0e0; color: #333;" @click="showConfigModal = false">Cancelar</button>
+                    <button class="action-btn btn-finish" @click="saveConfig">Salvar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vue 3 & Axios -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+        console.log("PDV Loaded - Check 1");
+    </script>
+    
+    {% endverbatim %}
+    <script>
+        // Server-side injected variables
+        const SERVER_CONFIG = {
+            hasConfig: {% if empresa_config %}true{% else %}false{% endif %},
+            controleCaixa: {% if empresa_config and empresa_config.controle_de_caixa %}true{% else %}false{% endif %}
+        };
+        console.log("Server Config:", SERVER_CONFIG);
+    </script>
+    {% verbatim %}
+
+    <script>
+        const { createApp } = Vue;
+
+        const app = createApp({
+            data() {
+                return {
+                    // Controle de Caixa
+                    showCaixaModal: false,
+                    caixaInfo: null,
+                    caixaLoading: false,
+                    caixaTipoMovimentacao: 'ABERTURA',
+                    caixaValorInput: 0,
+                    caixaObservacao: '',
+                    caixaRelatorio: null,
+
+                    cart: [],
+                    searchQuery: '',
+                    suggestions: [],
+                    suggestionIndex: -1,
+                    quantidadeInput: 1,
+                    
+                    // Historico
+                    caixaHistoricoMode: false,
+                    caixaHistoricoList: [],
+                    caixaHistoricoData: '',
+                    
+                    // Client Logic
+                    showClientModal: false,
+                    clientCpf: '',
+                    clientName: '',
+                    tempClientCpf: '',
+                    tempClientName: '',
+                    
+                    // Discount Logic (New)
+                    showItemDiscountModal: false,
+                    showGeneralDiscountModal: false,
+                    selectedDiscountIndex: -1,
+                    tempItemDiscount: 0,
+                    tempGeneralDiscount: 0,
+                    generalDiscount: 0, // Desconto total no subtotal
+
+                    // Payment Logic (New)
+                    showPaymentModal: false,
+                    paymentMethods: [],
+                    selectedPaymentMethod: null,
+                    paymentList: [], // Array of { id: 1, valor: 10.00 }
+                    paymentAmount: 0,
+
+                    // State
+                    processing: false,
+                    selectedIndex: -1,
+                    debugMsg: '',
+                    
+                    // Config
+                    defaultOperacaoId: null,
+                    
+                    // Configurações Visuais
+                    showConfigModal: false,
+                    backgroundUrl: '',
+
+                    // Result Modal
+                    resultModal: {
+                        show: false,
+                        success: false,
+                        message: '',
+                        data: null
+                    },
+                    
+                    // Reimprimir
+                    showReimprimirModal: false,
+                    vendasReimprimir: [],
+                    vendaSelecionadaReimprimir: null,
+                    reimprimirSearch: '',
+                    
+                    // Company Info
+                    empresa: {},
+                    
+                    // Dados da Venda (Operação, Cliente, Vendedor)
+                    dadosVenda: {
+                        operacao: { nome: '🔄 CARREGANDO...' },
+                        vendedor: { nome: '🔄 CARREGANDO...' },
+                        cliente: null
+                    }  // TESTE: valores iniciais para ver se renderiza
+                }
+            },
+            computed: {
+                // Soma dos produtos (sem desconto geral)
+                cartSubtotal() {
+                     return this.cart.reduce((acc, item) => acc + item.subtotal, 0);
+                },
+                
+                // Total de Descontos (Itens + Geral)
+                totalDiscount() {
+                    const itensDiscount = this.cart.reduce((acc, item) => acc + (item.valor_desconto || 0), 0);
+                    return itensDiscount + this.generalDiscount;
+                },
+
+                // Valor Final a Pagar
+                finalTotalToPay() {
+                    // Subtotal dos itens (já com desconto de item aplicado no subtotal do item? 
+                    // No addToCart original não tem desconto. Vamos assumir que item.subtotal já considera desconto do item)
+                    // AJUSTE: O item.subtotal deve ser (qtd * unit) - desconto.
+                    // Vamos recalcular na hora de exibir
+                    return Math.max(0, this.cartSubtotal - this.generalDiscount);
+                },
+
+                // Total Pago até agora
+                totalPaid() {
+                    return this.paymentList.reduce((acc, p) => acc + p.valor, 0);
+                },
+
+                // Falta Pagar
+                remainingTotal() {
+                    return Math.max(0, this.finalTotalToPay - this.totalPaid);
+                },
+
+                // Troco
+                changeValue() {
+                    return Math.max(0, this.totalPaid - this.finalTotalToPay);
+                },
+
+                // Compatibilidade com código antigo
+                cartTotalValue() {
+                    return this.cartSubtotal; 
+                },
+                cartTotalItems() {
+                    return this.cart.length;
+                },
+                lastAddedItem() {
+                    return this.cart.length > 0 ? this.cart[this.cart.length - 1] : null;
+                },
+                // Retorna ultimo pagamento para exibição no cupom (simplificado) ou cria string
+                selectedPayment() {
+                    if (this.paymentList.length === 0) return null;
+                    if (this.paymentList.length === 1) return { nome: this.getPaymentName(this.paymentList[0].id) };
+                    return { nome: 'Múltiplos' };
+                }
+            },
+            mounted() {
+                // Safely focus search input
+                this.$nextTick(() => {
+                    if (this.$refs.searchInput) {
+                        this.$refs.searchInput.focus();
+                    }
+                });
+                
+                // Carregar Background Salvo
+                const savedBg = localStorage.getItem('pdv_bg');
+                if (savedBg) {
+                    this.backgroundUrl = savedBg;
+                    document.body.style.backgroundImage = `url('${savedBg}')`;
+                }
+
+                // Keyboard Shortcuts
+                window.addEventListener('keydown', (e) => {
+                    // Ignore if modal is open (except ESC)
+                    if (this.showClientModal || this.resultModal.show || this.showConfigModal) {
+                        if (e.key === 'Escape') {
+                            this.showClientModal = false;
+                            this.showConfigModal = false;
+                            if(!this.resultModal.success) this.resultModal.show = false;
+                        }
+                        return;
+                    }
+
+                    if (e.key === 'F2') { e.preventDefault(); this.$refs.searchInput.focus(); }
+                    if (e.key === 'F3') { 
+                        e.preventDefault(); 
+                        if(this.showPaymentModal && !this.processing) this.finalizeSale();
+                        else if(!this.showPaymentModal && !this.processing && this.cart.length > 0) this.openPaymentModal();
+                    }
+                    if (e.key === 'F4') { e.preventDefault(); this.cancelSale(); }
+                    if (e.key === 'F5') { e.preventDefault(); this.openClientModal(); }
+                    if (e.key === 'F6') { e.preventDefault(); this.openReimprimirModal(); }
+                    if (e.key === 'F7') { e.preventDefault(); this.openGeneralDiscount(); }
+                    if (e.key === 'Delete') {
+                         if (this.selectedIndex >= 0 && !this.showPaymentModal && !this.showClientModal) {
+                             e.preventDefault();
+                             this.removeItem(this.selectedIndex);
+                         }
+                    }
+                    if (e.key === 'Escape') { 
+                         this.suggestions = []; 
+                         this.showPaymentModal = false;
+                         this.showReimprimirModal = false;
+                         this.showItemDiscountModal = false;
+                         this.showGeneralDiscountModal = false;
+                         this.$refs.searchInput.focus();
+                    }
+                });
+
+                this.initSetup();
+            },
+            methods: {
+                // Controle de Caixa
+                async checkCaixaStatus() {
+                    this.caixaLoading = true;
+                    try {
+                        const res = await axios.get('/api/caixa/status/');
+                        this.caixaInfo = res.data;
+                    } catch (e) {
+                        console.error("Erro ao verificar caixa", e);
+                        // Se não autorizado ou erro, assume fechado ou sem info
+                        this.caixaInfo = { status: 'FECHADO' };
+                    } finally {
+                        this.caixaLoading = false;
+                    }
+                },
+                abrirModalCaixa() {
+                    const self = this;
+                    this.showCaixaModal = true;
+                    this.caixaRelatorio = null;
+                    this.checkCaixaStatus().then(() => {
+                        self.caixaValorInput = 0;
+                        self.caixaObservacao = '';
+                        self.caixaHistoricoMode = false;
+                        self.caixaHistoricoList = [];
+                        // self.caixaHistoricoData = new Date().toISOString().split('T')[0]; // Wrong: Uses UTC
+                        const d = new Date();
+                        const year = d.getFullYear();
+                        const month = String(d.getMonth() + 1).padStart(2, '0');
+                        const day = String(d.getDate()).padStart(2, '0');
+                        self.caixaHistoricoData = `${year}-${month}-${day}`;
+
+                        self.caixaTipoMovimentacao = self.caixaInfo.status === 'ABERTO' ? 'SUPRIMENTO' : 'ABERTURA';
+                    });
+                },
+                // Novo Bloco: Historico de Fechamentos
+                toggleHistorico() {
+                    this.caixaHistoricoMode = !this.caixaHistoricoMode;
+                    if (this.caixaHistoricoMode) {
+                        this.fetchHistorico();
+                    }
+                },
+                async fetchHistorico() {
+                    this.caixaLoading = true;
+                    try {
+                        let url = '/api/caixa/historico/';
+                        if (this.caixaHistoricoData) {
+                            url += `?data=${this.caixaHistoricoData}`;
+                        }
+                        const res = await axios.get(url);
+                        this.caixaHistoricoList = res.data;
+                    } catch(e) {
+                        alert("Erro ao buscar historico: " + e.message);
+                    } finally {
+                        this.caixaLoading = false;
+                    }
+                },
+                async reimprimirHistorico(id_caixa) {
+                    this.caixaLoading = true;
+                    try {
+                        const res = await axios.get(`/api/caixa/imprimir/${id_caixa}/`);
+                        this.caixaRelatorio = res.data; // Reutiliza a variavel de relatorio existente
+                        this.caixaHistoricoMode = false; // Sai do modo historico e vai pro modo relatorio
+                    } catch(e) {
+                         alert("Erro ao buscar detalhes do fechamento: " + e.message);
+                    } finally {
+                        this.caixaLoading = false;
+                    }
+                },
+                
+                setCaixaMode(mode) {
+                    this.caixaTipoMovimentacao = mode;
+                    this.caixaValorInput = 0;
+                    
+                    if (mode === 'FECHAMENTO' && this.caixaInfo) {
+                        try {
+                            const abertura = parseFloat(this.caixaInfo.valor_abertura || 0);
+                            // Tenta total_entradas_sessao (reais), senão fallback para vendas (que pode ter a prazo)
+                            const entradas = (this.caixaInfo.total_entradas_sessao !== undefined) ? 
+                                             parseFloat(this.caixaInfo.total_entradas_sessao) : 
+                                             parseFloat(this.caixaInfo.total_vendas_sessao || 0);
+                            
+                            const suprimentos = parseFloat(this.caixaInfo.total_suprimentos || 0);
+                            const sangrias = parseFloat(this.caixaInfo.total_sangrias || 0);
+                            
+                            console.log('Sugestão Fechamento: Abertura', abertura, '+ Entradas', entradas, '+ Suprimentos', suprimentos, '- Sangrias', sangrias);
+                            
+                            const sugerido = Math.max(0, abertura + entradas + suprimentos - sangrias);
+                            this.caixaValorInput = sugerido; 
+                        } catch(e) { console.error("Erro calcular sugerido", e); }
+                    }
+
+                    this.$nextTick(() => {
+                        if(this.$refs.caixaValorInput) {
+                             this.$refs.caixaValorInput.focus();
+                             if (mode === 'FECHAMENTO') {
+                                 this.$refs.caixaValorInput.select();
+                             }
+                        }
+                    });
+                },
+                getCaixaTitulo() {
+                    switch(this.caixaTipoMovimentacao) {
+                        case 'ABERTURA': return 'Abertura de Caixa';
+                        case 'FECHAMENTO': return 'Fechamento de Caixa';
+                        case 'SUPRIMENTO': return 'Suprimento (Entrada)';
+                        case 'SANGRIA': return 'Sangria (Retirada)';
+                        default: return 'Operação';
+                    }
+                },
+                async realizarOperacaoCaixa() {
+                    const valor = parseFloat(this.caixaValorInput);
+                    if (isNaN(valor) || valor < 0) {
+                        alert("Valor inválido");
+                        return;
+                    }
+
+                    this.processing = true;
+                    try {
+                        let res;
+                        const payload = {
+                            valor: valor, 
+                            observacao: this.caixaObservacao
+                        };
+
+                        if (this.caixaTipoMovimentacao === 'ABERTURA') {
+                            res = await axios.post('/api/caixa/abrir/', { 
+                                valor_abertura: valor 
+                            });
+                            alert("Caixa aberto com sucesso!");
+                            this.showCaixaModal = false;
+                        } else if (this.caixaTipoMovimentacao === 'FECHAMENTO') {
+                            res = await axios.post('/api/caixa/fechar/', { 
+                                valor_fechamento: valor,
+                                observacoes: this.caixaObservacao
+                            });
+                            this.caixaRelatorio = res.data.relatorio;
+                            // Auto-print report
+                            this.$nextTick(() => {
+                                setTimeout(() => window.print(), 500);
+                            });
+                        } else {
+                            payload.tipo = this.caixaTipoMovimentacao;
+                            res = await axios.post('/api/caixa/registrar/', payload);
+                            alert(`${this.caixaTipoMovimentacao} registrada com sucesso!`);
+                            this.showCaixaModal = false;
+                        }
+                        
+                        if (this.showCaixaModal && !this.caixaRelatorio) {
+                             this.checkCaixaStatus();
+                        }
+                        
+                    } catch (e) {
+                        console.error(e);
+                        alert("Erro: " + (e.response?.data?.error || e.message));
+                    } finally {
+                        this.processing = false;
+                    }
+                },
+                
+                async initSetup() {
+                    // Fetch CSRF
+                    const getCookie = (name) => {
+                        let cookieValue = null;
+                        if (document.cookie && document.cookie !== '') {
+                            const cookies = document.cookie.split(';');
+                            for (let i = 0; i < cookies.length; i++) {
+                                const cookie = cookies[i].trim();
+                                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                                    break;
+                                }
+                            }
+                        }
+                        return cookieValue;
+                    };
+                    axios.defaults.headers.common['X-CSRFToken'] = getCookie('csrftoken');
+                    axios.defaults.withCredentials = true;  // Enviar cookies de sessão
+
+                    // --- TENTATIVA DE RECUPERAR TOKEN JWT (Se existir no localStorage) ---
+                    const possibleKeys = ['accessToken', 'access_token', 'token', 'authToken', 'access', 'jwt', 'user_token'];
+                    let token = null;
+                    for (const key of possibleKeys) {
+                        const val = localStorage.getItem(key);
+                        if (val) {
+                            token = val;
+                            console.log('🔑 Token JWT encontrado na chave:', key);
+                            break;
+                        }
+                    }
+                    if (token) {
+                        try {
+                            // Verifica se é um objeto JSON (alguns sistemas salvam {token: '...'})
+                            if (token.startsWith('{')) {
+                                const parsed = JSON.parse(token);
+                                token = parsed.access || parsed.token || parsed.accessToken || token;
+                            }
+                        } catch (e) { /* ignore */ }
+                        
+                        axios.defaults.headers.common['Authorization'] = 'Bearer ' + token;
+                        console.log('🔐 Authorization Header configurado com Token JWT');
+                    }
+                    // ---------------------------------------------------------------------
+
+                    // Try fetch default operation
+                    try {
+                        const ops = await axios.get('/api/operacoes/');
+                        if (ops.data.results && ops.data.results.length > 0) {
+                             const bestOp = ops.data.results.find(o => o.nome_operacao && (o.nome_operacao.toLowerCase().includes('nfc') || o.nome_operacao.toLowerCase().includes('rapida')));
+                             // Se achar uma específica, usa. Senão, deixa null para o backend pegar do Parametro User
+                             if (bestOp) {
+                                 this.defaultOperacaoId = bestOp.id_operacao;
+                             }
+                        }
+
+                        // Fetch Company Info
+                        const empRes = await axios.get('/api/empresa/');
+                        if (empRes.data && Array.isArray(empRes.data) && empRes.data.length > 0) {
+                            this.empresa = empRes.data[0];
+                        } else if (empRes.data && empRes.data.results && empRes.data.results.length > 0) {
+                             this.empresa = empRes.data.results[0];
+                        }
+
+                        // Fetch Payment Methods
+                        const payRes = await axios.get('/api/formas-pagamento/');
+                        console.log("Formas Pagamento:", payRes.data);
+                        if (payRes.data && Array.isArray(payRes.data) && payRes.data.length > 0) {
+                            this.paymentMethods = payRes.data;
+                            this.selectedPaymentMethod = this.paymentMethods[0].id_forma_pagamento;
+                        } else if (payRes.data && payRes.data.results) {
+                            this.paymentMethods = payRes.data.results;
+                            if(this.paymentMethods.length) this.selectedPaymentMethod = this.paymentMethods[0].id_forma_pagamento;
+                        } else {
+                            console.warn("Nenhuma forma de pagamento retornada.");
+                            alert("Atenção: Nenhuma forma de pagamento encontrada no sistema. Verifique o cadastro.");
+                        }
+
+                        // Carregar dados do usuário (operação, vendedor)
+                        try {
+                            console.log('🔄 Carregando parâmetros do usuário...');
+                            console.log('   Usuário Django:', '{% endverbatim %}{{ request.user.username }}{% verbatim %}');
+                            
+                            const userRes = await axios.get('/api/user/parametros/');
+                            console.log('✅ Parâmetros do usuário recebidos:', userRes.data);
+                            
+                            // Montar dadosVenda inicial com os dados do usuário
+                            this.dadosVenda = {
+                                operacao: userRes.data.operacao || null,
+                                vendedor: userRes.data.vendedor || null,
+                                cliente: null, // Cliente será preenchido quando selecionado
+                                usuario: {
+                                    username: userRes.data.usuario?.username || '{% endverbatim %}{{ request.user.username }}{% verbatim %}'
+                                }
+                            };
+                            
+                            console.log('✅ Dados da Venda iniciais montados:', this.dadosVenda);
+                        } catch (userErr) {
+                            console.error('❌ Erro ao carregar parâmetros do usuário:', userErr);
+                            
+                            if (userErr.response) {
+                                console.error('   Status:', userErr.response.status);
+                                console.error('   Detalhes:', userErr.response.data);
+                            } else if (userErr.request) {
+                                console.error('   ⚠️ SEM RESPOSTA DO SERVIDOR (Network Error)');
+                                console.error('   Verifique se o backend está rodando e acessível.');
+                                console.error('   Possível bloqueio de CORS se estiver usando porta diferente.');
+                            } else {
+                                console.error('   Erro:', userErr.message);
+                            }
+                        }
+                        
+                        await this.checkCaixaStatus();
+
+                    } catch (e) { 
+                        console.error("Erro ao buscar dados iniciais", e);
+                        // Mostrar erro na tela se falhar formas de pagamento
+                        if (e.response && e.response.status !== 404) {
+                             alert("Erro ao carregar formas de pagamento: " + (e.response.data.detail || e.message));
+                        }
+                    }
+                },
+
+                printReceipt() {
+                    // Garantir que o Vue renderize antes de imprimir
+                    this.$nextTick(() => {
+                        setTimeout(() => {
+                            window.print();
+                        }, 100);
+                    });
+                },
+
+                // Search
+                debouncedSearch() {
+                    clearTimeout(this.timer);
+                    this.timer = setTimeout(this.fetchProducts, 300);
+                },
+                    async fetchProducts() {
+                    if (this.searchQuery.length < 2) {
+                        this.suggestions = [];
+                        return;
+                    }
+                    try {
+                        const res = await axios.get(`/api/produtos/?search=${this.searchQuery}`);
+                        // Handle both list array or paginated object results
+                        const raw = res.data;
+                        let list = [];
+                        if (Array.isArray(raw)) {
+                            list = raw;
+                        } else if (raw.results && Array.isArray(raw.results)) {
+                            list = raw.results;
+                        }
+
+                        // Normaliza os dados para garantir que preco_venda existe
+                        this.suggestions = list.map(p => ({
+                            ...p,
+                            preco_venda: p.valor_venda || p.preco_venda || 0
+                        }));
+
+                        this.suggestionIndex = 0;
+                    } catch (e) {
+                         console.error(e);
+                    }
+                },
+                moveSuggestion(step) {
+                    if (this.suggestions.length === 0) return;
+                    this.suggestionIndex += step;
+                    if (this.suggestionIndex < 0) this.suggestionIndex = this.suggestions.length - 1;
+                    if (this.suggestionIndex >= this.suggestions.length) this.suggestionIndex = 0;
+                },
+                selectSuggestion() {
+                    if (this.suggestions.length > 0 && this.suggestionIndex >= 0) {
+                        this.addToCart(this.suggestions[this.suggestionIndex]);
+                    }
+                },
+                
+                // Cart
+                addToCart(prod) {
+                    // Controle de Caixa: Impedir venda se fechado
+                    if (SERVER_CONFIG.controleCaixa && (!this.caixaInfo || this.caixaInfo.status !== 'ABERTO')) {
+                        alert("Caixa FECHADO! É necessário realizar a abertura do caixa antes de iniciar as vendas.");
+                        this.abrirModalCaixa();
+                        return;
+                    }
+
+                    const preco = parseFloat(prod.preco_venda || 0);
+                    const quantidade = parseFloat(this.quantidadeInput) || 1;
+                    this.cart.push({
+                        id_produto: prod.id_produto,
+                        nome_produto: prod.nome_produto,
+                        codigo_produto: prod.codigo_produto,
+                        quantidade: quantidade,
+                        preco_unitario: preco,
+                        preco_original: preco,
+                        subtotal: preco * quantidade,
+                        desconto: 0,
+                        valor_desconto: 0
+                    });
+                    this.searchQuery = '';
+                    this.suggestions = [];
+                    this.quantidadeInput = 1;
+                    this.$refs.searchInput.focus();
+                },
+                removeItem(idx) {
+                    if(confirm("Remover este item?")) {
+                        this.cart.splice(idx, 1);
+                    }
+                },
+
+                // NOVO: Descontos
+                openItemDiscount(index) {
+                    this.selectedDiscountIndex = index;
+                    this.tempItemDiscount = this.cart[index].valor_desconto || 0;
+                    this.showItemDiscountModal = true;
+                    this.$nextTick(() => this.$refs.itemDiscountInput?.focus());
+                },
+                confirmItemDiscount() {
+                    const item = this.cart[this.selectedDiscountIndex];
+                    const discount = parseFloat(this.tempItemDiscount) || 0;
+                    const maxDiscount = (item.quantidade * item.preco_original) - 0.01;
+                    
+                    if (discount > maxDiscount) { alert("Desconto inválido!"); return; }
+
+                    item.valor_desconto = discount;
+                    item.desconto = discount;
+                    // Recalcula subtotal
+                    item.subtotal = (item.quantidade * item.preco_original) - discount;
+                    // Visual changes
+                    item.preco_unitario = item.subtotal / item.quantidade;
+
+                    this.showItemDiscountModal = false;
+                },
+                openGeneralDiscount() {
+                    this.tempGeneralDiscount = this.generalDiscount;
+                    this.showGeneralDiscountModal = true;
+                    this.$nextTick(() => this.$refs.generalDiscountInput?.focus());
+                },
+                confirmGeneralDiscount() {
+                    const discount = parseFloat(this.tempGeneralDiscount) || 0;
+                    if (discount > this.cartSubtotal) { alert("Desconto maior que o total!"); return; }
+                    this.generalDiscount = discount;
+                    this.showGeneralDiscountModal = false;
+                },
+
+                // NOVO: Pagamentos
+                openPaymentModal() {
+                    if (this.cart.length === 0) return;
+                    this.showPaymentModal = true;
+                    // Auto-fill amount
+                    this.$nextTick(() => {
+                        this.paymentAmount = Number(this.remainingTotal.toFixed(2));
+                        this.$refs.paymentAmountInput?.focus();
+                    });
+                },
+                addPayment() {
+                    const methodId = this.selectedPaymentMethod;
+                    const amount = parseFloat(this.paymentAmount);
+                    
+                    if (!methodId) { alert("Selecione forma de pagamento"); return; }
+                    if (isNaN(amount) || amount <= 0) { alert("Valor inválido"); return; }
+
+                    this.paymentList.push({ id: methodId, valor: amount });
+                    this.paymentAmount = 0;
+                    
+                    // Se ainda falta, foca para adicionar mais
+                    this.$nextTick(() => {
+                        const remaining = this.remainingTotal;
+                        if (remaining > 0) {
+                            this.paymentAmount = Number(remaining.toFixed(2));
+                            this.$refs.paymentAmountInput.focus();
+                        }
+                    });
+                },
+                removePayment(index) {
+                    this.paymentList.splice(index, 1);
+                },
+                getPaymentLabel(pay) {
+                    // 1. Tenta nome fixo (vindo do backend ou setado manualmente)
+                    if (pay.nome_fixo) return pay.nome_fixo;
+                    
+                    // 2. Tenta buscar pelo ID na lista carregada
+                    if (pay.id) {
+                        const found = this.paymentMethods.find(m => m.id_forma_pagamento === pay.id);
+                        if (found) return found.nome_forma;
+                    }
+                    
+                    return 'Pagamento';
+                },
+                getPaymentName(id) {
+                    const found = this.paymentMethods.find(m => m.id_forma_pagamento === id);
+                    return found ? found.nome_forma : `ID ${id}`;
+                },
+
+
+                formatNumber(value, decimals = 2) {
+                    if (value === null || value === undefined) return '0,00';
+                    const num = parseFloat(value);
+                    if (isNaN(num)) return '0,00';
+                    return num.toFixed(decimals).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+                },
+                
+                formatCnpjCpf(value) {
+                    if (!value) return '';
+                    const numbers = value.replace(/\D/g, '');
+                    if (numbers.length === 11) {
+                        // CPF: 000.000.000-00
+                        return numbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+                    } else if (numbers.length === 14) {
+                        // CNPJ: 00.000.000/0000-00
+                        return numbers.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+                    }
+                    return value;
+                },
+                
+                formatCep(value) {
+                    if (!value) return '';
+                    const numbers = value.replace(/\D/g, '');
+                    if (numbers.length === 8) {
+                        return numbers.replace(/(\d{5})(\d{3})/, '$1-$2');
+                    }
+                    return value;
+                },
+                
+                formatChave(chave) {
+                    if (!chave) return '';
+                    const numbers = chave.replace(/\D/g, '');
+                    if (numbers.length === 44) {
+                        // Formata em blocos de 4 dígitos: 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
+                        return numbers.match(/.{1,4}/g).join(' ');
+                    }
+                    return chave;
+                },
+                
+                formatItemNumber(num) {
+                    return String(num).padStart(3, '0');
+                },
+                
+                encodeURIComponent(str) {
+                    return encodeURIComponent(str);
+                },
+
+                // Client
+                openClientModal() {
+                    this.tempClientCpf = this.clientCpf;
+                    this.tempClientName = this.clientName;
+                    this.showClientModal = true;
+                    setTimeout(() => document.getElementById('cpfInput').focus(), 100);
+                },
+                confirmClient() {
+                    this.clientCpf = this.tempClientCpf;
+                    this.clientName = this.tempClientName;
+                    
+                    // Atualizar cliente em dadosVenda também
+                    if (this.dadosVenda) {
+                        this.dadosVenda.cliente = {
+                            nome: this.clientName || 'CONSUMIDOR',
+                            cpf_cnpj: this.clientCpf || ''
+                        };
+                        console.log('✅ Cliente atualizado na barra azul:', this.dadosVenda.cliente);
+                    }
+                    
+                    this.showClientModal = false;
+                    this.$refs.searchInput.focus();
+                },
+
+                // Sale
+                cancelSale() {
+                    if (confirm('Deseja limpar a venda atual?')) {
+                        this.resetSale();
+                    }
+                },
+                resetSale() {
+                    this.cart = [];
+                    this.clientCpf = '';
+                    this.clientName = '';
+                    this.resultModal.show = false;
+                    this.processing = false;
+                    this.showPaymentModal = false;
+                    this.dadosVenda = null;
+                    setTimeout(() => this.$refs.searchInput.focus(), 100);
+                },
+                removeSelectedItem() {
+                     if (this.selectedIndex >= 0) {
+                        this.removeItem(this.selectedIndex);
+                        this.selectedIndex = -1;
+                     }
+                },
+                async finalizeSale() {
+                    if (this.cart.length === 0 || this.processing) return;
+
+                    this.processing = true;
+                    document.body.style.cursor = 'wait';
+                    try {
+                         // Prepara lista de pagamentos
+                         let pagamentos = [];
+                         if (this.paymentList.length > 0) {
+                             pagamentos = this.paymentList.map(p => ({
+                                 id_forma_pagamento: p.id,
+                                 valor: p.valor
+                             }));
+                         } else {
+                             // Se não adicionou nada na lista mas clicou em finalizar (cenário rápido)
+                             // Usa o que estiver no select com o valor total
+                             if (this.selectedPaymentMethod) {
+                                // Encontrar nome para garantir exibição
+                                const methodObj = this.paymentMethods.find(m => m.id_forma_pagamento === this.selectedPaymentMethod);
+                                const nomePagamento = methodObj ? methodObj.nome_forma : 'Dinheiro';
+
+                                // Atualiza lista visual também para sair no cupom
+                                this.paymentList.push({
+                                    id: this.selectedPaymentMethod,
+                                    valor: this.finalTotalToPay,
+                                    nome_fixo: nomePagamento
+                                });
+
+                                pagamentos.push({
+                                    id_forma_pagamento: this.selectedPaymentMethod,
+                                    valor: this.finalTotalToPay
+                                });
+                             }
+                         }
+
+                         const customPayload = {
+                             venda: {
+                                valor_total: this.finalTotalToPay, // Envia o total LIQUIDO a pagar
+                                id_operacao: this.defaultOperacaoId,
+                                id_cliente: 1,
+                                cpf_cnpj: this.clientCpf,
+                                nome_cliente: this.clientName,
+                                id_forma_pagamento: this.selectedPaymentMethod,
+                                formas_pagamento: pagamentos
+                             },
+                             itens: this.cart
+                         };
+                         
+                         const magicRes = await axios.post('/api/vendas/salvar_pdv_nfce/', customPayload);
+                         
+                         // Capturar dados_venda da resposta
+                         if (magicRes.data.dados_venda) {
+                             this.dadosVenda = magicRes.data.dados_venda;
+                             console.log('✅ Dados da Venda recebidos:', this.dadosVenda);
+                         }
+                         
+                         if (magicRes.data.sucesso) {
+                             // Close Payment Modal
+                             this.showPaymentModal = false;
+
+                             const isOffline = magicRes.data.venda_offline || false;
+                             this.resultModal = {
+                                 show: true, 
+                                 success: true, // Sempre sucesso (verde), mas msg pode ser de alerta
+                                 message: magicRes.data.mensagem,
+                                 data: magicRes.data,
+                                 isOffline: isOffline
+                             };
+                         } else {
+                             throw new Error(magicRes.data.mensagem);
+                         }
+
+                    } catch (e) {
+                         console.error(e);
+                         const msg = e.response?.data?.mensagem || e.message || JSON.stringify(e.response?.data);
+                         this.resultModal = { show: true, success: false, message: 'Erro: ' + msg };
+                    } finally {
+                        this.processing = false;
+                        document.body.style.cursor = 'default';
+                    }
+                },
+                
+                // Reimprimir Venda
+                openReimprimirModal() {
+                    this.showReimprimirModal = true;
+                    this.reimprimirSearch = '';
+                    this.vendaSelecionadaReimprimir = null;
+                    this.buscarVendasReimprimir();
+                },
+                
+                async buscarVendasReimprimir() {
+                    try {
+                        const params = { ordering: '-id_venda', page_size: 50 };
+                        if (this.reimprimirSearch) {
+                            params.search = this.reimprimirSearch;
+                        }
+                        
+                        // Usar endpoint sem autenticação
+                        const response = await axios.get('/api/vendas/pdv-nfce/', { params });
+                        console.log('Vendas retornadas:', response.data);
+                        
+                        // Filtrar vendas - ajustado para aceitar varios status
+                        const vendas = response.data.results || response.data || [];
+                        // Mostrar TODAS as vendas (removido filtro de apenas NFC-e emitida)
+                        this.vendasReimprimir = vendas; 
+                        
+                        console.log('Vendas filtradas (agora todas):', this.vendasReimprimir.length);
+                            
+                    } catch (error) {
+                        console.error('Erro ao buscar vendas:', error);
+                        this.vendasReimprimir = [];
+                    }
+                },
+                
+                async reimprimirVenda() {
+                    if (!this.vendaSelecionadaReimprimir) return;
+                    
+                    try {
+                        // Buscar dados completos da venda - usar endpoint sem auth
+                        const response = await axios.get(`/api/vendas/pdv-nfce/${this.vendaSelecionadaReimprimir}/`);
+                        const vendaData = response.data;
+                        
+                        console.log('Dados da venda:', vendaData);
+                        
+                        // Verificar se tem NFCe
+                        if (!vendaData.numero_nfe && !vendaData.chave_nfe) {
+                            alert('Esta venda não possui NFCe emitida!');
+                            return;
+                        }
+                        
+                        // Carregar dados no carrinho para impressão
+                        this.cart = vendaData.itens.map(item => ({
+                            id_produto: item.id_produto,
+                            codigo_produto: item.produto_codigo || item.codigo_produto || '',
+                            nome_produto: item.produto_nome || item.nome_produto || item.id_produto,
+                            quantidade: parseFloat(item.quantidade),
+                            preco_unitario: parseFloat(item.valor_unitario || item.preco_unitario),
+                            subtotal: parseFloat(item.valor_total || item.subtotal)
+                        }));
+                        
+                        // Carregar dados de pagamento para impressão
+                        if (vendaData.pagamentos && vendaData.pagamentos.length > 0) {
+                            this.paymentList = vendaData.pagamentos.map(p => ({
+                                id: p.id_forma_pagamento, 
+                                valor: parseFloat(p.valor),
+                                nome_fixo: p.nome_forma_pagamento
+                            }));
+                        } else if (vendaData.forma_pagamento) {
+                            // Fallback caso backend antigo
+                            this.paymentList = [{
+                                id: 999, 
+                                valor: parseFloat(vendaData.valor_total),
+                                nome_fixo: vendaData.forma_pagamento
+                            }];
+                            // Mock para exibir nome correto se ID falhar
+                            if(!this.getPaymentName(999).includes('ID')) {
+                                // Já existe? Provavel que nao
+                            }
+                            // Hack: podemos forçar exibição no template, mas assumindo que
+                            // temos a lista de formas carregadas, tentamos achar pelo nome
+                            const found = this.paymentMethods.find(pm => pm.nome_forma === vendaData.forma_pagamento);
+                            if(found) this.paymentList[0].id = found.id_forma_pagamento;
+                        }
+
+                        // Carregar dados do cliente
+                        this.clientName = vendaData.nome_cliente || '';
+                        this.clientCpf = vendaData.cpf_cnpj || '';
+                        
+                        // Simular resultado de emissão para impressão
+                        this.resultModal = {
+                            show: true,
+                            success: true,
+                            message: 'Venda carregada para reimpressão',
+                            data: {
+                                chave: vendaData.chave_nfe,
+                                protocolo: vendaData.protocolo_nfe,
+                                numero: vendaData.numero_nfe,
+                                serie: vendaData.serie_nfe || '1',
+                                qrcode: vendaData.qrcode_nfe || '', 
+                                url_consulta: 'portalsped.fazenda.mg.gov.br/portalnfce'
+                            },
+                            isOffline: false
+                        };
+                        
+                        // Fechar modal de reimprimir
+                        this.showReimprimirModal = false;
+                        
+                        // Aguardar um momento e imprimir automaticamente
+                        setTimeout(() => {
+                            this.printReceipt();
+                        }, 500);
+                        
+                    } catch (error) {
+                        console.error('Erro ao reimprimir venda:', error);
+                        alert('Erro ao carregar dados da venda: ' + (error.response?.data?.detail || error.message));
+                    }
+                },
+                
+                formatDatetime(value) {
+                    if (!value) return '';
+                    const date = new Date(value);
+                    return date.toLocaleString('pt-BR');
+                },
+
+                // Configuração Visual
+                saveConfig() {
+                    console.log("Saving config...", this.backgroundUrl);
+                    if (this.backgroundUrl) {
+                        const url = this.backgroundUrl.trim();
+                        if (url) {
+                            try {
+                                localStorage.setItem('pdv_bg', url);
+                                document.body.style.backgroundImage = `url('${url}')`;
+                                console.log("Background updated and saved to localStorage");
+                            } catch(e) {
+                                console.error("Error saving to localStorage", e);
+                                alert("Não foi possível salvar a imagem (provavelmente muito grande). Ela será usada apenas nesta sessão.");
+                                document.body.style.backgroundImage = `url('${url}')`;
+                            }
+                        }
+                    } else {
+                        localStorage.removeItem('pdv_bg');
+                        document.body.style.backgroundImage = '';
+                    }
+                    this.showConfigModal = false;
+                },
+                clearBackground() {
+                    this.backgroundUrl = '';
+                    localStorage.removeItem('pdv_bg');
+                    document.body.style.backgroundImage = '';
+                    // Do not close modal immediately so user can set another one or see it cleared
+                    // this.showConfigModal = false; 
+                },
+                handleFileUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) {
+                        return;
+                    }
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const dataUrl = e.target.result;
+                        // Check storage limit approx
+                        if (dataUrl.length > 4000000) { // ~4MB warning (localStorage limit is usually 5MB)
+                            alert("A imagem selecionada é muito grande e pode não ser salva permanentemente (Limite aprox 4MB).");
+                        }
+                        this.backgroundUrl = dataUrl;
+                        // Preview immediately
+                        document.body.style.backgroundImage = `url('${dataUrl}')`;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+        });
+        
+        app.mount('#app');
+    </script>
+    {% endverbatim %}
+</body>
+</html>

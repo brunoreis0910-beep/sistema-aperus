@@ -1,0 +1,83 @@
+/* CSS Override para remover avisos de vendor prefixes */
+
+/* Remover vendor prefixes problemáticos */
+button::-moz-focus-inner,
+input::-moz-focus-inner,
+select::-moz-focus-inner,
+textarea::-moz-focus-inner {
+  border: 0;
+  padding: 0;
+}
+
+/* Placeholder styles mais compatíveis */
+input::placeholder,
+textarea::placeholder {
+  color: rgba(0, 0, 0, 0.54);
+  opacity: 1;
+}
+
+/* Remove outline padrão webkit */
+input:focus,
+textarea:focus,
+select:focus,
+button:focus {
+  outline: 2px solid #1976d2;
+  outline-offset: 2px;
+}
+
+/* Reset para evitar problemas de vendor prefixes */
+* {
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Suporte para flexbox sem vendor prefixes */
+.flex {
+  display: flex;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Remove seletores MS específicos */
+select::-ms-expand {
+  display: none;
+}
+
+/* Estilização limpa para inputs */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  transition: border-color 0.2s ease;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+  border-color: #1976d2;
+}
+
+/* Prevenir zoom em iOS */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

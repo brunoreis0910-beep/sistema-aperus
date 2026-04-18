@@ -1,0 +1,373 @@
+// Em: C:\Projetos\SistemaGerencial\frontend\src\pages\LoginPage.jsx
+
+import React, { useState } from 'react';
+import {
+  Container,
+  Box,
+  TextField,
+  Button,
+  Typography,
+  Fade,
+  Slide,
+  CircularProgress,
+  InputAdornment,
+  IconButton,
+  Avatar,
+  Paper,
+  Fab,
+  Tooltip
+} from '@mui/material';
+import {
+  Visibility,
+  VisibilityOff,
+  Person,
+  Lock,
+  BusinessCenter,
+  Settings
+} from '@mui/icons-material';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+
+function LoginPage() {
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const [loading, setLoading] = useState(false);
+  const [usuario, setUsuario] = useState('');
+  const [senha, setSenha] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showContent, setShowContent] = useState(true);
+
+  const handleLogin = async (e) => {
+    if (e) e.preventDefault();
+    setLoading(true);
+
+    // Mostra configuração ANTES de tentar
+    const apiUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    alert(`TENTANDO LOGIN:\n\nUsuário: ${usuario}\nAPI: ${apiUrl}/api/token/`);
+
+    try {
+      await login(usuario, senha);
+    } catch (error) {
+      const errorDetails = {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        message: error.message,
+        responseData: JSON.stringify(error.response?.data),
+        url: error.config?.url,
+        method: error.config?.method,
+        networkError: error.code
+      };
+
+      const errorMsg = `❌ ERRO DE LOGIN\n\n` +
+        `URL tentada: ${errorDetails.url}\n` +
+        `Status HTTP: ${errorDetails.status} ${errorDetails.statusText}\n` +
+        `Código erro: ${errorDetails.networkError}\n` +
+        `Mensagem: ${errorDetails.message}\n` +
+        `Resposta: ${errorDetails.responseData}\n\n` +
+        `✅ CHECKLIST:\n` +
+        `1. Servidores rodando?\n` +
+        `2. Mesma WiFi?\n` +
+        `3. IP correto: localhost ou ${window.location.hostname}?\n` +
+        `4. Porta correta: 8005?\n` +
+        `5. Usuário: ${usuario}`;
+
+      alert(errorMsg);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #1976d2 0%, #0d47a1 100%)',
+        position: 'relative',
+        overflow: 'hidden',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.05\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")',
+          opacity: 0.1,
+        }
+      }}
+    >
+      {/* Elementos decorativos flutuantes */}
+      <Box
+        sx={{
+          position: 'absolute',
+          width: '300px',
+          height: '300px',
+          borderRadius: '50%',
+          background: 'rgba(255, 255, 255, 0.1)',
+          top: '-150px',
+          left: '-150px',
+          animation: 'float 6s ease-in-out infinite',
+          '@keyframes float': {
+            '0%, 100%': { transform: 'translate(0, 0)' },
+            '50%': { transform: 'translate(30px, 30px)' }
+          }
+        }}
+      />
+      <Box
+        sx={{
+          position: 'absolute',
+          width: '200px',
+          height: '200px',
+          borderRadius: '50%',
+          background: 'rgba(255, 255, 255, 0.1)',
+          bottom: '-100px',
+          right: '-100px',
+          animation: 'float 8s ease-in-out infinite',
+        }}
+      />
+
+      <Box
+        sx={{
+          display: 'flex',
+          width: '100%',
+          maxWidth: '1000px',
+          mx: 2,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          borderRadius: 4,
+          overflow: 'hidden',
+          position: 'relative',
+          zIndex: 1,
+          bgcolor: 'white',
+        }}
+      >
+        {/* Painel esquerdo - Informativo */}
+        <Slide direction="right" in={showContent} timeout={800}>
+          <Box
+            sx={{
+              flex: 1,
+              background: '#f8faff',
+              p: 6,
+              display: { xs: 'none', md: 'flex' },
+              flexDirection: 'column',
+              justifyContent: 'center',
+              position: 'relative',
+            }}
+          >
+            <Box sx={{ mb: 4 }}>
+              <BusinessCenter sx={{ fontSize: 60, mb: 2, color: '#1976d2' }} />
+              <Typography
+                variant="h3"
+                sx={{
+                  fontWeight: 700,
+                  mb: 2,
+                  color: '#000000'
+                }}
+              >
+                APERUS
+              </Typography>
+              <Typography
+                variant="h6"
+                sx={{
+                  color: '#555555',
+                  fontWeight: 300,
+                  lineHeight: 1.6
+                }}
+              >
+                A solução completa para gestão do seu negócio
+              </Typography>
+            </Box>
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {[
+                { icon: '📊', text: 'Controle total do estoque' },
+                { icon: '💰', text: 'Gestão financeira integrada' },
+                { icon: '👥', text: 'Cadastro de clientes e fornecedores' },
+                { icon: '📈', text: 'Relatórios e dashboards em tempo real' }
+              ].map((item, index) => (
+                <Fade in={showContent} timeout={1000 + index * 200} key={index}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Typography variant="h5">{item.icon}</Typography>
+                    <Typography variant="body1" sx={{ color: '#000000' }}>
+                      {item.text}
+                    </Typography>
+                  </Box>
+                </Fade>
+              ))}
+            </Box>
+          </Box>
+        </Slide>
+
+        {/* Painel direito - Formulário de Login */}
+        <Slide direction="left" in={showContent} timeout={800}>
+          <Paper
+            elevation={0}
+            sx={{
+              flex: { xs: 1, md: 0.8 },
+              p: { xs: 4, sm: 6 },
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              bgcolor: 'white',
+              position: 'relative',
+            }}
+          >
+            <Fade in={showContent} timeout={1200}>
+              <Box>
+                {/* Avatar/Ícone */}
+                <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+                  <Avatar
+                    sx={{
+                      width: 80,
+                      height: 80,
+                      bgcolor: 'primary.main',
+                      background: 'linear-gradient(135deg, #1976d2 0%, #0d47a1 100%)',
+                      boxShadow: '0 4px 20px rgba(25, 118, 210, 0.4)',
+                    }}
+                  >
+                    <BusinessCenter sx={{ fontSize: 40 }} />
+                  </Avatar>
+                </Box>
+
+                {/* Título */}
+                <Typography
+                  variant="h4"
+                  align="center"
+                  sx={{
+                    mb: 1,
+                    fontWeight: 700,
+                    background: 'linear-gradient(135deg, #1976d2 0%, #0d47a1 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  Bem-vindo!
+                </Typography>
+
+                <Typography
+                  variant="body1"
+                  align="center"
+                  color="text.secondary"
+                  sx={{ mb: 4 }}
+                >
+                  Faça login para continuar
+                </Typography>
+
+                {/* Formulário */}
+                <form onSubmit={handleLogin}>
+                  <TextField
+                    fullWidth
+                    label="Usuário"
+                    variant="outlined"
+                    value={usuario}
+                    onChange={(e) => setUsuario(e.target.value)}
+                    required
+                    disabled={loading}
+                    autoFocus
+                    sx={{ mb: 3 }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Person color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+
+                  <TextField
+                    fullWidth
+                    label="Senha"
+                    type={showPassword ? 'text' : 'password'}
+                    variant="outlined"
+                    value={senha}
+                    onChange={(e) => setSenha(e.target.value)}
+                    required
+                    disabled={loading}
+                    sx={{ mb: 4 }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Lock color="action" />
+                        </InputAdornment>
+                      ),
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setShowPassword(!showPassword)}
+                            edge="end"
+                          >
+                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+
+                  <Button
+                    type="submit"
+                    fullWidth
+                    variant="contained"
+                    size="large"
+                    disabled={loading}
+                    sx={{
+                      py: 1.5,
+                      fontSize: '1.1rem',
+                      fontWeight: 600,
+                      background: 'linear-gradient(135deg, #1976d2 0%, #0d47a1 100%)',
+                      boxShadow: '0 4px 15px rgba(25, 118, 210, 0.4)',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, #1565c0 0%, #0a3d91 100%)',
+                        boxShadow: '0 6px 20px rgba(25, 118, 210, 0.6)',
+                        transform: 'translateY(-2px)',
+                      },
+                      '&:active': {
+                        transform: 'translateY(0)',
+                      },
+                    }}
+                  >
+                    {loading ? (
+                      <CircularProgress size={24} color="inherit" />
+                    ) : (
+                      'Entrar'
+                    )}
+                  </Button>
+                </form>
+
+                {/* Footer */}
+                <Box sx={{ mt: 4, textAlign: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    © 2025 APERUS
+                  </Typography>
+                </Box>
+              </Box>
+            </Fade>
+          </Paper>
+        </Slide>
+
+        {/* Botão de Configuração de IP (só no Capacitor) */}
+        {window.Capacitor && (
+          <Tooltip title="Configurar IP do Servidor" placement="left">
+            <Fab
+              color="primary"
+              aria-label="configurações"
+              onClick={() => navigate('/configuracao-ip')}
+              sx={{
+                position: 'fixed',
+                bottom: 16,
+                right: 16,
+                zIndex: 1000,
+              }}
+            >
+              <Settings />
+            </Fab>
+          </Tooltip>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+export default LoginPage;

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador de Erros NFC-e</title>
+    <!-- Google Fonts & Material Icons -->
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f6f8; font-family: 'Roboto', sans-serif; }
+        .container { max-width: 1200px; margin-top: 30px; } 
+        .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        .card-header { 
+            background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%); 
+            color: white; 
+            padding: 15px 20px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .status-badge { padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 500; display: inline-flex; align-items: center; gap: 5px; }
+        .bg-success-soft { background-color: #e8f5e9; color: #2e7d32; }
+        .bg-warning-soft { background-color: #fff3e0; color: #ef6c00; }
+        .bg-danger-soft { background-color: #ffebee; color: #c62828; }
+        
+        .error-preview { 
+            max-width: 250px; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            cursor: pointer; 
+            color: #d32f2f; 
+            font-size: 0.85rem;
+        }
+        .error-preview:hover { text-decoration: underline; background-color: #ffebee; }
+
+        .btn-action { margin-left: 5px; }
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container pb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-1 text-primary d-flex align-items-center gap-2">
+                <i class="material-icons">dns</i> 
+                Painel de Correção de NFC-e
+            </h4>
+            <p class="text-muted mb-0">Gerencie vendas com erro, limpe travamentos e visualize logs.</p>
+        </div>
+        <div>
+            <a href="/" class="btn btn-outline-secondary d-flex align-items-center gap-2">
+                <i class="material-icons" style="font-size: 18px;">arrow_back</i> Voltar ao Sistema
+            </a>
+            <button onclick="location.reload()" class="btn btn-primary d-flex align-items-center gap-2 ms-2">
+                <i class="material-icons" style="font-size: 18px;">refresh</i> Atualizar
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Lista de Vendas (Últimas 50)</h5>
+            <small class="text-white-50">Ordenado por mais recente</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">ID</th>
+                            <th>Data</th>
+                            <th>Cliente</th>
+                            <th>Valor</th>
+                            <th>Status NFC-e</th>
+                            <th>Mensagem de Erro</th>
+                            <th class="text-end pe-4">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for venda in vendas %}
+                        <tr>
+                            <td class="ps-4 fw-bold text-secondary">#{{ venda.pk }}</td>
+                            <td>{{ venda.data_documento|date:"d/m/Y H:i" }}</td>
+                            <td>
+                                <div class="fw-bold text-dark">{{ venda.id_cliente.nome_razao_social|default:"Consumidor Final" }}</div>
+                            </td>
+                            <td class="fw-bold text-primary">R$ {{ venda.valor_total }}</td>
+                            <td>
+                                {% if venda.status_nfe == 'EMITIDA' %}
+                                    <span class="status-badge bg-success-soft">
+                                        <i class="material-icons" style="font-size: 14px;">check_circle</i> EMITIDA
+                                    </span>
+                                {% elif venda.status_nfe == 'ERRO' %}
+                                    <span class="status-badge bg-danger-soft">
+                                        <i class="material-icons" style="font-size: 14px;">error</i> ERRO
+                                    </span>
+                                {% else %}
+                                    <span class="status-badge bg-warning-soft">
+                                        <i class="material-icons" style="font-size: 14px;">hourglass_empty</i> {{ venda.status_nfe|default:"PENDENTE" }}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if venda.mensagem_nfe %}
+                                    <div class="error-preview" onclick="verErro('{{ venda.mensagem_nfe|escapejs }}')" title="Clique para ver detalhes">
+                                        {{ venda.mensagem_nfe }}
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end pe-4">
+                                <div class="d-flex justify-content-end align-items-center">
+                                    {% if venda.xml_nfe %}
+                                    <a href="/api/vendas/{{ venda.pk }}/download_xml/" target="_blank" class="btn btn-sm btn-outline-primary btn-action" title="Baixar XML">
+                                        <i class="material-icons" style="font-size: 18px;">download</i>
+                                    </a>
+                                    {% endif %}
+                                    
+                                    {% if venda.status_nfe == 'ERRO' %}
+                                    <button class="btn btn-sm btn-warning btn-action text-dark fw-bold d-flex align-items-center gap-1" onclick="limparXml({{ venda.pk }})" title="Limpar Erro e Resetar Status para Tentar Novamente">
+                                        <i class="material-icons" style="font-size: 18px;">build</i> Limpar Erro
+                                    </button>
+                                    {% endif %}
+
+                                    {% if not venda.status_nfe or venda.status_nfe == 'PENDENTE' %}
+                                    <button class="btn btn-sm btn-outline-danger btn-action" onclick="excluirVenda({{ venda.pk }})" title="Excluir Venda">
+                                        <i class="material-icons" style="font-size: 18px;">delete</i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <i class="material-icons" style="font-size: 48px; opacity: 0.3;">assignment_late</i>
+                                <p class="mt-2">Nenhuma venda encontrada.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Erro -->
+<div class="modal fade" id="errorModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Detalhes do Erro</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <pre id="errorModalContent" style="white-space: pre-wrap; background: #f8f9fa; padding: 15px; border-radius: 5px;"></pre>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    function verErro(msg) {
+        document.getElementById('errorModalContent').textContent = msg;
+        var myModal = new bootstrap.Modal(document.getElementById('errorModal'));
+        myModal.show();
+    }
+
+    function limparXml(id) {
+        if(!confirm("CONFIRMAÇÃO:
+Deseja limpar os dados de erro desta venda?
+
+Isso irá:
+1. Resetar o status para 'PENDENTE'
+2. Limpar o XML inválido
+3. Permitir tentar emitir novamente")) return;
+        
+        fetch(`/api/vendas/${id}/limpar_nfce_erro/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') }
+        })
+        .then(res => res.json())
+        .then(data => {
+            alert(data.mensagem);
+            location.reload();
+        })
+        .catch(err => alert("Erro ao comunicar com servidor. Verifique o console."));
+    }
+
+    function excluirVenda(id) {
+        if(!confirm("PERIGO: Deseja EXCLUIR permanentemente esta venda #" + id + "?
+
+Essa ação não pode ser desfeita!")) return;
+        
+        fetch(`/api/vendas/${id}/`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') }
+        })
+        .then(async res => {
+            if(res.ok || res.status === 204) {
+                alert("Venda excluída com sucesso!");
+                location.reload();
+            } else {
+                const data = await res.json();
+                alert(data.error || data.detail || "Erro ao excluir venda.");
+            }
+        })
+        .catch(err => alert("Erro ao comunicar com servidor."));
+    }
+</script>
+</body>
+</html>

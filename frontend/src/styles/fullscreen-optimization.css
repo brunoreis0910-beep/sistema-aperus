@@ -1,0 +1,203 @@
+/* 
+ * OTIMIZAÇÕES DE TELA INTEIRA MÁXIMA
+ * Este arquivo força o uso de 100% da tela disponível
+ */
+
+/* Reset crítico para tela inteira */
+html {
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+}
+
+body {
+  width: 100vw !important;
+  min-height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: auto !important;
+  box-sizing: border-box !important;
+}
+
+#root {
+  width: 100vw !important;
+  min-height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-sizing: border-box !important;
+}
+
+/* Forçar todos os containers principais */
+.MuiContainer-root,
+.MuiContainer-maxWidthXl,
+.MuiContainer-maxWidthLg,
+.MuiContainer-maxWidthMd,
+.MuiContainer-maxWidthSm,
+.MuiContainer-maxWidthXs {
+  max-width: none !important;
+  width: 100vw !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+/* Layout de dashboard específico */
+.MuiBox-root[role="main"],
+.MuiContainer-root>.MuiBox-root {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+/* Grid containers sempre largura total */
+.MuiGrid-container {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.MuiGrid-item {
+  box-sizing: border-box !important;
+}
+
+/* Box containers largura total */
+.MuiBox-root {
+  max-width: none !important;
+  box-sizing: border-box !important;
+}
+
+/* Paper e Card largura responsiva */
+.MuiPaper-root,
+.MuiCard-root {
+  box-sizing: border-box !important;
+  width: 100% !important;
+}
+
+/* Específico para monitores ultra-wide */
+@media screen and (min-width: 3440px) {
+  .MuiContainer-root {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .MuiGrid-container {
+    padding: 0 !important;
+  }
+
+  .MuiGrid-item {
+    padding: 6px !important;
+  }
+}
+
+/* Específico para monitores super ultra-wide (5120px+) */
+@media screen and (min-width: 5120px) {
+  .MuiContainer-root {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .MuiGrid-item {
+    padding: 8px !important;
+  }
+
+  /* Zoom otimizado para super ultra-wide */
+  body {
+    zoom: 1.0;
+    /* Manter zoom normal */
+  }
+
+  /* FORÇA máxima para super ultra-wide */
+  html,
+  body,
+  #root {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+
+  /* Desabilitar qualquer limitação de largura */
+  .MuiContainer-root,
+  .MuiBox-root,
+  .MuiGrid-container {
+    max-width: none !important;
+    width: 100% !important;
+  }
+}
+
+/* Força AppBar a usar largura total */
+.MuiAppBar-root {
+  width: 100vw !important;
+  left: 0 !important;
+  right: 0 !important;
+}
+
+/* Toolbar otimizado */
+.MuiToolbar-root {
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* Tabs largura otimizada */
+.MuiTabs-root {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* Drawer para mobile mantém padrão */
+@media (max-width: 899px) {
+  .MuiDrawer-paper {
+    width: 280px !important;
+  }
+}
+
+/* Forçar flexbox principal */
+.MuiBox-root:first-of-type {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100vh !important;
+  width: 100vw !important;
+}
+
+/* Área de conteúdo principal */
+main.MuiContainer-root {
+  flex-grow: 1 !important;
+  width: 100vw !important;
+  max-width: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Debug: outline para verificar limites */
+.debug-borders * {
+  outline: 1px solid rgba(255, 0, 0, 0.2) !important;
+}
+
+/* Otimização de performance para telas grandes */
+@media screen and (min-width: 2560px) {
+  * {
+    will-change: auto !important;
+  }
+
+  .MuiCard-root {
+    backface-visibility: hidden !important;
+    transform: translateZ(0) !important;
+  }
+}
+
+/* Remover limitações de largura de qualquer elemento */
+@media screen and (min-width: 1920px) {
+  [style*="max-width"] {
+    max-width: none !important;
+  }
+
+  [class*="maxWidth"] {
+    max-width: none !important;
+  }
+}

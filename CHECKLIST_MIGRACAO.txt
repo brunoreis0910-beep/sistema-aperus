@@ -1,0 +1,367 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║          CHECKLIST COMPLETO - MIGRAÇÃO PARA OUTRO SERVIDOR                   ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  ✓ PASTA DE PRODUÇÃO CRIADA COM SUCESSO!
+═══════════════════════════════════════════════════════════════════════════════
+
+Localização: C:\Projetos\SistemaGerencial\SistemaAperus
+Tamanho: ~142 MB
+Arquivos: 821
+Pastas: 4 principais (api, frontend, projeto_gerencial, static)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  ARQUIVOS INCLUÍDOS NA PASTA
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ CÓDIGO FONTE COMPLETO:
+  ├── api/                      → Backend Django (models, views, serializers)
+  ├── projeto_gerencial/        → Configurações Django (settings, urls, wsgi)
+  ├── frontend/src/             → Frontend Vue.js (código fonte)
+  └── static/                   → Arquivos estáticos
+
+✓ DOCUMENTAÇÃO:
+  ├── COMECE_AQUI.txt           → Guia rápido 3 passos
+  ├── MANUAL_INSTALACAO.txt     → Manual completo detalhado
+  ├── README.txt                → Informações gerais
+  └── COMO_TRANSFERIR.txt       → Guia de transferência
+
+✓ SCRIPTS DE INSTALAÇÃO:
+  ├── INSTALAR.bat              → Instalador interativo (menu completo)
+  └── INICIAR.bat               → Inicializador do sistema
+
+✓ CONFIGURAÇÃO:
+  ├── requirements.txt          → Dependências Python
+  ├── .env.example              → Modelo de configuração
+  ├── manage.py                 → Django manager
+  └── frontend/package.json     → Dependências Node.js
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  ARQUIVOS NÃO INCLUÍDOS (CONFORME SOLICITADO)
+═══════════════════════════════════════════════════════════════════════════════
+
+✗ Banco de Dados (.db, .sqlite3) → Você já transferiu separadamente
+✗ node_modules/                  → Será instalado no servidor
+✗ .venv/                         → Será criado no servidor
+✗ __pycache__/                   → Lixo de desenvolvimento
+✗ .git/                          → Controle de versão
+✗ dist/, build/                  → Builds antigos
+✗ logs/, *.log                   → Logs de desenvolvimento
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  CHECKLIST - ANTES DE TRANSFERIR
+═══════════════════════════════════════════════════════════════════════════════
+
+[ ] ✓ Pasta SistemaAperus completa (142 MB)
+[ ] ✓ Todos os arquivos .txt de documentação presentes
+[ ] ✓ INSTALAR.bat e INICIAR.bat presentes
+[ ] ✓ Pasta api/ presente
+[ ] ✓ Pasta projeto_gerencial/ presente
+[ ] ✓ Pasta frontend/src/ presente
+[ ] ✓ requirements.txt presente
+[ ] ✓ .env.example presente
+[ ] ✓ manage.py presente
+
+TUDO PRONTO PARA TRANSFERIR! ✓
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASSO A PASSO - MIGRAÇÃO COMPLETA
+═══════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ PASSO 1: TRANSFERIR ARQUIVOS                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  OPÇÃO A: Compactar e Transferir (RECOMENDADO)
+  ────────────────────────────────────────────────────────────────────────────
+  
+  1. Compacte a pasta SistemaAperus em ZIP:
+     
+     PowerShell:
+     Compress-Archive -Path "C:\Projetos\SistemaGerencial\SistemaAperus" `
+                      -DestinationPath "C:\SistemaAperus.zip"
+  
+  2. Transfira o ZIP para o servidor (rede, pendrive, OneDrive, etc)
+  
+  3. No servidor, descompacte em: C:\Sistemas\Aperus\
+
+
+  OPÇÃO B: Copiar Diretamente pela Rede
+  ────────────────────────────────────────────────────────────────────────────
+  
+  PowerShell (substitua o IP do servidor):
+  
+  $ServidorIP = "192.168.1.10"
+  $Origem = "C:\Projetos\SistemaGerencial\SistemaAperus"
+  $Destino = "\\$ServidorIP\C$\Sistemas\Aperus"
+  
+  New-Item -ItemType Directory -Path $Destino -Force
+  Copy-Item -Path $Origem -Destination $Destino -Recurse -Force
+  
+  
+  OPÇÃO C: Via Pendrive
+  ────────────────────────────────────────────────────────────────────────────
+  
+  1. Copie a pasta SistemaAperus para o pendrive
+  2. Leve até o servidor
+  3. Cole em C:\Sistemas\Aperus\
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ PASSO 2: NO SERVIDOR - BANCO DE DADOS                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  ✓ Banco PostgreSQL já está instalado
+  ✓ Banco já foi transferido/restaurado
+  
+  Anote as informações:
+  
+  - Nome do banco: _______________
+  - Usuário: _______________
+  - Senha: _______________
+  - Host: _______________
+  - Porta: _______________
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ PASSO 3: NO SERVIDOR - INSTALAÇÃO                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  1. Abra a pasta onde copiou o sistema (ex: C:\Sistemas\Aperus\)
+  
+  2. Leia primeiro: COMECE_AQUI.txt
+  
+  3. Clique 2x em: INSTALAR.bat
+  
+  4. Escolha: [A] - Instalação Completa
+  
+  5. Aguarde (30-45 minutos):
+     - Instalar Python 3.12 (se não tiver)
+     - Instalar Node.js 20 (se não tiver)
+     - Criar ambiente virtual
+     - Instalar dependências Python
+     - Instalar dependências Node.js
+     - Buildar frontend
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ PASSO 4: NO SERVIDOR - CONFIGURAÇÃO                                         │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  1. Copie o arquivo de exemplo:
+     
+     Copy-Item .env.example .env
+  
+  2. Abra .env com Bloco de Notas
+  
+  3. Configure com os dados do banco:
+     
+     DB_ENGINE=django.db.backends.postgresql
+     DB_NAME=aperus_producao              ← Nome do seu banco
+     DB_USER=aperus_user                  ← Usuário do banco
+     DB_PASSWORD=SuaSenhaAqui             ← Senha do banco
+     DB_HOST=localhost                    ← IP do servidor do banco
+     DB_PORT=5432                         ← Porta do PostgreSQL
+     
+     DEBUG=False                          ← IMPORTANTE! False em produção
+     ENVIRONMENT=production
+     ALLOWED_HOSTS=192.168.1.10,seudominio.com
+     
+     SECRET_KEY=                          ← Gere uma chave única
+  
+  4. Gere uma SECRET_KEY:
+     
+     PowerShell:
+     .\.venv\Scripts\Activate.ps1
+     python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+     
+     Cole o resultado em SECRET_KEY= no .env
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ PASSO 5: NO SERVIDOR - EXECUTAR MIGRAÇÕES                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  IMPORTANTE: Como você já transferiu o banco de dados, PULE ESTE PASSO!
+  
+  As tabelas já existem no banco que você transferiu.
+  
+  MAS se precisar criar novas tabelas/colunas:
+  
+  .\.venv\Scripts\Activate.ps1
+  python manage.py migrate
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ PASSO 6: NO SERVIDOR - COLETAR ARQUIVOS ESTÁTICOS                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  .\.venv\Scripts\Activate.ps1
+  python manage.py collectstatic --noinput
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ PASSO 7: NO SERVIDOR - INICIAR O SISTEMA                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  TESTE INICIAL:
+  ────────────────────────────────────────────────────────────────────────────
+  
+  1. Clique 2x em: INICIAR.bat
+  
+  2. Acesse no navegador:
+     http://localhost:8005/admin/
+  
+  3. Teste o login
+  
+  4. Se funcionar, pressione Ctrl+C para parar
+
+
+  CONFIGURAR COMO SERVIÇO (RECOMENDADO):
+  ────────────────────────────────────────────────────────────────────────────
+  
+  1. Baixe NSSM: https://nssm.cc/download
+  
+  2. Extraia nssm.exe para C:\Windows\System32\
+  
+  3. PowerShell Admin:
+     
+     nssm install Aperus_Backend
+  
+  4. Configure:
+     - Path: C:\Sistemas\Aperus\.venv\Scripts\python.exe
+     - Startup directory: C:\Sistemas\Aperus
+     - Arguments: manage.py runserver 0.0.0.0:8005
+  
+  5. Inicie:
+     
+     Start-Service Aperus_Backend
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  RESUMO DO QUE FOI PREPARADO PARA VOCÊ
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ Pasta limpa com APENAS arquivos necessários (142 MB)
+✓ SEM lixo de desenvolvimento
+✓ SEM banco de dados (você já transferiu separadamente)
+✓ SEM node_modules (será instalado no servidor)
+✓ SEM .venv (será criado no servidor)
+✓ COM todo código fonte (backend + frontend)
+✓ COM documentação completa
+✓ COM instalador automático
+✓ COM scripts de inicialização
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  VERIFICAÇÃO FINAL - CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+ANTES DA MIGRAÇÃO:
+──────────────────────────────────────────────────────────────────────────────
+[ ] Pasta SistemaAperus pronta (142 MB)
+[ ] Banco de dados já transferido/restaurado no servidor
+[ ] Anotou: nome do banco, usuário, senha, host, porta
+
+
+NO SERVIDOR - APÓS TRANSFERÊNCIA:
+──────────────────────────────────────────────────────────────────────────────
+[ ] Pasta copiada para C:\Sistemas\Aperus\ (ou outro local)
+[ ] PostgreSQL instalado e rodando
+[ ] Executou INSTALAR.bat opção [A]
+[ ] Arquivo .env configurado com dados do banco
+[ ] DEBUG=False no .env
+[ ] SECRET_KEY gerada e configurada
+[ ] ALLOWED_HOSTS configurado
+[ ] Arquivos estáticos coletados (collectstatic)
+[ ] Sistema inicia sem erros (INICIAR.bat)
+[ ] Consegue acessar http://localhost:8005/admin/
+[ ] Consegue fazer login
+[ ] Dados do banco aparecem normalmente
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  ARQUIVOS DE SUPORTE
+═══════════════════════════════════════════════════════════════════════════════
+
+Na pasta SistemaAperus você tem:
+
+📖 COMECE_AQUI.txt
+   → Guia ultra rápido de 3 passos
+
+📖 MANUAL_INSTALACAO.txt
+   → Manual completo com todos os detalhes
+
+📖 README.txt
+   → Informações gerais do sistema
+
+📖 COMO_TRANSFERIR.txt
+   → Como copiar para o servidor
+
+📖 ESTE_ARQUIVO.txt (CHECKLIST_MIGRACAO.txt)
+   → Checklist completo da migração
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  COMANDOS ÚTEIS NO SERVIDOR
+═══════════════════════════════════════════════════════════════════════════════
+
+Ativar ambiente virtual:
+  .\.venv\Scripts\Activate.ps1
+
+Iniciar sistema manualmente:
+  python manage.py runserver 0.0.0.0:8005
+
+Verificar sistema:
+  python manage.py check
+
+Ver status do serviço:
+  Get-Service Aperus_Backend
+
+Parar serviço:
+  Stop-Service Aperus_Backend
+
+Iniciar serviço:
+  Start-Service Aperus_Backend
+
+Ver logs:
+  Get-Content logs\error.log -Tail 50
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PROBLEMAS COMUNS
+═══════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA: "Erro ao conectar no banco"
+SOLUÇÃO:
+  - Verifique se PostgreSQL está rodando: Get-Service postgresql*
+  - Teste conexão: psql -U aperus_user -d aperus_producao
+  - Verifique .env (usuário, senha, host, porta)
+
+PROBLEMA: "Python/Node não encontrado"
+SOLUÇÃO:
+  - Execute INSTALAR.bat opções [1] e [2]
+  - Ou baixe manualmente de python.org e nodejs.org
+
+PROBLEMA: "Porta 8005 em uso"
+SOLUÇÃO:
+  - Ver o que usa: netstat -ano | findstr :8005
+  - Matar processo: taskkill /PID [numero] /F
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ TUDO PRONTO PARA MIGRAÇÃO!
+
+Pasta: C:\Projetos\SistemaGerencial\SistemaAperus
+Próximo passo: Transferir para o servidor
+
+═══════════════════════════════════════════════════════════════════════════════
