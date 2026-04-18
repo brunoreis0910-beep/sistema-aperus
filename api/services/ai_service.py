@@ -25,9 +25,11 @@ from api.ai_dispatcher import AIDispatcher
 
 try:
     from google import genai
+    from google.genai import types as genai_types
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
+    genai_types = None
     logger.warning("Google Gemini não instalado. Execute: pip install google-genai")
 
 
@@ -42,8 +44,12 @@ class AIService:
             # A chave da API agora é gerenciada centralmente
             api_key = settings.GEMINI_API_KEY
             if api_key:
-                self.client = genai.Client(api_key=api_key)
-                logger.info("Google Gemini configurado com sucesso via settings")
+                # v1alpha é necessário para modelos Gemini 2.x e preview
+                self.client = genai.Client(
+                    api_key=api_key,
+                    http_options=genai_types.HttpOptions(api_version='v1alpha')
+                )
+                logger.info("Google Gemini configurado com sucesso via settings (v1alpha)")
             else:
                 logger.warning("GEMINI_API_KEY não configurada nas settings do Django")
     
@@ -56,7 +62,7 @@ class AIService:
         'gemini-2.5-flash-preview-04-17',
         'gemini-2.5-pro-preview-03-25',
         'gemini-2.0-flash-lite',
-        'gemini-1.5-flash-8b',
+        'gemini-1.5-flash',
     ]
 
     def _chamar_gemini_com_retry(self, prompt: str, max_tentativas: int = 3, delay_inicial: float = 2.0, config: dict = None) -> str:
