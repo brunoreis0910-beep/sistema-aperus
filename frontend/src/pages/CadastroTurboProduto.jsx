@@ -4,11 +4,11 @@ import {
   Box, Paper, Typography, TextField, Button, 
   CircularProgress, Alert, Grid, Card, CardMedia,
   CardContent, Chip, Autocomplete, Divider, IconButton,
-  Tooltip
+  Tooltip, InputAdornment
 } from '@mui/material';
 import {
   QrCodeScanner, Save, Refresh, AttachMoney,
-  Category, Info, CheckCircle, Error as ErrorIcon
+  Category, Info, CheckCircle, Error as ErrorIcon, Search
 } from '@mui/icons-material';
 import api from '../services/api';
 import { toast } from 'react-toastify';
@@ -837,7 +837,27 @@ export default function CadastroTurboProduto() {
                         label="GTIN / EAN"
                         value={dadosProduto.gtin || ''}
                         onChange={(e) => atualizarCampo('gtin', e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && dadosProduto.gtin) {
+                            buscarProdutoPorEan(dadosProduto.gtin);
+                          }
+                        }}
                         helperText="Código de barras do produto"
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <Tooltip title="Buscar dados na API Cosmos">
+                                <IconButton
+                                  edge="end"
+                                  disabled={loading || !dadosProduto.gtin}
+                                  onClick={() => buscarProdutoPorEan(dadosProduto.gtin)}
+                                >
+                                  {loading ? <CircularProgress size={18} /> : <Search />}
+                                </IconButton>
+                              </Tooltip>
+                            </InputAdornment>
+                          )
+                        }}
                       />
                     </Grid>
 
