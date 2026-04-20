@@ -31,6 +31,7 @@ export default function CadastroTurboProduto() {
   
   const inputRef = useRef(null);
   const nomeRef = useRef(null);
+  const buscaIniciadaRef = useRef(false); // Evita busca dupla ao inicializar com EAN automático
 
   // Foco automático no campo EAN ao carregar
   useEffect(() => {
@@ -57,12 +58,14 @@ export default function CadastroTurboProduto() {
       }
       
       // Definir o EAN e fazer busca automática
+      buscaIniciadaRef.current = true; // Bloqueia o useEffect do ean para não disparar segunda busca
       setEan(eanAuto);
       
       // Fazer busca após um pequeno delay para garantir que o estado foi atualizado
       setTimeout(() => {
         buscarProdutoPorEan(eanAuto, dadosXML);
-      }, 100);
+        buscaIniciadaRef.current = false; // Libera após a busca real iniciar
+      }, 600);
       
       // Limpar sessionStorage após usar
       sessionStorage.removeItem('cadastro_turbo_ean_auto');
@@ -130,20 +133,12 @@ export default function CadastroTurboProduto() {
 
     setLoading(true);
     try {
-      console.log('[GTIN] ===== INICIANDO BUSCA EAN =====');
-      console.log('[GTIN] eanParam:', eanParam, '| ean (estado):', ean, '| eanBusca:', eanBusca);
-      console.log('[GTIN] dadosXML:', dadosXML);
       // Passa nome do XML ao backend para busca de imagem mesmo em produtos genéricos
       const nomeSugerido = dadosXML?.nome ? encodeURIComponent(dadosXML.nome) : '';
       const urlTurbo = nomeSugerido
         ? `/api/produtos/cadastro-turbo/?ean=${eanBusca}&nome_sugerido=${nomeSugerido}`
         : `/api/produtos/cadastro-turbo/?ean=${eanBusca}`;
-      console.log('[GTIN] URL:', urlTurbo);
       const response = await api.get(urlTurbo);
-      console.log('[GTIN] Resposta HTTP status:', response.status);
-      console.log('[GTIN] Resposta completa:', JSON.stringify(response.data));
-      console.log('[GTIN] fonte:', response.data.fonte, '| is_generic:', response.data.is_generic);
-      console.log('[GTIN] dados.gtin:', response.data.dados?.gtin, '| dados.nome_produto:', response.data.dados?.nome_produto);
       
       // Auto-focus if generic
       const isGeneric = response.data.is_generic === true;
@@ -605,11 +600,10 @@ export default function CadastroTurboProduto() {
   // Auto-trigger search when EAN has sufficient length (bar code readers usually are fast)
   useEffect(() => {
     if (ean.length >= 8) {
-       console.log('[GTIN] useEffect disparado - ean:', ean, '| length:', ean.length);
+       // Se a busca foi iniciada pela inicialização automática (com dados XML), ignora
+       if (buscaIniciadaRef.current) return;
        // Debounce para evitar múltiplas buscas enquanto digita/bipe
-       // Não bloqueia por 'loading' - se o usuário escaneou um novo EAN, busca imediatamente após debounce
        const timer = setTimeout(() => {
-           console.log('[GTIN] Debounce concluído - chamando buscarProdutoPorEan com ean:', ean);
            buscarProdutoPorEan(ean);
        }, 500); 
        return () => clearTimeout(timer);
