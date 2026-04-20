@@ -133,8 +133,13 @@ export default function CadastroTurboProduto() {
       console.log('[GTIN] ===== INICIANDO BUSCA EAN =====');
       console.log('[GTIN] eanParam:', eanParam, '| ean (estado):', ean, '| eanBusca:', eanBusca);
       console.log('[GTIN] dadosXML:', dadosXML);
-      console.log('[GTIN] URL:', `/api/produtos/cadastro-turbo/?ean=${eanBusca}`);
-      const response = await api.get(`/api/produtos/cadastro-turbo/?ean=${eanBusca}`);
+      // Passa nome do XML ao backend para busca de imagem mesmo em produtos genéricos
+      const nomeSugerido = dadosXML?.nome ? encodeURIComponent(dadosXML.nome) : '';
+      const urlTurbo = nomeSugerido
+        ? `/api/produtos/cadastro-turbo/?ean=${eanBusca}&nome_sugerido=${nomeSugerido}`
+        : `/api/produtos/cadastro-turbo/?ean=${eanBusca}`;
+      console.log('[GTIN] URL:', urlTurbo);
+      const response = await api.get(urlTurbo);
       console.log('[GTIN] Resposta HTTP status:', response.status);
       console.log('[GTIN] Resposta completa:', JSON.stringify(response.data));
       console.log('[GTIN] fonte:', response.data.fonte, '| is_generic:', response.data.is_generic);
@@ -164,18 +169,9 @@ export default function CadastroTurboProduto() {
       
       const dados = response.data.dados || {};
       
-      // 🔥 NOVO: Se há dados do XML e o produto não foi encontrado (genérico), mesclar dados do XML
-      if (dadosXML && isGeneric) {
-        console.log('📦 Mesclando dados do XML com resposta da API...');
-        
-        // Preencher com dados do XML (prioridade para dados reais)
-        dados.gtin = dadosXML.gtin || eanBusca || dados.gtin || '';
-        dados.nome_produto = dadosXML.nome || dados.nome_produto || '';
-        dados.ncm = dadosXML.ncm || dados.ncm || '';
-        dados.unidade_medida = dadosXML.unidade || dados.unidade_medida || 'UN';
-        dados.preco_custo = parseFloat(dadosXML.valor_unitario || dados.preco_custo || 0);
-        
-        // Dados tributários do XML
+      // Se há dados do XML: sempre mescla campos fiscais e preço de custo real da NF
+      if (dadosXML) {
+        // Dados tributários do XML (sempre aplicar, independente de genérico)
         dados.cfop = dadosXML.cfop || dados.cfop || '';
         dados.cst_icms = dadosXML.cst || dados.cst_icms || '';
         dados.csosn = dadosXML.csosn || dados.csosn || '';
@@ -185,11 +181,23 @@ export default function CadastroTurboProduto() {
         dados.valor_ipi = dadosXML.vipi || dados.valor_ipi || '';
         dados.valor_pis = dadosXML.vpis || dados.valor_pis || '';
         dados.valor_cofins = dadosXML.vcofins || dados.valor_cofins || '';
-        
+        // Preço de custo real da NF (prioridade sobre o da API)
+        if (dadosXML.valor_unitario) {
+          dados.preco_custo = parseFloat(dadosXML.valor_unitario);
+        }
         // Calcular margem e preço de venda sugerido (50% de margem sobre custo)
         if (dados.preco_custo > 0 && !dados.preco_venda) {
           dados.preco_venda = parseFloat((dados.preco_custo * 1.5).toFixed(2));
         }
+      }
+
+      // 🔥 Se produto genérico (não encontrado na API), mescla também nome/ncm do XML
+      if (dadosXML && isGeneric) {
+        console.log('📦 Mesclando dados do XML com resposta da API (produto genérico)...');
+        dados.gtin = dadosXML.gtin || eanBusca || dados.gtin || '';
+        dados.nome_produto = dadosXML.nome || dados.nome_produto || '';
+        dados.ncm = dadosXML.ncm || dados.ncm || '';
+        dados.unidade_medida = dadosXML.unidade || dados.unidade_medida || 'UN';
         
         toast.success('📄 Dados do XML carregados com sucesso!', {
           autoClose: 3000
@@ -219,7 +227,10 @@ export default function CadastroTurboProduto() {
         if (!eanBusca) return;
         setLoadingPrecos(true);
         try {
-          const resPrecos = await api.get(`/api/produtos/precos-regiao/?ean=${eanBusca}&raio=20`);
+          // Passa o nome do produto para o serviço usar caso não encontre via EAN
+          const nomeParaPreco = dados.nome_produto || '';
+          const nomeParam = nomeParaPreco ? `&nome=${encodeURIComponent(nomeParaPreco)}` : '';
+          const resPrecos = await api.get(`/api/produtos/precos-regiao/?ean=${eanBusca}&raio=20${nomeParam}`);
           if (resPrecos.data.sucesso) {
             setPrecosRegionais(resPrecos.data);
             if ((!dados.preco_venda || dados.preco_venda === 0) && resPrecos.data.estatisticas?.media) {
@@ -549,16 +560,10 @@ export default function CadastroTurboProduto() {
         sessionStorage.removeItem('cadastro_turbo_item_index');
         sessionStorage.removeItem('cadastro_turbo_ean_auto');
         
-        // Sinalizar que está voltando do turbo para mudar para aba Produtos
-        if (origem === 'compra_form') {
-          sessionStorage.setItem('cadastro_turbo_voltando', 'true');
-        }
-        
-        // Aguardar um momento e voltar
+        // Aguardar um momento e ir para tela de Produtos
         setTimeout(() => {
-          const destino = origem === 'compra_form' ? '/compras' : '/produtos';
-          console.log('🚀 [TURBO] Navegando para:', destino, '| Origem:', origem);
-          navigate(destino);
+          console.log('🚀 [TURBO] Navegando para: /produtos');
+          navigate('/produtos');
         }, 1500);
       }
       

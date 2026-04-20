@@ -213,7 +213,9 @@ def cadastro_turbo_produto(request):
     
     # Se não veio imagem do Cosmos, lança busca IA em background (não bloqueia)
     img_valor = response_data['dados'].get('imagem_url_externa')
-    if not img_valor and dados_produto.get('nome') and not is_generic:
+    # Usa nome do produto ou nome sugerido pelo frontend (para produtos genéricos com nome do XML)
+    nome_para_imagem = dados_produto.get('nome') or request.GET.get('nome_sugerido', '').strip()
+    if not img_valor and nome_para_imagem:
         try:
             import threading
             import uuid
@@ -223,7 +225,7 @@ def cadastro_turbo_produto(request):
 
             def buscar_imagem_bg():
                 try:
-                    img = _buscar_imagem_produto_ia(dados_produto['nome'], ean)
+                    img = _buscar_imagem_produto_ia(nome_para_imagem, ean)
                     if img:
                         # Armazena no cache de sessão Django para o polling
                         from django.core.cache import cache
@@ -564,6 +566,7 @@ def pesquisar_precos_regiao(request):
     
     ean = request.query_params.get('ean')
     raio = int(request.query_params.get('raio', 5))
+    nome_sugerido = request.query_params.get('nome', '').strip()
     
     if not ean:
         return Response({
@@ -577,7 +580,7 @@ def pesquisar_precos_regiao(request):
     
     try:
         service = PrecosRegionaisService()
-        resultado = service.pesquisar_precos(ean, empresa_id, raio)
+        resultado = service.pesquisar_precos(ean, empresa_id, raio, nome_sugerido=nome_sugerido)
         
         return Response(resultado)
     

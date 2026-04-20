@@ -284,13 +284,14 @@ class AITtsView(APIView):
             texto = re.sub(padrao, sub, texto)
         return texto.strip()
 
-    def _gerar_edge_tts(self, texto, voz='pt-BR-FranciscaNeural'):
+    def _gerar_edge_tts(self, texto, voz='pt-BR-AntonioNeural'):
         """Gera áudio via Microsoft Edge TTS (gratuito, sem API key, voz neural)."""
         import asyncio
         import base64
         import tempfile
         import os
         import edge_tts
+        from concurrent.futures import ThreadPoolExecutor
 
         vozes_edge_ptbr = {
             'pt-BR-FranciscaNeural', 'pt-BR-AntonioNeural', 'pt-BR-BrendaNeural',
@@ -301,7 +302,7 @@ class AITtsView(APIView):
             'pt-BR-YaraNeural',
         }
         if voz not in vozes_edge_ptbr:
-            voz = 'pt-BR-FranciscaNeural'
+            voz = 'pt-BR-AntonioNeural'
 
         async def _sintetizar():
             communicate = edge_tts.Communicate(texto, voz, rate='+5%', pitch='+0Hz')
@@ -313,7 +314,16 @@ class AITtsView(APIView):
             os.unlink(tmp_path)
             return audio_bytes
 
-        audio_bytes = asyncio.run(_sintetizar())
+        def _rodar_em_thread():
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(_sintetizar())
+            finally:
+                loop.close()
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            audio_bytes = executor.submit(_rodar_em_thread).result(timeout=30)
+
         return base64.b64encode(audio_bytes).decode('utf-8')
 
     def post(self, request):
@@ -355,7 +365,7 @@ class AITtsView(APIView):
 
         # 2) Edge TTS (Microsoft) — gratuito, neural, sem API key
         try:
-            voz_edge = voz_solicitada if voz_solicitada else 'pt-BR-FranciscaNeural'
+            voz_edge = voz_solicitada if voz_solicitada else 'pt-BR-AntonioNeural'
             audio_b64 = self._gerar_edge_tts(texto, voz=voz_edge)
             return Response({'sucesso': True, 'audio_base64': audio_b64, 'formato': 'mp3', 'provider': 'edge'})
         except Exception as e:

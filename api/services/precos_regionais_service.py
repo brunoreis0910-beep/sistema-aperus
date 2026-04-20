@@ -26,7 +26,7 @@ class PrecosRegionaisService:
         self.infoprice_base_url = config('INFOPRICE_API_URL', default='https://api.infoprice.com.br/v1')
         self.timeout = 15  # segundos
     
-    def pesquisar_precos(self, ean: str, empresa_id: int, raio_km: int = 5, usar_cache: bool = True) -> Dict:
+    def pesquisar_precos(self, ean: str, empresa_id: int, raio_km: int = 5, usar_cache: bool = True, nome_sugerido: str = '') -> Dict:
         """
         Pesquisa preços do produto EAN em um raio de X km
         
@@ -107,6 +107,11 @@ class PrecosRegionaisService:
             if nome_produto:
                 logger.info(f"Buscando estimativa de preço via Gemini para: {nome_produto}")
                 return self._buscar_preco_gemini(nome_produto, ean)
+
+            # Fallback: usa nome sugerido pelo chamador (ex: nome do XML de compra)
+            if nome_sugerido:
+                logger.info(f"Buscando estimativa de preço via Gemini com nome sugerido: {nome_sugerido}")
+                return self._buscar_preco_gemini(nome_sugerido, ean)
 
             logger.info(f"Sem nome de produto para buscar preço via Gemini. EAN: {ean}")
             return {
