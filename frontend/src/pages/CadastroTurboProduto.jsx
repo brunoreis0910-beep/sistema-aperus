@@ -560,10 +560,18 @@ export default function CadastroTurboProduto() {
         sessionStorage.removeItem('cadastro_turbo_item_index');
         sessionStorage.removeItem('cadastro_turbo_ean_auto');
         
-        // Aguardar um momento e ir para tela de Produtos
+        // Sinalizar que está voltando do turbo para mudar para aba Produtos
+        if (origem === 'compra_form') {
+          sessionStorage.setItem('cadastro_turbo_voltando', 'true');
+        }
+        
+        // Aguardar um momento e voltar para a tela correta
         setTimeout(() => {
-          console.log('🚀 [TURBO] Navegando para: /produtos');
-          navigate('/produtos');
+          if (origem === 'compra_form') {
+            navigate('/compras');
+          } else {
+            navigate('/produtos');
+          }
         }, 1500);
       }
       
