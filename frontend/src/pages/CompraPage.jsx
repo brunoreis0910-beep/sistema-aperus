@@ -2280,11 +2280,10 @@ function CompraPage() {
                                       
                                       if (!isNaN(fracao) && fracao > 0) {
                                         const qtd = parseFloat(item.quantidade) || 0;
-                                        if (fracao > qtd) {
-                                          novosItens[index].quantidade_com_fracao = qtd * fracao;
-                                        } else {
-                                          novosItens[index].quantidade_com_fracao = qtd; // Obedece a quantidade
-                                        }
+                                        // Fração !== 1 é o fator de conversão (caixa, fardo, etc.)
+                                        // Ex: 30 caixas × fração 6 = 180 unidades
+                                        // Fração = 1 significa sem conversão (compra unitária)
+                                        novosItens[index].quantidade_com_fracao = fracao !== 1 ? qtd * fracao : null;
                                       } else {
                                         novosItens[index].quantidade_com_fracao = null;
                                       }
@@ -2297,7 +2296,9 @@ function CompraPage() {
                                     placeholder="Ex: 12"
                                     helperText={
                                       item.fracao_memorizada && !isNaN(parseFloat(item.fracao_memorizada)) && parseFloat(item.fracao_memorizada) > 0
-                                        ? `= ${(parseFloat(item.fracao_memorizada) > (parseFloat(item.quantidade) || 0) ? (parseFloat(item.quantidade) || 0) * parseFloat(item.fracao_memorizada) : parseFloat(item.quantidade) || 0).toFixed(2)} un`
+                                        ? parseFloat(item.fracao_memorizada) !== 1
+                                          ? `= ${((parseFloat(item.quantidade) || 0) * parseFloat(item.fracao_memorizada)).toFixed(2)} un`
+                                          : `${(parseFloat(item.quantidade) || 0).toFixed(2)} un`
                                         : 'Caixa/Fardo'
                                     }
                                     sx={{ 
