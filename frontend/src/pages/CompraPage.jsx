@@ -260,7 +260,6 @@ function CompraPage() {
           try {
             const formRestaurado = JSON.parse(formBackup);
             setForm(formRestaurado);
-            console.log('📋 Formulário restaurado do backup:', formRestaurado.itens?.length, 'itens');
           } catch (e) {
             console.warn('Erro ao restaurar form backup:', e);
           }
@@ -269,6 +268,8 @@ function CompraPage() {
         sessionStorage.removeItem('compra_mostrar_formulario_backup');
         // Recarregar produtos para incluir o produto recém-cadastrado no turbo
         carregarDados();
+        // Ir para aba Produtos após retorno do Turbo
+        setAbaAtiva(1);
       }
       
       // Forçar recarregamento dos produtos se veio do cadastro de produto normal
