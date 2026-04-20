@@ -222,10 +222,12 @@ export default function CadastroTurboProduto() {
         if (!eanBusca) return;
         setLoadingPrecos(true);
         try {
-          // Passa o nome do produto para o serviço usar caso não encontre via EAN
+          // Passa o nome e unidade do produto para o serviço usar caso não encontre via EAN
           const nomeParaPreco = dados.nome_produto || '';
           const nomeParam = nomeParaPreco ? `&nome=${encodeURIComponent(nomeParaPreco)}` : '';
-          const resPrecos = await api.get(`/api/produtos/precos-regiao/?ean=${eanBusca}&raio=20${nomeParam}`);
+          const unidade = dados.unidade_medida || 'UN';
+          const unidadeParam = `&unidade=${encodeURIComponent(unidade)}`;
+          const resPrecos = await api.get(`/api/produtos/precos-regiao/?ean=${eanBusca}&raio=20${nomeParam}${unidadeParam}`);
           if (resPrecos.data.sucesso) {
             setPrecosRegionais(resPrecos.data);
             if ((!dados.preco_venda || dados.preco_venda === 0) && resPrecos.data.estatisticas?.media) {

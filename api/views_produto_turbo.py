@@ -567,6 +567,7 @@ def pesquisar_precos_regiao(request):
     ean = request.query_params.get('ean')
     raio = int(request.query_params.get('raio', 5))
     nome_sugerido = request.query_params.get('nome', '').strip()
+    unidade_medida = request.query_params.get('unidade', 'UN').strip().upper()
     
     if not ean:
         return Response({
@@ -580,7 +581,7 @@ def pesquisar_precos_regiao(request):
     
     try:
         service = PrecosRegionaisService()
-        resultado = service.pesquisar_precos(ean, empresa_id, raio, nome_sugerido=nome_sugerido)
+        resultado = service.pesquisar_precos(ean, empresa_id, raio, nome_sugerido=nome_sugerido, unidade_medida=unidade_medida)
         
         return Response(resultado)
     

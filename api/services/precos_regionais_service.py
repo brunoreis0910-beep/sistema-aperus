@@ -26,7 +26,7 @@ class PrecosRegionaisService:
         self.infoprice_base_url = config('INFOPRICE_API_URL', default='https://api.infoprice.com.br/v1')
         self.timeout = 15  # segundos
     
-    def pesquisar_precos(self, ean: str, empresa_id: int, raio_km: int = 5, usar_cache: bool = True, nome_sugerido: str = '') -> Dict:
+    def pesquisar_precos(self, ean: str, empresa_id: int, raio_km: int = 5, usar_cache: bool = True, nome_sugerido: str = '', unidade_medida: str = 'UN') -> Dict:
         """
         Pesquisa preços do produto EAN em um raio de X km
         
@@ -106,12 +106,12 @@ class PrecosRegionaisService:
 
             if nome_produto:
                 logger.info(f"Buscando estimativa de preço via Gemini para: {nome_produto}")
-                return self._buscar_preco_gemini(nome_produto, ean)
+                return self._buscar_preco_gemini(nome_produto, ean, unidade_medida=unidade_medida)
 
             # Fallback: usa nome sugerido pelo chamador (ex: nome do XML de compra)
             if nome_sugerido:
                 logger.info(f"Buscando estimativa de preço via Gemini com nome sugerido: {nome_sugerido}")
-                return self._buscar_preco_gemini(nome_sugerido, ean)
+                return self._buscar_preco_gemini(nome_sugerido, ean, unidade_medida=unidade_medida)
 
             logger.info(f"Sem nome de produto para buscar preço via Gemini. EAN: {ean}")
             return {
@@ -127,7 +127,7 @@ class PrecosRegionaisService:
                 'mensagem': f'Erro no serviço: {str(e)}'
             }
     
-    def _buscar_preco_gemini(self, nome_produto: str, ean: str) -> Dict:
+    def _buscar_preco_gemini(self, nome_produto: str, ean: str, unidade_medida: str = 'UN') -> Dict:
         """
         Busca estimativa de preço real via Gemini + Google Search grounding.
         Usa busca na internet para obter preços atualizados.
@@ -144,6 +144,14 @@ class PrecosRegionaisService:
 
             client = genai.Client(api_key=api_key)
 
+            # Instrução extra para garantir preço por unidade quando aplicável
+            unidade_upper = (unidade_medida or 'UN').upper()
+            unidades_unitarias = {'UN', 'UNID', 'UNIDADE', 'PC', 'PÇ', 'PECA', 'PEÇA', 'KG', 'G', 'L', 'ML'}
+            if unidade_upper in unidades_unitarias:
+                instrucao_unidade = f'- O produto é vendido por UNIDADE ({unidade_upper}). Retorne o preço por UNIDADE, NÃO por fardo, caixa ou pack.\n'
+            else:
+                instrucao_unidade = f'- A unidade de medida é {unidade_upper}. Retorne o preço correspondente a essa unidade.\n'
+
             prompt = (
                 f'Pesquise na internet o preço de venda atual do produto "{nome_produto}" '
                 f'(código EAN: {ean}) em supermercados e lojas do Brasil. '
@@ -154,6 +162,7 @@ class PrecosRegionaisService:
                 f'REGRAS:\n'
                 f'- Use preços REAIS encontrados na internet (sites de supermercados, farmácias, e-commerce).\n'
                 f'- Inclua de 2 a 5 lojas/sites com preços encontrados.\n'
+                + instrucao_unidade +
                 f'- Valores em Reais (R$). NÃO invente preços.'
             )
 
