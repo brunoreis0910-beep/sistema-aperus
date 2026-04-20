@@ -90,14 +90,17 @@ export default function CadastroTurboProduto() {
       const response = await api.get('/api/categorias-mercadologicas/?nivel=3');
       if (response.data.sucesso) {
         const categorias = response.data.categorias || [];
-        setCategoriasDisponiveis(Array.isArray(categorias) ? categorias : []);
-      } else {
-        setCategoriasDisponiveis([]);
+        const arr = Array.isArray(categorias) ? categorias : [];
+        setCategoriasDisponiveis(arr);
+        return arr;
       }
+      setCategoriasDisponiveis([]);
+      return [];
     } catch (error) {
       // Falha silenciosa — categorias são opcionais, não bloqueia o uso da tela
       console.warn('Não foi possível carregar categorias mercadológicas:', error?.message);
       setCategoriasDisponiveis([]);
+      return [];
     }
   };
 
@@ -230,7 +233,8 @@ export default function CadastroTurboProduto() {
           const resPrecos = await api.get(`/api/produtos/precos-regiao/?ean=${eanBusca}&raio=20${nomeParam}${unidadeParam}`);
           if (resPrecos.data.sucesso) {
             setPrecosRegionais(resPrecos.data);
-            if ((!dados.preco_venda || dados.preco_venda === 0) && resPrecos.data.estatisticas?.media) {
+            // Sempre aplica o preço de mercado como preco_venda (preço unitário real)
+            if (resPrecos.data.estatisticas?.media) {
                const precoSugerido = parseFloat(resPrecos.data.estatisticas.media);
                setDadosProduto(prev => ({
                  ...prev,
@@ -433,6 +437,12 @@ export default function CadastroTurboProduto() {
                     }
                 }
 
+                // 5. Preencher Marca se vazio
+                if (!novosDados.marca && sugestoes.marca_sugerida) {
+                    novosDados.marca = sugestoes.marca_sugerida;
+                    alterado = true;
+                }
+
                 console.log('🤖 [IA] Resultado aplicação:', { alterado, grupo: novosDados.id_grupo, classificacao: novosDados.classificacao, ncm: novosDados.ncm, categoria: novosDados.categoria_mercadologica_id });
                 return alterado ? novosDados : prev;
             });
@@ -458,6 +468,12 @@ export default function CadastroTurboProduto() {
   const classificarComIA = async (nome, descricao = '') => {
     setClassificandoIA(true);
     try {
+      // Recarrega categorias se a lista estiver vazia
+      let cats = categoriasDisponiveis;
+      if (!cats || cats.length === 0) {
+        cats = await carregarCategorias();
+      }
+
       // 1. Classificar categoria mercadológica via endpoint dedicado
       const response = await api.post('/api/produtos/classificar-ia/', {
         nome,
@@ -466,7 +482,7 @@ export default function CadastroTurboProduto() {
       
       if (response.data.sucesso) {
         // Encontra o nome da categoria pelo ID para salvar no campo 'categoria' (texto)
-        const catObj = categoriasDisponiveis.find(c => c.id === response.data.subcategoria_id);
+        const catObj = cats.find(c => c.id === response.data.subcategoria_id);
         setDadosProduto(prev => ({
           ...prev,
           categoria_mercadologica_id: response.data.subcategoria_id,

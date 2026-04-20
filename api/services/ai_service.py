@@ -1599,7 +1599,8 @@ Relatórios disponíveis para exportação em PDF:
                 "categoria_sugerida": "Nome exato da categoria escolhida",
                 "classificacao_tipo_item": "00",
                 "descricao_comercial": "Descrição técnica/comercial curta",
-                "ncm_provavel": "00000000"
+                "ncm_provavel": "00000000",
+                "marca_sugerida": "Nome da marca/fabricante ou null se não identificado"
             }}
             
             REGRAS IMPORTANTES:
@@ -1608,6 +1609,7 @@ Relatórios disponíveis para exportação em PDF:
             - categoria_id: DEVE ser o ID de uma das categorias listadas. Escolha a MAIS ESPECÍFICA.
             - grupo_sugerido: Nome do departamento (nível 1) da categoria escolhida. Se nenhum grupo existente faz sentido, sugira um novo com novo_grupo=true.
             - classificacao_tipo_item: Para varejo, use "00" (Mercadoria para Revenda).
+            - marca_sugerida: Se o nome do produto contiver a marca (ex: "Nescafé", "Nestlé", "Sadia", "Kibon"), retorne-a. Caso contrário retorne null.
             """
 
             # Temperatura baixa para respostas mais determinísticas
