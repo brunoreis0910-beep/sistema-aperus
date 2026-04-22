@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, Box, Typography,
   List, ListItem, Divider, IconButton, Chip, CircularProgress,
-  Alert, Collapse, Tooltip
+  Alert, Collapse, Tooltip, Button
 } from '@mui/material';
 import {
   Close as CloseIcon,
   WhatsApp as WhatsAppIcon,
   MoneyOff as MoneyOffIcon,
   ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon
+  ExpandLess as ExpandLessIcon,
+  SendOutlined as SendIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
@@ -73,6 +74,21 @@ export default function InadimplenciaDialog({ open, onClose }) {
     window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensagem)}`, '_blank');
   };
 
+  const enviarWhatsAppParaTodos = () => {
+    const clientesComContato = clientes.filter(c => c.whatsapp || c.telefone);
+    if (clientesComContato.length === 0) {
+      alert('Nenhum cliente possui WhatsApp ou telefone cadastrado!');
+      return;
+    }
+    const confirmado = window.confirm(
+      `Serão abertas ${clientesComContato.length} janela(s) do WhatsApp para envio de cobranças.\n\nPermita popups no navegador se necessário.\n\nContinuar?`
+    );
+    if (!confirmado) return;
+    clientesComContato.forEach((cliente, i) => {
+      setTimeout(() => enviarWhatsApp(cliente), i * 800);
+    });
+  };
+
   const getCorChip = (dias) => {
     if (dias > 30) return 'error';
     if (dias > 15) return 'warning';
@@ -109,8 +125,27 @@ export default function InadimplenciaDialog({ open, onClose }) {
         {!loading && !error && clientes.length > 0 && (
           <>
             <Alert severity="error" sx={{ mb: 2 }}>
-              ⚠️ <strong>{clientes.length} cliente(s)</strong> com parcelas vencidas.
-              Total geral: <strong>R$ {clientes.reduce((s, c) => s + c.total_devido, 0).toFixed(2).replace('.', ',')}</strong>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                <Box>
+                  ⚠️ <strong>{clientes.length} cliente(s)</strong> com parcelas vencidas.
+                  Total geral: <strong>R$ {clientes.reduce((s, c) => s + c.total_devido, 0).toFixed(2).replace('.', ',')}</strong>
+                </Box>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<SendIcon />}
+                  onClick={enviarWhatsAppParaTodos}
+                  sx={{
+                    bgcolor: '#25D366',
+                    color: 'white',
+                    fontWeight: 'bold',
+                    whiteSpace: 'nowrap',
+                    '&:hover': { bgcolor: '#20BA5A' },
+                  }}
+                >
+                  Enviar WhatsApp para Todos ({clientes.filter(c => c.whatsapp || c.telefone).length})
+                </Button>
+              </Box>
             </Alert>
 
             <List>
