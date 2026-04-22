@@ -568,7 +568,7 @@ function CompraPage() {
           return ({
           id_produto: idProdutoFinal,
           quantidade: item.quantidade || 1,
-          valor_unitario: item.valor_unitario || 0,
+          valor_unitario: Math.trunc((item.valor_unitario || 0) * 1000000) / 1000000,
           fracao_memorizada: item.fracao_memorizada || 1,
           quantidade_com_fracao: item.quantidade_com_fracao != null ? item.quantidade_com_fracao : null,
           cfop: item.cfop || '',
@@ -1068,7 +1068,7 @@ function CompraPage() {
         itens: itensCalculados.map(item => ({
           id_produto: parseInt(item.id_produto),
           quantidade: parseFloat(item.quantidade) || 0, // Sempre envia a quantidade da NF
-          valor_unitario: parseFloat(item.valor_unitario) || 0, // Sempre envia o valor unitário da NF
+          valor_unitario: Math.trunc((parseFloat(item.valor_unitario) || 0) * 1000000) / 1000000, // Trunca para 6 casas
           valor_total: parseFloat(item.subtotal.toFixed(6)),
           fracao_memorizada: parseFloat(item.fracao_memorizada) || 1,
           // O backend agora calcula a quantidade_com_fracao, não precisa mais enviar
