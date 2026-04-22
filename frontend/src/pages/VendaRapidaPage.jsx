@@ -275,6 +275,16 @@ const VendaRapidaPage = () => {
     axiosInstance.get('/configuracao-impressao/modulo/venda_rapida/')
       .then(res => setConfigImpressao(res.data))
       .catch(() => {});
+    // Carregar imagem de fundo do servidor (sobrescreve cache local se existir)
+    axiosInstance.get('/user-preferencias/')
+      .then(res => {
+        const bg = res.data['venda_rapida_bg'];
+        if (bg) {
+          setImagemFundo(bg);
+          localStorage.setItem('vendaRapidaImagemFundo', bg);
+        }
+      })
+      .catch(() => {}); // fallback já inicializado do localStorage
     console.log('⏱️ Chamando carregarPromocoes...');
     carregarPromocoes().then(() => {
       console.log('✅ Promoções carregadas com sucesso no mount');
@@ -908,6 +918,7 @@ const VendaRapidaPage = () => {
   const salvarImagemFundo = (url) => {
     setImagemFundo(url);
     localStorage.setItem('vendaRapidaImagemFundo', url);
+    axiosInstance.patch('/user-preferencias/', { venda_rapida_bg: url }).catch(() => {});
     setOpenConfigFundo(false);
     console.log('✅ Imagem de fundo salva');
   };
@@ -915,6 +926,7 @@ const VendaRapidaPage = () => {
   const removerImagemFundo = () => {
     setImagemFundo('');
     localStorage.removeItem('vendaRapidaImagemFundo');
+    axiosInstance.patch('/user-preferencias/', { venda_rapida_bg: null }).catch(() => {});
     setOpenConfigFundo(false);
     console.log('✅ Imagem de fundo removida');
   };

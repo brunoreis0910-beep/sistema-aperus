@@ -4336,6 +4336,27 @@ class UserAtalho(models.Model):
         return f"{self.user.username} - {self.tecla}: {self.caminho}"
 
 
+class UserPreferencia(models.Model):
+    """Armazena preferências de interface por usuário (chave → valor)."""
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='preferencias',
+        db_column='id_user'
+    )
+    chave = models.CharField(max_length=100, help_text='Nome da preferência')
+    valor = models.TextField(blank=True, null=True, help_text='Valor da preferência')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'user_preferencias'
+        managed = True
+        unique_together = [('user', 'chave')]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.chave}"
+
+
 class Numeracao(models.Model):
     id_numeracao = models.AutoField(primary_key=True)
     descricao = models.CharField(max_length=20)

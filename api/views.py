@@ -35,6 +35,7 @@ from .models import (
     Pet, TipoServico, Agendamento, Avaliacao, SessaoAgendamento,  # <-- NOVOS (Pet Shop)
     LogAuditoria,  # <-- NOVO (Auditoria)
     UserAtalho,
+    UserPreferencia,
     MapaCarga, MapaCargaItem, ConfiguracaoBancaria, Boleto  # <-- Sistema de Logística e Boletos
 )
 
@@ -3175,6 +3176,34 @@ class UserAtalhoViewSet(viewsets.ModelViewSet):
         atalhos = UserAtalho.objects.filter(user=user)
         mapa = {a.tecla: a.caminho for a in atalhos}
         return Response(mapa)
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def user_preferencias_view(request):
+    """
+    GET  /api/user-preferencias/  → retorna todas as preferências do usuário como {chave: valor}
+    PATCH /api/user-preferencias/ → atualiza/cria preferências enviadas como {chave: valor}
+    """
+    if request.method == 'GET':
+        prefs = UserPreferencia.objects.filter(user=request.user)
+        return Response({p.chave: p.valor for p in prefs})
+
+    # PATCH
+    data = request.data
+    if not isinstance(data, dict):
+        return Response({'error': 'Esperado objeto JSON.'}, status=400)
+
+    for chave, valor in data.items():
+        if valor is None:
+            UserPreferencia.objects.filter(user=request.user, chave=chave).delete()
+        else:
+            UserPreferencia.objects.update_or_create(
+                user=request.user,
+                chave=chave,
+                defaults={'valor': valor}
+            )
+    return Response({'status': 'ok'})
 
 
 class ConfiguracaoImpressaoViewSet(viewsets.ModelViewSet):

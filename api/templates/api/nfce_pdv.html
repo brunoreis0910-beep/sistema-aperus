@@ -1518,6 +1518,20 @@
                     this.backgroundUrl = savedBg;
                     document.body.style.backgroundImage = `url('${savedBg}')`;
                 }
+                // Carregar Background do Servidor (sobrescreve cache se houver)
+                const token = sessionStorage.getItem('accessToken');
+                if (token) {
+                    axios.get('/api/user-preferencias/', { headers: { Authorization: `Bearer ${token}` } })
+                        .then(res => {
+                            const bg = res.data['pdv_bg'];
+                            if (bg) {
+                                this.backgroundUrl = bg;
+                                document.body.style.backgroundImage = `url('${bg}')`;
+                                localStorage.setItem('pdv_bg', bg);
+                            }
+                        })
+                        .catch(() => {});
+                }
 
                 // Keyboard Shortcuts
                 window.addEventListener('keydown', (e) => {
@@ -2323,10 +2337,21 @@
                                 alert("Não foi possível salvar a imagem (provavelmente muito grande). Ela será usada apenas nesta sessão.");
                                 document.body.style.backgroundImage = `url('${url}')`;
                             }
+                            // Salvar no servidor
+                            const token = sessionStorage.getItem('accessToken');
+                            if (token) {
+                                axios.patch('/api/user-preferencias/', { pdv_bg: url },
+                                    { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+                            }
                         }
                     } else {
                         localStorage.removeItem('pdv_bg');
                         document.body.style.backgroundImage = '';
+                        const token = sessionStorage.getItem('accessToken');
+                        if (token) {
+                            axios.patch('/api/user-preferencias/', { pdv_bg: null },
+                                { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+                        }
                     }
                     this.showConfigModal = false;
                 },
@@ -2334,6 +2359,11 @@
                     this.backgroundUrl = '';
                     localStorage.removeItem('pdv_bg');
                     document.body.style.backgroundImage = '';
+                    const token = sessionStorage.getItem('accessToken');
+                    if (token) {
+                        axios.patch('/api/user-preferencias/', { pdv_bg: null },
+                            { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+                    }
                     // Do not close modal immediately so user can set another one or see it cleared
                     // this.showConfigModal = false; 
                 },

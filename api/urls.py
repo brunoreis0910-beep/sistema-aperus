@@ -267,6 +267,8 @@ from .views import (
     BoletoViewSet,  # Integração Bancária
     ConfiguracaoImpressaoViewSet,  # Impressão por módulo
     LoteProdutoViewSet,  # Controle de Lotes
+    UserAtalhoViewSet,  # Atalhos de teclado por usuário
+    user_preferencias_view,  # Preferências de interface por usuário
 )
 
 from .viewsets_formapagamento import FormaPagamentoViewSet
@@ -335,6 +337,7 @@ router.register(r'mapas-carga-itens', MapaCargaItemViewSet, basename='mapa-carga
 router.register(r'configuracoes-bancarias', ConfiguracaoBancariaViewSet, basename='configuracao-bancaria')  # Integração Bancária
 router.register(r'configuracao-impressao', ConfiguracaoImpressaoViewSet, basename='configuracao-impressao')  # Configurações de Impressão
 router.register(r'lote-produto', LoteProdutoViewSet, basename='lote-produto')  # Controle de Lotes de Produto
+router.register(r'user-atalhos', UserAtalhoViewSet, basename='user-atalho')  # Atalhos de teclado por usuário
 router.register(r'boletos', BoletoViewSet, basename='boleto')  # Integração Bancária
 router.register(r'config-produto', ConfiguracaoProdutoViewSet, basename='config-produto')
 router.register(r'veiculos-novos', VeiculoNovoViewSet, basename='veiculo-novo')
@@ -634,6 +637,8 @@ urlpatterns = [
     path('sped-contribuicoes/gerar/', SpedContribuicoesGerarView.as_view(), name='sped-contribuicoes-gerar'),
     path('sped-contribuicoes/salvar-config/', SpedContribuicoesSalvarConfigView.as_view(), name='sped-contribuicoes-salvar-config'),
     path('sped-contribuicoes/carregar-config/', SpedContribuicoesCarregarConfigView.as_view(), name='sped-contribuicoes-carregar-config'),    path('', include(router.urls)),
+    # Preferências de Interface do Usuário
+    path('user-preferencias/', user_preferencias_view, name='user-preferencias'),
     # Health Check — monitoramento de infraestrutura
     path('health/', HealthCheckView.as_view(), name='health-check'),
     path('health/detail/', HealthCheckDetailView.as_view(), name='health-check-detail'),

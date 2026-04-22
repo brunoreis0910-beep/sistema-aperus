@@ -1,5 +1,6 @@
 import React from 'react';
 import { Outlet, useLocation, Link as RouterLink, useNavigate } from 'react-router-dom';
+import { fetchShortcutsApi } from '../services/shortcutService';
 import {
   Box,
   Container,
@@ -314,6 +315,21 @@ const DashboardLayoutClean = () => {
     setLogoutDialogOpen(false);
   };
 
+  // Mapa de atalhos em ref para o handler de teclado acessar sem re-render
+  const shortcutsMapRef = React.useRef({});
+
+  // Carrega atalhos da API ao montar (repopula localStorage caso cache tenha sido limpo)
+  React.useEffect(() => {
+    fetchShortcutsApi()
+      .then(map => { if (map) shortcutsMapRef.current = map; })
+      .catch(() => {
+        try {
+          const raw = localStorage.getItem('appShortcuts_v1');
+          shortcutsMapRef.current = JSON.parse(raw || '{}');
+        } catch { shortcutsMapRef.current = {}; }
+      });
+  }, []);
+
   // Listener global para atalhos de teclado (F1, F2 e Esc)
   React.useEffect(() => {
     const handler = (e) => {
@@ -342,11 +358,7 @@ const DashboardLayoutClean = () => {
           // Evitar ação padrão do navegador para outras teclas F
           e.preventDefault();
 
-          const raw = localStorage.getItem('appShortcuts_v1');
-          let map = {};
-          try { map = JSON.parse(raw || '{}'); } catch (err) { map = {}; }
-
-          const path = map[key];
+          const path = shortcutsMapRef.current[key];
           if (path) {
             navigate(path);
           }
