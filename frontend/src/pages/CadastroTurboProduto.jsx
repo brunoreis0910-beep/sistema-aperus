@@ -20,6 +20,7 @@ export default function CadastroTurboProduto() {
   const [dadosProduto, setDadosProduto] = useState(null);
   const [produtoExistente, setProdutoExistente] = useState(false);
   const [categoriasDisponiveis, setCategoriasDisponiveis] = useState([]);
+  const categoriasDisponiveisRef = useRef([]);
   const [gruposDisponiveis, setGruposDisponiveis] = useState([]);
   const gruposDisponiveisRef = useRef([]);
   const [classificandoIA, setClassificandoIA] = useState(false);
@@ -89,14 +90,17 @@ export default function CadastroTurboProduto() {
       if (response.data.sucesso) {
         const categorias = response.data.categorias || [];
         const arr = Array.isArray(categorias) ? categorias : [];
+        categoriasDisponiveisRef.current = arr;
         setCategoriasDisponiveis(arr);
         return arr;
       }
+      categoriasDisponiveisRef.current = [];
       setCategoriasDisponiveis([]);
       return [];
     } catch (error) {
       // Falha silenciosa — categorias são opcionais, não bloqueia o uso da tela
       console.warn('Não foi possível carregar categorias mercadológicas:', error?.message);
+      categoriasDisponiveisRef.current = [];
       setCategoriasDisponiveis([]);
       return [];
     }
@@ -418,7 +422,7 @@ export default function CadastroTurboProduto() {
                     // Prioridade 1: IA retornou o ID diretamente da lista de categorias
                     const categoriaIdIA = sugestoes.categoria_id;
                     if (categoriaIdIA) {
-                        catEncontrada = categoriasDisponiveis.find(c => c.id === categoriaIdIA);
+                        catEncontrada = categoriasDisponiveisRef.current.find(c => c.id === categoriaIdIA);
                     }
                     
                     // Prioridade 2: Fallback - buscar pelo nome sugerido
@@ -426,7 +430,7 @@ export default function CadastroTurboProduto() {
                         const categoriaSugerida = sugestoes.categoria_sugerida || sugestoes.categoria;
                         if (categoriaSugerida) {
                             const termo = categoriaSugerida.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                            catEncontrada = categoriasDisponiveis.find(c => {
+                            catEncontrada = categoriasDisponiveisRef.current.find(c => {
                                 const nome = (c.nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                                 const caminho = (c.caminho_completo || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                                 return nome === termo || caminho.includes(termo) || termo.includes(nome);
