@@ -169,6 +169,10 @@ export default function CadastroTurboProduto() {
       
       // Se há dados do XML: sempre mescla campos fiscais e preço de custo real da NF
       if (dadosXML) {
+        // Nome do produto do XML sempre tem prioridade sobre nome da API externa
+        if (dadosXML.nome) {
+          dados.nome_produto = dadosXML.nome;
+        }
         // Dados tributários do XML (sempre aplicar, independente de genérico)
         dados.cfop = dadosXML.cfop || dados.cfop || '';
         dados.cst_icms = dadosXML.cst || dados.cst_icms || '';
@@ -189,11 +193,10 @@ export default function CadastroTurboProduto() {
         }
       }
 
-      // 🔥 Se produto genérico (não encontrado na API), mescla também nome/ncm do XML
+      // 🔥 Se produto genérico (não encontrado na API), mescla também ncm/unidade do XML
       if (dadosXML && isGeneric) {
         console.log('📦 Mesclando dados do XML com resposta da API (produto genérico)...');
         dados.gtin = dadosXML.gtin || eanBusca || dados.gtin || '';
-        dados.nome_produto = dadosXML.nome || dados.nome_produto || '';
         dados.ncm = dadosXML.ncm || dados.ncm || '';
         dados.unidade_medida = dadosXML.unidade || dados.unidade_medida || 'UN';
         
