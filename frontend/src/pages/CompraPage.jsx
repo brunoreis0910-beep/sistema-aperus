@@ -309,6 +309,12 @@ function CompraPage() {
           selecionarProduto(index, produtoEncontrado.id_produto);
           toast.success(`✅ Produto "${produtoEncontrado.nome_produto}" selecionado automaticamente!`);
           
+          // Rolar até o item recém-cadastrado
+          setTimeout(() => {
+            const el = document.querySelector(`[data-item-index="${index}"]`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 400);
+
           // Salvar vínculo no cache (localStorage) usando chave NF-e
           if (form.dados_entrada) {
             salvarVinculoCache(form.dados_entrada, form.itens[index]._codigo || form.itens[index]._ean, produtoEncontrado.id_produto);
@@ -1991,6 +1997,7 @@ function CompraPage() {
                         <Fade in key={index}>
                           <Card
                             elevation={3}
+                            data-item-index={index}
                             sx={{
                               background: cardBg,
                               border: `2px solid ${borderColor}`,
