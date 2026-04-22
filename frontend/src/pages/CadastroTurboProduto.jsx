@@ -64,7 +64,7 @@ export default function CadastroTurboProduto() {
       
       // Inicia busca imediatamente (sem delay — dados do XML evitam chamadas externas)
       buscarProdutoPorEan(eanAuto, dadosXML);
-      buscaIniciadaRef.current = false;
+      // NÃO resetar aqui — o reset é feito no useEffect([ean]) após o re-render
       
       // Limpar sessionStorage após usar
       sessionStorage.removeItem('cadastro_turbo_ean_auto');
@@ -628,8 +628,11 @@ export default function CadastroTurboProduto() {
   // Auto-trigger search when EAN has sufficient length (bar code readers usually are fast)
   useEffect(() => {
     if (ean.length >= 8) {
-       // Se a busca foi iniciada pela inicialização automática (com dados XML), ignora
-       if (buscaIniciadaRef.current) return;
+       // Se a busca foi iniciada pela inicialização automática (com dados XML), ignora e reseta o bloqueio
+       if (buscaIniciadaRef.current) {
+         buscaIniciadaRef.current = false;
+         return;
+       }
        // Debounce para evitar múltiplas buscas enquanto digita/bipe
        const timer = setTimeout(() => {
            buscarProdutoPorEan(ean);
