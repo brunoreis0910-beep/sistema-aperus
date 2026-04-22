@@ -1309,7 +1309,9 @@ function CompraPage() {
           // Quantidade da NF = Quantidade do Estoque / Fração
           const qtdNF = parseFloat((qtdNoEstoque / fracao).toFixed(6));
           // Valor Unitário da NF = Custo Unitário do Estoque * Fração
-          const valorUnitNF = parseFloat((valorCustoEstoque * fracao).toFixed(6));
+          // Trunca para 6 casas decimais em vez de arredondar
+          const valorUnitNFCalculado = valorCustoEstoque * fracao;
+          const valorUnitNF = Math.trunc(valorUnitNFCalculado * 1000000) / 1000000;
 
           return {
             ...item,
