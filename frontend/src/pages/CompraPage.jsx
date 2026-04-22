@@ -544,21 +544,11 @@ function CompraPage() {
       
       let vinculosRestaurados = 0;
 
-      // Preencher formulário
-      setForm({
-        id_fornecedor: dados.id_fornecedor || '',
-        numero_documento: dados.numero_documento || '',
-        data_documento: dataDocumentoFormatada,
-        data_entrada: dados.data_entrada || new Date().toLocaleDateString('en-CA'),
-        dados_entrada: chaveNfe,   // chave NF-e 44 dígitos
-        xml_conteudo: dados.xml_conteudo || '',      // XML completo
-        id_operacao: form.id_operacao,
-        itens: dados.itens.map(item => {
-          // Verificar se há vínculo salvo para este item
+      // Preparar os itens antes de carregar dados (não depende da lista de fornecedores)
+      const itensMapeados = dados.itens.map(item => {
           const codigoItem = item.codigo || item.ean || '';
           const idProdutoVinculado = vinculosSalvos[codigoItem];
           
-          // Se encontrou vínculo salvo, usar ele em vez do que veio do backend
           let idProdutoFinal = item.id_produto || '';
           let produtoEncontrado = item.produto_encontrado || !!item.id_produto;
           
@@ -574,7 +564,6 @@ function CompraPage() {
           quantidade: item.quantidade || 1,
           valor_unitario: item.valor_unitario || 0,
           fracao_memorizada: item.fracao_memorizada || item.quantidade || 1,
-          // Campos editáveis de tributação (pré-preenchidos do XML)
           cfop: item.cfop || '',
           cst: item.cst || '',
           csosn: item.csosn || '',
@@ -584,11 +573,10 @@ function CompraPage() {
           vipi: item.vipi || '',
           vpis: item.vpis || '',
           vcofins: item.vcofins || '',
-          // Metadados somente-leitura do XML
           _codigo: item.codigo,
-          _ean: item.ean || '',  // Código EAN/barras
-          _descricao: item.descricao,  // Descrição original do XML
-          _nome_produto: item.nome_produto,  // Nome do produto cadastrado (se encontrado)
+          _ean: item.ean || '',
+          _descricao: item.descricao,
+          _nome_produto: item.nome_produto,
           _ncm: item.ncm,
           _unidade: item.unidade,
           _cfop: item.cfop,
@@ -601,10 +589,24 @@ function CompraPage() {
           _vipi: item.vipi,
           _vpis: item.vpis,
           _vcofins: item.vcofins,
-          // Metadados para colorir linha
           _encontrado: produtoEncontrado
         });
-        })
+      });
+
+      // Recarrega listas (fornecedores, produtos etc.) ANTES de definir o form
+      // para que o Select de fornecedor já encontre a opção ao renderizar
+      await carregarDados()
+
+      // Preencher formulário APÓS carregar listas — garante que o Select exiba o fornecedor
+      setForm({
+        id_fornecedor: dados.id_fornecedor || '',
+        numero_documento: dados.numero_documento || '',
+        data_documento: dataDocumentoFormatada,
+        data_entrada: dados.data_entrada || new Date().toLocaleDateString('en-CA'),
+        dados_entrada: chaveNfe,
+        xml_conteudo: dados.xml_conteudo || '',
+        id_operacao: form.id_operacao,
+        itens: itensMapeados,
       })
 
       // Mostrar mensagem se vínculos foram restaurados
@@ -613,8 +615,6 @@ function CompraPage() {
           autoClose: 3000
         });
       }
-
-      await carregarDados()
     } catch (error) {
       console.error('Erro ao importar XML:', error)
       setErro(error.response?.data?.error || 'Erro ao importar XML. Verifique o arquivo.')

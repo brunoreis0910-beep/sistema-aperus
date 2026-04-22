@@ -616,7 +616,59 @@ class CompraViewSet(viewsets.ModelViewSet):
                 if transporta is not None:
                     transportadora_nome = get_text(transporta, 'xNome', '')
                     transportadora_cnpj = get_text(transporta, 'CNPJ', '')
-            
+
+            # Buscar ou criar fornecedor ANTES do loop de itens para que a
+            # fração memorizada por fornecedor possa ser consultada durante o loop
+            fornecedor = None
+            fornecedor_criado = False
+            fornecedor_nome = ''
+            id_fornecedor = None
+
+            if cnpj_emit:
+                from .models import Fornecedor
+                fornecedor = Fornecedor.objects.filter(cpf_cnpj=cnpj_emit).first()
+
+                if fornecedor:
+                    fornecedor_nome = fornecedor.nome_razao_social
+                    id_fornecedor = fornecedor.id_fornecedor
+                elif nome_emit:
+                    enderEmit = get_node(emit, 'enderEmit')
+                    telefone = ''
+                    logradouro = ''
+                    numero = ''
+                    bairro = ''
+                    cidade = ''
+                    estado = ''
+                    cep = ''
+
+                    if enderEmit is not None:
+                        telefone = get_text(enderEmit, 'fone')
+                        logradouro = get_text(enderEmit, 'xLgr')
+                        numero = get_text(enderEmit, 'nro')
+                        bairro = get_text(enderEmit, 'xBairro')
+                        cidade = get_text(enderEmit, 'xMun')
+                        estado = get_text(enderEmit, 'UF')
+                        cep = get_text(enderEmit, 'CEP')
+
+                    try:
+                        fornecedor = Fornecedor.objects.create(
+                            nome_razao_social=nome_emit,
+                            nome_fantasia=nome_emit,
+                            cpf_cnpj=cnpj_emit,
+                            telefone=telefone or '',
+                            endereco=logradouro or '',
+                            numero=numero or '',
+                            bairro=bairro or '',
+                            cidade=cidade or '',
+                            estado=estado or '',
+                            cep=cep or '',
+                        )
+                        fornecedor_criado = True
+                        fornecedor_nome = nome_emit
+                        id_fornecedor = fornecedor.id_fornecedor
+                    except Exception as e:
+                        print(f"Erro ao criar fornecedor automático: {e}")
+
             # Itens
             itens_nf = []
             for det in det_list:
@@ -811,59 +863,6 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'produto_encontrado': produto_db is not None  # Flag indicando se o produto foi encontrado
                     })
             
-            # Buscar ou criar fornecedor
-            fornecedor = None
-            fornecedor_criado = False
-            fornecedor_nome = ''
-            id_fornecedor = None
-            
-            if cnpj_emit:
-                from .models import Fornecedor
-                fornecedor = Fornecedor.objects.filter(cpf_cnpj=cnpj_emit).first()
-                
-                # Se encontrou fornecedor existente, pega o nome
-                if fornecedor:
-                    fornecedor_nome = fornecedor.nome_razao_social
-                    id_fornecedor = fornecedor.id_fornecedor
-                # Se não existir, criar automaticamente
-                elif nome_emit:
-                    enderEmit = get_node(emit, 'enderEmit')
-                    telefone = ''
-                    logradouro = ''
-                    numero = ''
-                    bairro = ''
-                    cidade = ''
-                    estado = ''
-                    cep = ''
-                    
-                    if enderEmit is not None:
-                        telefone = get_text(enderEmit, 'fone')
-                        logradouro = get_text(enderEmit, 'xLgr')
-                        numero = get_text(enderEmit, 'nro')
-                        bairro = get_text(enderEmit, 'xBairro')
-                        cidade = get_text(enderEmit, 'xMun')
-                        estado = get_text(enderEmit, 'UF')
-                        cep = get_text(enderEmit, 'CEP')
-                    
-                    try:
-                        fornecedor = Fornecedor.objects.create(
-                            nome_razao_social=nome_emit,
-                            nome_fantasia=nome_emit,
-                            cpf_cnpj=cnpj_emit,
-                            telefone=telefone or '',
-                            endereco=logradouro or '',
-                            numero=numero or '',
-                            bairro=bairro or '',
-                            cidade=cidade or '',
-                            estado=estado or '',
-                            cep=cep or '',
-                        )
-                        fornecedor_criado = True
-                        fornecedor_nome = nome_emit
-                        id_fornecedor = fornecedor.id_fornecedor
-                    except Exception as e:
-                        print(f"Erro ao criar fornecedor automático: {e}")
-
             return Response({
                 'numero_nf': numero_nf,
                 'numero_documento': numero_nf,  # Alias para compatibilidade
