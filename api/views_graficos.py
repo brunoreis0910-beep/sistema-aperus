@@ -146,7 +146,7 @@ class GraficosComparativosView(APIView):
                 cursor.execute("""
                     SELECT COALESCE(SUM(valor_total_nota), 0) as total, COUNT(*) as quantidade
                     FROM compras
-                    WHERE DATE(data_documento) >= DATE(%s) AND DATE(data_documento) <= DATE(%s)
+                    WHERE DATE(data_emissao_nfe) >= DATE(%s) AND DATE(data_emissao_nfe) <= DATE(%s)
                 """, [mes_atual_inicio, mes_atual_fim])
                 compras_mes_atual = cursor.fetchone()
                 
@@ -154,7 +154,7 @@ class GraficosComparativosView(APIView):
                 cursor.execute("""
                     SELECT COALESCE(SUM(valor_total_nota), 0) as total, COUNT(*) as quantidade
                     FROM compras
-                    WHERE DATE(data_documento) >= DATE(%s) AND DATE(data_documento) <= DATE(%s)
+                    WHERE DATE(data_emissao_nfe) >= DATE(%s) AND DATE(data_emissao_nfe) <= DATE(%s)
                 """, [mes_anterior_inicio, mes_anterior_fim])
                 compras_mes_anterior = cursor.fetchone()
                 
@@ -162,7 +162,7 @@ class GraficosComparativosView(APIView):
                 cursor.execute("""
                     SELECT COALESCE(SUM(valor_total_nota), 0) as total, COUNT(*) as quantidade
                     FROM compras
-                    WHERE DATE(data_documento) >= DATE(%s) AND DATE(data_documento) <= DATE(%s)
+                    WHERE DATE(data_emissao_nfe) >= DATE(%s) AND DATE(data_emissao_nfe) <= DATE(%s)
                 """, [ano_passado_inicio, ano_passado_fim])
                 compras_ano_passado = cursor.fetchone()
                 
