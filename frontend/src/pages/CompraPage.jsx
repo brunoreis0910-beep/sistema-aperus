@@ -1042,9 +1042,13 @@ function CompraPage() {
           : (fracao !== 1 ? qtdNF * fracao : qtdNF)
         const valorUnitNF = parseFloat(item.valor_unitario) || 0
         // Custo por unidade de estoque: divide pelo fator de fração quando aplicável
-        const valorUnitEstoque = (qtdComFracao > qtdNF && fracao > 1)
-          ? valorUnitNF / fracao
-          : valorUnitNF
+        // Arredonda para 6 casas decimais para respeitar max_digits=15 do backend
+        const valorUnitEstoque = parseFloat(
+          ((qtdComFracao > qtdNF && fracao > 1)
+            ? valorUnitNF / fracao
+            : valorUnitNF
+          ).toFixed(6)
+        )
         // O total financeiro usa a quantidade e preço da NF (não muda o total da nota)
         const subtotal = qtdNF * valorUnitNF
         total += subtotal
