@@ -22,6 +22,11 @@ class CompraItemSerializer(serializers.ModelSerializer):
         representation = super().to_representation(instance)
         # Inclui valor_unitario como alias de valor_compra para compatibilidade com frontend
         representation['valor_unitario'] = representation.get('valor_compra')
+        # Retorna fração salva para o frontend restaurar os campos de fração
+        fracao = instance.fracao_aplicada
+        qtd_fracionada = instance.quantidade_fracionada
+        representation['fracao_memorizada'] = float(fracao) if fracao is not None else 1
+        representation['quantidade_com_fracao'] = float(qtd_fracionada) if qtd_fracionada is not None else None
         return representation
     
     def to_internal_value(self, data):
