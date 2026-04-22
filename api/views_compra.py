@@ -33,21 +33,18 @@ class CompraItemSerializer(serializers.ModelSerializer):
         """Garante que todos os valores numéricos sejam Decimal"""
         print(f'[DEBUG SERIALIZER] to_internal_value chamado com data: {data}')
         
-        # Remove campos extras do frontend que não pertencem ao serializer/modelo
-        data = {k: v for k, v in data.items() if k not in ('fracao_memorizada', 'quantidade_com_fracao')}
+        # Mantém campos extras do frontend para uso no create/update
+        # mas o DRF não vai tentar mapeá-los para o modelo
+        internal_value = super().to_internal_value(data)
 
-        # Força conversão para Decimal antes da validação do DRF
-        if 'quantidade' in data and data['quantidade'] is not None:
-            data['quantidade'] = str(data['quantidade'])
-        if 'valor_unitario' in data and data['valor_unitario'] is not None:
-            data['valor_unitario'] = str(data['valor_unitario'])
-        if 'desconto' in data and data['desconto'] is not None:
-            data['desconto'] = str(data['desconto'])
+        # Adiciona os campos extras de volta para que fiquem disponíveis no `validated_data`
+        if 'fracao_memorizada' in data:
+            internal_value['fracao_memorizada'] = data['fracao_memorizada']
+        if '_ean' in data:
+            internal_value['_ean'] = data['_ean']
             
-        result = super().to_internal_value(data)
-        print(f'[DEBUG SERIALIZER] to_internal_value retornou: {result}')
-        print(f'[DEBUG SERIALIZER] Tipos - quantidade: {type(result.get("quantidade"))}, valor_unitario: {type(result.get("valor_unitario"))}, desconto: {type(result.get("desconto"))}')
-        return result
+        print(f'[DEBUG SERIALIZER] to_internal_value retornou: {internal_value}')
+        return internal_value
 
 
 class CompraSerializer(serializers.ModelSerializer):
@@ -175,117 +172,72 @@ class CompraSerializer(serializers.ModelSerializer):
             
             for item in itens_data:
                 print(f'[DEBUG] Item recebido: {item}')
-                print(f'[DEBUG] Tipo do item: {type(item)}')
-                produto = item.get('id_produto', None)
-                
-                # Debug dos valores recebidos
-                print(f'[DEBUG] quantidade raw: {item.get("quantidade")} (tipo: {type(item.get("quantidade"))})')
-                print(f'[DEBUG] valor_unitario raw: {item.get("valor_unitario")} (tipo: {type(item.get("valor_unitario"))})')
-                print(f'[DEBUG] desconto raw: {item.get("desconto")} (tipo: {type(item.get("desconto"))})')
-                
-                qtd_raw = item.get('quantidade') or 0
-                if isinstance(qtd_raw, Decimal):
-                    quantidade = qtd_raw
-                else:
-                    try:
-                        quantidade = Decimal(str(qtd_raw))
-                    except (InvalidOperation, TypeError):
-                        quantidade = Decimal('0')
-                
-                # Aceita tanto valor_unitario (frontend) quanto valor_compra (backend)
-                valor_compra_raw = item.get('valor_unitario') or item.get('valor_compra') or 0
-                if isinstance(valor_compra_raw, Decimal):
-                    valor_compra = valor_compra_raw
-                else:
-                    try:
-                        valor_compra = Decimal(str(valor_compra_raw))
-                    except (InvalidOperation, TypeError):
-                        valor_compra = Decimal('0')
-                
-                desconto_raw = item.get('desconto') or 0
-                if isinstance(desconto_raw, Decimal):
-                    desconto = desconto_raw
-                else:
-                    try:
-                        desconto = Decimal(str(desconto_raw))
-                    except (InvalidOperation, TypeError):
-                        desconto = Decimal('0')
+                produto = item.get('id_produto')
 
-                # Garante que todos os valores são Decimal antes da operação com quantize
-                if not isinstance(quantidade, Decimal):
-                    quantidade = Decimal(str(quantidade))
-                quantidade = quantidade.quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+                # Frontend envia 'quantidade' e 'valor_unitario' como da NF.
+                # O backend deve calcular a quantidade de estoque e o custo unitário de estoque.
                 
-                if not isinstance(valor_compra, Decimal):
-                    valor_compra = Decimal(str(valor_compra))
-                valor_compra = valor_compra.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                qtd_nf = Decimal(str(item.get('quantidade', '0')))
+                valor_unit_nf = Decimal(str(item.get('valor_unitario', '0')))
+                fracao = Decimal(str(item.get('fracao_memorizada', '1')))
+                desconto = Decimal(str(item.get('desconto', '0')))
+
+                # Calcula a quantidade que vai para o estoque
+                qtd_estoque = qtd_nf * fracao
                 
-                if not isinstance(desconto, Decimal):
-                    desconto = Decimal(str(desconto))
-                desconto = desconto.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                # Calcula o custo unitário para o estoque
+                # Se a fração for > 1, o custo unitário é dividido.
+                # Ex: Caixa com 6 custa R$60 (valor_unit_nf). Custo por unidade é R$10.
+                custo_unit_estoque = valor_unit_nf / fracao if fracao > 1 else valor_unit_nf
                 
-                print(f'[DEBUG_MULT] Antes - qtd: {quantidade} ({type(quantidade)}), vlr: {valor_compra} ({type(valor_compra)}), desc: {desconto} ({type(desconto)})')
-                valor_total_item = (quantidade * valor_compra) - desconto
-                print(f'[DEBUG_MULT] Depois - total: {valor_total_item}')
-                
-                # Preparar dados do item
+                # O valor total do item na compra é sempre baseado nos valores da NF
+                valor_total_item = (qtd_nf * valor_unit_nf) - desconto
+
+                print(f'[DEBUG_CALC] Qtd NF: {qtd_nf}, Vlr Unit NF: {valor_unit_nf}, Fração: {fracao}')
+                print(f'[DEBUG_CALC] -> Qtd Estoque: {qtd_estoque}, Custo Unit Estoque: {custo_unit_estoque}')
+                print(f'[DEBUG_CALC] -> Valor Total Item: {valor_total_item}')
+
+                # Preparar dados do item para salvar no banco
                 item_data = {
                     'id_compra': compra,
                     'id_produto': produto,
-                    'quantidade': quantidade,
-                    'valor_compra': valor_compra,
-                    'valor_total': valor_total_item,
-                    'desconto': desconto
+                    'quantidade': qtd_estoque,          # Salva a quantidade convertida para o estoque
+                    'valor_compra': custo_unit_estoque, # Salva o custo unitário de estoque
+                    'valor_total': valor_total_item,    # Valor total do item (baseado na NF)
+                    'desconto': desconto,
+                    'fracao_aplicada': fracao,
+                    'quantidade_fracionada': qtd_estoque if fracao > 1 else None,
                 }
-                
-                # Se houver fração aplicada (vinda da importação XML), salvar também
-                if 'quantidade_com_fracao' in item and item['quantidade_com_fracao']:
-                    try:
-                        qtd_fracionada = Decimal(str(item['quantidade_com_fracao']))
-                        item_data['quantidade_fracionada'] = qtd_fracionada.quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
-                    except (InvalidOperation, TypeError):
-                        pass
-                
-                if 'fracao_memorizada' in item and item['fracao_memorizada']:
-                    try:
-                        fracao = Decimal(str(item['fracao_memorizada']))
-                        item_data['fracao_aplicada'] = fracao.quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
-                    except (InvalidOperation, TypeError):
-                        pass
                 
                 print(f'[DEBUG_CREATE] Criando item - {item_data}')
                 CompraItem.objects.create(**item_data)
                 print('[DEBUG_CREATE] Item criado com sucesso!')
 
                 # Salvar/atualizar fração por fornecedor+produto quando fracao > 1
-                fracao_val = item.get('fracao_memorizada')
-                ean_val = item.get('_ean') or item.get('ean') or ''
-                if fracao_val and produto and compra.id_fornecedor and ean_val:
+                ean_val = item.get('_ean') or '' # O _ean é passado pelo frontend
+                if fracao > 1 and produto and compra.id_fornecedor and ean_val:
                     try:
                         from .models import FornecedorProdutoFracao
-                        fracao_dec = Decimal(str(fracao_val))
-                        if fracao_dec > 1:
-                            FornecedorProdutoFracao.objects.update_or_create(
-                                fornecedor=compra.id_fornecedor,
-                                produto=produto,
-                                gtin=ean_val,
-                                defaults={'fracao': fracao_dec}
-                            )
+                        FornecedorProdutoFracao.objects.update_or_create(
+                            fornecedor=compra.id_fornecedor,
+                            produto=produto,
+                            gtin=ean_val,
+                            defaults={'fracao': fracao}
+                        )
+                        print(f'[FRACAO] Fração {fracao} salva para Fornecedor {compra.id_fornecedor.id} e Produto {produto.id}')
                     except Exception as _fe:
                         print(f'[FRACAO] erro ao salvar fracao: {_fe}')
                 
                 # Acumula totais
-                total = total + valor_total_item
-                desconto_total = desconto_total + desconto
-                print(f'[DEBUG_TOTAL] Total acumulado: {total} ({type(total)}), Desconto total: {desconto_total}')
-                
-
+                total += valor_total_item
+                desconto_total += desconto
+                print(f'[DEBUG_TOTAL] Total acumulado: {total}, Desconto total: {desconto_total}')
 
                 # Atualiza estoque
                 if produto and operacao:
                     print(f'[DEBUG_IF] Entrando no if - produto: {produto}, operacao: {operacao}')
                     deposito_id = getattr(operacao, 'id_deposito_incremento', None) or 1
-                    print(f'[DEBUG_IF] deposito_id: {deposito_id} (tipo: {type(deposito_id)})')
+                    print(f'[DEBUG_IF] deposito_id: {deposito_id}')
                     print(f'[DEBUG_ANTES_QUERY] Vai buscar estoque - produto.pk={produto.pk}, deposito_id={deposito_id}')
 
                     try:

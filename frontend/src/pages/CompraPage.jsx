@@ -1067,13 +1067,11 @@ function CompraPage() {
         valor_total: total.toFixed(6),
         itens: itensCalculados.map(item => ({
           id_produto: parseInt(item.id_produto),
-          // Quantidade para estoque: usa a quantidade convertida pela fração
-          quantidade: item.qtdComFracao,
-          // Valor unitário por unidade de estoque (após divisão pela fração)
-          valor_unitario: item.valorUnitEstoque,
+          quantidade: parseFloat(item.quantidade) || 0, // Sempre envia a quantidade da NF
+          valor_unitario: parseFloat(item.valor_unitario) || 0, // Sempre envia o valor unitário da NF
           valor_total: parseFloat(item.subtotal.toFixed(6)),
           fracao_memorizada: parseFloat(item.fracao_memorizada) || 1,
-          quantidade_com_fracao: item.qtdComFracao !== (parseFloat(item.quantidade) || 0) ? item.qtdComFracao : null
+          // O backend agora calcula a quantidade_com_fracao, não precisa mais enviar
         }))
       }
 
@@ -1301,34 +1299,35 @@ function CompraPage() {
       // Preenche o formulário com os dados da compra
       // Restaura a representação original da NF: reverte a expansão de fração
       const itensRestaurados = (compraCompleta.itens || []).map(item => {
-        const fracao = parseFloat(item.fracao_memorizada) || 1
-        // qtdComFracao = quantidade expandida (unidades de estoque)
-        // Só reverte se o backend confirmou que houve expansão (quantidade_com_fracao != null)
-        // OU se fracao > 1 e a quantidade já é o valor expandido
-        const qtdComFracao = item.quantidade_com_fracao != null
-          ? parseFloat(item.quantidade_com_fracao)
-          : null
-        if (fracao > 1 && qtdComFracao != null) {
-          // Backend retornou quantidade_com_fracao: a quantidade do item já é qtdComFracao
-          // Reverte para quantidade NF (ex: 12 / 6 = 2 caixas)
-          const qtdNF = parseFloat((qtdComFracao / fracao).toFixed(6))
-          const valorUnitStored = parseFloat(item.valor_unitario) || 0
-          // Reverte para valor unitário NF (ex: 4.813333 * 6 = 28.88)
-          const valorNF = parseFloat((valorUnitStored * fracao).toFixed(6))
+        const fracao = parseFloat(item.fracao_memorizada) || 1;
+        const qtdNoEstoque = parseFloat(item.quantidade) || 0; // Esta é a quantidade que foi para o estoque
+        const valorCustoEstoque = parseFloat(item.valor_unitario) || 0; // Custo unitário no estoque
+
+        // Se a fração é maior que 1, significa que a quantidade e o valor foram convertidos.
+        // Precisamos reverter para os valores da Nota Fiscal.
+        if (fracao > 1) {
+          // Quantidade da NF = Quantidade do Estoque / Fração
+          const qtdNF = parseFloat((qtdNoEstoque / fracao).toFixed(6));
+          // Valor Unitário da NF = Custo Unitário do Estoque * Fração
+          const valorUnitNF = parseFloat((valorCustoEstoque * fracao).toFixed(6));
+
           return {
             ...item,
-            quantidade: qtdNF,
-            valor_unitario: valorNF,
-            // quantidade_com_fracao mantida para salvarCompra reusar
-          }
+            quantidade: qtdNF, // Restaura a quantidade original da NF (ex: 2 caixas)
+            valor_unitario: valorUnitNF, // Restaura o valor unitário original da NF (ex: R$ 60,00 por caixa)
+            fracao_memorizada: fracao, // Mantém a fração (ex: 6 unidades por caixa)
+            // A quantidade_com_fracao é recalculada no save, não precisa restaurar aqui
+          };
         }
-        // Se não houve expansão, o valor unitário já é o da NF
+
+        // Se não houve expansão (fração é 1), os valores já estão corretos.
         return {
           ...item,
+          quantidade: qtdNoEstoque,
+          valor_unitario: valorCustoEstoque,
           fracao_memorizada: fracao,
-          quantidade_com_fracao: qtdComFracao
-        }
-      })
+        };
+      });
 
       setForm({
         id_fornecedor: String(compraCompleta.id_fornecedor || ''),
