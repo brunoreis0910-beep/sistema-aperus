@@ -133,15 +133,20 @@ def cadastro_turbo_produto(request):
     # Suporta tanto GET (?ean=...) quanto POST (body)
     ean = request.GET.get('ean') or request.data.get('ean', '')
     ean = str(ean).strip()
-    
-    print(f"[CADASTRO TURBO] EAN extraído: '{ean}'")
-    
+
+    # Dados do XML passados pelo frontend (evita chamadas às APIs externas)
+    xml_nome = request.GET.get('xml_nome', '').strip()
+    xml_ncm  = request.GET.get('xml_ncm', '').strip()
+    xml_unidade = request.GET.get('xml_unidade', 'UN').strip() or 'UN'
+
+    print(f"[CADASTRO TURBO] EAN extraído: '{ean}' | xml_nome: '{xml_nome}'")
+
     if not ean:
         return Response({
             'sucesso': False,
             'mensagem': 'EAN não informado'
         }, status=status.HTTP_400_BAD_REQUEST)
-    
+
     # Verifica se já existe no banco local
     produto_existente = Produto.objects.filter(gtin=ean).first()
     if produto_existente:
@@ -158,6 +163,53 @@ def cadastro_turbo_produto(request):
             'fonte': 'BANCO'
         })
     
+    # ─── ATALHO: dados completos do XML já disponíveis → pula APIs externas ────
+    if xml_nome:
+        logger.info(f"[CADASTRO TURBO] XML mode: retornando dados do XML sem chamar APIs externas")
+        response_data = {
+            'sucesso': True,
+            'produto_existente': False,
+            'dados': {
+                'gtin': ean,
+                'nome_produto': xml_nome,
+                'descricao': xml_nome,
+                'marca': '',
+                'ncm': xml_ncm,
+                'unidade_medida': xml_unidade,
+                'peso_unitario': 0,
+                'imagem_url_externa': '',
+                'categoria_sugerida': '',
+                'categoria_mercadologica_id': None,
+                'preco_venda': 0.0,
+                'preco_custo': 0.0,
+                'classificacao': '',
+                'categoria': '',
+                'id_grupo': None,
+            },
+            'fonte': 'XML',
+            'is_generic': False,
+            'mensagem': 'Dados carregados do XML da nota fiscal.',
+            'cache_hit': False,
+        }
+        # Busca imagem em background (não bloqueia)
+        try:
+            import threading, uuid
+            job_id = str(uuid.uuid4())
+            response_data['imagem_job_id'] = job_id
+            def _bg():
+                try:
+                    img = _buscar_imagem_produto_ia(xml_nome, ean)
+                    if img:
+                        from django.core.cache import cache
+                        cache.set(f'imagem_job_{job_id}', img, timeout=120)
+                except Exception as e:
+                    print(f"[TURBO BG XML] Erro thread imagem: {e}")
+            threading.Thread(target=_bg, daemon=True).start()
+        except Exception:
+            pass
+        return Response(response_data)
+    # ────────────────────────────────────────────────────────────────────────────
+
     # Busca na API externa
     service = ProdutoEANService()
     resultado = service.buscar_produto_por_ean(ean)

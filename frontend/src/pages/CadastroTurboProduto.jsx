@@ -61,11 +61,9 @@ export default function CadastroTurboProduto() {
       buscaIniciadaRef.current = true; // Bloqueia o useEffect do ean para não disparar segunda busca
       setEan(eanAuto);
       
-      // Fazer busca após um pequeno delay para garantir que o estado foi atualizado
-      setTimeout(() => {
-        buscarProdutoPorEan(eanAuto, dadosXML);
-        buscaIniciadaRef.current = false; // Libera após a busca real iniciar
-      }, 600);
+      // Inicia busca imediatamente (sem delay — dados do XML evitam chamadas externas)
+      buscarProdutoPorEan(eanAuto, dadosXML);
+      buscaIniciadaRef.current = false;
       
       // Limpar sessionStorage após usar
       sessionStorage.removeItem('cadastro_turbo_ean_auto');
@@ -136,11 +134,16 @@ export default function CadastroTurboProduto() {
 
     setLoading(true);
     try {
-      // Passa nome do XML ao backend para busca de imagem mesmo em produtos genéricos
-      const nomeSugerido = dadosXML?.nome ? encodeURIComponent(dadosXML.nome) : '';
-      const urlTurbo = nomeSugerido
-        ? `/api/produtos/cadastro-turbo/?ean=${eanBusca}&nome_sugerido=${nomeSugerido}`
-        : `/api/produtos/cadastro-turbo/?ean=${eanBusca}`;
+      // Quando há dados do XML, passa xml_nome/xml_ncm para o backend pular APIs externas
+      let urlTurbo = `/api/produtos/cadastro-turbo/?ean=${eanBusca}`;
+      if (dadosXML?.nome) {
+        urlTurbo += `&xml_nome=${encodeURIComponent(dadosXML.nome)}`;
+        if (dadosXML.ncm)     urlTurbo += `&xml_ncm=${encodeURIComponent(dadosXML.ncm)}`;
+        if (dadosXML.unidade) urlTurbo += `&xml_unidade=${encodeURIComponent(dadosXML.unidade)}`;
+      } else {
+        const nomeSugerido = dadosXML?.nome ? encodeURIComponent(dadosXML.nome) : '';
+        if (nomeSugerido) urlTurbo += `&nome_sugerido=${nomeSugerido}`;
+      }
       const response = await api.get(urlTurbo);
       
       // Auto-focus if generic
@@ -193,8 +196,8 @@ export default function CadastroTurboProduto() {
         }
       }
 
-      // 🔥 Se produto genérico (não encontrado na API), mescla também ncm/unidade do XML
-      if (dadosXML && isGeneric) {
+      // 🔥 Se produto genérico OU origem XML, mescla ncm/unidade/gtin do XML
+      if (dadosXML && (isGeneric || fonteResposta === 'XML')) {
         console.log('📦 Mesclando dados do XML com resposta da API (produto genérico)...');
         dados.gtin = dadosXML.gtin || eanBusca || dados.gtin || '';
         dados.ncm = dadosXML.ncm || dados.ncm || '';
