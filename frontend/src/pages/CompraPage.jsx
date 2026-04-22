@@ -1278,6 +1278,26 @@ function CompraPage() {
       const compraCompleta = response.data
       
       // Preenche o formulário com os dados da compra
+      // Restaura a representação original da NF: reverte a expansão de fração
+      const itensRestaurados = (compraCompleta.itens || []).map(item => {
+        const fracao = parseFloat(item.fracao_memorizada) || 1
+        if (fracao > 1) {
+          const qtdExpanded = parseFloat(item.quantidade) || 0
+          const valorUnitStored = parseFloat(item.valor_unitario) || 0
+          // Reverte para quantidade NF (ex: 12 / 6 = 2 caixas)
+          const qtdNF = parseFloat((qtdExpanded / fracao).toFixed(6))
+          // Reverte para valor unitário NF (ex: 4.81 * 6 = 28.86)
+          const valorNF = parseFloat((valorUnitStored * fracao).toFixed(6))
+          return {
+            ...item,
+            quantidade: qtdNF,
+            valor_unitario: valorNF,
+            // quantidade_com_fracao já vem do backend (ex: 12) — mantém para salvarCompra
+          }
+        }
+        return item
+      })
+
       setForm({
         id_fornecedor: compraCompleta.id_fornecedor || '',
         id_operacao: compraCompleta.id_operacao || '',
@@ -1285,7 +1305,7 @@ function CompraPage() {
         data_documento: compraCompleta.data_documento ? compraCompleta.data_documento.split('T')[0] : '',
         data_entrada: compraCompleta.data_entrada || new Date().toLocaleDateString('en-CA'),
         dados_entrada: compraCompleta.dados_entrada || '',
-        itens: compraCompleta.itens || []
+        itens: itensRestaurados
       })
       
       // Define que está editando
