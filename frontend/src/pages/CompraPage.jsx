@@ -1035,11 +1035,20 @@ function CompraPage() {
       // Calcular total apenas dos itens válidos
       let total = 0
       const itensCalculados = itensValidos.map(item => {
-        const qtd = parseFloat(item.quantidade) || 0
-        const valorUnit = parseFloat(item.valor_unitario) || 0
-        const subtotal = qtd * valorUnit
+        const qtdNF = parseFloat(item.quantidade) || 0
+        const fracao = parseFloat(item.fracao_memorizada) || 1
+        const qtdComFracao = (item.quantidade_com_fracao != null)
+          ? parseFloat(item.quantidade_com_fracao)
+          : (fracao !== 1 ? qtdNF * fracao : qtdNF)
+        const valorUnitNF = parseFloat(item.valor_unitario) || 0
+        // Custo por unidade de estoque: divide pelo fator de fração quando aplicável
+        const valorUnitEstoque = (qtdComFracao > qtdNF && fracao > 1)
+          ? valorUnitNF / fracao
+          : valorUnitNF
+        // O total financeiro usa a quantidade e preço da NF (não muda o total da nota)
+        const subtotal = qtdNF * valorUnitNF
         total += subtotal
-        return { ...item, subtotal }
+        return { ...item, qtdComFracao, valorUnitEstoque, subtotal }
       })
 
       const payload = {
@@ -1053,9 +1062,13 @@ function CompraPage() {
         valor_total: total.toFixed(6),
         itens: itensCalculados.map(item => ({
           id_produto: parseInt(item.id_produto),
-          quantidade: parseFloat(item.quantidade),
-          valor_unitario: parseFloat(item.valor_unitario),
-          valor_total: parseFloat(item.subtotal.toFixed(6))
+          // Quantidade para estoque: usa a quantidade convertida pela fração
+          quantidade: item.qtdComFracao,
+          // Valor unitário por unidade de estoque (após divisão pela fração)
+          valor_unitario: item.valorUnitEstoque,
+          valor_total: parseFloat(item.subtotal.toFixed(6)),
+          fracao_memorizada: parseFloat(item.fracao_memorizada) || 1,
+          quantidade_com_fracao: item.qtdComFracao !== (parseFloat(item.quantidade) || 0) ? item.qtdComFracao : null
         }))
       }
 
