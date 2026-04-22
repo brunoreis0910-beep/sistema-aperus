@@ -256,6 +256,23 @@ class CompraSerializer(serializers.ModelSerializer):
                 print(f'[DEBUG_CREATE] Criando item - {item_data}')
                 CompraItem.objects.create(**item_data)
                 print('[DEBUG_CREATE] Item criado com sucesso!')
+
+                # Salvar/atualizar fração por fornecedor+produto quando fracao > 1
+                fracao_val = item.get('fracao_memorizada')
+                ean_val = item.get('_ean') or item.get('ean') or ''
+                if fracao_val and produto and compra.id_fornecedor and ean_val:
+                    try:
+                        from .models import FornecedorProdutoFracao
+                        fracao_dec = Decimal(str(fracao_val))
+                        if fracao_dec > 1:
+                            FornecedorProdutoFracao.objects.update_or_create(
+                                fornecedor=compra.id_fornecedor,
+                                produto=produto,
+                                gtin=ean_val,
+                                defaults={'fracao': fracao_dec}
+                            )
+                    except Exception as _fe:
+                        print(f'[FRACAO] erro ao salvar fracao: {_fe}')
                 
                 # Acumula totais
                 total = total + valor_total_item
@@ -423,6 +440,25 @@ class CompraSerializer(serializers.ModelSerializer):
                         pass
 
                 CompraItem.objects.create(id_compra=instance, **item_data)
+
+                # Salvar/atualizar fração por fornecedor+produto quando fracao > 1
+                if fracao_memorizada and instance.id_fornecedor:
+                    id_produto_obj = item_data.get('id_produto')
+                    ean_update = item_data.get('_ean') or item_data.get('ean') or ''
+                    # Se não veio EAN no item_data, não salva (sem GTIN não faz sentido)
+                    if id_produto_obj and ean_update:
+                        try:
+                            from .models import FornecedorProdutoFracao
+                            fracao_dec = Decimal(str(fracao_memorizada))
+                            if fracao_dec > 1:
+                                FornecedorProdutoFracao.objects.update_or_create(
+                                    fornecedor=instance.id_fornecedor,
+                                    produto=id_produto_obj,
+                                    gtin=ean_update,
+                                    defaults={'fracao': fracao_dec}
+                                )
+                        except Exception as _fe:
+                            print(f'[FRACAO] erro ao salvar fracao no update: {_fe}')
 
                 # Atualizar estoque com novo item
                 id_produto = item_data['id_produto']

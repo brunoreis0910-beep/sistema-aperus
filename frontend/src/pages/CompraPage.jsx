@@ -569,7 +569,8 @@ function CompraPage() {
           id_produto: idProdutoFinal,
           quantidade: item.quantidade || 1,
           valor_unitario: item.valor_unitario || 0,
-          fracao_memorizada: item.fracao_memorizada || item.quantidade || 1,
+          fracao_memorizada: item.fracao_memorizada || 1,
+          quantidade_com_fracao: item.quantidade_com_fracao != null ? item.quantidade_com_fracao : null,
           cfop: item.cfop || '',
           cst: item.cst || '',
           csosn: item.csosn || '',
@@ -1150,6 +1151,26 @@ function CompraPage() {
         console.log('✅ COMPRA CRIADA:', response.data)
       }
 
+      // Salvar frações por fornecedor+produto (para auto-aplicar na próxima importação XML)
+      const idFornecedor = parseInt(form.id_fornecedor)
+      if (idFornecedor) {
+        for (const item of itensCalculados) {
+          const fracao = parseFloat(item.fracao_memorizada) || 1
+          const ean = item._ean || ''
+          const idProduto = parseInt(item.id_produto)
+          if (fracao > 1 && ean && idProduto) {
+            try {
+              await axiosInstance.post('/compras/salvar-fracao/', {
+                id_fornecedor: idFornecedor,
+                id_produto: idProduto,
+                gtin: ean,
+                fracao: fracao
+              })
+            } catch (_) { /* ignora erro de fração, não cancela o save */ }
+          }
+        }
+      }
+
       // Verifica se deve gerar financeiro (apenas para novas compras)
       const geraFinanceiro = !editandoId && (operacaoSelecionada?.gera_financeiro || response.data?.gerou_financeiro)
 
@@ -1281,18 +1302,24 @@ function CompraPage() {
       // Restaura a representação original da NF: reverte a expansão de fração
       const itensRestaurados = (compraCompleta.itens || []).map(item => {
         const fracao = parseFloat(item.fracao_memorizada) || 1
-        if (fracao > 1) {
-          const qtdExpanded = parseFloat(item.quantidade) || 0
-          const valorUnitStored = parseFloat(item.valor_unitario) || 0
+        // qtdComFracao = quantidade expandida (unidades de estoque)
+        // Só reverte se o backend confirmou que houve expansão (quantidade_com_fracao != null)
+        // OU se fracao > 1 e a quantidade já é o valor expandido
+        const qtdComFracao = item.quantidade_com_fracao != null
+          ? parseFloat(item.quantidade_com_fracao)
+          : null
+        if (fracao > 1 && qtdComFracao != null) {
+          // Backend retornou quantidade_com_fracao: a quantidade do item já é qtdComFracao
           // Reverte para quantidade NF (ex: 12 / 6 = 2 caixas)
-          const qtdNF = parseFloat((qtdExpanded / fracao).toFixed(6))
-          // Reverte para valor unitário NF (ex: 4.81 * 6 = 28.86)
+          const qtdNF = parseFloat((qtdComFracao / fracao).toFixed(6))
+          const valorUnitStored = parseFloat(item.valor_unitario) || 0
+          // Reverte para valor unitário NF (ex: 4.813333 * 6 = 28.88)
           const valorNF = parseFloat((valorUnitStored * fracao).toFixed(6))
           return {
             ...item,
             quantidade: qtdNF,
             valor_unitario: valorNF,
-            // quantidade_com_fracao já vem do backend (ex: 12) — mantém para salvarCompra
+            // quantidade_com_fracao mantida para salvarCompra reusar
           }
         }
         return item
@@ -1445,7 +1472,8 @@ function CompraPage() {
           id_produto: item.id_produto || '',
           quantidade: item.quantidade || 1,
           valor_unitario: item.valor_unitario || 0,
-          fracao_memorizada: item.fracao_memorizada || item.quantidade || 1,
+          fracao_memorizada: item.fracao_memorizada || 1,
+          quantidade_com_fracao: item.quantidade_com_fracao != null ? item.quantidade_com_fracao : null,
           cfop: item.cfop || '',
           cst: item.cst || '',
           csosn: item.csosn || '',
@@ -2358,7 +2386,7 @@ function CompraPage() {
                                     required
                                     type="number"
                                     label="Valor Unit. *"
-                                    value={item.valor_unitario}
+                                    value={item.valor_unitario != null ? parseFloat(parseFloat(item.valor_unitario).toFixed(6)) : ''}
                                     onChange={(e) => atualizarItem(index, 'valor_unitario', e.target.value)}
                                     inputProps={{ min: 0, step: 0.000001 }}
                                     variant="outlined"
