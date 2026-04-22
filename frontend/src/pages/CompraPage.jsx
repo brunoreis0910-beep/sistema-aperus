@@ -1322,15 +1322,20 @@ function CompraPage() {
             // quantidade_com_fracao mantida para salvarCompra reusar
           }
         }
-        return item
+        // Se não houve expansão, o valor unitário já é o da NF
+        return {
+          ...item,
+          fracao_memorizada: fracao,
+          quantidade_com_fracao: qtdComFracao
+        }
       })
 
       setForm({
-        id_fornecedor: compraCompleta.id_fornecedor || '',
+        id_fornecedor: String(compraCompleta.id_fornecedor || ''),
         id_operacao: compraCompleta.id_operacao || '',
         numero_documento: compraCompleta.numero_documento || '',
         data_documento: compraCompleta.data_documento ? compraCompleta.data_documento.split('T')[0] : '',
-        data_entrada: compraCompleta.data_entrada || new Date().toLocaleDateString('en-CA'),
+        data_entrada: compraCompleta.data_entrada ? compraCompleta.data_entrada.split('T')[0] : new Date().toLocaleDateString('en-CA'),
         dados_entrada: compraCompleta.dados_entrada || '',
         itens: itensRestaurados
       })
