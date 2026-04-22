@@ -351,10 +351,14 @@ class CompraSerializer(serializers.ModelSerializer):
         # Extrair itens do validated_data
         itens_data = validated_data.pop('itens', [])
         
+        # Determinar depósito da operação atual (antes de atualizar)
+        operacao_atual = instance.id_operacao
+        deposito_id = getattr(operacao_atual, 'id_deposito_incremento', None) or 1
+
         # Reverter estoque dos itens antigos
         with transaction.atomic():
             for item_antigo in instance.itens.all():
-                estoque = Estoque.objects.filter(id_produto=item_antigo.id_produto).first()
+                estoque = Estoque.objects.filter(id_produto=item_antigo.id_produto, id_deposito_id=deposito_id).first()
                 if estoque:
                     # Reverter quantidade antiga
                     qtd_antiga = Decimal(str(item_antigo.quantidade))
@@ -386,7 +390,11 @@ class CompraSerializer(serializers.ModelSerializer):
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
             instance.save()
-            
+
+            # Depósito da nova operação (pode ter mudado)
+            nova_operacao = instance.id_operacao
+            novo_deposito_id = getattr(nova_operacao, 'id_deposito_incremento', None) or 1
+
             # Adicionar novos itens e atualizar estoque
             for item_data in itens_data:
                 # Extrair campos extras que não pertencem ao modelo CompraItem
@@ -410,32 +418,37 @@ class CompraSerializer(serializers.ModelSerializer):
                         pass
 
                 CompraItem.objects.create(id_compra=instance, **item_data)
-                
+
                 # Atualizar estoque com novo item
                 id_produto = item_data['id_produto']
                 quantidade = Decimal(str(item_data['quantidade']))
-                valor_compra = Decimal(str(item_data.get('valor_compra') or item_data.get('valor_unitario')))
-                
-                estoque_obj, created = Estoque.objects.get_or_create(
-                    id_produto=id_produto,
-                    defaults={'quantidade': Decimal('0'), 'custo_medio': Decimal('0'), 'valor_total': Decimal('0')}
-                )
-                
-                qtd_estoque_decimal = Decimal(str(estoque_obj.quantidade or 0))
-                custo_medio_atual = Decimal(str(estoque_obj.custo_medio or 0))
-                
-                nova_quantidade = qtd_estoque_decimal + quantidade
-                
-                # Calcula novo custo médio ponderado
-                valor_estoque_atual = qtd_estoque_decimal * custo_medio_atual
-                valor_nova_compra = quantidade * valor_compra
-                novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else valor_compra
-                
-                estoque_obj.quantidade = nova_quantidade
-                estoque_obj.custo_medio = novo_custo_medio.quantize(Decimal('0.0001'))
-                estoque_obj.valor_ultima_compra = valor_compra
-                estoque_obj.valor_total = nova_quantidade * novo_custo_medio
-                estoque_obj.save()
+                valor_compra = Decimal(str(item_data.get('valor_compra') or item_data.get('valor_unitario') or 0))
+
+                try:
+                    estoque_obj = Estoque.objects.get(
+                        id_produto=id_produto,
+                        id_deposito_id=novo_deposito_id
+                    )
+                    qtd_estoque_decimal = Decimal(str(estoque_obj.quantidade or 0))
+                    custo_medio_atual = Decimal(str(estoque_obj.custo_medio or 0))
+                    nova_quantidade = qtd_estoque_decimal + quantidade
+                    valor_estoque_atual = qtd_estoque_decimal * custo_medio_atual
+                    valor_nova_compra = quantidade * valor_compra
+                    novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else valor_compra
+                    estoque_obj.quantidade = nova_quantidade
+                    estoque_obj.custo_medio = novo_custo_medio.quantize(Decimal('0.0001'))
+                    estoque_obj.valor_ultima_compra = valor_compra
+                    estoque_obj.valor_total = nova_quantidade * novo_custo_medio
+                    estoque_obj.save()
+                except Estoque.DoesNotExist:
+                    Estoque.objects.create(
+                        id_produto=id_produto,
+                        id_deposito_id=novo_deposito_id,
+                        quantidade=quantidade,
+                        custo_medio=valor_compra,
+                        valor_ultima_compra=valor_compra,
+                        valor_total=quantidade * valor_compra
+                    )
             
             # Deletar financeiros pendentes antigos
             financeiros.filter(status_conta='Pendente').delete()
