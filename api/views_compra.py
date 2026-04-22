@@ -28,6 +28,9 @@ class CompraItemSerializer(serializers.ModelSerializer):
         """Garante que todos os valores numéricos sejam Decimal"""
         print(f'[DEBUG SERIALIZER] to_internal_value chamado com data: {data}')
         
+        # Remove campos extras do frontend que não pertencem ao serializer/modelo
+        data = {k: v for k, v in data.items() if k not in ('fracao_memorizada', 'quantidade_com_fracao')}
+
         # Força conversão para Decimal antes da validação do DRF
         if 'quantidade' in data and data['quantidade'] is not None:
             data['quantidade'] = str(data['quantidade'])
@@ -386,6 +389,26 @@ class CompraSerializer(serializers.ModelSerializer):
             
             # Adicionar novos itens e atualizar estoque
             for item_data in itens_data:
+                # Extrair campos extras que não pertencem ao modelo CompraItem
+                fracao_memorizada = item_data.pop('fracao_memorizada', None)
+                quantidade_com_fracao = item_data.pop('quantidade_com_fracao', None)
+
+                # Mapear valor_unitario → valor_compra (alias do frontend)
+                if 'valor_unitario' in item_data:
+                    item_data['valor_compra'] = item_data.pop('valor_unitario')
+
+                # Salvar fração nos campos corretos do modelo
+                if quantidade_com_fracao is not None:
+                    try:
+                        item_data['quantidade_fracionada'] = Decimal(str(quantidade_com_fracao)).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+                    except (InvalidOperation, TypeError):
+                        pass
+                if fracao_memorizada is not None:
+                    try:
+                        item_data['fracao_aplicada'] = Decimal(str(fracao_memorizada)).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+                    except (InvalidOperation, TypeError):
+                        pass
+
                 CompraItem.objects.create(id_compra=instance, **item_data)
                 
                 # Atualizar estoque com novo item
