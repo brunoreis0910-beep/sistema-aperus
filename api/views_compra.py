@@ -254,37 +254,37 @@ class CompraSerializer(serializers.ModelSerializer):
                         
                         qtd_estoque_decimal = Decimal(str(qtd_estoque_atual))
                         print(f'[DEBUG_ESTOQUE] Tipo depois de Decimal(): {type(qtd_estoque_decimal)}')
-                        print(f'[DEBUG_ESTOQUE] quantidade a adicionar: {quantidade} ({type(quantidade)})')
+                        print(f'[DEBUG_ESTOQUE] quantidade a adicionar: {qtd_estoque} ({type(qtd_estoque)})')
                         
-                        nova_quantidade = qtd_estoque_decimal + quantidade
+                        nova_quantidade = qtd_estoque_decimal + qtd_estoque
                         print(f'[DEBUG_ESTOQUE] Nova quantidade calculada: {nova_quantidade} ({type(nova_quantidade)})')
                         
                         # Calcula novo custo médio ponderado
                         valor_estoque_atual = qtd_estoque_decimal * custo_medio_atual
-                        valor_nova_compra = quantidade * valor_compra
-                        novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else valor_compra
+                        valor_nova_compra = qtd_estoque * custo_unit_estoque
+                        novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else custo_unit_estoque
                         
                         estoque_obj.quantidade = nova_quantidade
                         estoque_obj.custo_medio = novo_custo_medio.quantize(Decimal('0.0001'))
-                        estoque_obj.valor_ultima_compra = valor_compra
+                        estoque_obj.valor_ultima_compra = custo_unit_estoque
                         estoque_obj.valor_total = nova_quantidade * novo_custo_medio
                         estoque_obj.save()
-                        print(f'[DEBUG_ESTOQUE] Estoque atualizado - Custo médio: {novo_custo_medio}, Última compra: {valor_compra}')
+                        print(f'[DEBUG_ESTOQUE] Estoque atualizado - Custo médio: {novo_custo_medio}, Última compra: {custo_unit_estoque}')
                     except Estoque.DoesNotExist:
                         print(f'[DEBUG_ESTOQUE] Estoque não existe, criando novo')
                         print(f'[DEBUG_ESTOQUE_CREATE] Vai criar - produto={produto} (tipo: {type(produto)})')
                         print(f'[DEBUG_ESTOQUE_CREATE] deposito_id={deposito_id} (tipo: {type(deposito_id)})')
-                        print(f'[DEBUG_ESTOQUE_CREATE] quantidade={quantidade} (tipo: {type(quantidade)})')
+                        print(f'[DEBUG_ESTOQUE_CREATE] quantidade={qtd_estoque} (tipo: {type(qtd_estoque)})')
                         
                         Estoque.objects.create(
                             id_produto=produto,
                             id_deposito_id=deposito_id,
-                            quantidade=quantidade,
-                            custo_medio=valor_compra,
-                            valor_ultima_compra=valor_compra,
-                            valor_total=quantidade * valor_compra
+                            quantidade=qtd_estoque,
+                            custo_medio=custo_unit_estoque,
+                            valor_ultima_compra=custo_unit_estoque,
+                            valor_total=qtd_estoque * custo_unit_estoque
                         )
-                        print(f'[DEBUG_ESTOQUE] Novo estoque criado com custo médio: {valor_compra}')
+                        print(f'[DEBUG_ESTOQUE] Novo estoque criado com custo médio: {custo_unit_estoque}')
             compra.save()
 
             # Verifica se operação gera financeiro
