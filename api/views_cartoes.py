@@ -71,7 +71,10 @@ class RecebimentoCartaoViewSet(viewsets.ModelViewSet):
         recebimentos = RecebimentoCartao.objects.filter(id_recebimento__in=ids).exclude(status='LIQUIDADO')
         
         total_baixado = Decimal('0.00')
+        total_bruto = Decimal('0.00')
+        total_taxa = Decimal('0.00')
         count = 0
+        bandeiras_set = set()
         
         for rec in recebimentos:
             # 1. Atualizar Status do RecebimentoCartao
@@ -81,12 +84,16 @@ class RecebimentoCartaoViewSet(viewsets.ModelViewSet):
             
             valor_liq = rec.valor_liquido
             total_baixado += valor_liq
+            total_bruto += rec.valor_bruto
+            total_taxa += rec.valor_taxa
+            if rec.bandeira:
+                bandeiras_set.add(rec.bandeira)
             
             # 2. Atualizar FinanceiroConta Vinculado (se houver) -> Marcar como 'Pago'
             if rec.id_financeiro:
                 fc = rec.id_financeiro
                 if fc.status_conta != 'Paga':
-                    fc.status_conta = 'Paga' # ou Liquidado? Verificando models... 'Paga' parece ser usado
+                    fc.status_conta = 'Paga'
                     fc.data_pagamento = data_pagamento
                     fc.valor_liquidado = valor_liq  # Usa valor líquido do recebível (após taxas)
                     fc.id_conta_baixa = conta_bancaria
@@ -94,22 +101,35 @@ class RecebimentoCartaoViewSet(viewsets.ModelViewSet):
             
             count += 1
             
-        # 3. Gerar Movimentação Bancária Única (Consolidada) ou Individual?
-        # Geralmente consolidada por lote (extrato mostra o lote), mas individual é mais rastreável.
-        # Vamos fazer consolidada se for muitos, mas aqui faremos um lançamento único somando tudo para simplificar o extrato.
-        
+        # 3. Gerar Movimentações Bancárias: Crédito (bruto) + Débito (taxa)
         if count > 0:
+            bandeiras_label = ', '.join(sorted(bandeiras_set)) if bandeiras_set else 'Cartão'
+
+            # Lançamento de CRÉDITO — valor bruto recebido
             FinanceiroBancario.objects.create(
                 id_conta_bancaria=conta_bancaria,
-                tipo_movimento='C', # Crédito
+                tipo_movimento='C',
                 data_pagamento=data_pagamento,
-                valor_movimento=total_baixado,
-                descricao=f"Recebimento Cartões (Lote {count} itens)",
-                forma_pagamento='Cartão', # Genérico
+                valor_movimento=total_bruto,
+                descricao=f"Recebimento Cartão {bandeiras_label} ({count} item{'ns' if count > 1 else ''})",
+                forma_pagamento='Cartão',
             )
+
+            # Lançamento de DÉBITO — taxa da operadora (somente se houver taxa)
+            if total_taxa > Decimal('0.00'):
+                FinanceiroBancario.objects.create(
+                    id_conta_bancaria=conta_bancaria,
+                    tipo_movimento='D',
+                    data_pagamento=data_pagamento,
+                    valor_movimento=total_taxa,
+                    descricao=f"Taxa Cartão {bandeiras_label} ({count} item{'ns' if count > 1 else ''})",
+                    forma_pagamento='Cartão',
+                )
             
         return Response({
             'message': f'{count} recebimentos baixados com sucesso.',
+            'total_bruto': float(total_bruto),
+            'total_taxa': float(total_taxa),
             'total_recebido': float(total_baixado)
         })
 

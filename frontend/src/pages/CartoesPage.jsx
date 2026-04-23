@@ -123,8 +123,9 @@ export default function CartoesPage() {
       }
       
       const r = await axiosInstance.post('/financeiro/cartoes/baixar_lote/', payload)
-      
-      alert(r.data.message || 'Baixa realizada com sucesso!')
+
+      const taxa = r.data.total_taxa ? ` (Taxa descontada: ${fmt(r.data.total_taxa)})` : ''
+      alert((r.data.message || 'Baixa realizada com sucesso!') + taxa)
       
       // Limpar seleção e atualizar lista
       setSelecionados([])
@@ -147,6 +148,14 @@ export default function CartoesPage() {
   const totalSelecionadosLiq = recebimentosArray
     .filter(r => selecionados.includes(r.id_recebimento))
     .reduce((s, r) => s + Number(r.valor_liquido || 0), 0)
+
+  const totalSelecionadosBruto = recebimentosArray
+    .filter(r => selecionados.includes(r.id_recebimento))
+    .reduce((s, r) => s + Number(r.valor_bruto || 0), 0)
+
+  const totalSelecionadosTaxa = recebimentosArray
+    .filter(r => selecionados.includes(r.id_recebimento))
+    .reduce((s, r) => s + Number(r.valor_taxa || 0), 0)
 
   return (
     <Box sx={{ p: 3 }}>
@@ -372,7 +381,15 @@ export default function CartoesPage() {
         <DialogContent>
           <Stack spacing={3} sx={{ mt: 2 }}>
             <Alert severity="info">
-              Você está baixando {selecionados.length} recebimento(s) no valor líquido total de <strong>{fmt(totalSelecionadosLiq)}</strong>.
+              <Typography variant="body2"><strong>{selecionados.length} recebimento(s) selecionado(s)</strong></Typography>
+              <Box component="ul" sx={{ m: 0, pl: 2, mt: 0.5 }}>
+                <li>Valor bruto: <strong>{fmt(totalSelecionadosBruto)}</strong></li>
+                <li style={{ color: '#d32f2f' }}>Taxa cartão: <strong>−{fmt(totalSelecionadosTaxa)}</strong></li>
+                <li>Valor líquido: <strong>{fmt(totalSelecionadosLiq)}</strong></li>
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                Serão gerados 2 lançamentos no extrato: crédito (bruto) e débito (taxa).
+              </Typography>
             </Alert>
             
             <TextField
