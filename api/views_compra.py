@@ -654,8 +654,22 @@ class CompraViewSet(viewsets.ModelViewSet):
             id_fornecedor = None
 
             if cnpj_emit:
+                import re as _re
                 from .models import Fornecedor
+                # Normaliza para apenas dígitos (XML sempre vem sem formatação)
+                _cnpj_digits = _re.sub(r'\D', '', cnpj_emit)
+
+                # 1) Tenta match exato (como veio no XML)
                 fornecedor = Fornecedor.objects.filter(cpf_cnpj=cnpj_emit).first()
+
+                # 2) Tenta com apenas dígitos (caso o DB guarde sem formatação diferente)
+                if not fornecedor and _cnpj_digits != cnpj_emit:
+                    fornecedor = Fornecedor.objects.filter(cpf_cnpj=_cnpj_digits).first()
+
+                # 3) Tenta com formatação XX.XXX.XXX/XXXX-XX (caso o DB guarde formatado)
+                if not fornecedor and len(_cnpj_digits) == 14:
+                    _cnpj_fmt = f'{_cnpj_digits[:2]}.{_cnpj_digits[2:5]}.{_cnpj_digits[5:8]}/{_cnpj_digits[8:12]}-{_cnpj_digits[12:]}'
+                    fornecedor = Fornecedor.objects.filter(cpf_cnpj=_cnpj_fmt).first()
 
                 if fornecedor:
                     fornecedor_nome = fornecedor.nome_razao_social
@@ -697,6 +711,15 @@ class CompraViewSet(viewsets.ModelViewSet):
                         id_fornecedor = fornecedor.id_fornecedor
                     except Exception as e:
                         print(f"Erro ao criar fornecedor automático: {e}")
+                        # Criação falhou (possivelmente CNPJ já existe em outro formato).
+                        # Tenta localizar por busca parcial nos dígitos do CNPJ.
+                        if not fornecedor and _cnpj_digits:
+                            for _f in Fornecedor.objects.filter(cpf_cnpj__icontains=_cnpj_digits[2:10]).iterator():
+                                if _re.sub(r'\D', '', _f.cpf_cnpj or '') == _cnpj_digits:
+                                    fornecedor = _f
+                                    fornecedor_nome = _f.nome_razao_social or nome_emit
+                                    id_fornecedor = _f.id_fornecedor
+                                    break
 
             # Itens
             itens_nf = []
