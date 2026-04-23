@@ -215,7 +215,8 @@ class CompraSerializer(serializers.ModelSerializer):
 
                 # Salvar/atualizar fração por fornecedor+produto quando fracao > 1
                 ean_val = item.get('_ean') or '' # O _ean é passado pelo frontend
-                if fracao > 1 and produto and compra.id_fornecedor and ean_val:
+                # Sempre atualiza a fração (mesmo fracao=1 para resetar) quando há EAN
+                if produto and compra.id_fornecedor and ean_val:
                     try:
                         from .models import FornecedorProdutoFracao
                         FornecedorProdutoFracao.objects.update_or_create(
@@ -224,7 +225,7 @@ class CompraSerializer(serializers.ModelSerializer):
                             gtin=ean_val,
                             defaults={'fracao': fracao}
                         )
-                        print(f'[FRACAO] Fração {fracao} salva para Fornecedor {compra.id_fornecedor.id} e Produto {produto.id}')
+                        print(f'[FRACAO] Fração {fracao} salva/atualizada para Fornecedor {compra.id_fornecedor.id} e Produto {produto.id}')
                     except Exception as _fe:
                         print(f'[FRACAO] erro ao salvar fracao: {_fe}')
                 
@@ -419,7 +420,8 @@ class CompraSerializer(serializers.ModelSerializer):
                         try:
                             from .models import FornecedorProdutoFracao
                             fracao_dec = Decimal(str(fracao_memorizada))
-                            if fracao_dec > 1:
+                            # Sempre atualiza (mesmo fracao=1 para resetar)
+                            if fracao_dec > 0:
                                 FornecedorProdutoFracao.objects.update_or_create(
                                     fornecedor=instance.id_fornecedor,
                                     produto=id_produto_obj,

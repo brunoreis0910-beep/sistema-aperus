@@ -1156,7 +1156,8 @@ function CompraPage() {
           const fracao = parseFloat(item.fracao_memorizada) || 1
           const ean = item._ean || ''
           const idProduto = parseInt(item.id_produto)
-          if (fracao > 1 && ean && idProduto) {
+          // Sempre salva a fração (mesmo fracao=1 para resetar), desde que tenha EAN e produto
+          if (ean && idProduto && !isNaN(fracao) && fracao > 0) {
             try {
               await axiosInstance.post('/compras/salvar-fracao/', {
                 id_fornecedor: idFornecedor,
