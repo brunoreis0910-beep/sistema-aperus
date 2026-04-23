@@ -846,6 +846,39 @@ class SalvarVendaPDVNFCeView(APIView):
                     fin.save()
                     print(f"?? [PDV-NFCe] Conta salva: {fin.id_conta} - Status: {fin.status_conta}")
 
+                    # Gerar RecebimentoCartao se a forma de pagamento é cartão
+                    # Condição: taxa_operadora > 0, OU codigo_t_pag de cartão, OU tem integração de terminal
+                    _codigos_cartao = ('03', '04', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19')
+                    _e_cartao = forma_pagamento and (
+                        (forma_pagamento.taxa_operadora and forma_pagamento.taxa_operadora > 0)
+                        or (forma_pagamento.codigo_t_pag in _codigos_cartao)
+                        or (forma_pagamento.tipo_integracao and forma_pagamento.tipo_integracao != '')
+                    )
+                    if _e_cartao:
+                        from .models import RecebimentoCartao
+                        taxa = Decimal(str(forma_pagamento.taxa_operadora or 0))
+                        dias_repasse = int(forma_pagamento.dias_repasse or 1)
+                        valor_bruto = fin.valor_parcela
+                        valor_taxa = (valor_bruto * taxa / Decimal('100')).quantize(Decimal('0.01'))
+                        valor_liquido = valor_bruto - valor_taxa
+                        data_previsao = fin.data_emissao + timedelta(days=dias_repasse)
+                        codigo_tpag = forma_pagamento.codigo_t_pag or '99'
+                        tipo_cartao = 'DEBITO' if codigo_tpag == '04' else 'CREDITO'
+                        RecebimentoCartao.objects.create(
+                            id_venda=venda,
+                            id_financeiro=fin,
+                            data_venda=fin.data_emissao,
+                            valor_bruto=valor_bruto,
+                            taxa_percentual=taxa,
+                            valor_taxa=valor_taxa,
+                            valor_liquido=valor_liquido,
+                            data_previsao=data_previsao,
+                            bandeira=forma_pagamento.nome_forma,
+                            tipo_cartao=tipo_cartao,
+                            status='PENDENTE',
+                        )
+                        print(f"?? [PDV-NFCe] RecebimentoCartao gerado: {forma_pagamento.nome_forma} - R${valor_bruto} (taxa {taxa}%)")
+
             # 3. Tenta Emitir NFC-e
             service = NFCeService()
             # OTIMIZA��O: N�o configurar ACBr antes de tentar nativo. O m�todo emitir_nfce gerencia isso.
