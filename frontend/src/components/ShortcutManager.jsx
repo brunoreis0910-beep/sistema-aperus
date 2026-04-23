@@ -42,6 +42,7 @@ const ROUTES = [
   { label: 'Equipamentos', path: '/equipamentos' },
   // Operações
   { label: 'Compras', path: '/compras' },
+  { label: 'Consulta Estoque', path: '/consulta-estoque' },
   { label: 'Ordem de Serviço', path: '/ordem-servico' },
   { label: 'Trocas (Listar)', path: '/trocas' },
   { label: 'Nova Troca', path: '/trocas/nova' },

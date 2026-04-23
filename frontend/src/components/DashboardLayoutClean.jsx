@@ -70,6 +70,7 @@ import {
   ,TrendingDown as ChurnIcon
   ,AccessTime as AccessTimeIcon
   ,MoveToInbox as EntregasIcon
+  ,Inventory as InventoryIcon
 } from '@mui/icons-material';
 
 import { useAuth } from '../context/AuthContext';
@@ -194,6 +195,7 @@ const DashboardLayoutClean = () => {
     opcoes: [
       ...(can('produtos_acessar') ? [{ label: 'Etiquetas', path: '/etiquetas', icon: <EtiquetasIcon sx={{ color: '#fff' }} /> }] : []),
       ...(can('produtos_editar') ? [{ label: 'Ajustar Estoque', path: '/estoque-config', icon: <AjusteIcon sx={{ color: '#fff' }} /> }] : []),
+      ...(can('produtos_acessar') ? [{ label: 'Consulta Estoque', path: '/consulta-estoque', icon: <InventoryIcon sx={{ color: '#fff' }} /> }] : []),
       ...(can('produtos_editar') ? [{ label: 'Tabela Comercial', path: '/tabela-comercial', icon: <MonetizationOnIcon sx={{ color: '#fff' }} /> }] : []),
       ...(can('produtos_acessar') ? [{ label: 'Veículos', path: '/veiculos', icon: <DirectionsCarIcon sx={{ color: '#fff' }} /> }] : []),
       ...(can('financeiro_acessar') ? [{ label: 'Cheques', path: '/cheques', icon: <PaymentIcon sx={{ color: '#fff' }} /> }] : []),
@@ -238,6 +240,7 @@ const DashboardLayoutClean = () => {
       '/alugueis/nova': 'financeiro_acessar',
       '/cheques': 'financeiro_acessar',
       '/estoque-config': 'config_acessar',
+      '/consulta-estoque': 'produtos_acessar',
       '/mapa-promocao': 'mapa_promocao_acessar',
       '/pet-shop': 'petshop_acessar',
       '/clinica-veterinaria': 'petshop_acessar',
@@ -382,7 +385,7 @@ const DashboardLayoutClean = () => {
     if (fullPath.startsWith('/relatorios/comissoes')) return 'comissoes';
 
     // Páginas que pertencem ao submenu "+Opções"
-    if (['etiquetas', 'status-ordem-servico', 'crm', 'rh', 'ponto', 'pix', 'recorrencia', 'churn'].includes(path)) {
+    if (['etiquetas', 'status-ordem-servico', 'crm', 'rh', 'ponto', 'pix', 'recorrencia', 'churn', 'consulta-estoque'].includes(path)) {
       return 'opcoes';
     }
 
