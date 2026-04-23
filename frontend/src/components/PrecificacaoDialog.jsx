@@ -291,7 +291,7 @@ const PrecificacaoDialog = ({ open, onClose, itens, onAplicar, axiosInstance }) 
                       type="number"
                       value={item.percentual || ''}
                       onChange={(e) => handlePercentualChange(index, e.target.value)}
-                      sx={{ width: 80 }}
+                      sx={{ width: 110 }}
                       InputProps={{
                         endAdornment: <InputAdornment position="end">%</InputAdornment>
                       }}
