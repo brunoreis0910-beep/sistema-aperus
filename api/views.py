@@ -237,6 +237,11 @@ class FinanceiroContaViewSet(viewsets.ModelViewSet):
             forma_pagamento_obj = FormaPagamento.objects.filter(pk=id_forma_pag).first()
             if forma_pagamento_obj and not data.get('forma_pagamento'):
                 data['forma_pagamento'] = forma_pagamento_obj.nome_forma
+        elif data.get('forma_pagamento'):
+            # Fallback: busca pelo nome quando id_forma_pagamento não foi enviado (ex: Vendas.jsx)
+            from .models import FormaPagamento
+            nome_forma = str(data['forma_pagamento']).strip()
+            forma_pagamento_obj = FormaPagamento.objects.filter(nome_forma__iexact=nome_forma).first()
 
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
@@ -244,7 +249,7 @@ class FinanceiroContaViewSet(viewsets.ModelViewSet):
 
         # Cria RecebimentoCartao automaticamente se a forma de pagamento tem taxa de operadora
         if (forma_pagamento_obj and
-                fin.tipo_conta == 'Receber' and
+                fin.tipo_conta.lower() == 'receber' and
                 forma_pagamento_obj.taxa_operadora and
                 forma_pagamento_obj.taxa_operadora > 0):
             from decimal import Decimal
