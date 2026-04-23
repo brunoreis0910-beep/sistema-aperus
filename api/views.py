@@ -227,6 +227,59 @@ class FinanceiroContaViewSet(viewsets.ModelViewSet):
     }
     ordering_fields = ['data_vencimento', 'data_pagamento', 'descricao']
 
+    def create(self, request, *args, **kwargs):
+        # Popula forma_pagamento (CharField) a partir do id_forma_pagamento recebido no payload
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        id_forma_pag = data.get('id_forma_pagamento')
+        forma_pagamento_obj = None
+        if id_forma_pag:
+            from .models import FormaPagamento
+            forma_pagamento_obj = FormaPagamento.objects.filter(pk=id_forma_pag).first()
+            if forma_pagamento_obj and not data.get('forma_pagamento'):
+                data['forma_pagamento'] = forma_pagamento_obj.nome_forma
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        fin = serializer.save()
+
+        # Cria RecebimentoCartao automaticamente se a forma de pagamento tem taxa de operadora
+        if (forma_pagamento_obj and
+                fin.tipo_conta == 'Receber' and
+                forma_pagamento_obj.taxa_operadora and
+                forma_pagamento_obj.taxa_operadora > 0):
+            from decimal import Decimal
+            from datetime import timedelta
+            from .models import RecebimentoCartao, Venda
+            taxa = Decimal(str(forma_pagamento_obj.taxa_operadora))
+            dias_repasse = int(forma_pagamento_obj.dias_repasse or 1)
+            valor_bruto = fin.valor_parcela
+            valor_taxa = (valor_bruto * taxa / Decimal('100')).quantize(Decimal('0.01'))
+            valor_liquido = valor_bruto - valor_taxa
+            data_venda = fin.data_emissao
+            data_previsao = data_venda + timedelta(days=dias_repasse)
+            codigo_tpag = forma_pagamento_obj.codigo_t_pag or '99'
+            tipo_cartao = 'DEBITO' if codigo_tpag == '04' else 'CREDITO'
+            venda_obj = None
+            if fin.id_venda_origem:
+                venda_obj = Venda.objects.filter(pk=fin.id_venda_origem).first()
+            RecebimentoCartao.objects.create(
+                id_venda=venda_obj,
+                id_financeiro=fin,
+                data_venda=data_venda,
+                valor_bruto=valor_bruto,
+                taxa_percentual=taxa,
+                valor_taxa=valor_taxa,
+                valor_liquido=valor_liquido,
+                data_previsao=data_previsao,
+                bandeira=forma_pagamento_obj.nome_forma,
+                tipo_cartao=tipo_cartao,
+                status='PENDENTE',
+            )
+            print(f'[FINANCEIRO] RecebimentoCartao gerado: {forma_pagamento_obj.nome_forma} - R${valor_bruto} (taxa {taxa}%)')
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
     def list(self, request, *args, **kwargs):
         response = super().list(request, *args, **kwargs)
         contas = response.data if isinstance(response.data, list) else response.data.get('results', [])
