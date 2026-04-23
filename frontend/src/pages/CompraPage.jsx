@@ -437,14 +437,14 @@ function CompraPage() {
 
     // Filtro por data de entrada (início)
     if (filtros.dataInicio && compra.data_entrada) {
-      const dataCompra = new Date(compra.data_entrada + 'T00:00:00')
+      const dataCompra = new Date(compra.data_entrada.split('T')[0] + 'T00:00:00')
       const dataInicio = new Date(filtros.dataInicio + 'T00:00:00')
       if (dataCompra < dataInicio) return false
     }
 
     // Filtro por data de entrada (fim)
     if (filtros.dataFim && compra.data_entrada) {
-      const dataCompra = new Date(compra.data_entrada + 'T00:00:00')
+      const dataCompra = new Date(compra.data_entrada.split('T')[0] + 'T00:00:00')
       const dataFim = new Date(filtros.dataFim + 'T00:00:00')
       if (dataCompra > dataFim) return false
     }
@@ -3283,7 +3283,7 @@ function CompraPage() {
                       </TableCell>
                       <TableCell sx={{ color: '#000' }}>
                         {compra.data_documento
-                          ? new Date(compra.data_documento + 'T00:00:00').toLocaleDateString('pt-BR', {
+                          ? new Date(compra.data_documento.split('T')[0] + 'T00:00:00').toLocaleDateString('pt-BR', {
                               day: '2-digit',
                               month: '2-digit',
                               year: 'numeric'
@@ -3292,7 +3292,7 @@ function CompraPage() {
                       </TableCell>
                       <TableCell sx={{ color: '#000' }}>
                         {compra.data_entrada
-                          ? new Date(compra.data_entrada + 'T00:00:00').toLocaleDateString('pt-BR', {
+                          ? new Date(compra.data_entrada.split('T')[0] + 'T00:00:00').toLocaleDateString('pt-BR', {
                               day: '2-digit',
                               month: '2-digit',
                               year: 'numeric'
