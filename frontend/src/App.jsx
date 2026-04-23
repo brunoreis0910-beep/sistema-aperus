@@ -126,6 +126,7 @@ import RecorrenciaPage from './pages/RecorrenciaPage'
 import ChurnPage from './pages/ChurnPage'
 import PontoPage from './pages/PontoPage'
 import DashboardBI from './pages/DashboardBI'
+import ConsultaEstoquePage from './pages/ConsultaEstoquePage'
 
 export default function App() {
   return (
@@ -255,6 +256,7 @@ export default function App() {
                   <Route path='recorrencia' element={<RecorrenciaPage />} />
                   <Route path='churn' element={<ChurnPage />} />
                   <Route path='dashboard-bi' element={<DashboardBI />} />
+                  <Route path='consulta-estoque' element={<ConsultaEstoquePage />} />
                 </Route>
 
                 <Route path='*' element={<Navigate to='/' replace />} />

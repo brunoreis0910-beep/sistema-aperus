@@ -105,6 +105,10 @@ export default function Sidebar() {
           <ListItemIcon><ReceiptLongIcon /></ListItemIcon>
           <ListItemText primary="Compras" />
         </ListItem>
+        <ListItem button component={RouterLink} to="/consulta-estoque">
+          <ListItemIcon><InventoryIcon /></ListItemIcon>
+          <ListItemText primary="Consulta Estoque" />
+        </ListItem>
         <ListItem button component={RouterLink} to="/financeiro">
           <ListItemIcon><AccountBalanceIcon /></ListItemIcon>
           <ListItemText primary="Financeiro" />
