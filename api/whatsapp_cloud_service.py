@@ -322,7 +322,11 @@ def testar_conexao_api() -> dict:
         return {"ok": False, "erro": mensagem}
 
     except requests.Timeout:
-        return {"ok": False, "erro": "Tempo limite excedido ao conectar com a Meta."}
+        return {"ok": False, "erro": "Tempo limite excedido ao conectar com a Meta.", "sem_rede": True}
+    except requests.ConnectionError as exc:
+        # Rede inacessível (sem internet, servidor offline, etc.) — não é falha de token
+        logger.warning("Cloud API: sem conectividade de rede para acessar graph.facebook.com")
+        return {"ok": False, "erro": "Sem conectividade de rede.", "sem_rede": True}
     except Exception as exc:
         logger.exception("Erro ao testar conexão Cloud API")
         return {"ok": False, "erro": str(exc)}

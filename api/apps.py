@@ -34,7 +34,8 @@ class ApiConfig(AppConfig):
                         token, phone_id, _ = _cloud._get_credenciais()
                         if token and phone_id:
                             resultado = _cloud.testar_conexao_api()
-                            if not resultado.get('ok'):
+                            # Só marca erro de token se a falha NÃO foi por rede inacessível
+                            if not resultado.get('ok') and not resultado.get('sem_rede'):
                                 _cloud.marcar_token_erro()
                 except Exception:
                     pass
