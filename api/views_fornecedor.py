@@ -30,3 +30,4 @@ class FornecedorViewSet(viewsets.ModelViewSet):
     """CRUD para Fornecedores (mesmos campos do Cliente)."""
     queryset = Fornecedor.objects.all().order_by('nome_razao_social')
     serializer_class = FornecedorSerializer
+    pagination_class = None  # Retorna todos os fornecedores sem paginar (usado em seletores)
