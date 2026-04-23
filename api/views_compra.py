@@ -379,19 +379,36 @@ class CompraSerializer(serializers.ModelSerializer):
                 if 'valor_unitario' in item_data:
                     item_data['valor_compra'] = item_data.pop('valor_unitario')
 
-                # Salvar fração nos campos corretos do modelo
-                if quantidade_com_fracao is not None:
-                    try:
-                        item_data['quantidade_fracionada'] = Decimal(str(quantidade_com_fracao)).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
-                    except (InvalidOperation, TypeError):
-                        pass
+                # ── Aplicar fração: converter valores NF → valores de estoque ──
+                fracao = Decimal('1')
                 if fracao_memorizada is not None:
                     try:
-                        item_data['fracao_aplicada'] = Decimal(str(fracao_memorizada)).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+                        fracao = Decimal(str(fracao_memorizada)).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
                     except (InvalidOperation, TypeError):
-                        pass
+                        fracao = Decimal('1')
 
-                CompraItem.objects.create(id_compra=instance, **item_data)
+                qtd_nf = Decimal(str(item_data.get('quantidade', '0')))
+                valor_unit_nf = Decimal(str(item_data.get('valor_compra', '0')))
+
+                # Quantidade que vai para o estoque = qtd_NF × fração
+                qtd_estoque = qtd_nf * fracao
+                # Custo unitário de estoque = valor_NF / fração
+                custo_unit_estoque = valor_unit_nf / fracao if fracao > 1 else valor_unit_nf
+
+                item_data['quantidade'] = qtd_estoque
+                item_data['valor_compra'] = custo_unit_estoque
+
+                # Salvar fração nos campos corretos do modelo
+                item_data['fracao_aplicada'] = fracao
+                if fracao > 1:
+                    item_data['quantidade_fracionada'] = qtd_estoque
+                else:
+                    item_data['quantidade_fracionada'] = None
+
+                CompraItem.objects.create(id_compra=instance, **{
+                    k: v for k, v in item_data.items()
+                    if k not in ('_ean', 'ean', '_cfop_original', '_encontrado', '_vicms', '_vipi', '_vpis', '_vcofins')
+                })
 
                 # Salvar/atualizar fração por fornecedor+produto quando fracao > 1
                 if fracao_memorizada and instance.id_fornecedor:
