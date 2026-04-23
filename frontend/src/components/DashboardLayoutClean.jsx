@@ -82,6 +82,7 @@ import AIChat from './AIChat';
 import LogoutDialog from './LogoutDialog';
 import MobileMenuDrawer from './MobileMenuDrawer';
 import ShortcutManager from './ShortcutManager';
+import GlobalSearch from './GlobalSearch';
 import AcessoNegado from './AcessoNegado';
 import NotificationBell from './NotificationBell';
 
@@ -104,6 +105,7 @@ const DashboardLayoutClean = () => {
   const [relatoriosMenuAnchor, setRelatoriosMenuAnchor] = React.useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [shortcutManagerOpen, setShortcutManagerOpen] = React.useState(false);
+  const [globalSearchOpen, setGlobalSearchOpen] = React.useState(false);
 
   // Define todos os itens de menu com suas permissões (usando nomes do banco de dados)
   const allMenuItems = [
@@ -344,6 +346,13 @@ const DashboardLayoutClean = () => {
         }
 
         const key = e.key;
+
+        // Ctrl+K — Busca global
+        if ((e.ctrlKey || e.metaKey) && key === 'k') {
+          e.preventDefault();
+          setGlobalSearchOpen(true);
+          return;
+        }
 
         if (key === 'Escape') {
           e.preventDefault();
@@ -1096,6 +1105,9 @@ const DashboardLayoutClean = () => {
 
       {/* Gerenciador de Atalhos */}
       <ShortcutManager open={shortcutManagerOpen} onClose={() => setShortcutManagerOpen(false)} />
+
+      {/* Busca Global (Ctrl+K) */}
+      <GlobalSearch open={globalSearchOpen} onClose={() => setGlobalSearchOpen(false)} />
 
       {/* Menu Mobile Drawer */}
       <MobileMenuDrawer
