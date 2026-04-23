@@ -846,15 +846,8 @@ class SalvarVendaPDVNFCeView(APIView):
                     fin.save()
                     print(f"?? [PDV-NFCe] Conta salva: {fin.id_conta} - Status: {fin.status_conta}")
 
-                    # Gerar RecebimentoCartao se a forma de pagamento é cartão
-                    # Condição: taxa_operadora > 0, OU codigo_t_pag de cartão, OU tem integração de terminal
-                    _codigos_cartao = ('03', '04', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19')
-                    _e_cartao = forma_pagamento and (
-                        (forma_pagamento.taxa_operadora and forma_pagamento.taxa_operadora > 0)
-                        or (forma_pagamento.codigo_t_pag in _codigos_cartao)
-                        or (forma_pagamento.tipo_integracao and forma_pagamento.tipo_integracao != '')
-                    )
-                    if _e_cartao:
+                    # Gerar RecebimentoCartao somente se a forma de pagamento possui taxa de operadora
+                    if forma_pagamento and forma_pagamento.taxa_operadora and forma_pagamento.taxa_operadora > 0:
                         from .models import RecebimentoCartao
                         taxa = Decimal(str(forma_pagamento.taxa_operadora or 0))
                         dias_repasse = int(forma_pagamento.dias_repasse or 1)
