@@ -1114,6 +1114,12 @@ const OrdemServicoPage = () => {
 
   const compartilharWhatsApp = async () => {
     const texto = gerarTextoOS();
+
+    // Se a OS já está salva, imprimir automaticamente junto
+    if (ordemAtual?.id_os) {
+      imprimirOrdem(ordemAtual);
+    }
+
     try {
       const { Share } = await import('@capacitor/share');
       await Share.share({
@@ -1123,8 +1129,14 @@ const OrdemServicoPage = () => {
       });
     } catch {
       // Fallback: abrir WhatsApp Web
+      const telBruto = ordemAtual?.cliente_telefone || '';
+      const telLimpo = telBruto.replace(/\D/g, '');
+      const telComPais = telLimpo ? (telLimpo.startsWith('55') ? telLimpo : `55${telLimpo}`) : '';
       const encoded = encodeURIComponent(texto);
-      window.open(`https://wa.me/?text=${encoded}`, '_blank');
+      const url = telComPais
+        ? `https://wa.me/${telComPais}?text=${encoded}`
+        : `https://wa.me/?text=${encoded}`;
+      window.open(url, '_blank');
     }
   };
 
@@ -2278,6 +2290,9 @@ const OrdemServicoPage = () => {
     const telBruto = ordem.cliente_telefone || '';
     const telLimpo = telBruto.replace(/\D/g, '');
     const telComPais = telLimpo ? (telLimpo.startsWith('55') ? telLimpo : `55${telLimpo}`) : '';
+
+    // Disparar impressão automaticamente junto com o WhatsApp
+    imprimirOrdem(ordem);
 
     try {
       const { Share } = await import('@capacitor/share');
