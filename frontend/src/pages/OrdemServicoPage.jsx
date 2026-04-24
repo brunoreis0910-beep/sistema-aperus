@@ -2240,6 +2240,38 @@ const OrdemServicoPage = () => {
     }
   };
 
+  const compartilharWhatsAppOS = async (ordem) => {
+    const total = parseFloat(ordem.valor_total_os || 0).toFixed(2);
+    let texto = `*🔧 ORDEM DE SERVIÇO*\n`;
+    texto += `OS-${ordem.id_os}\n`;
+    if (ordem.data_abertura) texto += `📅 ${new Date(ordem.data_abertura).toLocaleDateString('pt-BR')}\n`;
+    if (ordem.cliente_nome) texto += `👤 Cliente: ${ordem.cliente_nome}\n`;
+    const nomeStatus = ordem.status_info?.nome || ordem.status_os || '';
+    if (nomeStatus) texto += `📊 Status: ${nomeStatus}\n`;
+    if (ordem.descricao_problema) texto += `📝 Problema: ${ordem.descricao_problema}\n`;
+    if (ordem.laudo_tecnico) texto += `🔍 Laudo: ${ordem.laudo_tecnico}\n`;
+    texto += `\n💰 *Total: R$ ${total}*`;
+
+    const telBruto = ordem.cliente_telefone || '';
+    const telLimpo = telBruto.replace(/\D/g, '');
+    const telComPais = telLimpo ? (telLimpo.startsWith('55') ? telLimpo : `55${telLimpo}`) : '';
+
+    try {
+      const { Share } = await import('@capacitor/share');
+      await Share.share({
+        title: `OS-${ordem.id_os}`,
+        text: texto,
+        dialogTitle: 'Compartilhar Ordem de Serviço',
+      });
+    } catch {
+      const encoded = encodeURIComponent(texto);
+      const url = telComPais
+        ? `https://wa.me/${telComPais}?text=${encoded}`
+        : `https://wa.me/?text=${encoded}`;
+      window.open(url, '_blank');
+    }
+  };
+
   const imprimirOrdem = async (ordem) => {
     const usarTermica = configImpressao.tipo_impressora === 'termica';
     try {
@@ -3333,6 +3365,14 @@ const OrdemServicoPage = () => {
                       sx={{ color: '#0288d1' }}
                     >
                       <EmailIcon />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => compartilharWhatsAppOS(ordem)}
+                      title="Enviar via WhatsApp"
+                      sx={{ color: '#25D366' }}
+                    >
+                      <WhatsAppIcon />
                     </IconButton>
                     {ordem.gera_financeiro && getStatusInfo(ordem).nome !== 'Aberta' && (
                       <IconButton
