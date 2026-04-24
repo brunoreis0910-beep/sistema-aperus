@@ -5283,6 +5283,7 @@ class ConfiguracaoImpressao(models.Model):
     TIPO_IMPRESSORA_CHOICES = [
         ('termica', 'Térmica (Cupom)'),
         ('a4', 'A4 (Folha)'),
+        ('a4_fotos', 'A4 com Fotos e Assinatura'),
     ]
     LARGURA_TERMICA_CHOICES = [
         ('58mm', '58mm'),
