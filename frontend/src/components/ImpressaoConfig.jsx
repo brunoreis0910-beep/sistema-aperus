@@ -114,6 +114,9 @@ const ModuloCard = ({ modulo, axiosInstance }) => {
                   >
                     <MenuItem value="termica">🖨️ Térmica (Cupom)</MenuItem>
                     <MenuItem value="a4">📄 A4 (Folha)</MenuItem>
+                    {modulo.key === 'ordem_servico' && (
+                      <MenuItem value="a4_fotos">📸 A4 com Fotos e Assinatura</MenuItem>
+                    )}
                   </Select>
                 </FormControl>
               </Grid>

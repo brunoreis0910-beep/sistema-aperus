@@ -2250,6 +2250,29 @@ const OrdemServicoPage = () => {
     if (nomeStatus) texto += `📊 Status: ${nomeStatus}\n`;
     if (ordem.descricao_problema) texto += `📝 Problema: ${ordem.descricao_problema}\n`;
     if (ordem.laudo_tecnico) texto += `🔍 Laudo: ${ordem.laudo_tecnico}\n`;
+
+    const produtos = ordem.itens_produtos || [];
+    if (produtos.length > 0) {
+      texto += `\n*🛒 Produtos:*\n`;
+      produtos.forEach(item => {
+        const nome = item.produto_nome || `Produto #${item.id_produto}`;
+        const qtd = parseFloat(item.quantidade || 1);
+        const vtotal = parseFloat(item.valor_total || 0).toFixed(2);
+        texto += `• ${nome} (${qtd}x) — R$ ${vtotal}\n`;
+      });
+    }
+
+    const servicos = ordem.itens_servicos || [];
+    if (servicos.length > 0) {
+      texto += `\n*🔧 Serviços:*\n`;
+      servicos.forEach(item => {
+        const desc = item.descricao_servico || 'Serviço';
+        const qtd = parseFloat(item.quantidade || 1);
+        const vtotal = parseFloat(item.valor_total || 0).toFixed(2);
+        texto += `• ${desc} (${qtd}x) — R$ ${vtotal}\n`;
+      });
+    }
+
     texto += `\n💰 *Total: R$ ${total}*`;
 
     const telBruto = ordem.cliente_telefone || '';
@@ -2273,15 +2296,38 @@ const OrdemServicoPage = () => {
   };
 
   const imprimirOrdem = async (ordem) => {
-    const usarTermica = configImpressao.tipo_impressora === 'termica';
+    const tipoImpressao = configImpressao.tipo_impressora;
+    const usarTermica = tipoImpressao === 'termica';
+    const usarFotosAssinatura = tipoImpressao === 'a4_fotos';
     try {
       // Buscar dados completos da ordem incluindo financeiro
       const response = await axiosInstance.get(`/ordem-servico/${ordem.id_os}/`);
-
       const ordemCompleta = response.data;
-      console.log('📄 Dados completos para impressão:', ordemCompleta);
 
-      const conteudo = usarTermica ? gerarConteudoImpressaoTermica(ordemCompleta) : gerarConteudoImpressao(ordemCompleta);
+      let conteudo;
+      if (usarTermica) {
+        conteudo = gerarConteudoImpressaoTermica(ordemCompleta);
+      } else if (usarFotosAssinatura) {
+        // Buscar fotos e assinatura do servidor
+        let fotos = [];
+        let assinatura = null;
+        try {
+          const respFotos = await axiosInstance.get(`/os-fotos/?id_os=${ordem.id_os}`);
+          fotos = (respFotos.data?.results || respFotos.data || []).map(f => ({
+            base64: f.imagem_base64,
+            nomeArquivo: f.nome_arquivo,
+          }));
+        } catch (e) { console.warn('Fotos indisponíveis para impressão:', e); }
+        try {
+          const respAssin = await axiosInstance.get(`/os-assinaturas/?id_os=${ordem.id_os}`);
+          const lista = respAssin.data?.results || respAssin.data || [];
+          if (lista.length > 0) assinatura = lista[0].assinatura_base64;
+        } catch (e) { console.warn('Assinatura indisponível para impressão:', e); }
+        conteudo = gerarConteudoImpressaoComFotos(ordemCompleta, fotos, assinatura);
+      } else {
+        conteudo = gerarConteudoImpressao(ordemCompleta);
+      }
+
       const janelaImpressao = window.open('', '_blank', usarTermica ? 'width=300,height=600' : '');
       janelaImpressao.document.write(conteudo);
       janelaImpressao.document.close();
@@ -2289,7 +2335,7 @@ const OrdemServicoPage = () => {
       setTimeout(() => janelaImpressao.print(), 250);
     } catch (err) {
       console.error('Erro ao buscar dados para impressão:', err);
-      // Fallback: usar dados existentes
+      // Fallback: usar dados existentes (sem fotos/assinatura)
       const conteudo = usarTermica ? gerarConteudoImpressaoTermica(ordem) : gerarConteudoImpressao(ordem);
       const janelaImpressao = window.open('', '_blank', usarTermica ? 'width=300,height=600' : '');
       janelaImpressao.document.write(conteudo);
@@ -2743,6 +2789,157 @@ const OrdemServicoPage = () => {
       </body>
       </html>
     `;
+  };
+
+  // Template A4 com Fotos e Assinatura
+  const gerarConteudoImpressaoComFotos = (ordem, fotos, assinatura) => {
+    const rodapeTexto = configImpressao.observacao_rodape || '';
+    const nomeCliente = ordem.cliente_nome || 'N/A';
+    const nomeTecnico = ordem.tecnico_nome || 'N/A';
+    const statusInfo = getStatusInfo(ordem);
+    const empresa = ordem.empresa_info || {};
+
+    const itensHtml = [];
+    let subtotalProd = 0;
+    let subtotalServ = 0;
+
+    (ordem.itens_produtos || []).forEach(item => {
+      const qty = parseFloat(item.quantidade || 0);
+      const vlr = parseFloat(item.valor_unitario || 0);
+      const desc = parseFloat(item.desconto || 0);
+      const total = qty * vlr - desc;
+      subtotalProd += total;
+      itensHtml.push(`
+        <tr>
+          <td><span style="background:#4caf50;color:white;padding:2px 7px;border-radius:3px;font-size:.8em;">PRODUTO</span></td>
+          <td>${item.produto_nome || 'N/A'}</td>
+          <td style="text-align:center">${qty.toFixed(2)}</td>
+          <td style="text-align:right">R$ ${vlr.toFixed(2)}</td>
+          <td style="text-align:right">${desc > 0 ? `R$ ${desc.toFixed(2)}` : '-'}</td>
+          <td style="text-align:right"><strong>R$ ${total.toFixed(2)}</strong></td>
+        </tr>`);
+    });
+
+    (ordem.itens_servicos || []).forEach(item => {
+      const qty = parseFloat(item.quantidade || 0);
+      const vlr = parseFloat(item.valor_unitario || 0);
+      const desc = parseFloat(item.desconto || 0);
+      const total = qty * vlr - desc;
+      subtotalServ += total;
+      const descServico = item.descricao_servico || item.servico_nome || 'Serviço';
+      itensHtml.push(`
+        <tr>
+          <td><span style="background:#2196f3;color:white;padding:2px 7px;border-radius:3px;font-size:.8em;">SERVIÇO</span></td>
+          <td>${descServico}${item.tecnico_nome ? ` <span style="font-size:.8em;color:#666;">(${item.tecnico_nome})</span>` : ''}</td>
+          <td style="text-align:center">${qty.toFixed(2)}</td>
+          <td style="text-align:right">R$ ${vlr.toFixed(2)}</td>
+          <td style="text-align:right">${desc > 0 ? `R$ ${desc.toFixed(2)}` : '-'}</td>
+          <td style="text-align:right"><strong>R$ ${total.toFixed(2)}</strong></td>
+        </tr>`);
+    });
+
+    const totalGeral = parseFloat(ordem.valor_total_os || 0) || (subtotalProd + subtotalServ);
+
+    const fotosHtml = (fotos || []).length > 0 ? `
+      <div style="margin:24px 0;">
+        <h3 style="color:#2196F3;border-bottom:2px solid #2196F3;padding-bottom:6px;">📷 Fotos da OS</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;">
+          ${fotos.map(f => `
+            <div style="text-align:center;">
+              <img src="${f.base64}" alt="${f.nomeArquivo || 'foto'}"
+                style="max-width:200px;max-height:180px;border:2px solid #ddd;border-radius:6px;object-fit:cover;" />
+              ${f.nomeArquivo ? `<div style="font-size:.75em;color:#666;margin-top:3px;">${f.nomeArquivo}</div>` : ''}
+            </div>`).join('')}
+        </div>
+      </div>` : '';
+
+    const assinaturaHtml = assinatura ? `
+      <div style="margin:30px 0 10px 0;">
+        <h3 style="color:#2196F3;border-bottom:2px solid #2196F3;padding-bottom:6px;">✍️ Assinatura do Cliente</h3>
+        <div style="margin-top:14px;text-align:center;">
+          <img src="${assinatura}" alt="Assinatura" style="max-width:340px;max-height:120px;border:1px solid #aaa;border-radius:4px;background:#fff;padding:6px;" />
+          <div style="border-top:1px solid #333;width:340px;margin:8px auto 0;padding-top:4px;font-size:.85em;">
+            Assinatura do Cliente / Responsável
+          </div>
+        </div>
+      </div>` : `
+      <div style="margin:30px 0 10px 0;page-break-inside:avoid;">
+        <h3 style="color:#2196F3;border-bottom:2px solid #2196F3;padding-bottom:6px;">✍️ Assinatura</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:20px;">
+          <div style="text-align:center;">
+            <div style="border-top:1px solid #333;padding-top:6px;font-size:.85em;">Assinatura do Cliente / Responsável</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="border-top:1px solid #333;padding-top:6px;font-size:.85em;">Assinatura do Técnico Responsável</div>
+          </div>
+        </div>
+      </div>`;
+
+    return `<!DOCTYPE html>
+<html><head>
+  <title>OS-${ordem.id_os || ''} — Com Fotos</title>
+  <meta charset="UTF-8">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Segoe UI',sans-serif;padding:28px;font-size:13px;line-height:1.55;color:#222;}
+    h1{text-align:center;color:#2196F3;font-size:2em;text-transform:uppercase;border-bottom:3px solid #2196F3;padding-bottom:12px;margin-bottom:20px;}
+    h3{color:#2196F3;margin:18px 0 8px;}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px;border:2px solid #2196F3;border-radius:8px;background:#e3f2fd;margin-bottom:16px;}
+    .lbl{font-weight:bold;color:#1565c0;min-width:110px;display:inline-block;}
+    table{width:100%;border-collapse:collapse;margin:12px 0;}
+    th{background:#2196F3;color:white;padding:10px;font-size:.85em;text-transform:uppercase;}
+    td{border:1px solid #ddd;padding:9px;}
+    tbody tr:nth-child(even){background:#f5f5f5;}
+    .total{text-align:right;font-weight:bold;font-size:1.4em;padding:14px;background:linear-gradient(135deg,#1565c0,#42a5f5);color:white;border-radius:8px;margin-top:14px;}
+    .sec{margin:16px 0;padding:12px;border:1px solid #ddd;border-radius:6px;background:#fafafa;}
+    .footer{margin-top:40px;padding-top:14px;border-top:2px solid #ddd;text-align:center;color:#666;font-size:.85em;}
+    @media print{body{padding:14px;}@page{size:A4;margin:14mm;}}
+  </style>
+</head><body>
+  ${empresa.nome ? `<div style="text-align:center;margin-bottom:16px;">
+    <div style="font-size:1.3em;font-weight:bold;">${empresa.nome}</div>
+    ${empresa.cnpj ? `<div style="font-size:.85em;">CNPJ: ${empresa.cnpj}</div>` : ''}
+    ${empresa.telefone ? `<div style="font-size:.85em;">Tel: ${empresa.telefone}</div>` : ''}
+    ${empresa.endereco ? `<div style="font-size:.8em;color:#555;">${empresa.endereco}</div>` : ''}
+    <hr style="margin:10px 0;">
+  </div>` : ''}
+
+  <h1>📋 ORDEM DE SERVIÇO</h1>
+
+  <div class="grid2">
+    <div><span class="lbl">Número:</span> <strong style="font-size:1.1em;">OS-${ordem.id_os || 'N/A'}</strong></div>
+    <div><span class="lbl">Data:</span> ${ordem.data_abertura ? new Date(ordem.data_abertura).toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</div>
+    <div><span class="lbl">Cliente:</span> <strong>${nomeCliente}</strong></div>
+    <div><span class="lbl">Técnico:</span> ${nomeTecnico}</div>
+    <div><span class="lbl">Status:</span> <span style="background:${getStatusColor(statusInfo.cor)};color:white;padding:3px 10px;border-radius:12px;font-size:.85em;">${statusInfo.nome}</span></div>
+    ${ordem.solicitante ? `<div><span class="lbl">Solicitante:</span> ${ordem.solicitante}</div>` : ''}
+    ${ordem.cliente_telefone ? `<div><span class="lbl">Telefone:</span> ${ordem.cliente_telefone}</div>` : ''}
+    ${ordem.cliente_cpf_cnpj ? `<div><span class="lbl">CPF/CNPJ:</span> ${ordem.cliente_cpf_cnpj}</div>` : ''}
+  </div>
+
+  ${ordem.descricao_problema ? `<div class="sec"><strong>📝 Problema / Observações:</strong><div style="margin-top:6px;white-space:pre-wrap;">${ordem.descricao_problema}</div></div>` : ''}
+  ${ordem.laudo_tecnico ? `<div class="sec" style="border-color:#ff9800;background:#fff3e0;"><strong style="color:#e65100;">🔧 Laudo Técnico:</strong><div style="margin-top:6px;white-space:pre-wrap;">${ordem.laudo_tecnico}</div></div>` : ''}
+
+  <h3>🛠️ Itens da Ordem de Serviço</h3>
+  <table>
+    <thead><tr>
+      <th style="width:11%">Tipo</th><th style="width:35%">Descrição</th>
+      <th style="width:8%;text-align:center">Qtd</th><th style="width:14%;text-align:right">Vlr. Unit.</th>
+      <th style="width:12%;text-align:right">Desc.</th><th style="width:17%;text-align:right">Total</th>
+    </tr></thead>
+    <tbody>${itensHtml.length > 0 ? itensHtml.join('') : '<tr><td colspan="6" style="text-align:center;color:#999;padding:16px;">Nenhum item</td></tr>'}</tbody>
+  </table>
+
+  <div class="total">💰 VALOR TOTAL: R$ ${totalGeral.toFixed(2)}</div>
+
+  ${fotosHtml}
+  ${assinaturaHtml}
+
+  <div class="footer">
+    Impresso em: ${new Date().toLocaleString('pt-BR')}
+    ${rodapeTexto ? `<br>${rodapeTexto}` : ''}
+  </div>
+</body></html>`;
   };
 
   // Template térmico para Ordem de Serviço (papel estreito)
