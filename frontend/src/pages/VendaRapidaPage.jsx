@@ -221,7 +221,9 @@ const VendaRapidaPage = () => {
   // Refs
   const codigoProdutoRef = useRef(null);
   const { user, permissions, isLoading: authLoading, axiosInstance } = useAuth();
-  const { servidorOk } = useOfflineSync();
+  const { servidorOk, marcarServidorIndisponivel } = useOfflineSync();
+  // Ref sempre atualizado para evitar stale closure em funções assíncronas
+  const servidorOkRef = useRef(servidorOk);
   const {
     buscarProdutos: buscarProdutosHook,
     buscarClientes: buscarClientesHook,
@@ -303,6 +305,9 @@ const VendaRapidaPage = () => {
       });
     }
   }, []);
+
+  // Mantém servidorOkRef sempre atualizado (evita stale closure em funções assíncronas)
+  useEffect(() => { servidorOkRef.current = servidorOk; }, [servidorOk]);
 
   // Quando servidor volta online: recarrega configurações
   const servidorOkPrevRef = useRef(servidorOk);
@@ -437,7 +442,7 @@ const VendaRapidaPage = () => {
       const token = getToken();
 
       // ── OFFLINE: carregar tudo do cache local ──────────────────────────────
-      if (!servidorOk) {
+      if (!servidorOkRef.current) {
         const cached = await carregarDadosIniciaisCache();
         // Validar que o cache pertence ao usuário logado atualmente
         const cacheUsername = cached?.parametros?._username;
@@ -595,7 +600,7 @@ const VendaRapidaPage = () => {
       const token = getToken();
       let tabelas = [];
 
-      if (servidorOk) {
+      if (servidorOkRef.current) {
         const response = await axiosInstance.get('/tabelas-comerciais/?apenas_ativas=true');
         tabelas = Array.isArray(response.data) ? response.data : (response.data?.results || []);
       } else {
@@ -654,7 +659,7 @@ const VendaRapidaPage = () => {
         console.log('🔍 Buscando produto:', termoBusca);
 
         let produtos;
-        if (servidorOk) {
+        if (servidorOkRef.current) {
           let response = await axiosInstance.get(`/produtos/?search=${termoBusca}`);
           produtos = Array.isArray(response.data) ? response.data : (response.data.results || []);
         } else {
@@ -1086,7 +1091,7 @@ const VendaRapidaPage = () => {
       console.log('📡 URL busca:', url);
 
       let produtos;
-      if (servidorOk) {
+      if (servidorOkRef.current) {
         let response = await axiosInstance.get(url);
         console.log('✅ Resposta busca:', response.data);
         produtos = Array.isArray(response.data) ? response.data : (response.data.results || []);
@@ -1109,7 +1114,7 @@ const VendaRapidaPage = () => {
               let valorVenda = produto.valor_venda || 0;
               let quantidadeEstoque = produto.quantidade_estoque || 0;
 
-              if (servidorOk && operacao && operacao.id_deposito_baixa) {
+              if (servidorOkRef.current && operacao && operacao.id_deposito_baixa) {
                 try {
                   const resEstoque = await axiosInstance.get(
                     `/estoque/?id_produto=${produto.id_produto}&id_deposito=${operacao.id_deposito_baixa}`
@@ -1162,7 +1167,7 @@ const VendaRapidaPage = () => {
       let valorVenda = produto.valor_venda || 0;
       let estoqueDisponivel = 0;
 
-      if (operacao && operacao.id_deposito_baixa && servidorOk) {
+      if (operacao && operacao.id_deposito_baixa && servidorOkRef.current) {
         console.log('🔍 Buscando estoque no depósito:', operacao.id_deposito_baixa);
         try {
           const resEstoque = await axiosInstance.get(
@@ -1185,7 +1190,7 @@ const VendaRapidaPage = () => {
           console.warn('[OFFLINE] Falha ao buscar estoque — usando dados do cache:', err.message);
           estoqueDisponivel = parseFloat(produto.estoque_total || 0);
         }
-      } else if (operacao && operacao.id_deposito_baixa && !servidorOk) {
+      } else if (operacao && operacao.id_deposito_baixa && !servidorOkRef.current) {
         console.log('[OFFLINE] Servidor indisponível — usando estoque do cache do produto');
         // Tentar usar estoque do depósito específico se estiver no cache do produto
         const estoqueDeposito = produto.estoque_por_deposito?.find(
@@ -1222,7 +1227,7 @@ const VendaRapidaPage = () => {
 
       // Se produto controla lote, buscar lotes e abrir seleção imediatamente
       if (produto.controla_lote) {
-        if (!servidorOk) {
+        if (!servidorOkRef.current) {
           console.warn('[OFFLINE] Produto controla lote mas servidor está offline — lote ignorado.');
         } else {
           try {
@@ -2562,7 +2567,7 @@ const VendaRapidaPage = () => {
       console.log('[VENDA] Dados da venda completa:', dadosVenda);
 
       // ── OFFLINE: salvar venda localmente e encerrar ────────────────────────
-      if (!servidorOk) {
+      if (!servidorOkRef.current) {
         const dadosFinanceiros = prepararDadosFinanceiros();
         const tempId = await salvarVendaOffline(dadosVenda, dadosFinanceiros);
         console.log('[OFFLINE] Venda salva localmente:', tempId, '| financeiros:', dadosFinanceiros.length);
