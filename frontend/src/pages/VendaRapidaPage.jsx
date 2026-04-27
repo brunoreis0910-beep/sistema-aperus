@@ -133,6 +133,7 @@ const VendaRapidaPage = () => {
   const [formaPagamentoAtual, setFormaPagamentoAtual] = useState(null);
   const [valorCondicaoAtual, setValorCondicaoAtual] = useState('');
   const [valorRestante, setValorRestante] = useState(0);
+  const [valorTotal, setValorTotal] = useState(0);
   const [imagemFundo, setImagemFundo] = useState('');
   const [usarMercadoPago, setUsarMercadoPago] = useState(false);
   const [mpPointTransacaoUuid, setMpPointTransacaoUuid] = useState(null);
@@ -151,6 +152,7 @@ const VendaRapidaPage = () => {
   const [openPerguntarTabelaFinanceiro, setOpenPerguntarTabelaFinanceiro] = useState(false);
   const [openDesconto, setOpenDesconto] = useState(false);
   const [openDescontoItem, setOpenDescontoItem] = useState(false);
+  const [openCondicoesPagamento, setOpenCondicoesPagamento] = useState(false);
   const [openFinalizar, setOpenFinalizar] = useState(false);
   const [openReimprimir, setOpenReimprimir] = useState(false);
   const [vendas, setVendas] = useState([]);
