@@ -56,19 +56,22 @@ if ($statusOutput) {
 
 Write-Host ""
 Write-Host "[2/6] Baixando atualizacao do GitHub..." -ForegroundColor Cyan
-git fetch origin 2>&1 | Out-Null
+$null = git fetch origin 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERRO] Falha ao conectar no GitHub! Verifique a internet." -ForegroundColor Red
     Read-Host "Pressione ENTER para sair"
     exit 1
 }
 
-git pull origin main 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    git pull origin master 2>&1 | Out-Null
+$pullOutput = git pull origin main 2>&1
+$pullExitCode = $LASTEXITCODE
+if ($pullExitCode -ne 0) {
+    $pullOutput = git pull origin master 2>&1
+    $pullExitCode = $LASTEXITCODE
 }
-if ($LASTEXITCODE -ne 0) {
+if ($pullExitCode -ne 0) {
     Write-Host "[ERRO] Falha no git pull!" -ForegroundColor Red
+    Write-Host $pullOutput -ForegroundColor DarkGray
     Read-Host "Pressione ENTER para sair"
     exit 1
 }
