@@ -52,6 +52,8 @@ import axios from 'axios';
 import mockAPI from '../services/mockAPI';
 import useImpressaoVenda from '../hooks/useImpressaoVenda';
 import { useAuth } from '../context/AuthContext';
+import { useOfflineSync } from '../context/OfflineSyncContext';
+import WifiOffIcon from '@mui/icons-material/WifiOff';
 import promocaoService from '../services/promocaoService';
 import WhatsAppQuickSend, { useWhatsAppTemplates } from './WhatsAppQuickSend';
 import { CalculadoraRevestimento, CalculadoraTinta, BotoesCalculadora } from './CalculadorasConstrucao';
@@ -134,6 +136,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   const location = useLocation();
   // Hook de autenticação (DEVE VIR PRIMEIRO!)
   const { axiosInstance, user } = useAuth();
+  const { servidorOk, isOnline } = useOfflineSync();
 
   // Hook de impressão (precisa do axiosInstance)
   const {
@@ -3961,6 +3964,22 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
   return (
     <Box sx={{ p: embedded ? 0 : 3 }}>
+      {/* Banner offline */}
+      {(!servidorOk || !isOnline) && (
+        <Alert
+          severity="warning"
+          icon={<WifiOffIcon />}
+          sx={{
+            mb: 2,
+            fontWeight: 600,
+            backgroundColor: '#fff3e0',
+            border: '1px solid #ff9800',
+            '& .MuiAlert-icon': { color: '#e65100' },
+          }}
+        >
+          <strong>Modo Offline</strong> — Servidor indisponível. Alterações serão sincronizadas quando a conexão voltar.
+        </Alert>
+      )}
       {/* Header */}
       {!embedded && (
       <Paper sx={{ p: 2, mb: 3 }}>
