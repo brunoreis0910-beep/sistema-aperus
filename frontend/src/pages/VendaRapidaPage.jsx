@@ -49,7 +49,6 @@ import {
   Settings as SettingsIcon,
   Wallpaper as WallpaperIcon
 } from '@mui/icons-material';
-import axios from 'axios';
 import promocaoService from '../services/promocaoService';
 import balancaService from '../services/balancaService';
 import { useAuth } from '../context/AuthContext';
@@ -70,87 +69,83 @@ const VendaRapidaPage = () => {
     parametros, setParametros,
     usuario, setUsuario,
     vendedor, setVendedor,
-    operacao, setOperacao,
-    empresa, setEmpresa,
     cliente, setCliente,
-    numeroDocumento, setNumeroDocumento,
-    tabelasComerciais, setTabelasComerciais,
-    tabelaSelecionada, setTabelaSelecionada,
-    formasPagamento, setFormasPagamento,
-    configImpressao, setConfigImpressao,
-    caixaStatus, setCaixaStatus,
-    caixaInfo, setCaixaInfo,
-    // Estados da Venda
     itens, setItens,
-    valorTotal, setValorTotal,
+    total, setTotal,
+    subtotal, setSubtotal,
     descontoGeral, setDescontoGeral,
-    // Estados do Produto
-    codigoProduto, setCodigoProduto,
-    idProdutoSelecionado, setIdProdutoSelecionado,
-    nomeProduto, setNomeProduto,
-    quantidade, setQuantidade,
-    valorUnitario, setValorUnitario,
-    precoBaseProduto, setPrecoBaseProduto,
-    descontoItem, setDescontoItem,
-    produtoBalanca, setProdutoBalanca,
-    // Lotes
-    controlaProdutoLote, setControlaProdutoLote,
-    lotesDisponiveis, setLotesDisponiveis,
-    lotePendente, setLotePendente,
-    lotePreSelecionado, setLotePreSelecionado,
-    // Promoções
-    promocoesAtivas, setPromocoes,
-    produtoEmPromocao, setProdutoEmPromocao,
-    mensagemPromocao, setMensagemPromocao,
-    // Validações
-    filaValidacoes, setFilaValidacoes,
-    limiteInfo, setLimiteInfo,
-    acaoLimiteAtual, setAcaoLimiteAtual,
-    senhaSupervisorLimite, setSenhaSupervisorLimite,
-    limiteAutorizado, setLimiteAutorizado,
-    atrasoInfo, setAtrasoInfo,
-    acaoAtrasoAtual, setAcaoAtrasoAtual,
-    senhaSupervisorAtraso, setSenhaSupervisorAtraso,
-    atrasoAutorizado, setAtrasoAutorizado,
-    estoqueInfo, setEstoqueInfo,
-    acaoEstoqueAtual, setAcaoEstoqueAtual,
-    senhaSupervisorEstoque, setSenhaSupervisorEstoque,
-    itemPendenteEstoque, setItemPendenteEstoque,
-    estoqueAutorizado, setEstoqueAutorizado,
-    // Condições de Pagamento
-    condicoesSelecionadas, setCondicoesSelecionadas,
-    formaPagamentoAtual, setFormaPagamentoAtual,
-    valorCondicaoAtual, setValorCondicaoAtual,
-    valorRestante, setValorRestante,
-    // Imagem de Fundo
-    imagemFundo, setImagemFundo,
-    // Mercado Pago
-    usarMercadoPago, setUsarMercadoPago,
-    mpPointTransacaoUuid, setMpPointTransacaoUuid,
-    mpPointStatus, setMpPointStatus,
-    mpPointDetalhe, setMpPointDetalhe,
-    mpPointAcaoAposAprovacao, setMpPointAcaoAposAprovacao
+    valorDescontoGeral, setValorDescontoGeral,
+    tabelasComerciais, setTabelasComerciais,
+    tabelaComercial, setTabelaComercial,
+    promocoesAtivas, setPromocoesAtivas,
+    operacoes, setOperacoes,
+    operacao, setOperacao,
+    formasPagamento, setFormasPagamento,
+    formaPagamento, setFormaPagamento,
+    parcelas, setParcelas,
+    dadosVenda, setDadosVenda,
+    vendaFinalizadaInfo, setVendaFinalizadaInfo,
+    isSubmitting, setIsSubmitting,
+    numeroVenda, setNumeroVenda,
+    // Adicione aqui todos os outros estados que foram movidos para o contexto
   } = useVendaRapida();
 
-  const [loading, setLoading] = useState(true); // true até carregarDadosUsuario concluir
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [openPesquisaProduto, setOpenPesquisaProduto] = useState(false);
+  const [produtosPesquisa, setProdutosPesquisa] = useState([]);
+  const [codigoProduto, setCodigoProduto] = useState('');
+  const [nomeProduto, setNomeProduto] = useState('');
+  const [quantidade, setQuantidade] = useState(1);
+  const [valorUnitario, setValorUnitario] = useState(0);
+  const [idProdutoSelecionado, setIdProdutoSelecionado] = useState(null);
+  const [descontoItem, setDescontoItem] = useState(0);
+  const [precoBaseProduto, setPrecoBaseProduto] = useState(0);
+  const [produtoBalanca, setProdutoBalanca] = useState(null);
+  const [controlaProdutoLote, setControlaProdutoLote] = useState(false);
+  const [lotesDisponiveis, setLotesDisponiveis] = useState([]);
+  const [lotePendente, setLotePendente] = useState(null);
+  const [lotePreSelecionado, setLotePreSelecionado] = useState(null);
+  const [produtoEmPromocao, setProdutoEmPromocao] = useState(null);
+  const [mensagemPromocao, setMensagemPromocao] = useState('');
+  const [filaValidacoes, setFilaValidacoes] = useState([]);
+  const [limiteInfo, setLimiteInfo] = useState(null);
+  const [acaoLimiteAtual, setAcaoLimiteAtual] = useState(null);
+  const [senhaSupervisorLimite, setSenhaSupervisorLimite] = useState('');
+  const [limiteAutorizado, setLimiteAutorizado] = useState(false);
+  const [atrasoInfo, setAtrasoInfo] = useState(null);
+  const [acaoAtrasoAtual, setAcaoAtrasoAtual] = useState(null);
+  const [senhaSupervisorAtraso, setSenhaSupervisorAtraso] = useState('');
+  const [atrasoAutorizado, setAtrasoAutorizado] = useState(false);
+  const [estoqueInfo, setEstoqueInfo] = useState(null);
+  const [acaoEstoqueAtual, setAcaoEstoqueAtual] = useState(null);
+  const [senhaSupervisorEstoque, setSenhaSupervisorEstoque] = useState('');
+  const [itemPendenteEstoque, setItemPendenteEstoque] = useState(null);
+  const [estoqueAutorizado, setEstoqueAutorizado] = useState(false);
+  const [condicoesSelecionadas, setCondicoesSelecionadas] = useState([]);
+  const [formaPagamentoAtual, setFormaPagamentoAtual] = useState(null);
+  const [valorCondicaoAtual, setValorCondicaoAtual] = useState('');
+  const [valorRestante, setValorRestante] = useState(0);
+  const [imagemFundo, setImagemFundo] = useState('');
+  const [usarMercadoPago, setUsarMercadoPago] = useState(false);
+  const [mpPointTransacaoUuid, setMpPointTransacaoUuid] = useState(null);
+  const [mpPointStatus, setMpPointStatus] = useState('');
+  const [mpPointDetalhe, setMpPointDetalhe] = useState('');
+  const [mpPointAcaoAposAprovacao, setMpPointAcaoAposAprovacao] = useState(null);
+  const [empresa, setEmpresa] = useState(null);
+  const [numeroDocumento, setNumeroDocumento] = useState('');
+  const [configImpressao, setConfigImpressao] = useState(null);
+  const [caixaStatus, setCaixaStatus] = useState('VERIFICANDO');
+  const [caixaInfo, setCaixaInfo] = useState(null);
+  const [tabelaSelecionada, setTabelaSelecionada] = useState(null);
 
-  // Dialogs e estados de UI que permanecem locais
   const [openSelecionarTabela, setOpenSelecionarTabela] = useState(false);
   const [produtoPendenteTabela, setProdutoPendenteTabela] = useState(null);
   const [openPerguntarTabelaFinanceiro, setOpenPerguntarTabelaFinanceiro] = useState(false);
   const [openDesconto, setOpenDesconto] = useState(false);
   const [openDescontoItem, setOpenDescontoItem] = useState(false);
   const [openFinalizar, setOpenFinalizar] = useState(false);
-  const [openPesquisaProduto, setOpenPesquisaProduto] = useState(false);
-  const [produtosPesquisa, setProdutosPesquisa] = useState([]);
-  const [itemSelecionado, setItemSelecionado] = useState(null);
-  const [descontoItemEdit, setDescontoItemEdit] = useState(0);
-  const [openCondicoesPagamento, setOpenCondicoesPagamento] = useState(false);
-  const [openImpressao, setOpenImpressao] = useState(false);
-  const [dadosVendaCompleta, setDadosVendaCompleta] = useState(null);
-  const [openSelecionarLote, setOpenSelecionarLote] = useState(false);
   const [openReimprimir, setOpenReimprimir] = useState(false);
   const [vendas, setVendas] = useState([]);
   const [loadingVendas, setLoadingVendas] = useState(false);
@@ -170,12 +165,9 @@ const VendaRapidaPage = () => {
   const [observacoesCaixa, setObservacoesCaixa] = useState('');
   const [justificativaFechamento, setJustificativaFechamento] = useState('');
 
-
-  // Refs
   const codigoProdutoRef = useRef(null);
   const { user, permissions, isLoading: authLoading, axiosInstance } = useAuth();
   const { servidorOk, marcarServidorIndisponivel } = useOfflineSync();
-  // Ref sempre atualizado para evitar stale closure em funções assíncronas
   const servidorOkRef = useRef(servidorOk);
   const {
     buscarProdutos: buscarProdutosHook,
@@ -233,15 +225,23 @@ const VendaRapidaPage = () => {
 
   useEffect(() => {
     console.log('🚀 VendaRapidaPage montado. Carregando dados...');
-    if (servidorOk) checkCaixaStatus();
-    carregarDadosUsuario();
-    carregarTabelasComerciais();
-    // Carregar configuração de impressão do módulo venda_rapida
+    // Apenas carrega os dados se eles não estiverem no contexto ainda
+    if (!parametros || !usuario) {
+      carregarDadosUsuario();
+    } else {
+      console.log('[CONTEXTO] Dados de usuário já presentes. Pulando recarga inicial.');
+      setLoading(false); // Garante que o loading seja desativado
+    }
+    if (tabelasComerciais.length === 0) {
+      carregarTabelasComerciais();
+    }
+    if (promocoesAtivas.dados.length === 0 && servidorOk) {
+        carregarPromocoes().catch(err => console.error('Erro ao carregar promoções no mount:', err));
+    }
     if (servidorOk) {
       axiosInstance.get('/configuracao-impressao/modulo/venda_rapida/')
         .then(res => setConfigImpressao(res.data))
         .catch(() => {});
-      // Carregar imagem de fundo do servidor (sobrescreve cache local se existir)
       axiosInstance.get('/user-preferencias/')
         .then(res => {
           const bg = res.data['venda_rapida_bg'];
@@ -250,146 +250,18 @@ const VendaRapidaPage = () => {
             localStorage.setItem('vendaRapidaImagemFundo', bg);
           }
         })
-        .catch(() => {}); // fallback já inicializado do localStorage
-      carregarPromocoes().then(() => {
-        console.log('✅ Promoções carregadas com sucesso no mount');
-      }).catch((err) => {
-        console.error('❌ Erro ao carregar promoções no mount:', err);
-      });
+        .catch(() => {});
     }
-  }, []);
-
-  // Mantém servidorOkRef sempre atualizado (evita stale closure em funções assíncronas)
-  useEffect(() => { servidorOkRef.current = servidorOk; }, [servidorOk]);
-
-  // Quando servidor volta online: recarregando configurações
-  const servidorOkPrevRef = useRef(servidorOk);
-  useEffect(() => {
-    const voltou = !servidorOkPrevRef.current && servidorOk;
-    servidorOkPrevRef.current = servidorOk;
-    if (voltou) {
-      console.log('[ONLINE] Servidor voltou — recarregando configurações...');
-      carregarDadosUsuario();
-      carregarTabelasComerciais();
-    }
-  }, [servidorOk]);
-
-  if (authLoading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (!user?.is_staff && !permissions?.venda_rapida_acessar) {
-    return (
-      <Box p={3}>
-        <Alert severity="warning">Você não tem permissão para acessar Venda Rápida.</Alert>
-      </Box>
-    );
-  }
-
-  // Função helper para pegar token correto
-  const getToken = () => {
-    return sessionStorage.getItem('accessToken') || sessionStorage.getItem('token');
-  };
-
-  useEffect(() => {
-    console.log('🔄 useEffect CALCULANDO TOTAL (itens ou desconto mudaram)');
-    calcularTotal();
-  }, [itens, descontoGeral]);
-
-  // Recarregar tabelas quando o usuário for carregado (para pegar a tabela padrão)
-  useEffect(() => {
-    if (usuario) {
-      carregarTabelasComerciais();
-    }
-  }, [usuario]);
-
-  // Monitorar carregamento de promoções
-  useEffect(() => {
-    console.log('📊 Estado de promocoesAtivas mudou:', {
-      quantidade: promocoesAtivas.length,
-      dados: promocoesAtivas
-    });
-  }, [promocoesAtivas]);
-
-  // Recarregar promoções a cada 10 segundos — apenas quando servidor estiver online
-  useEffect(() => {
-    if (!servidorOk) return; // não agendar quando offline
-    console.log('⏰ Configurando reload periódico de promoções a cada 10 segundos');
-    const interval = setInterval(() => {
-      if (!servidorOk) return; // checagem dupla ao disparar
-      console.log('🔄 Recarregando promoções (refresh periódico)');
-      carregarPromocoes();
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [servidorOk]);
-
-  // Atalhos de teclado
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      // F1 sempre funciona (seleção de cliente)
-      if (event.key === 'F1') {
-        event.preventDefault();
-        setOpenSelecionarCliente(true);
-        return;
-      }
-
-      // Para outros atalhos, bloquear se estiver em dialog ou textarea
-      const isInDialog = event.target.closest('[role="dialog"]');
-      const isTextarea = event.target.tagName === 'TEXTAREA';
-
-      if (isInDialog || isTextarea) {
-        return;
-      }
-
-      switch (event.key) {
-        case 'F4':
-          event.preventDefault();
-          // Abrir desconto
-          if (itens.length > 0) {
-            setOpenDesconto(true);
-          }
-          break;
-        case 'F6':
-          event.preventDefault();
-          // Cancelar venda
-          if (itens.length > 0 && window.confirm('Deseja cancelar a venda atual?')) {
-            setItens([]);
-            setDescontoGeral(0);
-            setCondicoesSelecionadas([]);
-            setCodigoProduto('');
-            setNomeProduto('');
-            setQuantidade(1);
-            setValorUnitario(0);
-            setIdProdutoSelecionado(null);
-          }
-          break;
-        case 'F10':
-          event.preventDefault();
-          // Concluir venda - calcular total síncrono e passar para abrirCondicoesPagamento
-          if (itens.length > 0) {
-            const subtotalSyncKey = itens.reduce((acc, item) => acc + (item.valor_total || 0), 0);
-            const valorDescontoGeralKey = (subtotalSyncKey * descontoGeral) / 100;
-            const totalSyncKey = subtotalSyncKey - valorDescontoGeralKey;
-            abrirCondicoesPagamento(false, totalSyncKey);
-          }
-          break;
-        default:
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [itens]);
+  }, []); // Roda apenas uma vez no mount
 
   const carregarDadosUsuario = async () => {
+    // Se já temos os parâmetros no contexto, não precisamos carregar tudo de novo
+    if (parametros && usuario) {
+      console.log('[CONTEXTO] Usando dados de usuário já carregados no contexto.');
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       const token = getToken();
@@ -417,7 +289,7 @@ const VendaRapidaPage = () => {
               setNumeroDocumento(String(cached.operacao.proximo_numero_nf || 1));
           }
           if (cached.cliente) await selecionarClienteVenda(cached.cliente);
-          console.log('[OFFLINE] Dados carregados do cache local (usuário:', currentUsername, ')');
+          console.log('[OFFLINE] Dados carregados do cache local');
         } else {
           setError('Servidor offline. Faça login online ao menos uma vez para usar o modo offline.');
         }
@@ -1729,6 +1601,134 @@ const VendaRapidaPage = () => {
         const quantidadeNum = parseFloat(item.quantidade) || 0;
         const valorUnitarioNum = parseFloat(item.valor_unitario) || 0;
 
+        const valorItem = quantidadeNum * valorUnitarioNum;
+        const valorDesconto = (valorItem * descontoPercentualNum) / 100;
+        const valorTotalItem = valorItem - valorDesconto;
+
+        console.log('[DESCONTO-ITEM] Atualizando desconto:', {
+          id_produto: item.id_produto,
+          desconto_anterior: item.desconto_percentual,
+          desconto_novo: descontoPercentualNum,
+          valor_desconto_anterior: item.desconto_valor,
+          valor_desconto_novo: valorDesconto.toFixed(2),
+          valor_total_anterior: item.valor_total,
+          valor_total_novo: valorTotalItem.toFixed(2)
+        });
+
+        return {
+          ...item,
+          desconto_percentual: descontoPercentualNum,
+          desconto_valor: valorDesconto,
+          valor_total: valorTotalItem
+        };
+      }
+      return item;
+    });
+
+    setItens(itensAtualizados);
+    setOpenDescontoItem(false);
+    setItemSelecionado(null);
+    setDescontoItemEdit(0);
+  };
+
+  const calcularTotal = () => {
+    const subtotal = itens.reduce((acc, item) => acc + item.valor_total, 0);
+    const valorDescontoGeral = (subtotal * descontoGeral) / 100;
+    const totalCalculado = subtotal - valorDescontoGeral;
+    console.log('🧮 CALCULANDO TOTAL:', {
+      'itens.length': itens.length,
+      'subtotal': subtotal,
+      'descontoGeral': descontoGeral,
+      'valorDescontoGeral': valorDescontoGeral,
+      'totalCalculado': totalCalculado
+    });
+    setValorTotal(totalCalculado);
+  };
+
+  // Funções de Condições de Pagamento
+  const abrirCondicoesPagamento = async (pularPerguntaTabela = false, totalRecalculado = null) => {
+    try {
+      console.log('🔓🔓🔓 ABRINDO CONDIÇÕES DE PAGAMENTO - INÍCIO');
+      console.log('💰 Estado atual dos valores:', {
+        'valorTotal (estado)': valorTotal,
+        'totalRecalculado (parâmetro)': totalRecalculado,
+        'itens.length': itens?.length,
+        'itens': itens
+      });
+
+      if (itens.length === 0) {
+        setError('Adicione pelo menos um item à venda');
+        return;
+      }
+
+      if (!vendedor || !vendedor.id_vendedor) {
+        setError('Vendedor é obrigatório. Configure um vendedor padrão em Configurações > Usuários');
+        return;
+      }
+
+      // A validação de limite de crédito agora é feita ao adicionar condição de pagamento a prazo
+
+      // Validar estoque de todos os itens antes de finalizar (se configurado)
+      if (operacao && operacao.validar_estoque && operacao.acao_estoque !== 'nao_validar' && !estoqueAutorizado) {
+        try {
+          console.log('🔍 Iniciando validação de estoque para finalização - itens:', itens.length);
+          const validacoesPendentes = [];
+
+          for (const item of itens) {
+            const produtoResponse = await axiosInstance.get(`/produtos/${item.id_produto}/`);
+            const produto = produtoResponse.data;
+
+            console.log('🔎 Checando item para validação de estoque:', {
+              id_produto: item.id_produto,
+              nome_item: item.nome || item.nome_produto || null,
+              quantidadeSolicitada_raw: item.quantidade,
+              tipo_quantidadeSolicitada: typeof item.quantidade
+            });
+
+            console.log('🔎 Dados do produto retornado pela API:', {
+              id_produto_api: produto.id_produto || produto.id,
+              nome_produto_api: produto.nome_produto || produto.descricao,
+              estoque_por_deposito: produto.estoque_por_deposito,
+              estoque_atual: produto.estoque_atual,
+              tipos: {
+                estoque_por_deposito: typeof produto.estoque_por_deposito,
+                estoque_atual: typeof produto.estoque_atual
+              }
+            });
+
+            let estoqueDisponivel = 0;
+            if (operacao.id_deposito_baixa && produto.estoque_por_deposito) {
+              const estoqueDeposito = produto.estoque_por_deposito.find(
+                est => Number(est.id_deposito) === Number(operacao.id_deposito_baixa)
+              );
+              estoqueDisponivel = estoqueDeposito ? parseFloat(estoqueDeposito.quantidade_atual || estoqueDeposito.quantidade) : 0;
+            } else {
+              estoqueDisponivel = parseFloat(produto.estoque_atual || 0);
+            }
+
+            let quantidadeSolicitada = parseFloat(item.quantidade);
+
+            console.log('   estoqueDisponivel (valor):', estoqueDisponivel, 'type:', typeof estoqueDisponivel);
+            console.log('   quantidadeSolicitada (valor):', quantidadeSolicitada, 'type:', typeof quantidadeSolicitada);
+            console.log('   Comparação: estoqueDisponivel < quantidadeSolicitada?', estoqueDisponivel < quantidadeSolicitada);
+
+            if (isNaN(estoqueDisponivel)) {
+              console.warn('⚠️ Estoque disponível é NaN para produto', produto.id_produto || produto.id, '- definindo 0');
+              estoqueDisponivel = 0;
+            }
+
+            if (isNaN(quantidadeSolicitada)) {
+              console.warn('⚠️ Quantidade solicitada é NaN para produto', produto.id_produto || produto.id, '- definindo 1');
+              quantidadeSolicitada = 1;
+            }
+
+            // ✅ VALIDAÇÃO: Só adicionar à fila SE estoque for INSUFICIENTE
+            if (estoqueDisponivel < quantidadeSolicitada) {
+              const faltam = quantidadeSolicitada - estoqueDisponivel;
+              console.log(`⚠️ ESTOQUE INSUFICIENTE DETECTADO para "${produto.nome_produto}": disponível ${estoqueDisponivel} < solicitado ${quantidadeSolicitada}`);
+
+              // Se ação for bloquear, interrompe imediatamente
+             
         const valorItem = quantidadeNum * valorUnitarioNum;
         const valorDesconto = (valorItem * descontoPercentualNum) / 100;
         const valorTotalItem = valorItem - valorDesconto;
