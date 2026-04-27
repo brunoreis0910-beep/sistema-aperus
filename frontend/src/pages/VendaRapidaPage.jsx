@@ -57,6 +57,7 @@ import { useOfflineSync } from '../context/OfflineSyncContext';
 import useTerminalCache from '../utils/useTerminalCache';
 import { salvarVendaOffline, buscarTabelasComerciaisCache } from '../utils/terminalCacheDB';
 import { logger } from '../components/DebugLogger';
+import { useVendaRapida } from '../context/VendaRapidaContext';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import CloudDoneIcon from '@mui/icons-material/CloudDone';
 
@@ -65,41 +66,80 @@ const VendaRapidaPage = () => {
     console.log('🚀🚀🚀 VendaRapidaPage CARREGADA - VERSÃO DEFINITIVA v4.0 - CACHE LIMPO');
   }, []);
 
+  const {
+    parametros, setParametros,
+    usuario, setUsuario,
+    vendedor, setVendedor,
+    operacao, setOperacao,
+    empresa, setEmpresa,
+    cliente, setCliente,
+    numeroDocumento, setNumeroDocumento,
+    tabelasComerciais, setTabelasComerciais,
+    tabelaSelecionada, setTabelaSelecionada,
+    formasPagamento, setFormasPagamento,
+    configImpressao, setConfigImpressao,
+    caixaStatus, setCaixaStatus,
+    caixaInfo, setCaixaInfo,
+    // Estados da Venda
+    itens, setItens,
+    valorTotal, setValorTotal,
+    descontoGeral, setDescontoGeral,
+    // Estados do Produto
+    codigoProduto, setCodigoProduto,
+    idProdutoSelecionado, setIdProdutoSelecionado,
+    nomeProduto, setNomeProduto,
+    quantidade, setQuantidade,
+    valorUnitario, setValorUnitario,
+    precoBaseProduto, setPrecoBaseProduto,
+    descontoItem, setDescontoItem,
+    produtoBalanca, setProdutoBalanca,
+    // Lotes
+    controlaProdutoLote, setControlaProdutoLote,
+    lotesDisponiveis, setLotesDisponiveis,
+    lotePendente, setLotePendente,
+    lotePreSelecionado, setLotePreSelecionado,
+    // Promoções
+    promocoesAtivas, setPromocoes,
+    produtoEmPromocao, setProdutoEmPromocao,
+    mensagemPromocao, setMensagemPromocao,
+    // Validações
+    filaValidacoes, setFilaValidacoes,
+    limiteInfo, setLimiteInfo,
+    acaoLimiteAtual, setAcaoLimiteAtual,
+    senhaSupervisorLimite, setSenhaSupervisorLimite,
+    limiteAutorizado, setLimiteAutorizado,
+    atrasoInfo, setAtrasoInfo,
+    acaoAtrasoAtual, setAcaoAtrasoAtual,
+    senhaSupervisorAtraso, setSenhaSupervisorAtraso,
+    atrasoAutorizado, setAtrasoAutorizado,
+    estoqueInfo, setEstoqueInfo,
+    acaoEstoqueAtual, setAcaoEstoqueAtual,
+    senhaSupervisorEstoque, setSenhaSupervisorEstoque,
+    itemPendenteEstoque, setItemPendenteEstoque,
+    estoqueAutorizado, setEstoqueAutorizado,
+    // Condições de Pagamento
+    condicoesSelecionadas, setCondicoesSelecionadas,
+    formaPagamentoAtual, setFormaPagamentoAtual,
+    valorCondicaoAtual, setValorCondicaoAtual,
+    valorRestante, setValorRestante,
+    // Imagem de Fundo
+    imagemFundo, setImagemFundo,
+    // Mercado Pago
+    usarMercadoPago, setUsarMercadoPago,
+    mpPointTransacaoUuid, setMpPointTransacaoUuid,
+    mpPointStatus, setMpPointStatus,
+    mpPointDetalhe, setMpPointDetalhe,
+    mpPointAcaoAposAprovacao, setMpPointAcaoAposAprovacao
+  } = useVendaRapida();
+
   const [loading, setLoading] = useState(true); // true até carregarDadosUsuario concluir
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Dados do usuário e parâmetros
-  const [usuario, setUsuario] = useState(null);
-  const [parametros, setParametros] = useState(null);
-  const [cliente, setCliente] = useState(null);
-  const [vendedor, setVendedor] = useState(null);
-  const [operacao, setOperacao] = useState(null);
-
-  // Tabelas Comerciais
-  const [tabelasComerciais, setTabelasComerciais] = useState([]);
-  const [tabelaSelecionada, setTabelaSelecionada] = useState(null);
+  // Dialogs e estados de UI que permanecem locais
   const [openSelecionarTabela, setOpenSelecionarTabela] = useState(false);
   const [produtoPendenteTabela, setProdutoPendenteTabela] = useState(null);
   const [openPerguntarTabelaFinanceiro, setOpenPerguntarTabelaFinanceiro] = useState(false);
-
-  // Dados da venda
-  const [numeroDocumento, setNumeroDocumento] = useState('');
-  const [itens, setItens] = useState([]);
-  const [valorTotal, setValorTotal] = useState(0);
-  const [descontoGeral, setDescontoGeral] = useState(0);
-
-  // Produto sendo adicionado
-  const [codigoProduto, setCodigoProduto] = useState('');
-  const [idProdutoSelecionado, setIdProdutoSelecionado] = useState(null);
-  const [nomeProduto, setNomeProduto] = useState('');
-  const [quantidade, setQuantidade] = useState(1);
-  const [valorUnitario, setValorUnitario] = useState(0);
-  const [precoBaseProduto, setPrecoBaseProduto] = useState(0);  // Preço original sem tabela
-  const [descontoItem, setDescontoItem] = useState(0);
-  const [produtoBalanca, setProdutoBalanca] = useState(null); // Info sobre produto de balança
-
-  // Dialogs
   const [openDesconto, setOpenDesconto] = useState(false);
   const [openDescontoItem, setOpenDescontoItem] = useState(false);
   const [openFinalizar, setOpenFinalizar] = useState(false);
@@ -107,116 +147,29 @@ const VendaRapidaPage = () => {
   const [produtosPesquisa, setProdutosPesquisa] = useState([]);
   const [itemSelecionado, setItemSelecionado] = useState(null);
   const [descontoItemEdit, setDescontoItemEdit] = useState(0);
-
-  // Condições de Pagamento
   const [openCondicoesPagamento, setOpenCondicoesPagamento] = useState(false);
-  const [formasPagamento, setFormasPagamento] = useState([]);
-  const [condicoesSelecionadas, setCondicoesSelecionadas] = useState([]);
-  const [formaPagamentoAtual, setFormaPagamentoAtual] = useState(null);
-  const [valorCondicaoAtual, setValorCondicaoAtual] = useState(0);
-  const [valorRestante, setValorRestante] = useState(0);
-
-  // Impressão
   const [openImpressao, setOpenImpressao] = useState(false);
   const [dadosVendaCompleta, setDadosVendaCompleta] = useState(null);
-  const [empresa, setEmpresa] = useState(null);
-  const [configImpressao, setConfigImpressao] = useState({ tipo_impressora: 'termica', largura_termica: '80mm', observacao_rodape: '', copias: 1 });
-
-  // Controle de Lote na Venda
-  const [controlaProdutoLote, setControlaProdutoLote] = useState(false);
   const [openSelecionarLote, setOpenSelecionarLote] = useState(false);
-  const [lotesDisponiveis, setLotesDisponiveis] = useState([]);
-  const [lotePendente, setLotePendente] = useState(null);
-  const [lotePreSelecionado, setLotePreSelecionado] = useState(null);
-
-  // Reimpressão
   const [openReimprimir, setOpenReimprimir] = useState(false);
   const [vendas, setVendas] = useState([]);
   const [loadingVendas, setLoadingVendas] = useState(false);
-
-  // Seleção de Cliente
   const [openSelecionarCliente, setOpenSelecionarCliente] = useState(false);
   const [clientes, setClientes] = useState([]);
   const [loadingClientes, setLoadingClientes] = useState(false);
   const [buscaCliente, setBuscaCliente] = useState('');
-
-  // Imagem de Fundo
-  const [imagemFundo, setImagemFundo] = useState(localStorage.getItem('vendaRapidaImagemFundo') || '');
   const [openConfigFundo, setOpenConfigFundo] = useState(false);
-
-  // Mercado Pago Point Tap
-  const [usarMercadoPago, setUsarMercadoPago] = useState(false);
   const [openMPPoint, setOpenMPPoint] = useState(false);
-  const [mpPointTransacaoUuid, setMpPointTransacaoUuid] = useState(null);
-  const [mpPointStatus, setMpPointStatus] = useState('PROCESSANDO'); // PROCESSANDO | APROVADA | RECUSADA | CANCELADA | ERRO
-  const [mpPointDetalhe, setMpPointDetalhe] = useState('');
-  const mpPointPollingRef = useRef(null);
-  const mpPointLoadingRef = useRef(false); // guard anti-duplo-tap
-  // 'adicionar_condicao' = após aprovação adiciona condição | 'finalizar_venda' = após aprovação finaliza
-  const [mpPointAcaoAposAprovacao, setMpPointAcaoAposAprovacao] = useState('adicionar_condicao');
-  const mpPointAcaoRef = useRef('adicionar_condicao'); // ref para usar dentro do intervalo
-
-  // Promoções
-  const [promocoesAtivas, setPromocoes] = useState([]);
-  const [produtoEmPromocao, setProdutoEmPromocao] = useState(null);
-  const [mensagemPromocao, setMensagemPromocao] = useState('');
-
-  // Estados para validações de operação
   const [openLimiteModal, setOpenLimiteModal] = useState(false);
-  const [limiteInfo, setLimiteInfo] = useState(null);
-  const [acaoLimiteAtual, setAcaoLimiteAtual] = useState('nao_validar');
-  const [senhaSupervisorLimite, setSenhaSupervisorLimite] = useState({ username: '', password: '' });
-  const [limiteAutorizado, setLimiteAutorizado] = useState(false);
-
   const [openAtrasoModal, setOpenAtrasoModal] = useState(false);
-  const [atrasoInfo, setAtrasoInfo] = useState(null);
-  const [acaoAtrasoAtual, setAcaoAtrasoAtual] = useState('alertar');
-  const [senhaSupervisorAtraso, setSenhaSupervisorAtraso] = useState({ username: '', password: '' });
-  const [atrasoAutorizado, setAtrasoAutorizado] = useState(false);
-
   const [openEstoqueModal, setOpenEstoqueModal] = useState(false);
-  const [estoqueInfo, setEstoqueInfo] = useState(null);
-  const [acaoEstoqueAtual, setAcaoEstoqueAtual] = useState('nao_validar');
-  const [senhaSupervisorEstoque, setSenhaSupervisorEstoque] = useState({ username: '', password: '' });
-  const [itemPendenteEstoque, setItemPendenteEstoque] = useState(null);
-  const [estoqueAutorizado, setEstoqueAutorizado] = useState(false);
-
-  // Fila de validações pendentes
-  const [filaValidacoes, setFilaValidacoes] = useState([]);
-
-  // DEBUG UI: mostrar contador visível de fila de validações (pequeno badge)
-  const BadgeFila = () => {
-    if (!filaValidacoes || filaValidacoes.length === 0) return null;
-    return (
-      <Box sx={{ position: 'fixed', right: 20, bottom: 100, zIndex: 2000 }}>
-        <Paper elevation={6} sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 220 }}>
-          <Chip label={`Validações pendentes: ${filaValidacoes.length}`} color="warning" />
-          <Box>
-            {filaValidacoes.map((v, idx) => (
-              <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5 }}>
-                <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                  {v.tipo === 'estoque' ? (v.dados?.produto || v.item?.nomeProduto || 'Produto') : v.tipo}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {v.tipo === 'estoque' ? `qtd:${v.dados?.solicitado ?? v.item?.quantidade ?? '-'} • ação:${v.acao}` : v.acao}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-        </Paper>
-      </Box>
-    );
-  };
-
-  // Controle de Caixa
-  const [caixaStatus, setCaixaStatus] = useState('LOADING'); // LOADING, ABERTO, FECHADO
-  const [caixaInfo, setCaixaInfo] = useState(null);
   const [openAbrirCaixa, setOpenAbrirCaixa] = useState(false);
   const [openFecharCaixa, setOpenFecharCaixa] = useState(false);
   const [valorAbertura, setValorAbertura] = useState('');
   const [valorFechamento, setValorFechamento] = useState('');
   const [observacoesCaixa, setObservacoesCaixa] = useState('');
   const [justificativaFechamento, setJustificativaFechamento] = useState('');
+
 
   // Refs
   const codigoProdutoRef = useRef(null);
@@ -309,7 +262,7 @@ const VendaRapidaPage = () => {
   // Mantém servidorOkRef sempre atualizado (evita stale closure em funções assíncronas)
   useEffect(() => { servidorOkRef.current = servidorOk; }, [servidorOk]);
 
-  // Quando servidor volta online: recarrega configurações
+  // Quando servidor volta online: recarregando configurações
   const servidorOkPrevRef = useRef(servidorOk);
   useEffect(() => {
     const voltou = !servidorOkPrevRef.current && servidorOk;
@@ -782,12 +735,12 @@ const VendaRapidaPage = () => {
 
   const selecionarClienteVenda = async (clienteSelecionado) => {
     console.log('🎯🎯🎯 selecionarClienteVenda CHAMADA:', clienteSelecionado);
-    console.log('🔧 Operação atual:', operacao);
-    console.log('🔧 validar_atraso:', operacao?.validar_atraso);
-    console.log('🔧 acao_atraso:', operacao?.acao_atraso);
-    console.log('🔧 atrasoAutorizado ANTES:', atrasoAutorizado);
-    console.log('🔧 limiteAutorizado ANTES:', limiteAutorizado);
-    console.log('🔧 estoqueAutorizado ANTES:', estoqueAutorizado);
+    console.log('🔍 Operação atual:', operacao);
+    console.log('🔍 validar_atraso:', operacao?.validar_atraso);
+    console.log('🔍 acao_atraso:', operacao?.acao_atraso);
+    console.log('🔍 atrasoAutorizado ANTES:', atrasoAutorizado);
+    console.log('🔍 limiteAutorizado ANTES:', limiteAutorizado);
+    console.log('🔍 estoqueAutorizado ANTES:', estoqueAutorizado);
 
     // RESETAR FLAGS ao trocar de cliente (mas não ao carregar cliente padrão pela primeira vez)
     // Se já tem um cliente selecionado e está trocando, resetar as autorizações
@@ -1415,7 +1368,7 @@ const VendaRapidaPage = () => {
             tipo_desconto: promo.tipo_desconto,
             valor_desconto: descontoFinal,
             quantidade_minima: produtoNaPromo.quantidade_minima,
-            valor_desconto_produto: produtoNaPromo.valor_desconto_produto
+            valor
           };
         } else {
           console.log('DEBUG: Quantidade insuficiente. Mínima:', qtdMinNum, 'Informada:', qtdNum);
@@ -1463,6 +1416,7 @@ const VendaRapidaPage = () => {
         desconto = promocao.desconto_percentual;
         console.log('📊 Desconto percentual:', desconto, '%');
       } else {
+        // Para desconto em valor, converter para percentual
         const valorItem = qtd * valor;
         desconto = (promocao.valor_desconto / valorItem) * 100;
         console.log('[DESCONTO] Desconto em valor: R$', promocao.valor_desconto, '->', desconto.toFixed(2), '%');
@@ -2109,7 +2063,7 @@ const VendaRapidaPage = () => {
     setOpenPerguntarTabelaFinanceiro(false);
 
     // Abrir condições de pagamento (pular pergunta para não perguntar novamente)
-    // Calcular total sincronamente e passar para evitar timing issues
+    // Calcular total síncronamente e passar para evitar timing issues
     const subtotalSyncPular = itens.reduce((acc, item) => acc + (item.valor_total || 0), 0);
     const valorDescontoGeralPular = (subtotalSyncPular * descontoGeral) / 100;
     const totalSyncPular = subtotalSyncPular - valorDescontoGeralPular;
@@ -2853,7 +2807,7 @@ const VendaRapidaPage = () => {
         
         <!-- TIPO DE OPERAÇÃO E NÚMERO -->
         <div class="center">
-          <div class="titulo">${dados.operacao && dados.operacao.nome_operacao ? dados.operacao.nome_operacao : 'VENDA RÁPIDA'}</div>
+          <div class="titulo">${dados.operacao ? (dados.operacao.nome_operacao || 'VENDA RÁPIDA' ) : 'VENDA RÁPIDA'}</div>
           <div class="bold">Nº ${dados.numero_documento}</div>
         </div>
         
@@ -3093,10 +3047,9 @@ const VendaRapidaPage = () => {
 
       // Log da primeira venda para verificar estrutura
       if (vendasArray.length > 0) {
-        console.log('🔍 Primeira venda (estrutura):', vendasArray[0]);
-        console.log('🔍 Chaves disponíveis:', Object.keys(vendasArray[0]));
-        console.log('🔍 Cliente da primeira venda:', vendasArray[0].cliente);
-        console.log('🔍 Tipo do cliente:', typeof vendasArray[0].cliente);
+        console.log('🔍 DEBUG Tabela - Primeira venda:', vendasArray[0]);
+        console.log('🔍 DEBUG Tabela - Cliente:', vendasArray[0].cliente);
+        console.log('🔍 DEBUG Tabela - Tipo cliente:', typeof vendasArray[0].cliente);
       }
 
       // Expandir dados do cliente se vier como ID
@@ -3737,7 +3690,7 @@ const VendaRapidaPage = () => {
               fullWidth
               variant="outlined"
               onClick={() => {
-                if (itens.length > 0 && window.confirm('Cancelar a venda?')) {
+                if (itens.length > 0 && window.confirm('Cancelar a venda atual?')) {
                   setItens([]);
                   setDescontoGeral(0);
                   setCondicoesSelecionadas([]);
@@ -4080,10 +4033,10 @@ const VendaRapidaPage = () => {
                   variant="contained"
                   size="large"
                   onClick={() => {
-                    const subtotalSyncBtn = itens.reduce((acc, item) => acc + (item.valor_total || 0), 0);
-                    const valorDescontoGeralBtn = (subtotalSyncBtn * descontoGeral) / 100;
-                    const totalSyncBtn = subtotalSyncBtn - valorDescontoGeralBtn;
-                    abrirCondicoesPagamento(false, totalSyncBtn);
+                    const subtotalSync = itens.reduce((acc, item) => acc + (item.valor_total || 0), 0);
+                    const valorDescontoGeralSync = (subtotalSync * descontoGeral) / 100;
+                    const totalSync = subtotalSync - valorDescontoGeralSync;
+                    abrirCondicoesPagamento(false, totalSync);
                   }}
                   disabled={itens.length === 0}
                   sx={{
@@ -4658,7 +4611,7 @@ const VendaRapidaPage = () => {
           <Paper sx={{ p: 2, mb: 3, backgroundColor: '#E3F2FD' }}>
             <Grid container spacing={2}>
               <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" color="text.secondary" gutterBottom>
                   Total da Venda:
                 </Typography>
                 <Typography variant="h5" fontWeight="bold" color="primary">
@@ -4666,7 +4619,7 @@ const VendaRapidaPage = () => {
                 </Typography>
               </Grid>
               <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" color="text.secondary" gutterBottom>
                   Valor Restante:
                 </Typography>
                 <Typography
@@ -4810,7 +4763,9 @@ const VendaRapidaPage = () => {
                       <Typography variant="caption" color="text.secondary">
                         Conta:
                       </Typography>
-                      <Typography variant="body2" fontWeight="bold" color={formaSelecionada.id_conta_padrao ? 'success.main' : 'error.main'}>
+                      <Typography variant="body2" fontWeight="bold" color={formaSelecionada.id_conta_padrao ? 'success.main' : 'error.main'}
+                        sx={{ display: 'block' }}
+                      >
                         {formaSelecionada.nome_conta_padrao || '⚠️ Não configurada'}
                       </Typography>
                     </Grid>
@@ -4818,7 +4773,9 @@ const VendaRapidaPage = () => {
                       <Typography variant="caption" color="text.secondary">
                         Centro de Custo:
                       </Typography>
-                      <Typography variant="body2" fontWeight="bold" color={formaSelecionada.id_centro_custo ? 'success.main' : 'error.main'}>
+                      <Typography variant="body2" fontWeight="bold" color={formaSelecionada.id_centro_custo ? 'success.main' : 'error.main'}
+                        sx={{ display: 'block' }}
+                      >
                         {formaSelecionada.nome_centro_custo || '⚠️ Não configurado'}
                       </Typography>
                     </Grid>
@@ -4826,7 +4783,9 @@ const VendaRapidaPage = () => {
                       <Typography variant="caption" color="text.secondary">
                         Departamento:
                       </Typography>
-                      <Typography variant="body2" fontWeight="bold" color={formaSelecionada.id_departamento ? 'success.main' : 'error.main'}>
+                      <Typography variant="body2" fontWeight="bold" color={formaSelecionada.id_departamento ? 'success.main' : 'error.main'}
+                        sx={{ display: 'block' }}
+                      >
                         {formaSelecionada.nome_departamento || '⚠️ Não configurado'}
                       </Typography>
                     </Grid>
@@ -5186,7 +5145,7 @@ const VendaRapidaPage = () => {
             </Button>
           )}
           <Button
-            onClick={() => salvarImagemFundo(imagemFundo)}
+            onClick={salvarImagemFundo}
             variant="contained"
             sx={{
               backgroundColor: '#9C27B0',
@@ -5765,7 +5724,7 @@ const VendaRapidaPage = () => {
                     <Typography variant="body1" color="primary" fontWeight="bold">
                       {tabela.percentual > 0 ? '+' : ''}{tabela.percentual}%
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{ opacity: 0.8 }}>
                       Exemplo: R$ 100,00 → R$ {(100 + (100 * tabela.percentual / 100)).toFixed(2)}
                     </Typography>
                   </Box>

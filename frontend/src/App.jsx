@@ -4,6 +4,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import { MenuStateProvider } from './context/MenuStateContext'
 import { GruposProdutoProvider } from './context/GruposProdutoContext'
+import { VendaRapidaProvider } from './context/VendaRapidaContext';
 import { ToastProvider } from './components/common/Toast'
 import { lightTheme } from './theme/unifiedTheme'
 import DebugLogger from './components/DebugLogger'
@@ -166,132 +167,137 @@ export default function App() {
         <UltraWideConfig>
           <GruposProdutoProvider>
             <MenuStateProvider>
-              <AxiosBridge />
-              <Routes>
-                <Route path='/login' element={<LoginPage />} />
-                <Route path='/login-simple' element={<LoginSimple />} />
-                <Route path='/login-clean' element={<LoginClean />} />
-                <Route path='/auto-login' element={<AutoLogin />} />
-                <Route path='/demo' element={<UltraWideDemo />} />
-                <Route path='/fullscreen-test' element={<FullScreenTest />} />
-                <Route path='/layout-selector' element={<LayoutSelector />} />
-                <Route path='/dashboard-fullscreen-test' element={<FullScreenDashboardTest />} />
-                <Route path='/database-test' element={<DatabaseTest />} />
-                <Route path='/api-tester' element={<APITester />} />
-                <Route path='/operacao-tester' element={<OperacaoTester />} />
-                <Route path='/auto-login-dev' element={<AutoLoginDev />} />
-                <Route path='/configuracao-ip' element={<ConfiguracaoIP />} />
-                <Route path='/debug-conexao' element={<DebugConexaoPage />} />
-                <Route path='/cotacao-resposta/:token' element={<CotacaoRespostaPublica />} />
-                <Route path='/exemplo-toast' element={<ExemploToast />} />
-                <Route path='/exemplo-icones' element={<ExemploIcones />} />
+              <VendaRapidaProvider>
+                <AxiosBridge />
+                {/* Rotas de Login e Autenticação (públicas) */}
+                <Routes>
+                  <Route path='/login' element={<LoginPage />} />
+                  <Route path='/login-simple' element={<LoginSimple />} />
+                  <Route path='/login-clean' element={<LoginClean />} />
+                  <Route path='/auto-login' element={<AutoLogin />} />
+                  <Route path='/auto-login-dev' element={<AutoLoginDev />} />
+                  <Route path='/configuracao-ip' element={<ConfiguracaoIP />} />
+                  <Route path='/cotacao-resposta/:token' element={<CotacaoRespostaPublica />} />
 
-                {/* Rotas protegidas */}
-                <Route
-                  path='/'
-                  element={
-                    <ProtectedRoute>
-                      <DashboardLayoutClean />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route index element={<DashboardHomeClean />} />
-                  <Route path='home' element={<DashboardHomeClean />} />
-                  <Route path='clientes' element={<ClientePageCompleteFixed />} />
-                  <Route path='fornecedores' element={<FornecedorPage />} />
-                  <Route path='produtos' element={<ProdutoPageResponsive />} />
-                  <Route path='cadastro-turbo' element={<CadastroTurboProduto />} />
-                  <Route path='vendas' element={<Vendas />} />
-                  <Route path='venda-rapida' element={<VendaRapidaPage />} />
-                  <Route path='ordem-servico' element={<OrdemServicoPage />} />
-                  <Route path='entregas' element={<EntregasPage />} />
-                  <Route path='comandas' element={<ComandasPage />} />
-                  <Route path='tabela-comercial' element={<TabelaComercialPage />} />
-                  <Route path='veiculos' element={<VeiculosPage />} />
-                  <Route path='etiquetas' element={<EtiquetasPage />} />
-                  <Route path='equipamentos' element={<EquipamentosPage />} />
-                  <Route path='alugueis' element={<AlugueisPage />} />
-                  <Route path='alugueis/nova' element={<AluguelNovoPage />} />
-                  <Route path='cheques' element={<ChequesPage />} />
-                  <Route path='estoque-config' element={<EstoqueConfig />} />
-                  <Route path='mapa-promocao' element={<MapaPromocaoPage />} />
-                  <Route path='compras' element={<CompraPage />} />
-                  <Route path='devolucoes' element={<DevolucoesListPage />} />
-                  <Route path='devolucoes/nova' element={<DevolucaoPage />} />
-                  <Route path='trocas' element={<TrocasListPage />} />
-                  <Route path='trocas/nova' element={<TrocaPage />} />
-                  <Route path='catalogos' element={<CatalogoPage />} />
-                  <Route path='relatorios' element={<RelatoriosPage />} />
-                  <Route path='graficos' element={<GraficosPage />} />
-                  <Route path='financeiro' element={<FinancePage />} />
-                  <Route path='bancario' element={<BancarioPage />} />
-                  <Route path='pet-shop' element={<PetShopPage />} />
-                  <Route path='clinica-veterinaria' element={<ClinicaVeterinariaPage />} />
-                  <Route path='documentos-fiscais' element={<DocumentosFiscaisPage />} />
-                  <Route path='sped' element={<SpedPage />} />
-                  <Route path='sped-contribuicoes' element={<SpedContribuicoesPage />} />
-                  <Route path='aprovacoes' element={<AprovacoesPage />} />
-                  <Route path='minhas-solicitacoes' element={<MinhasSolicitacoesPage />} />
-                  <Route path='configuracoes' element={<SettingsPage />} />
-                  <Route path='acesso-mobile' element={<AcessoMobile />} />
-                  <Route path='status-ordem-servico' element={<StatusOrdemServicoConfig />} />
-                  <Route path='backup' element={<BackupPage />} />
-                  <Route path='relatorios/cashback' element={<RelatorioCashback />} />
-                  <Route path='relatorios/lucratividade' element={<RelatorioLucratividadePage />} />
-                  <Route path='relatorios/projecao-compra' element={<RelatorioProjecaoCompraPage />} />
-                  <Route path='relatorios/ficha-produto' element={<FichaProdutoPage />} />
-                  <Route path='relatorios/ficha-veiculo' element={<FichaVeiculoPage />} />
-                  <Route path='relatorios/ficha-cliente' element={<FichaClientePage />} />
-                  <Route path='relatorios/clientes' element={<RelatoriosClientePage />} />
-                  <Route path='relatorios/produtos' element={<RelatoriosProdutoPage />} />
-                  <Route path='relatorios/vendas' element={<RelatoriosVendaPage />} />
-                  <Route path='alugueis/editar/:id' element={<AluguelEditarPage />} />
-                  <Route path='configuracao-contrato' element={<ConfiguracaoContratoPage />} />
-                  <Route path='nfce' element={<NFCePage />} />
-                  <Route path='nfe' element={<NFePage />} />
-                  <Route path='faturamento' element={<FaturamentoPage />} />
-                  <Route path='cte' element={<CTePage />} />
-                  {/* Manifestação do Destinatário */}
-                  <Route path='manifestacao-destinatario' element={<ManifestacaoPage />} />
-                  {/* Modulo Agro */}
-                  <Route path='agro' element={<AgroPage />} />
-                  <Route path='agro/safras' element={<AgroSafrasPage />} />
-                  <Route path='agro/contratos' element={<AgroContratosPage />} />
-                  <Route path='agro/conversoes' element={<AgroConversoesPage />} />
-                  <Route path='agro/operacional' element={<AgroOperacionalPage />} />
-                  <Route path='whatsapp' element={<AgroWhatsappPage />} />
-                  {/* Páginas restauradas */}
-                  <Route path='mdfe' element={<MDFePage />} />
-                  <Route path='cartoes' element={<CartoesPage />} />
-                  <Route path='conciliacao' element={<ConciliacaoPage />} />
-                  <Route path='agenda' element={<AgendaPage />} />
-                  <Route path='balancas' element={<BalancasPage />} />
-                  <Route path='contas-servicos' element={<ContasServicosPage />} />
-                  <Route path='cotacao' element={<CotacaoPage />} />
-                  <Route path='formas-pagamento' element={<FormasPagamentoPage />} />
-                  <Route path='relatorios/comissoes' element={<RelatorioComissoesPage />} />
-                  <Route path='relatorios/dre' element={<RelatorioDREPage />} />
-                  <Route path='relatorios/inventario' element={<RelatorioInventarioPage />} />
-                  <Route path='relatorios/cte' element={<RelatorioCTePage />} />
-                  <Route path='relatorios/mdfe' element={<RelatorioMDFePage />} />
-                  <Route path='producao' element={<ProducaoPage />} />
-                  <Route path='boletos' element={<BoletosPage />} />
-                  <Route path='mapa-carga' element={<MapaCargaPage />} />
-                  <Route path='assistente-ia' element={<AssistenteIAPage />} />
-                  <Route path='consultor-negocios' element={<ConsultorNegociosPage />} />
-                  {/* Novos Módulos */}
-                  <Route path='crm' element={<CRMPage />} />
-                  <Route path='rh' element={<RHPage />} />
-                  <Route path='ponto' element={<PontoPage />} />
-                  <Route path='pix' element={<PixPage />} />
-                  <Route path='recorrencia' element={<RecorrenciaPage />} />
-                  <Route path='churn' element={<ChurnPage />} />
-                  <Route path='dashboard-bi' element={<DashboardBI />} />
-                  <Route path='consulta-estoque' element={<ConsultaEstoquePage />} />
-                </Route>
+                  {/* Rotas de Debug e Testes (desenvolvimento) */}
+                  <Route path='/demo' element={<UltraWideDemo />} />
+                  <Route path='/fullscreen-test' element={<FullScreenTest />} />
+                  <Route path='/layout-selector' element={<LayoutSelector />} />
+                  <Route path='/dashboard-fullscreen-test' element={<FullScreenDashboardTest />} />
+                  <Route path='/database-test' element={<DatabaseTest />} />
+                  <Route path='/api-tester' element={<APITester />} />
+                  <Route path='/operacao-tester' element={<OperacaoTester />} />
+                  <Route path='/debug-conexao' element={<DebugConexaoPage />} />
+                  <Route path='/exemplo-toast' element={<ExemploToast />} />
+                  <Route path='/exemplo-icones' element={<ExemploIcones />} />
 
-                <Route path='*' element={<Navigate to='/' replace />} />
-              </Routes>
+                  {/* Rotas protegidas */}
+                  <Route
+                    path='/'
+                    element={
+                      <ProtectedRoute>
+                        <DashboardLayoutClean />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route index element={<DashboardHomeClean />} />
+                    <Route path='home' element={<DashboardHomeClean />} />
+                    <Route path='clientes' element={<ClientePageCompleteFixed />} />
+                    <Route path='fornecedores' element={<FornecedorPage />} />
+                    <Route path='produtos' element={<ProdutoPageResponsive />} />
+                    <Route path='cadastro-turbo' element={<CadastroTurboProduto />} />
+                    <Route path='vendas' element={<Vendas />} />
+                    <Route path='venda-rapida' element={<VendaRapidaPage />} />
+                    <Route path='ordem-servico' element={<OrdemServicoPage />} />
+                    <Route path='entregas' element={<EntregasPage />} />
+                    <Route path='comandas' element={<ComandasPage />} />
+                    <Route path='tabela-comercial' element={<TabelaComercialPage />} />
+                    <Route path='veiculos' element={<VeiculosPage />} />
+                    <Route path='etiquetas' element={<EtiquetasPage />} />
+                    <Route path='equipamentos' element={<EquipamentosPage />} />
+                    <Route path='alugueis' element={<AlugueisPage />} />
+                    <Route path='alugueis/nova' element={<AluguelNovoPage />} />
+                    <Route path='cheques' element={<ChequesPage />} />
+                    <Route path='estoque-config' element={<EstoqueConfig />} />
+                    <Route path='mapa-promocao' element={<MapaPromocaoPage />} />
+                    <Route path='compras' element={<CompraPage />} />
+                    <Route path='devolucoes' element={<DevolucoesListPage />} />
+                    <Route path='devolucoes/nova' element={<DevolucaoPage />} />
+                    <Route path='trocas' element={<TrocasListPage />} />
+                    <Route path='trocas/nova' element={<TrocaPage />} />
+                    <Route path='catalogos' element={<CatalogoPage />} />
+                    <Route path='relatorios' element={<RelatoriosPage />} />
+                    <Route path='graficos' element={<GraficosPage />} />
+                    <Route path='financeiro' element={<FinancePage />} />
+                    <Route path='bancario' element={<BancarioPage />} />
+                    <Route path='pet-shop' element={<PetShopPage />} />
+                    <Route path='clinica-veterinaria' element={<ClinicaVeterinariaPage />} />
+                    <Route path='documentos-fiscais' element={<DocumentosFiscaisPage />} />
+                    <Route path='sped' element={<SpedPage />} />
+                    <Route path='sped-contribuicoes' element={<SpedContribuicoesPage />} />
+                    <Route path='aprovacoes' element={<AprovacoesPage />} />
+                    <Route path='minhas-solicitacoes' element={<MinhasSolicitacoesPage />} />
+                    <Route path='configuracoes' element={<SettingsPage />} />
+                    <Route path='acesso-mobile' element={<AcessoMobile />} />
+                    <Route path='status-ordem-servico' element={<StatusOrdemServicoConfig />} />
+                    <Route path='backup' element={<BackupPage />} />
+                    <Route path='relatorios/cashback' element={<RelatorioCashback />} />
+                    <Route path='relatorios/lucratividade' element={<RelatorioLucratividadePage />} />
+                    <Route path='relatorios/projecao-compra' element={<RelatorioProjecaoCompraPage />} />
+                    <Route path='relatorios/ficha-produto' element={<FichaProdutoPage />} />
+                    <Route path='relatorios/ficha-veiculo' element={<FichaVeiculoPage />} />
+                    <Route path='relatorios/ficha-cliente' element={<FichaClientePage />} />
+                    <Route path='relatorios/clientes' element={<RelatoriosClientePage />} />
+                    <Route path='relatorios/produtos' element={<RelatoriosProdutoPage />} />
+                    <Route path='relatorios/vendas' element={<RelatoriosVendaPage />} />
+                    <Route path='alugueis/editar/:id' element={<AluguelEditarPage />} />
+                    <Route path='configuracao-contrato' element={<ConfiguracaoContratoPage />} />
+                    <Route path='nfce' element={<NFCePage />} />
+                    <Route path='nfe' element={<NFePage />} />
+                    <Route path='faturamento' element={<FaturamentoPage />} />
+                    <Route path='cte' element={<CTePage />} />
+                    {/* Manifestação do Destinatário */}
+                    <Route path='manifestacao-destinatario' element={<ManifestacaoPage />} />
+                    {/* Modulo Agro */}
+                    <Route path='agro' element={<AgroPage />} />
+                    <Route path='agro/safras' element={<AgroSafrasPage />} />
+                    <Route path='agro/contratos' element={<AgroContratosPage />} />
+                    <Route path='agro/conversoes' element={<AgroConversoesPage />} />
+                    <Route path='agro/operacional' element={<AgroOperacionalPage />} />
+                    <Route path='whatsapp' element={<AgroWhatsappPage />} />
+                    {/* Páginas restauradas */}
+                    <Route path='mdfe' element={<MDFePage />} />
+                    <Route path='cartoes' element={<CartoesPage />} />
+                    <Route path='conciliacao' element={<ConciliacaoPage />} />
+                    <Route path='agenda' element={<AgendaPage />} />
+                    <Route path='balancas' element={<BalancasPage />} />
+                    <Route path='contas-servicos' element={<ContasServicosPage />} />
+                    <Route path='cotacao' element={<CotacaoPage />} />
+                    <Route path='formas-pagamento' element={<FormasPagamentoPage />} />
+                    <Route path='relatorios/comissoes' element={<RelatorioComissoesPage />} />
+                    <Route path='relatorios/dre' element={<RelatorioDREPage />} />
+                    <Route path='relatorios/inventario' element={<RelatorioInventarioPage />} />
+                    <Route path='relatorios/cte' element={<RelatorioCTePage />} />
+                    <Route path='relatorios/mdfe' element={<RelatorioMDFePage />} />
+                    <Route path='producao' element={<ProducaoPage />} />
+                    <Route path='boletos' element={<BoletosPage />} />
+                    <Route path='mapa-carga' element={<MapaCargaPage />} />
+                    <Route path='assistente-ia' element={<AssistenteIAPage />} />
+                    <Route path='consultor-negocios' element={<ConsultorNegociosPage />} />
+                    {/* Novos Módulos */}
+                    <Route path='crm' element={<CRMPage />} />
+                    <Route path='rh' element={<RHPage />} />
+                    <Route path='ponto' element={<PontoPage />} />
+                    <Route path='pix' element={<PixPage />} />
+                    <Route path='recorrencia' element={<RecorrenciaPage />} />
+                    <Route path='churn' element={<ChurnPage />} />
+                    <Route path='dashboard-bi' element={<DashboardBI />} />
+                    <Route path='consulta-estoque' element={<ConsultaEstoquePage />} />
+                  </Route>
+
+                  <Route path='*' element={<Navigate to='/' replace />} />
+                </Routes>
+              </VendaRapidaProvider>
             </MenuStateProvider>
           </GruposProdutoProvider>
         </UltraWideConfig>
