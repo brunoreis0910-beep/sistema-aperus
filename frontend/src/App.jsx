@@ -138,12 +138,23 @@ import { useOfflineSync } from './context/OfflineSyncContext'
  */
 function AxiosBridge() {
   const { axiosInstance } = useAuth();
-  const { registerAxios } = useOfflineSync();
+  const { registerAxios, marcarServidorIndisponivel } = useOfflineSync();
   useEffect(() => {
     if (axiosInstance && registerAxios) {
       registerAxios(axiosInstance);
+      // Interceptor: marca servidor offline imediatamente ao receber 5xx ou erro de rede
+      const id = axiosInstance.interceptors.response.use(
+        null,
+        (error) => {
+          if (!error.response || error.response.status >= 500) {
+            marcarServidorIndisponivel?.();
+          }
+          return Promise.reject(error);
+        }
+      );
+      return () => axiosInstance.interceptors.response.eject(id);
     }
-  }, [axiosInstance, registerAxios]);
+  }, [axiosInstance, registerAxios, marcarServidorIndisponivel]);
   return null;
 }
 

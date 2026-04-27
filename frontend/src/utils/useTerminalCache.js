@@ -25,6 +25,7 @@ import {
   cachearParametros,
   buscarProdutosCache,
   buscarClientesCache,
+  buscarClienteCache,
   buscarFormasPagamentoCache,
   buscarOperacaoCache,
   buscarVendedorCache,

@@ -305,6 +305,18 @@ const VendaRapidaPage = () => {
     });
   }, []);
 
+  // Quando servidor volta online: recarrega configurações
+  const servidorOkPrevRef = useRef(servidorOk);
+  useEffect(() => {
+    const voltou = !servidorOkPrevRef.current && servidorOk;
+    servidorOkPrevRef.current = servidorOk;
+    if (voltou) {
+      console.log('[ONLINE] Servidor voltou — recarregando configurações...');
+      carregarDadosUsuario();
+      carregarTabelasComerciais();
+    }
+  }, [servidorOk]);
+
   if (authLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
@@ -516,8 +528,29 @@ const VendaRapidaPage = () => {
       }
 
     } catch (err) {
-      console.error('Erro ao carregar dados:', err);
-      setError('Erro ao carregar configurações de venda rápida');
+      console.error('Erro ao carregar dados do servidor:', err);
+      // Servidor indisponível — tentar carregar do cache local como fallback
+      try {
+        const cached = await carregarDadosIniciaisCache();
+        if (cached && (cached.vendedor || cached.operacao)) {
+          if (cached.empresa)    setEmpresa(cached.empresa);
+          if (cached.parametros) setParametros(cached.parametros);
+          if (cached.usuario)    setUsuario(cached.usuario);
+          if (cached.vendedor)   setVendedor(cached.vendedor);
+          if (cached.operacao) {
+            setOperacao(cached.operacao);
+            if (cached.operacao.usa_auto_numeracao)
+              setNumeroDocumento(String(cached.operacao.proximo_numero_nf || 1));
+          }
+          if (cached.cliente) await selecionarClienteVenda(cached.cliente).catch(() => {});
+          console.log('[CACHE] Configuração carregada do cache local (servidor indisponível)');
+        } else {
+          setError('Servidor indisponível e sem cache local. Abra o sistema online ao menos uma vez para ativar o modo offline.');
+        }
+      } catch (cacheErr) {
+        console.error('Erro ao carregar cache:', cacheErr);
+        setError('Servidor indisponível. Verifique sua conexão.');
+      }
     } finally {
       setLoading(false);
     }
@@ -2603,6 +2636,33 @@ const VendaRapidaPage = () => {
     } catch (err) {
       console.error('❌ Erro ao finalizar venda:', err);
       console.error('Detalhes do erro:', err.response?.data);
+
+      // ── FALLBACK OFFLINE: salva localmente se servidor retornar 5xx ou sem resposta ──
+      const httpStatus = err?.response?.status;
+      const isServerError = !err.response || httpStatus >= 500;
+      if (isServerError && typeof dadosVenda !== 'undefined') {
+        try {
+          const tempId = await salvarVendaOffline(dadosVenda);
+          console.log('[OFFLINE] Venda salva offline como fallback:', tempId);
+          setSuccess('✅ Servidor indisponível — venda salva offline! Será sincronizada automaticamente.');
+          setItens([]);
+          setCondicoesSelecionadas([]);
+          setDescontoGeral(0);
+          setCodigoProduto('');
+          setNomeProduto('');
+          setQuantidade(1);
+          setValorUnitario(0);
+          setIdProdutoSelecionado(null);
+          setOpenFinalizar(false);
+          setOpenCondicoesPagamento(false);
+          setTimeout(() => setSuccess(''), 8000);
+          setLoading(false);
+          return;
+        } catch (offlineErr) {
+          console.error('[OFFLINE] Falha ao salvar offline:', offlineErr);
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────────
 
       let mensagemErro = 'Erro ao finalizar venda';
 

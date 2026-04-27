@@ -28,6 +28,9 @@ const OfflineSyncContext = createContext(null);
 const INTERVALO_PING = 15_000;
 // Timeout do ping (ms)
 const TIMEOUT_PING   = 4_000;
+// Backoff base para retry após falha (ms): 2s, 4s, 8s, 16s, máx 60s
+const BACKOFF_BASE   = 2_000;
+const BACKOFF_MAX    = 60_000;
 
 export const OfflineSyncProvider = ({ children }) => {
   // axiosInstance é injetado externamente via registerAxios()
@@ -45,6 +48,7 @@ export const OfflineSyncProvider = ({ children }) => {
 
   const pingTimerRef    = useRef(null);
   const sincronizandoRef = useRef(false); // evita execuções concorrentes
+  const tentativasErroRef = useRef(0);    // backoff exponencial
 
   // ─── Verifica se o servidor está respondendo ────────────────────────────────
   const verificarServidor = useCallback(async () => {
@@ -64,11 +68,18 @@ export const OfflineSyncProvider = ({ children }) => {
       const ok = resp.ok || resp.status < 500;
       setIsOnline(true);
       setServidorOk(ok);
+      if (ok) tentativasErroRef.current = 0;
       return ok;
     } catch {
       setServidorOk(false);
       return false;
     }
+  }, []);
+
+  // Exposto para que o interceptor Axios possa marcar o servidor como indisponível
+  const marcarServidorIndisponivel = useCallback(() => {
+    tentativasErroRef.current += 1;
+    setServidorOk(false);
   }, []);
 
   // ─── Sincroniza a fila offline ──────────────────────────────────────────────
@@ -113,19 +124,30 @@ export const OfflineSyncProvider = ({ children }) => {
     setVendasOffline(totalVendas);
   }, []);
 
-  // ─── Loop de ping periódico ─────────────────────────────────────────────────
+  // ─── Loop de ping periódico com backoff exponencial ──────────────────────
   useEffect(() => {
+    let timeoutId = null;
+
     const tick = async () => {
       const ok = await verificarServidor();
-      if (ok) await sincronizar();
+      if (ok) {
+        await sincronizar();
+        tentativasErroRef.current = 0;
+      } else {
+        tentativasErroRef.current += 1;
+      }
       await atualizarPendentes();
+
+      // Próxima execução: backoff se houver falhas consecutivas
+      const atraso = tentativasErroRef.current > 0
+        ? Math.min(BACKOFF_BASE * Math.pow(2, tentativasErroRef.current - 1), BACKOFF_MAX)
+        : INTERVALO_PING;
+      timeoutId = setTimeout(tick, atraso);
     };
 
     // Executa imediatamente
     tick();
-
-    pingTimerRef.current = setInterval(tick, INTERVALO_PING);
-    return () => clearInterval(pingTimerRef.current);
+    return () => { if (timeoutId) clearTimeout(timeoutId); };
   }, [verificarServidor, sincronizar, atualizarPendentes]);
 
   // ─── Eventos de rede do navegador ──────────────────────────────────────────
@@ -159,6 +181,7 @@ export const OfflineSyncProvider = ({ children }) => {
     terminalId,
     sincronizar: () => sincronizar(true),
     atualizarPendentes,
+    marcarServidorIndisponivel,
     // Chamado pelo AuthContext após login para registrar o axiosInstance
     registerAxios: (instance) => { axiosRef.current = instance; },
   };
