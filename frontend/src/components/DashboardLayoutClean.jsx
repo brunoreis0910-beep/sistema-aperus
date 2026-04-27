@@ -484,7 +484,17 @@ const DashboardLayoutClean = () => {
                   icon={<WifiOffIcon sx={{ fontSize: '1rem' }} />}
                   label={pendentes > 0 ? `Offline · ${pendentes} pendente(s)` : 'Offline'}
                   size="small"
-                  sx={{ backgroundColor: '#f44336', color: '#fff', fontWeight: 700, cursor: 'default' }}
+                  sx={{
+                    backgroundColor: '#f44336',
+                    color: '#fff',
+                    fontWeight: 700,
+                    cursor: 'default',
+                    '@keyframes pulse-offline': {
+                      '0%, 100%': { opacity: 1, transform: 'scale(1)' },
+                      '50%':       { opacity: 0.75, transform: 'scale(1.06)' },
+                    },
+                    animation: 'pulse-offline 2s ease-in-out infinite',
+                  }}
                 />
               </Tooltip>
             ) : pendentes > 0 ? (

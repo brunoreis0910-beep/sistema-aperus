@@ -57,6 +57,8 @@ import { useOfflineSync } from '../context/OfflineSyncContext';
 import useTerminalCache from '../utils/useTerminalCache';
 import { salvarVendaOffline, buscarTabelasComerciaisCache } from '../utils/terminalCacheDB';
 import { logger } from '../components/DebugLogger';
+import WifiOffIcon from '@mui/icons-material/WifiOff';
+import CloudDoneIcon from '@mui/icons-material/CloudDone';
 
 const VendaRapidaPage = () => {
   useEffect(() => {
@@ -3157,6 +3159,25 @@ const VendaRapidaPage = () => {
     }}>
       {/* DEBUG: contador visível da fila de validações */}
       <BadgeFila />
+
+      {/* ── Banner de status offline ── */}
+      {!servidorOk && (
+        <Alert
+          severity="warning"
+          icon={<WifiOffIcon />}
+          sx={{
+            mb: 2,
+            fontWeight: 600,
+            backgroundColor: '#fff3e0',
+            border: '1px solid #ff9800',
+            '& .MuiAlert-icon': { color: '#e65100' },
+          }}
+          action={null}
+        >
+          <strong>Modo Offline</strong> — Servidor indisponível. Produtos e clientes carregados do cache local. Vendas serão salvas e sincronizadas automaticamente quando a conexão voltar.
+        </Alert>
+      )}
+
       {/* Alerta de Vendedor Não Configurado */}
       {(!vendedor || !vendedor.id_vendedor) && (
         <Alert

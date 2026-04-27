@@ -27,7 +27,7 @@ const OfflineSyncContext = createContext(null);
 // Intervalo de verificação de conexão com o servidor (ms)
 const INTERVALO_PING = 15_000;
 // Timeout do ping (ms)
-const TIMEOUT_PING   = 5_000;
+const TIMEOUT_PING   = 4_000;
 
 export const OfflineSyncProvider = ({ children }) => {
   // axiosInstance é injetado externamente via registerAxios()
@@ -35,7 +35,8 @@ export const OfflineSyncProvider = ({ children }) => {
   const axiosRef = useRef(null);
 
   const [isOnline,       setIsOnline]       = useState(navigator.onLine);
-  const [servidorOk,     setServidorOk]     = useState(true);
+  // Se já sabemos que não temos internet, começa como offline imediatamente
+  const [servidorOk,     setServidorOk]     = useState(navigator.onLine);
   const [pendentes,      setPendentes]      = useState(0);
   const [vendasOffline,  setVendasOffline]  = useState(0);
   const [sincronizando,  setSincronizando]  = useState(false);
