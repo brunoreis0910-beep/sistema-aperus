@@ -65,7 +65,7 @@ const VendaRapidaPage = () => {
     console.log('🚀🚀🚀 VendaRapidaPage CARREGADA - VERSÃO DEFINITIVA v4.0 - CACHE LIMPO');
   }, []);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // true até carregarDadosUsuario concluir
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -278,31 +278,30 @@ const VendaRapidaPage = () => {
 
   useEffect(() => {
     console.log('🚀 VendaRapidaPage montado. Carregando dados...');
-    console.log('⏱️ Chamando checkCaixaStatus...');
-    checkCaixaStatus();
-    console.log('⏱️ Timestamp:', new Date().toISOString());
+    if (servidorOk) checkCaixaStatus();
     carregarDadosUsuario();
     carregarTabelasComerciais();
     // Carregar configuração de impressão do módulo venda_rapida
-    axiosInstance.get('/configuracao-impressao/modulo/venda_rapida/')
-      .then(res => setConfigImpressao(res.data))
-      .catch(() => {});
-    // Carregar imagem de fundo do servidor (sobrescreve cache local se existir)
-    axiosInstance.get('/user-preferencias/')
-      .then(res => {
-        const bg = res.data['venda_rapida_bg'];
-        if (bg) {
-          setImagemFundo(bg);
-          localStorage.setItem('vendaRapidaImagemFundo', bg);
-        }
-      })
-      .catch(() => {}); // fallback já inicializado do localStorage
-    console.log('⏱️ Chamando carregarPromocoes...');
-    carregarPromocoes().then(() => {
-      console.log('✅ Promoções carregadas com sucesso no mount');
-    }).catch((err) => {
-      console.error('❌ Erro ao carregar promoções no mount:', err);
-    });
+    if (servidorOk) {
+      axiosInstance.get('/configuracao-impressao/modulo/venda_rapida/')
+        .then(res => setConfigImpressao(res.data))
+        .catch(() => {});
+      // Carregar imagem de fundo do servidor (sobrescreve cache local se existir)
+      axiosInstance.get('/user-preferencias/')
+        .then(res => {
+          const bg = res.data['venda_rapida_bg'];
+          if (bg) {
+            setImagemFundo(bg);
+            localStorage.setItem('vendaRapidaImagemFundo', bg);
+          }
+        })
+        .catch(() => {}); // fallback já inicializado do localStorage
+      carregarPromocoes().then(() => {
+        console.log('✅ Promoções carregadas com sucesso no mount');
+      }).catch((err) => {
+        console.error('❌ Erro ao carregar promoções no mount:', err);
+      });
+    }
   }, []);
 
   // Quando servidor volta online: recarrega configurações
@@ -455,6 +454,7 @@ const VendaRapidaPage = () => {
         } else {
           setError('Servidor offline. Faça login online ao menos uma vez para usar o modo offline.');
         }
+        setLoading(false);
         return;
       }
       // ── FIM OFFLINE ────────────────────────────────────────────────────────
