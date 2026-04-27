@@ -24,7 +24,7 @@
 import { terminalId } from './offlineQueue';
 
 const DB_NAME = 'AperusTerminalCache';
-const DB_VER  = 2;
+const DB_VER  = 3;
 
 let _db = null;
 
@@ -67,6 +67,9 @@ const abrirDB = () =>
       const sVendas = criar('vendas_offline', { keyPath: 'tempId' });
       if (!sVendas.indexNames.contains('por_status'))
         sVendas.createIndex('por_status', 'status', { unique: false });
+
+      // Estado da VendaRapidaPage (persistência entre navegações)
+      criar('venda_rapida_estado', { keyPath: 'chave' });
 
       // Metadados (data do último sync)
       criar('meta', { keyPath: 'chave' });
@@ -309,4 +312,106 @@ export const sincronizarVendasOffline = async (axiosInstance) => {
   }
 
   return { enviadas, erros };
+};
+
+// ─── Estado da Venda Rápida (Persistência entre navegações) ──────────────────
+
+/**
+ * Salva o estado completo da VendaRapidaPage no IndexedDB.
+ * Isso permite que o usuário navegue para outras páginas e volte sem perder dados.
+ * 
+ * @param {object} estado - Objeto com todos os campos que devem ser persistidos:
+ *   - usuario: dados do usuário logado
+ *   - vendedor: vendedor selecionado
+ *   - cliente: cliente selecionado
+ *   - operacao: operação de venda
+ *   - itens: array de itens da venda
+ *   - descontoGeral: desconto geral aplicado
+ *   - tabelaSelecionada: tabela comercial selecionada
+ *   - formasPagamento: formas de pagamento disponíveis
+ *   - condicoesSelecionadas: condições de pagamento selecionadas
+ *   - numeroDocumento: número do documento
+ *   - etc.
+ */
+export const salvarEstadoVendaRapida = async (estado) => {
+  try {
+    const db = await abrirDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('venda_rapida_estado', 'readwrite');
+      const req = tx.objectStore('venda_rapida_estado').put({
+        chave: 'estado_atual',
+        ...estado,
+        salvoEm: new Date().toISOString(),
+      });
+      req.onsuccess = () => {
+        console.log('[PERSISTÊNCIA] Estado da Venda Rápida salvo no IndexedDB');
+        resolve();
+      };
+      req.onerror = () => {
+        console.error('[PERSISTÊNCIA] Erro ao salvar estado:', req.error);
+        reject(req.error);
+      };
+    });
+  } catch (err) {
+    console.error('[PERSISTÊNCIA] Falha ao salvar estado da Venda Rápida:', err);
+    throw err;
+  }
+};
+
+/**
+ * Carrega o estado salvo da VendaRapidaPage do IndexedDB.
+ * Retorna null se não houver estado salvo.
+ */
+export const carregarEstadoVendaRapida = async () => {
+  try {
+    const db = await abrirDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('venda_rapida_estado', 'readonly');
+      const req = tx.objectStore('venda_rapida_estado').get('estado_atual');
+      req.onsuccess = () => {
+        const resultado = req.result;
+        if (resultado) {
+          console.log('[PERSISTÊNCIA] Estado da Venda Rápida carregado do IndexedDB');
+          console.log('   Salvo em:', resultado.salvoEm);
+          console.log('   Cliente:', resultado.cliente?.nome || 'Nenhum');
+          console.log('   Itens:', resultado.itens?.length || 0);
+        } else {
+          console.log('[PERSISTÊNCIA] Nenhum estado salvo encontrado');
+        }
+        resolve(resultado || null);
+      };
+      req.onerror = () => {
+        console.error('[PERSISTÊNCIA] Erro ao carregar estado:', req.error);
+        reject(req.error);
+      };
+    });
+  } catch (err) {
+    console.error('[PERSISTÊNCIA] Falha ao carregar estado da Venda Rápida:', err);
+    return null;
+  }
+};
+
+/**
+ * Limpa o estado salvo da VendaRapidaPage.
+ * Deve ser chamado após finalizar uma venda com sucesso.
+ */
+export const limparEstadoVendaRapida = async () => {
+  try {
+    const db = await abrirDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('venda_rapida_estado', 'readwrite');
+      const req = tx.objectStore('venda_rapida_estado').delete('estado_atual');
+      req.onsuccess = () => {
+        console.log('[PERSISTÊNCIA] Estado da Venda Rápida limpo do IndexedDB');
+        resolve();
+      };
+      req.onerror = () => {
+        console.error('[PERSISTÊNCIA] Erro ao limpar estado:', req.error);
+        reject(req.error);
+      };
+    });
+  } catch (err) {
+    console.error('[PERSISTÊNCIA] Falha ao limpar estado da Venda Rápida:', err);
+    throw err;
+  }
 };

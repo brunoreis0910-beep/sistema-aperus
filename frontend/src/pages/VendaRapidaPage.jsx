@@ -54,7 +54,13 @@ import balancaService from '../services/balancaService';
 import { useAuth } from '../context/AuthContext';
 import { useOfflineSync } from '../context/OfflineSyncContext';
 import useTerminalCache from '../utils/useTerminalCache';
-import { salvarVendaOffline, buscarTabelasComerciaisCache } from '../utils/terminalCacheDB';
+import { 
+  salvarVendaOffline, 
+  buscarTabelasComerciaisCache,
+  salvarEstadoVendaRapida,
+  carregarEstadoVendaRapida,
+  limparEstadoVendaRapida
+} from '../utils/terminalCacheDB';
 import { logger } from '../components/DebugLogger';
 import { useVendaRapida } from '../context/VendaRapidaContext';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
@@ -225,20 +231,60 @@ const VendaRapidaPage = () => {
 
   useEffect(() => {
     console.log('🚀 VendaRapidaPage montado. Carregando dados...');
-    // Apenas carrega os dados se eles não estiverem no contexto ainda
-    if (!parametros || !usuario) {
-      carregarDadosUsuario();
-    } else {
-      console.log('[CONTEXTO] Dados de usuário já presentes. Pulando recarga inicial.');
-      setLoading(false); // Garante que o loading seja desativado
-    }
+    
+    // 🔹 CARREGAR ESTADO SALVO DO INDEXEDDB (Persistência entre navegações)
+    const restaurarEstadoSalvo = async () => {
+      try {
+        const estadoSalvo = await carregarEstadoVendaRapida();
+        if (estadoSalvo) {
+          console.log('✅ Restaurando estado salvo da Venda Rápida');
+          
+          // Restaurar todos os dados salvos
+          if (estadoSalvo.usuario) setUsuario(estadoSalvo.usuario);
+          if (estadoSalvo.parametros) setParametros(estadoSalvo.parametros);
+          if (estadoSalvo.vendedor) setVendedor(estadoSalvo.vendedor);
+          if (estadoSalvo.cliente) setCliente(estadoSalvo.cliente);
+          if (estadoSalvo.operacao) setOperacao(estadoSalvo.operacao);
+          if (estadoSalvo.empresa) setEmpresa(estadoSalvo.empresa);
+          if (estadoSalvo.itens) setItens(estadoSalvo.itens);
+          if (estadoSalvo.descontoGeral !== undefined) setDescontoGeral(estadoSalvo.descontoGeral);
+          if (estadoSalvo.tabelaSelecionada) setTabelaSelecionada(estadoSalvo.tabelaSelecionada);
+          if (estadoSalvo.condicoesSelecionadas) setCondicoesSelecionadas(estadoSalvo.condicoesSelecionadas);
+          if (estadoSalvo.numeroDocumento) setNumeroDocumento(estadoSalvo.numeroDocumento);
+          if (estadoSalvo.tabelasComerciais) setTabelasComerciais(estadoSalvo.tabelasComerciais);
+          if (estadoSalvo.formasPagamento) setFormasPagamento(estadoSalvo.formasPagamento);
+          
+          setSuccess('✅ Venda restaurada! Você pode continuar de onde parou.');
+          setLoading(false);
+          return true; // Indica que restaurou o estado
+        }
+      } catch (err) {
+        console.error('Erro ao restaurar estado salvo:', err);
+      }
+      return false; // Não restaurou
+    };
+    
+    // Tentar restaurar primeiro, se não conseguir, carregar normalmente
+    restaurarEstadoSalvo().then(restaurado => {
+      if (!restaurado) {
+        // Apenas carrega os dados se eles não estiverem no contexto ainda
+        if (!parametros || !usuario) {
+          carregarDadosUsuario();
+        } else {
+          console.log('[CONTEXTO] Dados de usuário já presentes. Pulando recarga inicial.');
+          setLoading(false);
+        }
+      }
+    });
+    
     if (tabelasComerciais.length === 0) {
       carregarTabelasComerciais();
     }
-    if (promocoesAtivas.dados.length === 0 && servidorOk) {
+    if (promocoesAtivas.dados && promocoesAtivas.dados.length === 0 && servidorOk) {
         carregarPromocoes().catch(err => console.error('Erro ao carregar promoções no mount:', err));
     }
     if (servidorOk) {
+      checkCaixaStatus();
       axiosInstance.get('/configuracao-impressao/modulo/venda_rapida/')
         .then(res => setConfigImpressao(res.data))
         .catch(() => {});
@@ -253,6 +299,68 @@ const VendaRapidaPage = () => {
         .catch(() => {});
     }
   }, []); // Roda apenas uma vez no mount
+
+  // 🔹 AUTO-SAVE: Salva automaticamente o estado sempre que algo importante mudar
+  useEffect(() => {
+    // Não salvar se ainda está carregando os dados iniciais
+    if (loading || !usuario) return;
+    
+    // Debounce: aguarda 1 segundo após a última mudança para salvar
+    const timeoutId = setTimeout(async () => {
+      try {
+        await salvarEstadoVendaRapida({
+          usuario,
+          parametros,
+          vendedor,
+          cliente,
+          operacao,
+          empresa,
+          itens,
+          descontoGeral,
+          tabelaSelecionada,
+          condicoesSelecionadas,
+          numeroDocumento,
+          tabelasComerciais,
+          formasPagamento,
+        });
+        console.log('💾 [AUTO-SAVE] Estado da Venda Rápida salvo automaticamente');
+      } catch (err) {
+        console.error('❌ [AUTO-SAVE] Erro ao salvar estado:', err);
+      }
+    }, 1000); // Aguarda 1 segundo de "silêncio" antes de salvar
+
+    return () => clearTimeout(timeoutId); // Limpa o timeout ao desmontar ou re-renderizar
+  }, [
+    usuario, 
+    parametros, 
+    vendedor, 
+    cliente, 
+    operacao, 
+    empresa, 
+    itens, 
+    descontoGeral, 
+    tabelaSelecionada, 
+    condicoesSelecionadas,
+    numeroDocumento,
+    tabelasComerciais,
+    formasPagamento,
+    loading
+  ]); // Observa mudanças nessas variáveis
+
+  // Mantém servidorOkRef sempre atualizado (evita stale closure em funções assíncronas)
+  useEffect(() => { servidorOkRef.current = servidorOk; }, [servidorOk]);
+
+  // Quando servidor volta online: recarregando configurações
+  const servidorOkPrevRef = useRef(servidorOk);
+  useEffect(() => {
+    const voltou = !servidorOkPrevRef.current && servidorOk;
+    servidorOkPrevRef.current = servidorOk;
+    if (voltou) {
+      console.log('[ONLINE] Servidor voltou — recarregando configurações...');
+      carregarDadosUsuario();
+      carregarTabelasComerciais();
+    }
+  }, [servidorOk]);
 
   const carregarDadosUsuario = async () => {
     // Se já temos os parâmetros no contexto, não precisamos carregar tudo de novo
@@ -1728,284 +1836,73 @@ const VendaRapidaPage = () => {
               console.log(`⚠️ ESTOQUE INSUFICIENTE DETECTADO para "${produto.nome_produto}": disponível ${estoqueDisponivel} < solicitado ${quantidadeSolicitada}`);
 
               // Se ação for bloquear, interrompe imediatamente
-             
-        const valorItem = quantidadeNum * valorUnitarioNum;
-        const valorDesconto = (valorItem * descontoPercentualNum) / 100;
-        const valorTotalItem = valorItem - valorDesconto;
-
-        console.log('[DESCONTO-ITEM] Atualizando desconto:', {
-          id_produto: item.id_produto,
-          desconto_anterior: item.desconto_percentual,
-          desconto_novo: descontoPercentualNum,
-          valor_desconto_anterior: item.desconto_valor,
-          valor_desconto_novo: valorDesconto.toFixed(2),
-          valor_total_anterior: item.valor_total,
-          valor_total_novo: valorTotalItem.toFixed(2)
-        });
-
-        return {
-          ...item,
-          desconto_percentual: descontoPercentualNum,
-          desconto_valor: valorDesconto,
-          valor_total: valorTotalItem
-        };
-      }
-      return item;
-    });
-
-    setItens(itensAtualizados);
-    setOpenDescontoItem(false);
-    setItemSelecionado(null);
-    setDescontoItemEdit(0);
-  };
-
-  const calcularTotal = () => {
-    const subtotal = itens.reduce((acc, item) => acc + item.valor_total, 0);
-    const valorDescontoGeral = (subtotal * descontoGeral) / 100;
-    const totalCalculado = subtotal - valorDescontoGeral;
-    console.log('🧮 CALCULANDO TOTAL:', {
-      'itens.length': itens.length,
-      'subtotal': subtotal,
-      'descontoGeral': descontoGeral,
-      'valorDescontoGeral': valorDescontoGeral,
-      'totalCalculado': totalCalculado
-    });
-    setValorTotal(totalCalculado);
-  };
-
-  // Funções de Condições de Pagamento
-  const abrirCondicoesPagamento = async (pularPerguntaTabela = false, totalRecalculado = null) => {
-    try {
-      console.log('🔓🔓🔓 ABRINDO CONDIÇÕES DE PAGAMENTO - INÍCIO');
-      console.log('💰 Estado atual dos valores:', {
-        'valorTotal (estado)': valorTotal,
-        'totalRecalculado (parâmetro)': totalRecalculado,
-        'itens.length': itens?.length,
-        'itens': itens
-      });
-
-      if (itens.length === 0) {
-        setError('Adicione pelo menos um item à venda');
-        return;
-      }
-
-      if (!vendedor || !vendedor.id_vendedor) {
-        setError('Vendedor é obrigatório. Configure um vendedor padrão em Configurações > Usuários');
-        return;
-      }
-
-      // A validação de limite de crédito agora é feita ao adicionar condição de pagamento a prazo
-
-      // Validar estoque de todos os itens antes de finalizar (se configurado)
-      if (operacao && operacao.validar_estoque && operacao.acao_estoque !== 'nao_validar' && !estoqueAutorizado) {
-        try {
-          console.log('🔍 Iniciando validação de estoque para finalização - itens:', itens.length);
-          const validacoesPendentes = [];
-
-          for (const item of itens) {
-            const produtoResponse = await axiosInstance.get(`/produtos/${item.id_produto}/`);
-            const produto = produtoResponse.data;
-
-            console.log('🔎 Checando item para validação de estoque:', {
-              id_produto: item.id_produto,
-              nome_item: item.nome || item.nome_produto || null,
-              quantidadeSolicitada_raw: item.quantidade,
-              tipo_quantidadeSolicitada: typeof item.quantidade
-            });
-
-            console.log('🔎 Dados do produto retornado pela API:', {
-              id_produto_api: produto.id_produto || produto.id,
-              nome_produto_api: produto.nome_produto || produto.descricao,
-              estoque_por_deposito: produto.estoque_por_deposito,
-              estoque_atual: produto.estoque_atual,
-              tipos: {
-                estoque_por_deposito: typeof produto.estoque_por_deposito,
-                estoque_atual: typeof produto.estoque_atual
-              }
-            });
-
-            let estoqueDisponivel = 0;
-            if (operacao.id_deposito_baixa && produto.estoque_por_deposito) {
-              const estoqueDeposito = produto.estoque_por_deposito.find(
-                est => Number(est.id_deposito) === Number(operacao.id_deposito_baixa)
-              );
-              estoqueDisponivel = estoqueDeposito ? parseFloat(estoqueDeposito.quantidade_atual || estoqueDeposito.quantidade) : 0;
-            } else {
-              estoqueDisponivel = parseFloat(produto.estoque_atual || 0);
-            }
-
-            let quantidadeSolicitada = parseFloat(item.quantidade);
-
-            console.log('   estoqueDisponivel (valor):', estoqueDisponivel, 'type:', typeof estoqueDisponivel);
-            console.log('   quantidadeSolicitada (valor):', quantidadeSolicitada, 'type:', typeof quantidadeSolicitada);
-            console.log('   Comparação: estoqueDisponivel < quantidadeSolicitada?', estoqueDisponivel < quantidadeSolicitada);
-
-            if (isNaN(estoqueDisponivel)) {
-              console.warn('⚠️ Estoque disponível é NaN para produto', produto.id_produto || produto.id, '- definindo 0');
-              estoqueDisponivel = 0;
-            }
-
-            if (isNaN(quantidadeSolicitada)) {
-              console.warn('⚠️ Quantidade solicitada é NaN para produto', produto.id_produto || produto.id, '- definindo 1');
-              quantidadeSolicitada = 1;
-            }
-
-            // ✅ VALIDAÇÃO: Só adicionar à fila SE estoque for INSUFICIENTE
-            if (estoqueDisponivel < quantidadeSolicitada) {
-              const faltam = quantidadeSolicitada - estoqueDisponivel;
-              console.log(`⚠️ ESTOQUE INSUFICIENTE DETECTADO para "${produto.nome_produto}": disponível ${estoqueDisponivel} < solicitado ${quantidadeSolicitada}`);
-
-              // Se ação for bloquear, interrompe imediatamente
               if (operacao.acao_estoque === 'bloquear') {
-                setEstoqueInfo({
-                  produto: produto.nome_produto || item.nome,
-                  disponivel: estoqueDisponivel,
-                  solicitado: quantidadeSolicitada,
-                  faltam: faltam
-                });
-                setAcaoEstoqueAtual(operacao.acao_estoque);
-                setError(`❌ Estoque insuficiente para "${produto.nome_produto}". Disponível: ${estoqueDisponivel.toFixed(3)}, Solicitado: ${quantidadeSolicitada.toFixed(3)}`);
-                return;
+                setError(`❌ Estoque insuficiente para "${produto.nome_produto}". Disponível: ${estoqueDisponivel.toFixed(3)} | Solicitado: ${quantidadeSolicitada.toFixed(3)}`);
+                return; // Cancela a finalização
               }
 
-              // Para alertar ou solicitar_senha, enfileirar validação para este item
+              // Para alertar ou solicitar_senha, adicionar à fila de validações
               validacoesPendentes.push({
                 tipo: 'estoque',
                 dados: {
-                  produto: produto.nome_produto || item.nome,
+                  produto: produto.nome_produto,
                   disponivel: estoqueDisponivel,
                   solicitado: quantidadeSolicitada,
-                  faltam: faltam
+                  faltam
                 },
-                item: {
-                  codigoProduto: item.codigo || item.codigo_produto || item.codigoProduto,
-                  idProdutoSelecionado: item.id_produto,
-                  nomeProduto: item.nome,
-                  quantidade: item.quantidade,
-                  valorUnitario: item.valor_unitario || item.valorUnitario,
-                  descontoItem: item.desconto_percentual || item.descontoItem || 0,
-                  finalizacao: true
-                },
+                item,
                 acao: operacao.acao_estoque
               });
-            } else {
-              console.log(`✅ ESTOQUE OK para "${produto.nome_produto}": disponível ${estoqueDisponivel} >= solicitado ${quantidadeSolicitada} - NÃO será alertado`);
             }
           }
 
-          console.log('📊 RESUMO DA VALIDAÇÃO DE ESTOQUE:');
-          console.log(`   Total de itens verificados: ${itens.length}`);
-          console.log(`   Itens com estoque insuficiente: ${validacoesPendentes.length}`);
-
+          // Se há validações pendentes, processar a primeira
           if (validacoesPendentes.length > 0) {
-            console.log('📝 Adicionando validações de estoque para vários itens à fila:', validacoesPendentes.length, validacoesPendentes);
-            console.log('📝 Conteúdo para enfileirar (produtos):', validacoesPendentes.map(v => v.dados.produto));
-            // Armazenar fila restante (todos exceto a primeira)
-            setFilaValidacoes(validacoesPendentes.slice(1));
-
-            const primeiraValidacao = validacoesPendentes[0];
-            setEstoqueInfo(primeiraValidacao.dados);
-            setItemPendenteEstoque(primeiraValidacao.item);
-            setAcaoEstoqueAtual(primeiraValidacao.acao);
+            console.log('📋 Validações de estoque pendentes:', validacoesPendentes.length);
+            setFilaValidacoes(validacoesPendentes.slice(1)); // Guardar o resto da fila
+            const primeira = validacoesPendentes[0];
+            setEstoqueInfo(primeira.dados);
+            setItemPendenteEstoque(primeira.item);
+            setAcaoEstoqueAtual(primeira.acao);
             setOpenEstoqueModal(true);
-
-            return;
+            return; // Aguarda resolução do modal
           }
         } catch (err) {
           console.error('Erro ao validar estoque:', err);
         }
       }
 
-      // Verificar se deve perguntar novamente sobre tabela comercial
-      // LÓGICA:
-      // 1. Se tem tabela padrão configurada → NÃO pergunta nunca
-      // 2. Se não tem tabela padrão (perguntou ao adicionar produto):
-      //    - Se perguntar_ao_vender = SIM → Pergunta novamente aqui
-      //    - Se perguntar_ao_vender = NÃO → Não pergunta
-      console.log('🔍 Verificando se deve perguntar tabela no financeiro:', {
-        pularPerguntaTabela,
-        tabelaSelecionada: tabelaSelecionada?.nome,
-        perguntar_ao_vender: tabelaSelecionada?.perguntar_ao_vender,
-        tem_tabela_padrao: usuario?.parametros?.id_tabela_comercial ? true : false
-      });
+      // Calcular total (reutilizando cálculo ou usando o parâmetro se fornecido)
+      let totalParaUsar = totalRecalculado;
+      if (totalParaUsar === null) {
+        const subtotalSync = itens.reduce((acc, item) => acc + (item.valor_total || 0), 0);
+        const valorDescontoGeralSync = (subtotalSync * descontoGeral) / 100;
+        totalParaUsar = subtotalSync - valorDescontoGeralSync;
+      }
 
-      // Só pergunta se:
-      // - Não estamos pulando a pergunta (para evitar loop)
-      // - Tem uma tabela selecionada
-      // - A tabela tem perguntar_ao_vender = true
-      // - O usuário NÃO tem tabela padrão configurada (senão nunca perguntaria)
-      if (!pularPerguntaTabela &&
-        tabelaSelecionada &&
-        tabelaSelecionada.perguntar_ao_vender &&
-        !usuario?.parametros?.id_tabela_comercial) {
-        console.log('❓ Tabela tem perguntar_ao_vender=true E usuário sem tabela padrão - perguntando antes do financeiro');
+      console.log('💰 Total a ser usado:', totalParaUsar);
+      setValorTotal(totalParaUsar);
+      setValorRestante(totalParaUsar);
+
+      // Perguntar sobre uso da tabela (se configurado) – apenas se não tiver pulado
+      if (!pularPerguntaTabela && tabelaSelecionada && tabelaSelecionada.perguntar_ao_vender === true) {
+        console.log('💬 Perguntando sobre uso da tabela:', tabelaSelecionada.nome);
         setOpenPerguntarTabelaFinanceiro(true);
         return;
       }
 
-      console.log('ℹ️ Não vai perguntar tabela no financeiro');
-
-
-      // Verificar produtos em promoção
-      const itensEmPromocao = itens.filter(item => item.tem_promocao);
-      if (itensEmPromocao.length > 0) {
-        const descontoTotal = itensEmPromocao.reduce((acc, item) => acc + (item.desconto_valor || 0), 0);
-        const mensagem = `PROMOCAO DETECTADA!\n\n${itensEmPromocao.map(item => {
-          const descPerc = parseFloat(item.desconto_percentual || 0).toFixed(1);
-          const descValor = parseFloat(item.desconto_valor || 0).toFixed(2);
-          return `• ${item.nome} (Qtd: ${item.quantidade})\n   Desconto: ${descPerc}% = R$ ${descValor}`;
-        }).join('\n')}\n\nDesconto Total: R$ ${descontoTotal.toFixed(2)}\n\nO desconto ja foi aplicado!`;
-
-        console.log('[PROMOCAO] Itens em promoção detectados:', itensEmPromocao);
-        console.log('[PROMOCAO] Desconto total:', descontoTotal.toFixed(2));
-        setSuccess(mensagem);
-        setTimeout(() => setSuccess(''), 5000);
+      // Carregar formas de pagamento se ainda não carregadas
+      if (formasPagamento.length === 0) {
+        const formas = await obterFormasPagamento();
+        setFormasPagamento(formas);
+        console.log('💳 Formas de pagamento carregadas:', formas.length);
       }
 
-      setLoading(true);
-      const token = getToken();
-
-      // Buscar formas de pagamento (usa cache quando offline)
-      const formas = await obterFormasPagamento();
-      console.log('📋 Formas de pagamento recebidas:', formas);
-      setFormasPagamento(formas);
-      // Não limpar `condicoesSelecionadas` aqui — preservar condições já adicionadas
-      // para evitar que o usuário perca o que já foi definido ao reabrir o modal.
-
-      // Usar total recalculado se fornecido. Se não houver valorTotal atualizado
-      // (por exemplo, por timing do React), calcular de forma síncrona a partir
-      // dos itens para garantir que o modal abra com o valor correto.
-      const subtotalSync = itens.reduce((acc, item) => acc + (item.valor_total || 0), 0);
-      const valorDescontoGeralSync = (subtotalSync * descontoGeral) / 100;
-      const totalCalculadoSync = subtotalSync - valorDescontoGeralSync;
-
-      const totalParaUsar = totalRecalculado !== null
-        ? totalRecalculado
-        : (valorTotal && valorTotal > 0 ? valorTotal : totalCalculadoSync);
-
-      console.log('💵 DEBUG - Total usado no financeiro (sync-safe):', {
-        totalRecalculado,
-        valorTotal,
-        subtotalSync,
-        valorDescontoGeralSync,
-        totalCalculadoSync,
-        totalParaUsar,
-        'valorTotal é zero?': valorTotal === 0,
-        'totalRecalculado é null?': totalRecalculado === null
-      });
-
-      setValorRestante(totalParaUsar);
-      setValorCondicaoAtual(totalParaUsar); // Inicializa com o valor total
-      console.log('✅ Estados atualizados - abrindo modal:', {
-        'valorRestante será': totalParaUsar,
-        'valorCondicaoAtual será': totalParaUsar
-      });
       setOpenCondicoesPagamento(true);
-      setLoading(false);
+      console.log('✅ Modal de condições de pagamento aberto');
     } catch (err) {
-      console.error('Erro ao carregar formas de pagamento:', err);
-      setError('Erro ao carregar formas de pagamento');
-      setLoading(false);
+      console.error('Erro ao abrir condições de pagamento:', err);
+      setError(`Erro ao abrir condições de pagamento: ${err.message}`);
     }
   };
 
@@ -2538,6 +2435,15 @@ const VendaRapidaPage = () => {
         setIdProdutoSelecionado(null);
         setOpenFinalizar(false);
         setOpenCondicoesPagamento(false);
+        
+        // Limpar estado salvo do IndexedDB
+        try {
+          await limparEstadoVendaRapida();
+          console.log('✅ [OFFLINE] Estado limpo do IndexedDB após venda offline');
+        } catch (err) {
+          console.error('❌ [OFFLINE] Erro ao limpar estado:', err);
+        }
+        
         setTimeout(() => setSuccess(''), 8000);
         setLoading(false);
         return;
@@ -2700,6 +2606,15 @@ const VendaRapidaPage = () => {
           setIdProdutoSelecionado(null);
           setOpenFinalizar(false);
           setOpenCondicoesPagamento(false);
+          
+          // Limpar estado salvo do IndexedDB
+          try {
+            await limparEstadoVendaRapida();
+            console.log('✅ [FALLBACK] Estado limpo do IndexedDB');
+          } catch (clearErr) {
+            console.error('❌ [FALLBACK] Erro ao limpar estado:', clearErr);
+          }
+          
           setTimeout(() => setSuccess(''), 8000);
           setLoading(false);
           return;
@@ -2732,7 +2647,7 @@ const VendaRapidaPage = () => {
     }
   };
 
-  const limparVenda = () => {
+  const limparVenda = async () => {
     setItens([]);
     setDescontoGeral(0);
     setNumeroDocumento(String(parseInt(numeroDocumento) + 1));
@@ -2750,6 +2665,14 @@ const VendaRapidaPage = () => {
     setLimiteAutorizado(false);
     setAtrasoAutorizado(false);
     setEstoqueAutorizado(false);
+    
+    // 🔹 Limpar estado salvo do IndexedDB após finalizar venda
+    try {
+      await limparEstadoVendaRapida();
+      console.log('✅ Estado da venda limpo do IndexedDB');
+    } catch (err) {
+      console.error('❌ Erro ao limpar estado do IndexedDB:', err);
+    }
   };
 
   // Função para gerar HTML de impressão (reutilizável)
