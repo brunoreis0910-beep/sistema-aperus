@@ -150,6 +150,7 @@ const VendaRapidaPage = () => {
 
   const [openSelecionarTabela, setOpenSelecionarTabela] = useState(false);
   const [produtoPendenteTabela, setProdutoPendenteTabela] = useState(null);
+  const [openSelecionarLote, setOpenSelecionarLote] = useState(false);
   const [openPerguntarTabelaFinanceiro, setOpenPerguntarTabelaFinanceiro] = useState(false);
   const [openDesconto, setOpenDesconto] = useState(false);
   const [openDescontoItem, setOpenDescontoItem] = useState(false);
