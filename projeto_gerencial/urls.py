@@ -18,6 +18,10 @@ from django.views.decorators.csrf import csrf_exempt
 from api.views_nfce_config import ConfigNFceView
 from api.views_ui import PDVNFCeView, NFSeOSView, OrdemServicoIndexView
 from api.views_redirects import ConfiguracoesRedirectView, GenericHashRedirectView
+from django.http import JsonResponse
+
+def health_check(request):
+    return JsonResponse({'status': 'ok'})
 # Imporar views do Agro
 from api.views_frontend_agro import agro_index, agro_safras, agro_contratos, agro_conversoes
 
@@ -54,6 +58,7 @@ def lista_relatorios(request):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/health/', health_check, name='health_check'),
 
     # IMPORTANTE AQUI:
     path('api/', include('api.urls')),

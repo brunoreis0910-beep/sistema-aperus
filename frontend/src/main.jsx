@@ -7,6 +7,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { ThemeProvider } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import { AuthProvider } from './context/AuthContext'
+import { OfflineSyncProvider } from './context/OfflineSyncContext'
 import responsiveTheme from './theme/responsiveTheme'
 import axios from 'axios'
 
@@ -27,7 +28,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         }}
       >
         <AuthProvider>
-          <App />
+          <OfflineSyncProvider>
+            <App />
+          </OfflineSyncProvider>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>

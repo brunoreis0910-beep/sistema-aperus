@@ -16,7 +16,10 @@ import {
   Tab,
   Paper,
   Button,
-  Divider
+  Divider,
+  Chip,
+  Tooltip,
+  CircularProgress
 } from '@mui/material';
 import {
   Logout as LogoutIcon,
@@ -71,10 +74,15 @@ import {
   ,AccessTime as AccessTimeIcon
   ,MoveToInbox as EntregasIcon
   ,Inventory as InventoryIcon
+  ,CloudOff as CloudOffIcon
+  ,CloudDone as CloudDoneIcon
+  ,Sync as SyncIcon
+  ,WifiOff as WifiOffIcon
 } from '@mui/icons-material';
 
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
+import { useOfflineSync } from '../context/OfflineSyncContext';
 
 import DashboardErrorBoundary from './DashboardErrorBoundary';
 import QRCodeFloating from './QRCodeFloating';
@@ -92,6 +100,7 @@ const DashboardLayoutClean = () => {
   const { user, logout } = useAuth();
   const { can } = usePermissions();
   const theme = useTheme();
+  const { isOnline, servidorOk, pendentes, sincronizando, sincronizar } = useOfflineSync();
 
   // Detectar tela ultrawide e forçar modo desktop
   const isUltraWide = window.innerWidth >= 2560;
@@ -467,6 +476,29 @@ const DashboardLayoutClean = () => {
                 Bem-vindo, {user?.first_name || user?.username}
               </Typography>
             )}
+            {/* Indicador de conexão com o servidor */}
+            {!servidorOk || !isOnline ? (
+              <Tooltip title={!isOnline ? 'Sem internet — dados salvos localmente' : 'Servidor indisponível — dados salvos localmente'}>
+                <Chip
+                  icon={<WifiOffIcon sx={{ fontSize: '1rem' }} />}
+                  label={pendentes > 0 ? `Offline · ${pendentes} pendente(s)` : 'Offline'}
+                  size="small"
+                  sx={{ backgroundColor: '#f44336', color: '#fff', fontWeight: 700, cursor: 'default' }}
+                />
+              </Tooltip>
+            ) : pendentes > 0 ? (
+              <Tooltip title="Clique para sincronizar agora">
+                <Chip
+                  icon={sincronizando
+                    ? <CircularProgress size={12} sx={{ color: '#fff' }} />
+                    : <SyncIcon sx={{ fontSize: '1rem' }} />}
+                  label={sincronizando ? 'Sincronizando...' : `${pendentes} pendente(s)`}
+                  size="small"
+                  onClick={sincronizar}
+                  sx={{ backgroundColor: '#ff9800', color: '#fff', fontWeight: 700, cursor: 'pointer' }}
+                />
+              </Tooltip>
+            ) : null}
           </Box>
 
            <Box sx={{ display: 'flex', alignItems: 'center' }}>
