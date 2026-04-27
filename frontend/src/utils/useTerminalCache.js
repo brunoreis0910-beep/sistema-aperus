@@ -270,8 +270,10 @@ const useTerminalCache = (axiosInstance, servidorOk) => {
     const usuario    = cached.usuario || null;
 
     // Vendedor e operação do cache
-    const idVendedor  = parametros.id_vendedor_venda_rapida || parametros.id_vendedor_padrao;
-    const idOperacao  = parametros.id_operacao_venda_rapida || parametros.id_operacao_padrao;
+    // Vendedor e operação do cache — tenta campos específicos de Venda Rápida,
+    // depois campos de Venda, e por último os campos padrão
+    const idVendedor  = parametros.id_vendedor_venda_rapida || parametros.id_vendedor_venda || parametros.id_vendedor_padrao;
+    const idOperacao  = parametros.id_operacao_venda_rapida || parametros.id_operacao_venda || parametros.id_operacao_padrao;
     const idCliente   = parametros.id_cliente_padrao;
 
     const [vendedor, operacao, cliente] = await Promise.all([

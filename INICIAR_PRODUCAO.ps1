@@ -127,7 +127,11 @@ Write-Host "  Para parar o servidor: Ctrl+C" -ForegroundColor DarkGray
 Write-Host "════════════════════════════════════════════════════════════════" -ForegroundColor Green
 Write-Host ""
 
-python manage.py runserver 0.0.0.0:$PORTA
+python manage.py runserver 0.0.0.0:$PORTA --noreload
+
+# ALTERNATIVA RECOMENDADA: Waitress (servidor WSGI para produção no Windows)
+# Descomente a linha abaixo e comente a linha acima para usar o Waitress:
+# python -m waitress --port=$PORTA --threads=8 --host=0.0.0.0 projeto_gerencial.wsgi:application
 
 # Se o servidor parar (Ctrl+C ou erro)
 Write-Host ""

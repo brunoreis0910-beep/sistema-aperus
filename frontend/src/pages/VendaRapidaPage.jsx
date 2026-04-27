@@ -482,8 +482,8 @@ const VendaRapidaPage = () => {
           await selecionarClienteVenda(resCliente.data);
         }
 
-        // Carregar vendedor padrão para VENDA RÁPIDA (prioriza id_vendedor_venda_rapida, senão usa id_vendedor_padrao)
-        const idVendedorVendaRapida = resUsuario.data.parametros.id_vendedor_venda_rapida || resUsuario.data.parametros.id_vendedor_padrao;
+        // Carregar vendedor padrão para VENDA RÁPIDA (prioriza id_vendedor_venda_rapida, senão usa id_vendedor_venda, depois id_vendedor_padrao)
+        const idVendedorVendaRapida = resUsuario.data.parametros.id_vendedor_venda_rapida || resUsuario.data.parametros.id_vendedor_venda || resUsuario.data.parametros.id_vendedor_padrao;
         if (idVendedorVendaRapida) {
           console.log('👤 Carregando vendedor (Venda Rápida):', idVendedorVendaRapida);
           const resVendedor = await axiosInstance.get(
@@ -495,8 +495,8 @@ const VendaRapidaPage = () => {
           console.warn('⚠️ Nenhum vendedor padrão configurado nos parâmetros');
         }
 
-        // Carregar operação padrão para VENDA RÁPIDA (usa id_operacao_venda_rapida)
-        const idOperacaoVendaRapida = resUsuario.data.parametros.id_operacao_venda_rapida || resUsuario.data.parametros.id_operacao_padrao;
+        // Carregar operação padrão para VENDA RÁPIDA (usa id_operacao_venda_rapida, depois id_operacao_venda, depois id_operacao_padrao)
+        const idOperacaoVendaRapida = resUsuario.data.parametros.id_operacao_venda_rapida || resUsuario.data.parametros.id_operacao_venda || resUsuario.data.parametros.id_operacao_padrao;
         if (idOperacaoVendaRapida) {
           const resOperacao = await axiosInstance.get(
             `/operacoes/${idOperacaoVendaRapida}/`
