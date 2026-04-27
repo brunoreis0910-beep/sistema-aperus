@@ -100,10 +100,12 @@ const buscarTodos = async (store) => {
 };
 
 const buscarPorId = async (store, id) => {
+  // Coerce string numérica para número (evita mismatch de tipo com keyPath integer)
+  const chave = (typeof id === 'string' && /^\d+$/.test(id)) ? parseInt(id, 10) : id;
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
     const tx  = db.transaction(store, 'readonly');
-    const req = tx.objectStore(store).get(id);
+    const req = tx.objectStore(store).get(chave);
     req.onsuccess = () => resolve(req.result || null);
     req.onerror   = () => reject(req.error);
   });

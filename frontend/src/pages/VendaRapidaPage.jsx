@@ -534,7 +534,7 @@ const VendaRapidaPage = () => {
       // Servidor indisponível — tentar carregar do cache local como fallback
       try {
         const cached = await carregarDadosIniciaisCache();
-        if (cached && (cached.vendedor || cached.operacao)) {
+        if (cached && cached.parametros) {
           if (cached.empresa)    setEmpresa(cached.empresa);
           if (cached.parametros) setParametros(cached.parametros);
           if (cached.usuario)    setUsuario(cached.usuario);
