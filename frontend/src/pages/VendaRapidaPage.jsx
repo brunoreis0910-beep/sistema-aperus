@@ -99,6 +99,7 @@ const VendaRapidaPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [mostrarBannerOffline, setMostrarBannerOffline] = useState(false);
   const [openPesquisaProduto, setOpenPesquisaProduto] = useState(false);
   const [produtosPesquisa, setProdutosPesquisa] = useState([]);
   const [codigoProduto, setCodigoProduto] = useState('');
@@ -355,6 +356,19 @@ const VendaRapidaPage = () => {
 
   // Mantém servidorOkRef sempre atualizado (evita stale closure em funções assíncronas)
   useEffect(() => { servidorOkRef.current = servidorOk; }, [servidorOk]);
+
+  // 🔹 CONTROLE DO BANNER OFFLINE: Aguarda 2 segundos antes de mostrar
+  // para evitar falsos positivos durante a verificação inicial
+  useEffect(() => {
+    if (!servidorOk) {
+      const timeoutId = setTimeout(() => {
+        setMostrarBannerOffline(true);
+      }, 2000); // Aguarda 2 segundos
+      return () => clearTimeout(timeoutId);
+    } else {
+      setMostrarBannerOffline(false);
+    }
+  }, [servidorOk]);
 
   // Quando servidor volta online: recarregando configurações
   const servidorOkPrevRef = useRef(servidorOk);
@@ -3191,7 +3205,7 @@ const VendaRapidaPage = () => {
       position: 'relative'
     }}>
       {/* ── Banner de status offline ── */}
-      {!servidorOk && (
+      {mostrarBannerOffline && (
         <Alert
           severity="warning"
           icon={<WifiOffIcon />}
