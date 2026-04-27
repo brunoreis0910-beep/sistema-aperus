@@ -455,25 +455,19 @@ const DashboardLayoutClean = () => {
           <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box
               component="img"
-              src="/logos/aperus-logo.jpeg"
+              src="/logos/aperus-desktop.jpeg"
               alt="Logo Aperus"
               sx={{
-                height: 40,
-                borderRadius: 1,
+                height: 44,
                 objectFit: 'contain',
-                backgroundColor: 'transparent'
+                filter: 'brightness(0) invert(1)',
               }}
             />
-            <Box>
-              <Typography variant="h6" component="div" sx={{ fontWeight: 'bold', lineHeight: 1 }}>
-                APERUS
+            {user && (
+              <Typography variant="body2" sx={{ opacity: 0.9, lineHeight: 1.2 }}>
+                Bem-vindo, {user?.first_name || user?.username}
               </Typography>
-              {user && (
-                <Typography variant="body2" sx={{ opacity: 0.9, lineHeight: 1.2 }}>
-                  Bem-vindo, {user?.first_name || user?.username}
-                </Typography>
-              )}
-            </Box>
+            )}
           </Box>
 
            <Box sx={{ display: 'flex', alignItems: 'center' }}>
