@@ -107,6 +107,7 @@ const VendaRapidaPage = () => {
   const [valorUnitario, setValorUnitario] = useState(0);
   const [idProdutoSelecionado, setIdProdutoSelecionado] = useState(null);
   const [descontoItem, setDescontoItem] = useState(0);
+  const [descontoItemEdit, setDescontoItemEdit] = useState(0);
   const [precoBaseProduto, setPrecoBaseProduto] = useState(0);
   const [produtoBalanca, setProdutoBalanca] = useState(null);
   const [controlaProdutoLote, setControlaProdutoLote] = useState(false);
