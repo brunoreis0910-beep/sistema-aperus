@@ -2409,6 +2409,7 @@ const VendaRapidaPage = () => {
   // ── Fim MP Point ────────────────────────────────────────────────────────────
 
   const finalizarVenda = async () => {
+    let dadosVenda = null; // declarado fora do try para ser acessível no catch
     try {
       setLoading(true);
       setError('');
@@ -2467,7 +2468,7 @@ const VendaRapidaPage = () => {
       console.log('[ESTOQUE] Itens para baixa de estoque:', itensParaEnvio.map(i => `Prod ${i.id_produto}: ${i.quantidade} unidades`).join(', '));
 
       // Criar venda com itens
-      const dadosVenda = {
+      dadosVenda = {
         id_operacao: operacao.id_operacao,
         id_cliente: cliente?.id_cliente || null,
         id_vendedor: vendedor.id_vendedor,  // API espera id_vendedor (não id_vendedor1)
@@ -2640,7 +2641,7 @@ const VendaRapidaPage = () => {
       // ── FALLBACK OFFLINE: salva localmente se servidor retornar 5xx ou sem resposta ──
       const httpStatus = err?.response?.status;
       const isServerError = !err.response || httpStatus >= 500;
-      if (isServerError && typeof dadosVenda !== 'undefined') {
+      if (isServerError && dadosVenda) {
         try {
           const tempId = await salvarVendaOffline(dadosVenda);
           console.log('[OFFLINE] Venda salva offline como fallback:', tempId);
