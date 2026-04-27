@@ -53,6 +53,9 @@ import axios from 'axios';
 import promocaoService from '../services/promocaoService';
 import balancaService from '../services/balancaService';
 import { useAuth } from '../context/AuthContext';
+import { useOfflineSync } from '../context/OfflineSyncContext';
+import useTerminalCache from '../utils/useTerminalCache';
+import { salvarVendaOffline, buscarTabelasComerciaisCache } from '../utils/terminalCacheDB';
 import { logger } from '../components/DebugLogger';
 
 const VendaRapidaPage = () => {
@@ -216,6 +219,13 @@ const VendaRapidaPage = () => {
   // Refs
   const codigoProdutoRef = useRef(null);
   const { user, permissions, isLoading: authLoading, axiosInstance } = useAuth();
+  const { servidorOk } = useOfflineSync();
+  const {
+    buscarProdutos: buscarProdutosHook,
+    buscarClientes: buscarClientesHook,
+    obterFormasPagamento,
+    carregarDadosIniciais: carregarDadosIniciaisCache,
+  } = useTerminalCache(axiosInstance, servidorOk);
 
   // --- Funções de Caixa ---
   const checkCaixaStatus = async () => {
@@ -411,6 +421,28 @@ const VendaRapidaPage = () => {
       setLoading(true);
       const token = getToken();
 
+      // ── OFFLINE: carregar tudo do cache local ──────────────────────────────
+      if (!servidorOk) {
+        const cached = await carregarDadosIniciaisCache();
+        if (cached) {
+          if (cached.empresa)    setEmpresa(cached.empresa);
+          if (cached.parametros) setParametros(cached.parametros);
+          if (cached.usuario)    setUsuario(cached.usuario);
+          if (cached.vendedor)   setVendedor(cached.vendedor);
+          if (cached.operacao) {
+            setOperacao(cached.operacao);
+            if (cached.operacao.usa_auto_numeracao)
+              setNumeroDocumento(String(cached.operacao.proximo_numero_nf || 1));
+          }
+          if (cached.cliente) await selecionarClienteVenda(cached.cliente);
+          console.log('[OFFLINE] Dados carregados do cache local');
+        } else {
+          setError('Servidor offline. Faça login online ao menos uma vez para usar o modo offline.');
+        }
+        return;
+      }
+      // ── FIM OFFLINE ────────────────────────────────────────────────────────
+
       // Buscar dados da empresa
       const resEmpresa = await axiosInstance.get('/empresa/');
       if (resEmpresa.data && resEmpresa.data.length > 0) {
@@ -494,12 +526,9 @@ const VendaRapidaPage = () => {
       setLoadingClientes(true);
       const token = getToken();
 
-      const response = await axiosInstance.get('/clientes/');
-
-      // A API pode retornar array ou objeto com results
-      const clientesArray = Array.isArray(response.data) ? response.data : (response.data.results || []);
+      const clientesArray = await buscarClientesHook('');
       setClientes(clientesArray);
-      console.log('✅ Clientes carregados:', clientesArray.length);
+      console.log('✅ Clientes carregados:', clientesArray.length, servidorOk ? '(servidor)' : '(cache local)');
     } catch (err) {
       console.error('❌ Erro ao carregar clientes:', err);
       setError('Erro ao carregar clientes');
@@ -510,14 +539,17 @@ const VendaRapidaPage = () => {
 
   const carregarTabelasComerciais = async () => {
     try {
-      console.log('💰 Carregando tabelas comerciais da API...');
+      console.log('💰 Carregando tabelas comerciais...');
       const token = getToken();
-      const response = await axiosInstance.get('/tabelas-comerciais/?apenas_ativas=true');
+      let tabelas = [];
 
-      // Garantir que sempre seja array
-      const tabelas = Array.isArray(response.data)
-        ? response.data
-        : (response.data?.results || []);
+      if (servidorOk) {
+        const response = await axiosInstance.get('/tabelas-comerciais/?apenas_ativas=true');
+        tabelas = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+      } else {
+        tabelas = await buscarTabelasComerciaisCache();
+        console.log('[OFFLINE] Tabelas comerciais do cache:', tabelas.length);
+      }
       setTabelasComerciais(tabelas);
       console.log('✅ Tabelas comerciais carregadas:', tabelas);
 
@@ -569,10 +601,13 @@ const VendaRapidaPage = () => {
         const token = getToken();
         console.log('🔍 Buscando produto:', termoBusca);
 
-        let url = `/produtos/?search=${termoBusca}`;
-        let response = await axiosInstance.get(url);
-
-        const produtos = Array.isArray(response.data) ? response.data : (response.data.results || []);
+        let produtos;
+        if (servidorOk) {
+          let response = await axiosInstance.get(`/produtos/?search=${termoBusca}`);
+          produtos = Array.isArray(response.data) ? response.data : (response.data.results || []);
+        } else {
+          produtos = await buscarProdutosHook(termoBusca);
+        }
 
         if (produtos && produtos.length > 0) {
           if (produtos.length === 1) {
@@ -998,12 +1033,15 @@ const VendaRapidaPage = () => {
       let url = `/produtos/?search=${termoBusca}`;
       console.log('📡 URL busca:', url);
 
-      let response = await axiosInstance.get(url);
-
-      console.log('✅ Resposta busca:', response.data);
-
-      // A API retorna array diretamente, não objeto com results
-      const produtos = Array.isArray(response.data) ? response.data : (response.data.results || []);
+      let produtos;
+      if (servidorOk) {
+        let response = await axiosInstance.get(url);
+        console.log('✅ Resposta busca:', response.data);
+        produtos = Array.isArray(response.data) ? response.data : (response.data.results || []);
+      } else {
+        console.log('[OFFLINE] Buscando produto no cache local:', termoBusca);
+        produtos = await buscarProdutosHook(termoBusca);
+      }
 
       if (produtos && produtos.length > 0) {
         console.log('✅ Encontrou', produtos.length, 'produto(s)');
@@ -1013,13 +1051,13 @@ const VendaRapidaPage = () => {
           return await selecionarProduto(produtos[0], abrirModalSeAlertar);
         } else {
           // Se encontrou múltiplos, abre diálogo de seleção
-          // Carregar estoque de cada produto
+          // Carregar estoque de cada produto (apenas quando online)
           const produtosComEstoque = await Promise.all(
             produtos.map(async (produto) => {
               let valorVenda = produto.valor_venda || 0;
-              let quantidadeEstoque = 0;
+              let quantidadeEstoque = produto.quantidade_estoque || 0;
 
-              if (operacao && operacao.id_deposito_baixa) {
+              if (servidorOk && operacao && operacao.id_deposito_baixa) {
                 try {
                   const resEstoque = await axiosInstance.get(
                     `/estoque/?id_produto=${produto.id_produto}&id_deposito=${operacao.id_deposito_baixa}`
@@ -1895,12 +1933,10 @@ const VendaRapidaPage = () => {
       setLoading(true);
       const token = getToken();
 
-      // Buscar formas de pagamento
-      const res = await axiosInstance.get('/formas-pagamento/');
-
-      console.log('📋 Formas de pagamento recebidas:', res.data);
-
-      setFormasPagamento(Array.isArray(res.data) ? res.data : (res.data?.results || []));
+      // Buscar formas de pagamento (usa cache quando offline)
+      const formas = await obterFormasPagamento();
+      console.log('📋 Formas de pagamento recebidas:', formas);
+      setFormasPagamento(formas);
       // Não limpar `condicoesSelecionadas` aqui — preservar condições já adicionadas
       // para evitar que o usuário perca o que já foi definido ao reabrir o modal.
 
@@ -2407,6 +2443,27 @@ const VendaRapidaPage = () => {
       };
 
       console.log('[VENDA] Dados da venda completa:', dadosVenda);
+
+      // ── OFFLINE: salvar venda localmente e encerrar ────────────────────────
+      if (!servidorOk) {
+        const tempId = await salvarVendaOffline(dadosVenda);
+        console.log('[OFFLINE] Venda salva localmente:', tempId);
+        setSuccess('✅ Venda salva localmente! Será sincronizada automaticamente quando o servidor estiver disponível.');
+        setItens([]);
+        setCondicoesSelecionadas([]);
+        setDescontoGeral(0);
+        setCodigoProduto('');
+        setNomeProduto('');
+        setQuantidade(1);
+        setValorUnitario(0);
+        setIdProdutoSelecionado(null);
+        setOpenFinalizar(false);
+        setOpenCondicoesPagamento(false);
+        setTimeout(() => setSuccess(''), 8000);
+        setLoading(false);
+        return;
+      }
+      // ── FIM OFFLINE ────────────────────────────────────────────────────────
 
       const resVenda = await axiosInstance.post('/vendas/', dadosVenda);
 

@@ -127,6 +127,25 @@ import ChurnPage from './pages/ChurnPage'
 import PontoPage from './pages/PontoPage'
 import DashboardBI from './pages/DashboardBI'
 import ConsultaEstoquePage from './pages/ConsultaEstoquePage'
+import { useEffect } from 'react'
+import { useAuth } from './context/AuthContext'
+import { useOfflineSync } from './context/OfflineSyncContext'
+
+/**
+ * Componente bridge que registra o axiosInstance do AuthContext
+ * no OfflineSyncContext assim que disponível.
+ * Deve estar dentro de ambos os Providers (AuthProvider e OfflineSyncProvider).
+ */
+function AxiosBridge() {
+  const { axiosInstance } = useAuth();
+  const { registerAxios } = useOfflineSync();
+  useEffect(() => {
+    if (axiosInstance && registerAxios) {
+      registerAxios(axiosInstance);
+    }
+  }, [axiosInstance, registerAxios]);
+  return null;
+}
 
 export default function App() {
   return (
@@ -136,6 +155,7 @@ export default function App() {
         <UltraWideConfig>
           <GruposProdutoProvider>
             <MenuStateProvider>
+              <AxiosBridge />
               <Routes>
                 <Route path='/login' element={<LoginPage />} />
                 <Route path='/login-simple' element={<LoginSimple />} />

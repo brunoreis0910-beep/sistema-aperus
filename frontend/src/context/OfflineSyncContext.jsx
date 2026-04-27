@@ -19,6 +19,7 @@ import { useAuth } from './AuthContext';
 import {
   listarPendentes, contarPendentes, processarFila, terminalId,
 } from '../utils/offlineQueue';
+import { sincronizarVendasOffline, contarVendasOffline } from '../utils/terminalCacheDB';
 import { API_BASE_URL } from '../config/api';
 
 const OfflineSyncContext = createContext(null);
@@ -29,11 +30,14 @@ const INTERVALO_PING = 15_000;
 const TIMEOUT_PING   = 5_000;
 
 export const OfflineSyncProvider = ({ children }) => {
-  const { axiosInstance } = useAuth();
+  // axiosInstance é injetado externamente via registerAxios()
+  // para não depender do useAuth e evitar crash antes do login
+  const axiosRef = useRef(null);
 
   const [isOnline,       setIsOnline]       = useState(navigator.onLine);
   const [servidorOk,     setServidorOk]     = useState(true);
   const [pendentes,      setPendentes]      = useState(0);
+  const [vendasOffline,  setVendasOffline]  = useState(0);
   const [sincronizando,  setSincronizando]  = useState(false);
   const [ultimaSync,     setUltimaSync]     = useState(null);
   const [errosSync,      setErrosSync]      = useState(0);
@@ -69,32 +73,43 @@ export const OfflineSyncProvider = ({ children }) => {
   // ─── Sincroniza a fila offline ──────────────────────────────────────────────
   const sincronizar = useCallback(async (forcar = false) => {
     if (sincronizandoRef.current && !forcar) return;
-    if (!axiosInstance) return;
+    if (!axiosRef.current) return;
 
-    const total = await contarPendentes();
-    if (total === 0) return;
+    const totalFila   = await contarPendentes();
+    const totalVendas = await contarVendasOffline();
+    if (totalFila === 0 && totalVendas === 0) return;
 
     sincronizandoRef.current = true;
     setSincronizando(true);
 
     try {
-      const { enviados, erros } = await processarFila(axiosInstance, (env, tot) => {
+      // 1) Fila genérica (operações de outros módulos)
+      const { enviados, erros } = await processarFila(axiosRef.current, (env, tot) => {
         setPendentes(tot - env);
       });
-      setErrosSync(erros);
-      if (enviados > 0) setUltimaSync(new Date());
+      // 2) Vendas offline do terminal (VendaRapidaPage)
+      const { enviadas, erros: errosVendas } = await sincronizarVendasOffline(axiosRef.current);
+
+      setErrosSync(erros + errosVendas);
+      if (enviados > 0 || enviadas > 0) setUltimaSync(new Date());
     } finally {
       const restantes = await contarPendentes();
+      const restantesVendas = await contarVendasOffline();
       setPendentes(restantes);
+      setVendasOffline(restantesVendas);
       setSincronizando(false);
       sincronizandoRef.current = false;
     }
-  }, [axiosInstance]);
+  }, []);
 
   // ─── Atualiza contador de pendentes ────────────────────────────────────────
   const atualizarPendentes = useCallback(async () => {
-    const total = await contarPendentes();
+    const [total, totalVendas] = await Promise.all([
+      contarPendentes(),
+      contarVendasOffline(),
+    ]);
     setPendentes(total);
+    setVendasOffline(totalVendas);
   }, []);
 
   // ─── Loop de ping periódico ─────────────────────────────────────────────────
@@ -135,12 +150,16 @@ export const OfflineSyncProvider = ({ children }) => {
     isOnline,
     servidorOk,
     pendentes,
+    vendasOffline,
+    totalPendentes: pendentes + vendasOffline,
     sincronizando,
     ultimaSync,
     errosSync,
     terminalId,
     sincronizar: () => sincronizar(true),
     atualizarPendentes,
+    // Chamado pelo AuthContext após login para registrar o axiosInstance
+    registerAxios: (instance) => { axiosRef.current = instance; },
   };
 
   return (

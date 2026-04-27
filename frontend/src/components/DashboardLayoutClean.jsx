@@ -100,7 +100,8 @@ const DashboardLayoutClean = () => {
   const { user, logout } = useAuth();
   const { can } = usePermissions();
   const theme = useTheme();
-  const { isOnline, servidorOk, pendentes, sincronizando, sincronizar } = useOfflineSync();
+  const { isOnline, servidorOk, totalPendentes, sincronizando, sincronizar } = useOfflineSync();
+  const pendentes = totalPendentes || 0;
 
   // Detectar tela ultrawide e forçar modo desktop
   const isUltraWide = window.innerWidth >= 2560;
