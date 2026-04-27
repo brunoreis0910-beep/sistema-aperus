@@ -155,6 +155,7 @@ const VendaRapidaPage = () => {
   const [openDescontoItem, setOpenDescontoItem] = useState(false);
   const [openCondicoesPagamento, setOpenCondicoesPagamento] = useState(false);
   const [openFinalizar, setOpenFinalizar] = useState(false);
+  const [openImpressao, setOpenImpressao] = useState(false);
   const [openReimprimir, setOpenReimprimir] = useState(false);
   const [vendas, setVendas] = useState([]);
   const [loadingVendas, setLoadingVendas] = useState(false);
