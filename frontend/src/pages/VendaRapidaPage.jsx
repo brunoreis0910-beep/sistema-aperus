@@ -439,6 +439,15 @@ const VendaRapidaPage = () => {
       // ── OFFLINE: carregar tudo do cache local ──────────────────────────────
       if (!servidorOk) {
         const cached = await carregarDadosIniciaisCache();
+        // Validar que o cache pertence ao usuário logado atualmente
+        const cacheUsername = cached?.parametros?._username;
+        const currentUsername = user?.username;
+        if (cacheUsername && currentUsername && cacheUsername !== currentUsername) {
+          console.warn(`[OFFLINE] Cache pertence ao usuário "${cacheUsername}", mas logado como "${currentUsername}". Recusando cache.`);
+          setError(`Modo offline não disponível para "${currentUsername}": o cache pertence ao usuário "${cacheUsername}". Conecte-se à internet para ativar o modo offline para este usuário.`);
+          setLoading(false);
+          return;
+        }
         if (cached) {
           if (cached.empresa)    setEmpresa(cached.empresa);
           if (cached.parametros) setParametros(cached.parametros);
@@ -450,7 +459,7 @@ const VendaRapidaPage = () => {
               setNumeroDocumento(String(cached.operacao.proximo_numero_nf || 1));
           }
           if (cached.cliente) await selecionarClienteVenda(cached.cliente);
-          console.log('[OFFLINE] Dados carregados do cache local');
+          console.log('[OFFLINE] Dados carregados do cache local (usuário:', currentUsername, ')');
         } else {
           setError('Servidor offline. Faça login online ao menos uma vez para usar o modo offline.');
         }
@@ -534,7 +543,13 @@ const VendaRapidaPage = () => {
       // Servidor indisponível — tentar carregar do cache local como fallback
       try {
         const cached = await carregarDadosIniciaisCache();
-        if (cached && cached.parametros) {
+        // Validar que o cache pertence ao usuário logado
+        const cacheUsername = cached?.parametros?._username;
+        const currentUsername = user?.username;
+        if (cacheUsername && currentUsername && cacheUsername !== currentUsername) {
+          console.warn(`[CACHE] Cache de "${cacheUsername}" recusado para "${currentUsername}"`);
+          setError(`Modo offline não disponível para "${currentUsername}": cache pertence ao usuário "${cacheUsername}". Conecte-se à internet.`);
+        } else if (cached && cached.parametros) {
           if (cached.empresa)    setEmpresa(cached.empresa);
           if (cached.parametros) setParametros(cached.parametros);
           if (cached.usuario)    setUsuario(cached.usuario);
@@ -545,7 +560,7 @@ const VendaRapidaPage = () => {
               setNumeroDocumento(String(cached.operacao.proximo_numero_nf || 1));
           }
           if (cached.cliente) await selecionarClienteVenda(cached.cliente).catch(() => {});
-          console.log('[CACHE] Configuração carregada do cache local (servidor indisponível)');
+          console.log('[CACHE] Configuração carregada do cache local (usuário:', currentUsername, ')');
         } else {
           setError('Servidor indisponível e sem cache local. Abra o sistema online ao menos uma vez para ativar o modo offline.');
         }

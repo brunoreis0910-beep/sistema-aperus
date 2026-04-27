@@ -161,11 +161,12 @@ const useTerminalCache = (axiosInstance, servidorOk) => {
         if (e) await cachearEmpresa(e);
       }
 
-      // Parâmetros do usuário
+      // Parâmetros do usuário — inclui _username para validar na leitura offline
       if (resUsuario.status === 'fulfilled' && resUsuario.value.data?.parametros) {
         await cachearParametros({
           ...resUsuario.value.data.parametros,
           usuario: resUsuario.value.data,
+          _username: resUsuario.value.data.username,
         });
       }
 
