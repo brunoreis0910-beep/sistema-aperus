@@ -452,18 +452,29 @@ const DashboardLayoutClean = () => {
             </IconButton>
           )}
 
-          <Typography
-            variant="h6"
-            component="div"
-            sx={{ flexGrow: 1, fontWeight: 'bold' }}
-          >
-            APERUS
-            {user && (
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                Bem-vindo, {user?.first_name || user?.username}
+          <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box
+              component="img"
+              src="/logos/aperus-logo.jpeg"
+              alt="Logo Aperus"
+              sx={{
+                height: 40,
+                borderRadius: 1,
+                objectFit: 'contain',
+                backgroundColor: 'transparent'
+              }}
+            />
+            <Box>
+              <Typography variant="h6" component="div" sx={{ fontWeight: 'bold', lineHeight: 1 }}>
+                APERUS
               </Typography>
-            )}
-           </Typography>
+              {user && (
+                <Typography variant="body2" sx={{ opacity: 0.9, lineHeight: 1.2 }}>
+                  Bem-vindo, {user?.first_name || user?.username}
+                </Typography>
+              )}
+            </Box>
+          </Box>
 
            <Box sx={{ display: 'flex', alignItems: 'center' }}>
              <NotificationBell />
