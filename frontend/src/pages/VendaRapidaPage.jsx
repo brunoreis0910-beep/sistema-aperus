@@ -189,6 +189,11 @@ const VendaRapidaPage = () => {
     carregarDadosIniciais: carregarDadosIniciaisCache,
   } = useTerminalCache(axiosInstance, servidorOk);
 
+  // Função auxiliar para obter token de autenticação
+  const getToken = () => {
+    return localStorage.getItem('token') || sessionStorage.getItem('token');
+  };
+
   // --- Funções de Caixa ---
   const checkCaixaStatus = async () => {
     try {
@@ -315,7 +320,8 @@ const VendaRapidaPage = () => {
     // Debounce: aguarda 1 segundo após a última mudança para salvar
     const timeoutId = setTimeout(async () => {
       try {
-        await salvarEstadoVendaRapida({
+        // Serializar apenas dados simples para evitar erros do IndexedDB
+        const estadoSerializavel = JSON.parse(JSON.stringify({
           usuario,
           parametros,
           vendedor,
@@ -329,7 +335,9 @@ const VendaRapidaPage = () => {
           numeroDocumento,
           tabelasComerciais,
           formasPagamento,
-        });
+        }));
+        
+        await salvarEstadoVendaRapida(estadoSerializavel);
         console.log('💾 [AUTO-SAVE] Estado da Venda Rápida salvo automaticamente');
       } catch (err) {
         console.error('❌ [AUTO-SAVE] Erro ao salvar estado:', err);
@@ -688,7 +696,7 @@ const VendaRapidaPage = () => {
 
       console.log('📋 Promoções formatadas:', JSON.stringify(promocoesFormatadas, null, 2));
 
-      setPromocoes(promocoesFormatadas);
+      setPromocoesAtivas({ dados: promocoesFormatadas, carregado: true });
       console.log('✅ Estado de promoções atualizado. Total:', promocoesFormatadas.length);
 
       return Promise.resolve(promocoesFormatadas);
