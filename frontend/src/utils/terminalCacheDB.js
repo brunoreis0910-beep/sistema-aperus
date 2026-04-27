@@ -225,8 +225,12 @@ export const buscarParametrosCache = () => buscarSingleton('parametros');
 export const gerarTempIdVenda = () =>
   `venda_offline_${terminalId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-/** Salva uma venda realizada offline */
-export const salvarVendaOffline = async (dadosVenda) => {
+/**
+ * Salva uma venda realizada offline.
+ * @param {object} dadosVenda - Payload para POST /vendas/
+ * @param {Array}  dadosFinanceiros - Array de payloads para POST /contas/ (sem id_venda_origem)
+ */
+export const salvarVendaOffline = async (dadosVenda, dadosFinanceiros = []) => {
   const tempId = gerarTempIdVenda();
   const db     = await abrirDB();
   return new Promise((resolve, reject) => {
@@ -234,6 +238,7 @@ export const salvarVendaOffline = async (dadosVenda) => {
     const req = tx.objectStore('vendas_offline').put({
       tempId,
       dadosVenda,
+      dadosFinanceiros,
       terminalId,
       status: 'pendente',
       criadoEm: new Date().toISOString(),
@@ -272,6 +277,7 @@ export const removerVendaOffline = async (tempId) => {
 
 /**
  * Sincroniza todas as vendas offline com o servidor.
+ * Após cada POST /vendas/, cria os registros financeiros (POST /contas/).
  * Retorna { enviadas, erros }.
  */
 export const sincronizarVendasOffline = async (axiosInstance) => {
@@ -281,7 +287,19 @@ export const sincronizarVendasOffline = async (axiosInstance) => {
 
   for (const venda of pendentes) {
     try {
-      await axiosInstance.post('/vendas/', venda.dadosVenda);
+      const res    = await axiosInstance.post('/vendas/', venda.dadosVenda);
+      const idVenda = res.data.id_venda || res.data.id;
+
+      // Criar registros financeiros que foram preparados antes de ir offline
+      const financeiros = venda.dadosFinanceiros || [];
+      for (const fin of financeiros) {
+        try {
+          await axiosInstance.post('/contas/', { ...fin, id_venda_origem: idVenda });
+        } catch (finErr) {
+          console.warn('[OFFLINE] Falha ao criar financeiro na sync:', finErr?.response?.data || finErr.message);
+        }
+      }
+
       await removerVendaOffline(venda.tempId);
       enviadas++;
     } catch (err) {

@@ -2429,6 +2429,51 @@ const VendaRapidaPage = () => {
 
   // ── Fim MP Point ────────────────────────────────────────────────────────────
 
+  /**
+   * Monta o array de payloads para POST /contas/ a partir do estado atual.
+   * Chamado antes de salvar offline para que a sync possa criar o financeiro depois.
+   */
+  const prepararDadosFinanceiros = (idVenda = null) => {
+    if (!operacao?.gera_financeiro || condicoesSelecionadas.length === 0) return [];
+
+    return condicoesSelecionadas.map((condicao, i) => {
+      const formaId = parseInt(condicao.forma);
+      const forma = formasPagamento.find(f => f.id_forma_pagamento === formaId);
+
+      const dataVencimento = new Date();
+      dataVencimento.setDate(dataVencimento.getDate() + (forma?.dias_vencimento || 0));
+
+      const dataVendaStr = new Date().toISOString().split('T')[0];
+      const dataVencimentoStr = dataVencimento.toISOString().split('T')[0];
+      const deveBaixar = operacao.baixa_automatica && (dataVendaStr === dataVencimentoStr);
+
+      return {
+        tipo_conta: 'receber',
+        id_cliente_fornecedor: cliente?.id_cliente || null,
+        descricao: `Venda #${numeroDocumento} - ${forma?.nome_forma || 'Pagamento'} ${condicoesSelecionadas.length > 1 ? `(${i + 1}/${condicoesSelecionadas.length})` : ''}`,
+        valor_parcela: condicao.valor,
+        valor_liquidado: deveBaixar ? condicao.valor : 0,
+        valor_juros: 0,
+        valor_multa: 0,
+        valor_desconto: 0,
+        data_vencimento: dataVencimentoStr,
+        data_pagamento: deveBaixar ? dataVendaStr : null,
+        status_conta: deveBaixar ? 'Paga' : 'Pendente',
+        id_forma_pagamento: forma?.id_forma_pagamento || null,
+        id_venda_origem: idVenda,  // null quando offline — preenchido na sync
+        id_operacao: operacao.id_operacao,
+        id_departamento: forma?.id_departamento || null,
+        id_centro_custo: forma?.id_centro_custo || null,
+        id_conta_cobranca: forma?.id_conta_padrao || null,
+        id_conta_baixa: deveBaixar ? (forma?.id_conta_padrao || null) : null,
+        documento_numero: numeroDocumento,
+        parcela_numero: i + 1,
+        parcela_total: condicoesSelecionadas.length,
+        gerencial: 0,
+      };
+    });
+  };
+
   const finalizarVenda = async () => {
     let dadosVenda = null; // declarado fora do try para ser acessível no catch
     try {
@@ -2503,8 +2548,9 @@ const VendaRapidaPage = () => {
 
       // ── OFFLINE: salvar venda localmente e encerrar ────────────────────────
       if (!servidorOk) {
-        const tempId = await salvarVendaOffline(dadosVenda);
-        console.log('[OFFLINE] Venda salva localmente:', tempId);
+        const dadosFinanceiros = prepararDadosFinanceiros();
+        const tempId = await salvarVendaOffline(dadosVenda, dadosFinanceiros);
+        console.log('[OFFLINE] Venda salva localmente:', tempId, '| financeiros:', dadosFinanceiros.length);
         setSuccess('✅ Venda salva localmente! Será sincronizada automaticamente quando o servidor estiver disponível.');
         setItens([]);
         setCondicoesSelecionadas([]);
@@ -2664,8 +2710,9 @@ const VendaRapidaPage = () => {
       const isServerError = !err.response || httpStatus >= 500;
       if (isServerError && dadosVenda) {
         try {
-          const tempId = await salvarVendaOffline(dadosVenda);
-          console.log('[OFFLINE] Venda salva offline como fallback:', tempId);
+          const dadosFinanceiros = prepararDadosFinanceiros();
+          const tempId = await salvarVendaOffline(dadosVenda, dadosFinanceiros);
+          console.log('[OFFLINE] Venda salva offline como fallback:', tempId, '| financeiros:', dadosFinanceiros.length);
           setSuccess('✅ Servidor indisponível — venda salva offline! Será sincronizada automaticamente.');
           setItens([]);
           setCondicoesSelecionadas([]);
