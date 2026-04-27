@@ -498,6 +498,7 @@ const VendaRapidaPage = () => {
 
     } catch (err) {
       console.error('Erro ao carregar dados do servidor:', err);
+      marcarServidorIndisponivel(); // Força o estado de offline no contexto
       // Servidor indisponível — tentar carregar do cache local como fallback
       try {
         const cached = await carregarDadosIniciaisCache();
@@ -519,12 +520,13 @@ const VendaRapidaPage = () => {
           }
           if (cached.cliente) await selecionarClienteVenda(cached.cliente).catch(() => {});
           console.log('[CACHE] Configuração carregada do cache local (usuário:', currentUsername, ')');
+          setSuccess('Operando em modo offline com dados de cache.');
         } else {
-          setError('Servidor indisponível e sem cache local. Abra o sistema online ao menos uma vez para ativar o modo offline.');
+          setError('Servidor offline e sem cache local. Faça login online ao menos uma vez para ativar o modo offline.');
         }
       } catch (cacheErr) {
         console.error('Erro ao carregar cache:', cacheErr);
-        setError('Servidor indisponível. Verifique sua conexão.');
+        setError('Servidor indisponível. Verifique sua conexão e tente recarregar a página.');
       }
     } finally {
       setLoading(false);
