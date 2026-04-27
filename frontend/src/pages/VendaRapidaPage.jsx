@@ -392,6 +392,35 @@ const VendaRapidaPage = () => {
     }
   }, [servidorOk]);
 
+  // 🔹 SELECIONAR TABELA COMERCIAL DO PARÂMETRO DO USUÁRIO
+  // Observa quando usuario e tabelas comerciais são carregados e então seleciona automaticamente
+  useEffect(() => {
+    if (!usuario || !parametros || tabelasComerciais.length === 0) return;
+    
+    const idTabelaParametro = parametros.id_tabela_comercial;
+    if (!idTabelaParametro) {
+      console.log('⚠️ Usuário sem tabela comercial padrão configurada');
+      return;
+    }
+
+    // Só selecionar automaticamente se ainda não tem tabela selecionada
+    if (tabelaSelecionada) {
+      console.log('ℹ️ Tabela já selecionada:', tabelaSelecionada.nome);
+      return;
+    }
+
+    const tabelaParaSelecionar = tabelasComerciais.find(
+      t => t.id_tabela_comercial === idTabelaParametro
+    );
+
+    if (tabelaParaSelecionar) {
+      setTabelaSelecionada(tabelaParaSelecionar);
+      console.log('✅ Tabela comercial do parâmetro selecionada automaticamente:', tabelaParaSelecionar.nome);
+    } else {
+      console.log('⚠️ Tabela ID', idTabelaParametro, 'não encontrada. Disponíveis:', tabelasComerciais.map(t => t.id_tabela_comercial));
+    }
+  }, [usuario, parametros, tabelasComerciais, tabelaSelecionada]);
+
   const carregarDadosUsuario = async () => {
     // Se já temos os parâmetros no contexto, não precisamos carregar tudo de novo
     if (parametros && usuario) {
@@ -580,34 +609,8 @@ const VendaRapidaPage = () => {
         console.log('[OFFLINE] Tabelas comerciais do cache:', tabelas.length);
       }
       setTabelasComerciais(tabelas);
-      console.log('✅ Tabelas comerciais carregadas:', tabelas);
-
-      // Tentar usar a tabela configurada nos parâmetros do usuário
-      let tabelaParaSelecionar = null;
-
-      console.log('🔍 Verificando tabela padrão do usuário:', {
-        usuario: usuario ? 'existe' : 'null',
-        parametros: usuario?.parametros,
-        id_tabela_comercial: usuario?.parametros?.id_tabela_comercial
-      });
-
-      if (usuario?.parametros?.id_tabela_comercial) {
-        tabelaParaSelecionar = tabelas.find(t => t.id_tabela_comercial === usuario.parametros.id_tabela_comercial);
-        if (tabelaParaSelecionar) {
-          console.log('✅ Tabela do usuário selecionada:', tabelaParaSelecionar);
-        } else {
-          console.log('⚠️ Tabela ID', usuario.parametros.id_tabela_comercial, 'não encontrada na lista de tabelas');
-        }
-      }
-
-      // Se não encontrou a tabela do usuário, NÃO selecionar automaticamente
-      // Deixar null para forçar seleção manual na primeira busca
-      if (!tabelaParaSelecionar) {
-        console.log('⚠️ Usuário sem tabela padrão configurada. Irá perguntar na primeira busca.');
-        setTabelaSelecionada(null);
-      } else {
-        setTabelaSelecionada(tabelaParaSelecionar);
-      }
+      console.log('✅ Tabelas comerciais carregadas:', tabelas.length, 'tabelas');
+      // A seleção automática da tabela do parâmetro é feita no useEffect que observa usuario e tabelasComerciais
     } catch (error) {
       console.error('❌ Erro ao carregar tabelas comerciais:', error);
     }
