@@ -1331,7 +1331,7 @@ const VendaRapidaPage = () => {
      * Verifica se o produto tem promoção ativa
      * Retorna { desconto_percentual, desconto_valor, promocao_nome } ou null
      */
-    if (!promocoesAtivas || promocoesAtivas.length === 0) {
+    if (!promocoesAtivas?.dados || promocoesAtivas.dados.length === 0) {
       console.log('DEBUG: Nenhuma promoção ativa carregada');
       return null;
     }
@@ -1339,7 +1339,7 @@ const VendaRapidaPage = () => {
     console.log('DEBUG: Verificando promoções para produto', idProduto, 'com quantidade', qtd);
     console.log('DEBUG: Promoções ativas:', JSON.stringify(promocoesAtivas, null, 2));
 
-    for (const promo of promocoesAtivas) {
+    for (const promo of promocoesAtivas.dados) {
       console.log('DEBUG: Analisando promoção:', promo.nome_promocao, 'produtos:', promo.promocao_produtos);
 
       // Verificar se o produto está na promoção
