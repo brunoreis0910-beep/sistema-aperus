@@ -415,3 +415,93 @@ export const limparEstadoVendaRapida = async () => {
     throw err;
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FUNÇÕES DE CACHE PARA COMPONENTE VENDAS.JSX
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Salva o estado atual do componente Vendas.jsx no IndexedDB.
+ * Permite que o usuário navegue para outras páginas e volte sem perder dados.
+ * @param {Object} estado - Objeto contendo todos os dados do formulário de venda
+ */
+export const salvarEstadoVendas = async (estado) => {
+  try {
+    const db = await abrirDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('venda_rapida_estado', 'readwrite');
+      const req = tx.objectStore('venda_rapida_estado').put({
+        chave: 'estado_vendas',
+        dados: estado,
+        timestamp: new Date().toISOString()
+      });
+      req.onsuccess = () => {
+        console.log('[PERSISTÊNCIA] Estado de Vendas salvo no IndexedDB');
+        resolve();
+      };
+      req.onerror = () => {
+        console.error('[PERSISTÊNCIA] Erro ao salvar estado de Vendas:', req.error);
+        reject(req.error);
+      };
+    });
+  } catch (err) {
+    console.error('[PERSISTÊNCIA] Falha ao salvar estado de Vendas:', err);
+    throw err;
+  }
+};
+
+/**
+ * Carrega o estado salvo do componente Vendas.jsx.
+ * @returns {Object|null} - Objeto com os dados salvos ou null se não houver
+ */
+export const carregarEstadoVendas = async () => {
+  try {
+    const db = await abrirDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('venda_rapida_estado', 'readonly');
+      const req = tx.objectStore('venda_rapida_estado').get('estado_vendas');
+      req.onsuccess = () => {
+        if (req.result && req.result.dados) {
+          console.log('[PERSISTÊNCIA] Estado de Vendas carregado do IndexedDB');
+          resolve(req.result.dados);
+        } else {
+          console.log('[PERSISTÊNCIA] Nenhum estado de Vendas encontrado');
+          resolve(null);
+        }
+      };
+      req.onerror = () => {
+        console.error('[PERSISTÊNCIA] Erro ao carregar estado de Vendas:', req.error);
+        reject(req.error);
+      };
+    });
+  } catch (err) {
+    console.error('[PERSISTÊNCIA] Falha ao carregar estado de Vendas:', err);
+    return null;
+  }
+};
+
+/**
+ * Limpa o estado salvo do componente Vendas.jsx.
+ * Deve ser chamado após finalizar uma venda com sucesso.
+ */
+export const limparEstadoVendas = async () => {
+  try {
+    const db = await abrirDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('venda_rapida_estado', 'readwrite');
+      const req = tx.objectStore('venda_rapida_estado').delete('estado_vendas');
+      req.onsuccess = () => {
+        console.log('[PERSISTÊNCIA] Estado de Vendas limpo do IndexedDB');
+        resolve();
+      };
+      req.onerror = () => {
+        console.error('[PERSISTÊNCIA] Erro ao limpar estado de Vendas:', req.error);
+        reject(req.error);
+      };
+    });
+  } catch (err) {
+    console.error('[PERSISTÊNCIA] Falha ao limpar estado de Vendas:', err);
+    throw err;
+  }
+};
+

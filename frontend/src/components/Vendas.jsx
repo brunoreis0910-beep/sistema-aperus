@@ -53,6 +53,11 @@ import mockAPI from '../services/mockAPI';
 import useImpressaoVenda from '../hooks/useImpressaoVenda';
 import { useAuth } from '../context/AuthContext';
 import { useOfflineSync } from '../context/OfflineSyncContext';
+import { 
+  salvarEstadoVendas,
+  carregarEstadoVendas,
+  limparEstadoVendas
+} from '../utils/terminalCacheDB';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import promocaoService from '../services/promocaoService';
 import WhatsAppQuickSend, { useWhatsAppTemplates } from './WhatsAppQuickSend';
@@ -168,6 +173,53 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       setModo('nova');
     }
   }, [location, initialMode]);
+
+  // 🔹 RESTAURAR ESTADO SALVO DO INDEXEDDB (Persistência entre navegações)
+  useEffect(() => {
+    const restaurarEstadoSalvo = async () => {
+      try {
+        const estadoSalvo = await carregarEstadoVendas();
+        if (estadoSalvo && modo === 'nova') {
+          console.log('✅ Restaurando estado salvo de Vendas');
+          
+          // Restaurar dados da venda
+          if (estadoSalvo.venda) setVenda(estadoSalvo.venda);
+          if (estadoSalvo.novoItem) setNovoItem(estadoSalvo.novoItem);
+          
+          // Mostrar mensagem de sucesso
+          setSuccess('✅ Venda restaurada! Você pode continuar de onde parou.');
+          setTimeout(() => setSuccess(''), 3000);
+        }
+      } catch (err) {
+        console.error('Erro ao restaurar estado de Vendas:', err);
+      }
+    };
+    
+    restaurarEstadoSalvo();
+  }, [modo]); // Executa quando o modo muda
+
+  // 🔹 AUTO-SAVE: Salva automaticamente o estado quando houver mudanças
+  useEffect(() => {
+    // Não salvar se não estiver no modo 'nova' ou se não houver dados
+    if (modo !== 'nova' || !venda.id_operacao) return;
+    
+    // Debounce: aguarda 1 segundo após a última mudança para salvar
+    const timeoutId = setTimeout(async () => {
+      try {
+        const estadoSerializavel = JSON.parse(JSON.stringify({
+          venda,
+          novoItem
+        }));
+        
+        await salvarEstadoVendas(estadoSerializavel);
+        console.log('💾 [AUTO-SAVE] Estado de Vendas salvo automaticamente');
+      } catch (err) {
+        console.error('❌ [AUTO-SAVE] Erro ao salvar estado de Vendas:', err);
+      }
+    }, 1000); // Aguarda 1 segundo de "silêncio" antes de salvar
+
+    return () => clearTimeout(timeoutId);
+  }, [venda, novoItem, modo]);
 
 
 
@@ -313,6 +365,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   const [centroCusto, setCentroCusto] = useState('');
   const [diasVencimentoFormaPagamento, setDiasVencimentoFormaPagamento] = useState(0);
   const [alertaLimiteFinanceiro, setAlertaLimiteFinanceiro] = useState(null);
+  const [valorPago, setValorPago] = useState(0);
+  const [troco, setTroco] = useState(0);
 
   // Estados para modal de cadastro de cliente
   const [openClienteModal, setOpenClienteModal] = useState(false);
@@ -2383,6 +2437,14 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       }
 
       setSuccess('✅ Venda salva com sucesso!');
+      
+      // Limpar cache persistente após salvar com sucesso
+      try {
+        await limparEstadoVendas();
+        console.log('🧹 Cache de Vendas limpo após salvamento bem-sucedido');
+      } catch (cacheErr) {
+        console.error('⚠️ Erro ao limpar cache de Vendas:', cacheErr);
+      }
 
       // Calcular valor total dos itens (usando os dados que foram salvos)
       const totalItens = dadosVenda.itens.reduce((acc, item) => {
@@ -2525,6 +2587,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     setContaBancaria('');
     setDepartamento('');
     setCentroCusto('');
+    setValorPago(0);
+    setTroco(0);
     setOpenFinanceiroModal(true);
   };
 
@@ -2910,6 +2974,14 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       }
 
       setSuccess('✅ Venda salva com sucesso com autorização do supervisor!');
+      
+      // Limpar cache persistente após salvar com sucesso
+      try {
+        await limparEstadoVendas();
+        console.log('🧹 Cache de Vendas limpo após salvamento autorizado');
+      } catch (cacheErr) {
+        console.error('⚠️ Erro ao limpar cache de Vendas:', cacheErr);
+      }
 
       // Buscar venda completa e abrir modal financeiro
       const idVendaSalva = response.data.id || response.data.id_venda;
@@ -6312,6 +6384,56 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                   value={dataVencimento}
                   onChange={(e) => setDataVencimento(e.target.value)}
                   InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+
+              {/* Campos de Valor Pago e Troco */}
+              <Grid item xs={12}>
+                <Divider sx={{ my: 1 }}>
+                  <Chip label="Cálculo de Troco" size="small" />
+                </Divider>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Valor Pago pelo Cliente"
+                  value={valorPago || ''}
+                  onChange={(e) => {
+                    const pago = parseFloat(e.target.value) || 0;
+                    setValorPago(pago);
+                    const valorTotal = parseFloat(vendaParaFinanceiro?.valor_total || 0);
+                    const calculoTroco = pago - valorTotal;
+                    setTroco(calculoTroco > 0 ? calculoTroco : 0);
+                  }}
+                  inputProps={{ min: 0, step: 0.01 }}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                  }}
+                  InputLabelProps={{ shrink: true }}
+                  placeholder="Digite o valor recebido"
+                />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Troco"
+                  value={troco.toFixed(2)}
+                  InputProps={{
+                    readOnly: true,
+                    startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                  }}
+                  InputLabelProps={{ shrink: true }}
+                  sx={{
+                    '& .MuiInputBase-input': {
+                      bgcolor: troco > 0 ? '#e8f5e9' : '#f5f5f5',
+                      cursor: 'default',
+                      fontWeight: 'bold',
+                      color: troco > 0 ? '#2e7d32' : 'text.secondary'
+                    }
+                  }}
                 />
               </Grid>
 
