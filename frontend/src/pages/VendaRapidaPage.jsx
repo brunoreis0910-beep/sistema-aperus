@@ -358,16 +358,18 @@ const VendaRapidaPage = () => {
     });
   }, [promocoesAtivas]);
 
-  // Recarregar promoções a cada 10 segundos para garantir que sempre tenha dados atualizados
+  // Recarregar promoções a cada 10 segundos — apenas quando servidor estiver online
   useEffect(() => {
+    if (!servidorOk) return; // não agendar quando offline
     console.log('⏰ Configurando reload periódico de promoções a cada 10 segundos');
     const interval = setInterval(() => {
+      if (!servidorOk) return; // checagem dupla ao disparar
       console.log('🔄 Recarregando promoções (refresh periódico)');
       carregarPromocoes();
     }, 10000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [servidorOk]);
 
   // Atalhos de teclado
   useEffect(() => {
@@ -1145,24 +1147,39 @@ const VendaRapidaPage = () => {
       let valorVenda = produto.valor_venda || 0;
       let estoqueDisponivel = 0;
 
-      if (operacao && operacao.id_deposito_baixa) {
+      if (operacao && operacao.id_deposito_baixa && servidorOk) {
         console.log('🔍 Buscando estoque no depósito:', operacao.id_deposito_baixa);
-        const resEstoque = await axiosInstance.get(
-          `/estoque/?id_produto=${produto.id_produto}&id_deposito=${operacao.id_deposito_baixa}`
-        );
+        try {
+          const resEstoque = await axiosInstance.get(
+            `/estoque/?id_produto=${produto.id_produto}&id_deposito=${operacao.id_deposito_baixa}`
+          );
 
-        // Tratar resposta como array ou objeto com results
-        const estoqueData = Array.isArray(resEstoque.data) ? resEstoque.data : (resEstoque.data.results || []);
+          // Tratar resposta como array ou objeto com results
+          const estoqueData = Array.isArray(resEstoque.data) ? resEstoque.data : (resEstoque.data.results || []);
 
-        console.log('📦 Resposta do estoque:', estoqueData);
+          console.log('📦 Resposta do estoque:', estoqueData);
 
-        if (estoqueData && estoqueData.length > 0) {
-          valorVenda = estoqueData[0].valor_venda || valorVenda;
-          estoqueDisponivel = parseFloat(estoqueData[0].quantidade || 0);
-          console.log('📦 Estoque encontrado - Quantidade:', estoqueDisponivel);
-        } else {
-          console.log('⚠️ Nenhum registro de estoque encontrado para este depósito');
+          if (estoqueData && estoqueData.length > 0) {
+            valorVenda = estoqueData[0].valor_venda || valorVenda;
+            estoqueDisponivel = parseFloat(estoqueData[0].quantidade || 0);
+            console.log('📦 Estoque encontrado - Quantidade:', estoqueDisponivel);
+          } else {
+            console.log('⚠️ Nenhum registro de estoque encontrado para este depósito');
+          }
+        } catch (err) {
+          console.warn('[OFFLINE] Falha ao buscar estoque — usando dados do cache:', err.message);
+          estoqueDisponivel = parseFloat(produto.estoque_total || 0);
         }
+      } else if (operacao && operacao.id_deposito_baixa && !servidorOk) {
+        console.log('[OFFLINE] Servidor indisponível — usando estoque do cache do produto');
+        // Tentar usar estoque do depósito específico se estiver no cache do produto
+        const estoqueDeposito = produto.estoque_por_deposito?.find(
+          d => String(d.id_deposito) === String(operacao.id_deposito_baixa)
+        );
+        estoqueDisponivel = estoqueDeposito
+          ? parseFloat(estoqueDeposito.quantidade || 0)
+          : parseFloat(produto.estoque_total || 0);
+        console.log('[OFFLINE] Estoque usado do cache:', estoqueDisponivel);
       } else {
         console.log('⚠️ Operação sem depósito de baixa configurado');
       }
@@ -1190,21 +1207,25 @@ const VendaRapidaPage = () => {
 
       // Se produto controla lote, buscar lotes e abrir seleção imediatamente
       if (produto.controla_lote) {
-        try {
-          const resLotes = await axiosInstance.get(`/lote-produto/por_produto/?id_produto=${produto.id_produto}`);
-          const lotes = Array.isArray(resLotes.data) ? resLotes.data : (resLotes.data?.results || []);
-          if (!lotes || lotes.length === 0) {
-            setError('Este produto controla lote, mas não há lotes disponíveis com estoque. Cadastre um lote primeiro.');
-            setCodigoProduto('');
-            setIdProdutoSelecionado(null);
-            setNomeProduto('');
-            setValorUnitario(0);
-            return null;
+        if (!servidorOk) {
+          console.warn('[OFFLINE] Produto controla lote mas servidor está offline — lote ignorado.');
+        } else {
+          try {
+            const resLotes = await axiosInstance.get(`/lote-produto/por_produto/?id_produto=${produto.id_produto}`);
+            const lotes = Array.isArray(resLotes.data) ? resLotes.data : (resLotes.data?.results || []);
+            if (!lotes || lotes.length === 0) {
+              setError('Este produto controla lote, mas não há lotes disponíveis com estoque. Cadastre um lote primeiro.');
+              setCodigoProduto('');
+              setIdProdutoSelecionado(null);
+              setNomeProduto('');
+              setValorUnitario(0);
+              return null;
+            }
+            setLotesDisponiveis(lotes);
+            setOpenSelecionarLote(true);
+          } catch (err) {
+            console.error('[LOTE] Erro ao buscar lotes ao selecionar produto:', err);
           }
-          setLotesDisponiveis(lotes);
-          setOpenSelecionarLote(true);
-        } catch (err) {
-          console.error('[LOTE] Erro ao buscar lotes ao selecionar produto:', err);
         }
       }
 
