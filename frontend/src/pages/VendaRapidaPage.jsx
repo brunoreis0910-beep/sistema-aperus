@@ -136,6 +136,8 @@ const VendaRapidaPage = () => {
   const [valorCondicaoAtual, setValorCondicaoAtual] = useState('');
   const [valorRestante, setValorRestante] = useState(0);
   const [valorTotal, setValorTotal] = useState(0);
+  const [valorPago, setValorPago] = useState(0);
+  const [troco, setTroco] = useState(0);
   const [imagemFundo, setImagemFundo] = useState('');
   const [usarMercadoPago, setUsarMercadoPago] = useState(false);
   const [mpPointTransacaoUuid, setMpPointTransacaoUuid] = useState(null);
@@ -564,8 +566,15 @@ const VendaRapidaPage = () => {
       let tabelas = [];
 
       if (servidorOkRef.current) {
-        const response = await axiosInstance.get('/tabelas-comerciais/?apenas_ativas=true');
-        tabelas = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+        try {
+          const response = await axiosInstance.get('/tabelas-comerciais/?apenas_ativas=true');
+          tabelas = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+          console.log('✅ Tabelas carregadas do servidor:', tabelas.length);
+        } catch (error) {
+          console.error('❌ Erro ao carregar tabelas do servidor:', error);
+          tabelas = await buscarTabelasComerciaisCache();
+          console.log('[FALLBACK] Usando tabelas do cache:', tabelas.length);
+        }
       } else {
         tabelas = await buscarTabelasComerciaisCache();
         console.log('[OFFLINE] Tabelas comerciais do cache:', tabelas.length);
@@ -1911,6 +1920,9 @@ const VendaRapidaPage = () => {
       console.log('💰 Total a ser usado:', totalParaUsar);
       setValorTotal(totalParaUsar);
       setValorRestante(totalParaUsar);
+      setValorCondicaoAtual(totalParaUsar);
+      setValorPago(0);
+      setTroco(0);
 
       // Perguntar sobre uso da tabela (se configurado) – apenas se não tiver pulado
       if (!pularPerguntaTabela && tabelaSelecionada && tabelaSelecionada.perguntar_ao_vender === true) {
@@ -4578,6 +4590,46 @@ const VendaRapidaPage = () => {
                   color={valorRestante > 0 ? 'error' : 'success.main'}
                 >
                   R$ {valorRestante.toFixed(2)}
+                </Typography>
+              </Grid>
+            </Grid>
+            
+            {/* Campos de Valor Pago e Troco */}
+            <Divider sx={{ my: 2 }} />
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Valor Pago:
+                </Typography>
+                <TextField
+                  fullWidth
+                  type="number"
+                  value={valorPago || ''}
+                  onChange={(e) => {
+                    const pago = parseFloat(e.target.value) || 0;
+                    setValorPago(pago);
+                    const calculoTroco = pago - valorTotal;
+                    setTroco(calculoTroco > 0 ? calculoTroco : 0);
+                  }}
+                  inputProps={{ min: 0, step: 0.01 }}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                  }}
+                  size="small"
+                  placeholder="Digite o valor pago"
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Troco:
+                </Typography>
+                <Typography 
+                  variant="h5" 
+                  fontWeight="bold" 
+                  color={troco > 0 ? 'success.main' : 'text.secondary'}
+                  sx={{ mt: 1 }}
+                >
+                  R$ {troco.toFixed(2)}
                 </Typography>
               </Grid>
             </Grid>
