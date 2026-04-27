@@ -252,12 +252,8 @@ const useTerminalCache = (axiosInstance, servidorOk) => {
    * Offline: do cache.
    */
   const carregarDadosIniciais = useCallback(async (axiosInst = axiosInstance) => {
-    const offline = !servidorOk || !axiosInst;
-
-    if (!offline) {
-      // Online: delega ao caller (VendaRapidaPage já tem a lógica)
-      return null;
-    }
+    // Sempre lê do cache — pode ser chamado tanto no path offline quanto no
+    // catch de erros de servidor (quando servidorOk ainda não atualizou no React)
 
     // Offline: usa cache
     const [empresa, cached] = await Promise.all([
@@ -284,7 +280,7 @@ const useTerminalCache = (axiosInstance, servidorOk) => {
     ]);
 
     return { empresa, parametros, usuario, vendedor, operacao, cliente };
-  }, [servidorOk, axiosInstance]);
+  }, [axiosInstance]);  // removida dep. servidorOk: função sempre lê cache
 
   /**
    * Busca formas de pagamento.

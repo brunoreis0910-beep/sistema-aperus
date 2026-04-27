@@ -3217,7 +3217,7 @@ const VendaRapidaPage = () => {
     }
   };
 
-  if (!parametros) {
+  if (!parametros && !loading) {
     return (
       <Box sx={{ p: 3 }}>
         <Alert severity="warning">
