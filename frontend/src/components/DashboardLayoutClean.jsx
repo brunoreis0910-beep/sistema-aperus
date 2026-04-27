@@ -464,7 +464,7 @@ const DashboardLayoutClean = () => {
           <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box
               component="img"
-              src="/logos/aperus-logo.png"
+              src="/logos/aperus-logo.png?v=2"
               alt="Logo Aperus"
               sx={{
                 height: 44,
