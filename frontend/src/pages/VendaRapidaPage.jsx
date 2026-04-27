@@ -3184,9 +3184,6 @@ const VendaRapidaPage = () => {
       p: 2,
       position: 'relative'
     }}>
-      {/* DEBUG: contador visível da fila de validações */}
-      <BadgeFila />
-
       {/* ── Banner de status offline ── */}
       {!servidorOk && (
         <Alert
