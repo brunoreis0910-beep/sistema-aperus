@@ -460,6 +460,7 @@ const DashboardLayoutClean = () => {
               sx={{
                 height: 44,
                 objectFit: 'contain',
+                filter: 'brightness(0) invert(1)',
               }}
             />
             {user && (
