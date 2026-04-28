@@ -63,6 +63,9 @@ import promocaoService from '../services/promocaoService';
 import WhatsAppQuickSend, { useWhatsAppTemplates } from './WhatsAppQuickSend';
 import { CalculadoraRevestimento, CalculadoraTinta, BotoesCalculadora } from './CalculadorasConstrucao';
 
+console.log('📦 [Vendas.jsx] INÍCIO DO CARREGAMENTO DO MÓDULO');
+console.log('📦 [Vendas.jsx] Versão: v3.0 - Com logs de depuração detalhados');
+
 // Função auxiliar para formatar data sem conversão de timezone
 const formatarDataLocal = (dataString) => {
   if (!dataString) return '-';
@@ -138,12 +141,22 @@ axios.interceptors.request.use(
 );
 
 const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSuccess }) => {
+  console.log('🚀 [Vendas.jsx] COMPONENTE INICIANDO - Props:', { embedded, initialMode, initialModel });
+  
   const location = useLocation();
+  console.log('📍 [Vendas.jsx] Location:', location.pathname);
+  
   // Hook de autenticação (DEVE VIR PRIMEIRO!)
+  console.log('🔐 [Vendas.jsx] Chamando useAuth...');
   const { axiosInstance, user } = useAuth();
+  console.log('✅ [Vendas.jsx] useAuth retornou:', { hasAxios: !!axiosInstance, hasUser: !!user });
+  
+  console.log('🌐 [Vendas.jsx] Chamando useOfflineSync...');
   const { servidorOk, isOnline } = useOfflineSync();
+  console.log('✅ [Vendas.jsx] useOfflineSync retornou:', { servidorOk, isOnline });
 
   // Hook de impressão (precisa do axiosInstance)
+  console.log('🖨️  [Vendas.jsx] Chamando useImpressaoVenda...');
   const {
     loading: loadingImpressao,
     gerarPDF,

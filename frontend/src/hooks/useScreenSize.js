@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 
+console.log('📦 [useScreenSize.js] CARREGANDO módulo');
+
 export const useScreenSize = () => {
+  console.log('📐 useScreenSize: chamado');
   const [screenSize, setScreenSize] = useState({
     width: typeof window !== 'undefined' ? window.innerWidth : 1920,
     height: typeof window !== 'undefined' ? window.innerHeight : 1080,
@@ -35,8 +38,10 @@ export const useScreenSize = () => {
 
   return screenSize;
 };
+console.log('✅ [useScreenSize.js] useScreenSize DECLARADO');
 
 export const getOptimalLayout = (screenSize) => {
+  console.log('🎨 getOptimalLayout: chamado com', screenSize);
   const { width, isUltraWide, isSuperWide } = screenSize;
 
   if (isSuperWide) {
