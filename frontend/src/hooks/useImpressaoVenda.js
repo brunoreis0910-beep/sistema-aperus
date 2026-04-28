@@ -2,8 +2,15 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+console.log('📦 [useImpressaoVenda.js] MÓDULO CARREGANDO...');
+console.log('📦 [useImpressaoVenda.js] Versão: v2.0 - Com logs de depuração');
+
 const useImpressaoVenda = (axiosInstance) => {
+  console.log('🎯 [useImpressaoVenda.js] HOOK SENDO EXECUTADO');
+  console.log('🎯 [useImpressaoVenda.js] axiosInstance recebido:', !!axiosInstance);
+  
   const [loading, setLoading] = useState(false);
+  console.log('🎯 [useImpressaoVenda.js] useState(loading) declarado');
 
   const gerarPDF = async (dadosVenda) => {
     try {
@@ -1258,4 +1265,9 @@ const useImpressaoVenda = (axiosInstance) => {
   };
 };
 
+console.log('📦 [useImpressaoVenda.js] MÓDULO CARREGADO COMPLETAMENTE - useImpressaoVenda declarado');
+console.log('📦 [useImpressaoVenda.js] Exportando useImpressaoVenda...');
+
 export default useImpressaoVenda;
+
+console.log('✅ [useImpressaoVenda.js] EXPORT CONCLUÍDO');
