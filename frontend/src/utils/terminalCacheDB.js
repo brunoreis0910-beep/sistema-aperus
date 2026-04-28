@@ -159,6 +159,7 @@ export const buscarMeta = async (chave) => {
 // ─── Produtos ─────────────────────────────────────────────────────────────────
 
 export const cachearProdutos = (lista) => salvarLista('produtos', lista);
+export const buscarProdutosCacheAll = () => buscarTodos('produtos');
 
 /**
  * Busca produtos no cache local por código ou descrição.
@@ -192,6 +193,7 @@ export const buscarClientesCache = async (termo) => {
 };
 
 export const buscarClienteCache = (id) => buscarPorId('clientes', id);
+export const buscarClientesCacheAll = () => buscarTodos('clientes');
 
 // ─── Formas de Pagamento ──────────────────────────────────────────────────────
 
@@ -202,11 +204,13 @@ export const buscarFormasPagamentoCache = () => buscarTodos('formas_pagamento');
 
 export const cachearOperacoes = (lista) => salvarLista('operacoes', lista);
 export const buscarOperacaoCache = (id) => buscarPorId('operacoes', id);
+export const buscarOperacoesCache = () => buscarTodos('operacoes');
 
 // ─── Vendedores ───────────────────────────────────────────────────────────────
 
 export const cachearVendedores = (lista) => salvarLista('vendedores', lista);
 export const buscarVendedorCache = (id) => buscarPorId('vendedores', id);
+export const buscarVendedoresCache = () => buscarTodos('vendedores');
 
 // ─── Tabelas Comerciais ───────────────────────────────────────────────────────
 

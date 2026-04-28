@@ -56,7 +56,20 @@ import { useOfflineSync } from '../context/OfflineSyncContext';
 import { 
   salvarEstadoVendas,
   carregarEstadoVendas,
-  limparEstadoVendas
+  limparEstadoVendas,
+  salvarVendaOffline,
+  buscarParametrosCache,
+  cachearParametros,
+  cachearOperacoes,
+  cachearClientes,
+  cachearVendedores,
+  cachearProdutos,
+  cachearFormasPagamento,
+  buscarOperacoesCache,
+  buscarClientesCacheAll,
+  buscarVendedoresCache,
+  buscarProdutosCacheAll,
+  buscarFormasPagamentoCache
 } from '../utils/terminalCacheDB';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import promocaoService from '../services/promocaoService';
@@ -367,6 +380,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   // Estados para modal de financeiro
   const [openFinanceiroModal, setOpenFinanceiroModal] = useState(false);
   const [vendaParaFinanceiro, setVendaParaFinanceiro] = useState(null);
+  const [dadosVendaOffline, setDadosVendaOffline] = useState(null); // venda aguardando financeiro offline
   const [formaPagamento, setFormaPagamento] = useState('');
   const [numeroParcelas, setNumeroParcelas] = useState(1);
   const [dataVencimento, setDataVencimento] = useState(new Date().toISOString().split('T')[0]);
@@ -1153,6 +1167,25 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         setCentrosCusto(Array.isArray(ccData) ? ccData : []);
         setFormasPagamento(Array.isArray(fpData) ? fpData : []);
 
+        // ── Salvar no IndexedDB para uso offline ──────────────────────────────
+        try {
+          await Promise.all([
+            cachearOperacoes(Array.isArray(operacoesData) ? operacoesData : []),
+            cachearClientes(Array.isArray(clientesData) ? clientesData : []),
+            cachearVendedores(Array.isArray(vendedoresData) ? vendedoresData : []),
+            cachearProdutos(Array.isArray(produtosData) ? produtosData : []),
+            cachearFormasPagamento(Array.isArray(fpData) ? fpData : []),
+          ]);
+          console.log('💾 [CACHE] Dados salvos no IndexedDB para uso offline');
+          // Ao salvar no cache com sucesso (online), limpar contadores offline locais
+          for (const op of (Array.isArray(operacoesData) ? operacoesData : [])) {
+            if (op.id_operacao) localStorage.removeItem(`aperus_offline_num_${op.id_operacao}`);
+          }
+        } catch (cacheErr) {
+          console.warn('⚠️ [CACHE] Erro ao salvar dados no IndexedDB:', cacheErr);
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         // Garante que vendas seja sempre um array
         const vendasData = vendasRes.data?.results || vendasRes.data;
         const vendasCarregadas = Array.isArray(vendasData) ? vendasData : [];
@@ -1180,26 +1213,42 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
         if (apiError.response?.status === 401) {
           setError('🔐 Token expirado! Faça login novamente para acessar seus dados.');
-        } else {
-          setError(`❌ Erro no servidor: ${apiError.message}`);
+          return;
         }
 
-        console.log('🔄 Carregando dados mock como fallback...');
+        console.log('🔄 [OFFLINE] Carregando dados do cache local (IndexedDB)...');
 
-        // Fallback para dados mock
-        const [opRes, cliRes, vendRes, prodRes, vendasRes] = await Promise.all([
-          mockAPI.getOperacoes(),
-          mockAPI.getClientes(),
-          mockAPI.getVendedores(),
-          mockAPI.getProdutos(),
-          mockAPI.getVendas()
-        ]);
+        try {
+          const [opCache, cliCache, vendCache, prodCache, fpCache] = await Promise.all([
+            buscarOperacoesCache(),
+            buscarClientesCacheAll(),
+            buscarVendedoresCache(),
+            buscarProdutosCacheAll(),
+            buscarFormasPagamentoCache(),
+          ]);
 
-        setOperacoes(Array.isArray(opRes.data) ? opRes.data : []);
-        setClientes(Array.isArray(cliRes.data) ? cliRes.data : []);
-        setVendedores(Array.isArray(vendRes.data) ? vendRes.data : []);
-        setProdutos(Array.isArray(prodRes.data) ? prodRes.data : []);
-        setVendas(Array.isArray(vendasRes.data) ? vendasRes.data : []);
+          if (opCache.length > 0 || cliCache.length > 0) {
+            const operacoesFiltradas = initialModel === '55'
+              ? opCache
+              : opCache.filter(op => String(op.modelo_documento) !== '55');
+            setOperacoes(operacoesFiltradas);
+            setClientes(cliCache);
+            setVendedores(vendCache);
+            setProdutos(prodCache);
+            setFormasPagamento(fpCache);
+            console.log('✅ [OFFLINE] Dados carregados do cache:', {
+              operacoes: operacoesFiltradas.length,
+              clientes: cliCache.length,
+              vendedores: vendCache.length,
+              produtos: prodCache.length,
+            });
+          } else {
+            setError('⚠️ Servidor indisponível e cache vazio. Conecte-se à internet para carregar os dados.');
+          }
+        } catch (cacheErr) {
+          console.error('❌ [OFFLINE] Falha ao carregar cache:', cacheErr);
+          setError('⚠️ Servidor indisponível. Não foi possível carregar os dados.');
+        }
       }
 
     } catch (err) {
@@ -1974,6 +2023,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
   // Salvar venda
   const salvarVenda = async () => {
+    let dadosVenda = null; // declarado fora do try para ficar acessível no fallback offline
     try {
       setLoading(true);
       setError('');
@@ -2241,7 +2291,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       }
 
       // Preparar dados da venda
-      let dadosVenda = { ...venda };
+      dadosVenda = { ...venda };
       let creditoAplicado = 0;
 
       // Converter desconto percentual para valor antes de enviar
@@ -2351,6 +2401,51 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       }
 
       console.log('[VENDA] Salvando venda:', dadosVenda);
+
+      // ── OFFLINE: salvar localmente se servidor indisponível ───────────────────
+      if (!servidorOk) {
+        const operacaoOffline = operacoes.find(op => op.id_operacao === parseInt(dadosVenda.id_operacao));
+        if (operacaoOffline?.gera_financeiro) {
+          // Precisa de financeiro: guardar dados e abrir modal para coletar forma de pagamento
+          console.log('[OFFLINE] Operação gera financeiro — abrindo modal para coletar pagamento');
+          setDadosVendaOffline(dadosVenda);
+          abrirModalFinanceiro({
+            ...dadosVenda,
+            id: null,
+            id_venda: null,
+            gerou_financeiro: false,
+          });
+          setLoading(false);
+          return;
+        }
+        // Sem financeiro: salvar direto no IndexedDB
+        const tempId = await salvarVendaOffline(dadosVenda, []);
+        console.log('[OFFLINE] Venda salva localmente:', tempId);
+
+        // Incrementar número do documento localmente para a próxima venda offline
+        if (operacaoOffline?.usa_auto_numeracao && operacaoOffline?.id_operacao) {
+          const novoNumero = parseInt(dadosVenda.numero_documento || 0) + 1;
+          localStorage.setItem(`aperus_offline_num_${operacaoOffline.id_operacao}`, String(novoNumero));
+          setOperacoes(prev => prev.map(op =>
+            op.id_operacao === operacaoOffline.id_operacao
+              ? { ...op, proximo_numero_nf: novoNumero }
+              : op
+          ));
+          console.log('[OFFLINE] Próximo número do documento:', novoNumero);
+        }
+
+        setSuccess('✅ Venda salva localmente! Será sincronizada automaticamente quando o servidor estiver disponível.');
+        limparFormulario();
+        if (!embedded) {
+          setModo('lista');
+          carregarDados();
+        }
+        if (onSaveSuccess) onSaveSuccess();
+        if (onClose) onClose();
+        setLoading(false);
+        return;
+      }
+      // ── FIM OFFLINE ──────────────────────────────────────────────────────────
 
       // Usar axiosInstance do AuthContext (já cuida da autenticação)
       // Se venda tem ID, é uma atualização (conversão), senão é nova venda
@@ -2512,7 +2607,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       }
 
       // Verificar se a operação gera financeiro antes de abrir o modal
-      if (operacaoUsada && operacaoUsada.gera_financeiro === 1) {
+      if (operacaoUsada && operacaoUsada.gera_financeiro) {
         console.log('💰 Operação gera financeiro - abrindo modal financeiro');
         // Abrir modal financeiro usando a função existente
         abrirModalFinanceiro(vendaSalva);
@@ -2542,6 +2637,30 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
     } catch (err) {
       console.error('❌ Erro ao salvar:', err);
+
+      // ── FALLBACK OFFLINE: servidor caiu durante o processo ──────────────────
+      const httpStatus = err?.response?.status;
+      const isServerError = !err.response || httpStatus >= 500;
+      if (isServerError && dadosVenda) {
+        try {
+          const tempId = await salvarVendaOffline(dadosVenda, []);
+          console.log('[OFFLINE] Venda salva offline como fallback:', tempId);
+          setSuccess('✅ Servidor indisponível — venda salva offline! Será sincronizada automaticamente.');
+          limparFormulario();
+          if (!embedded) {
+            setModo('lista');
+            carregarDados();
+          }
+          if (onSaveSuccess) onSaveSuccess();
+          if (onClose) onClose();
+          setLoading(false);
+          return;
+        } catch (offlineErr) {
+          console.error('[OFFLINE] Falha ao salvar offline:', offlineErr);
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
       if (err.response?.status === 401) {
         setError('🔐 Token expirado! Faça login novamente.');
       } else {
@@ -2567,7 +2686,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     }
 
     // Buscar a operação para verificar se gera financeiro
-    const operacao = operacoes.find(op => op.id_operacao === venda.id_operacao);
+    const operacao = operacoes.find(op => op.id_operacao === parseInt(venda.id_operacao));
 
     if (!operacao) {
       setError('❌ Operação não encontrada!');
@@ -2575,7 +2694,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       return;
     }
 
-    if (operacao.gera_financeiro !== 1) {
+    if (!operacao.gera_financeiro) {
       setError('❌ Esta operação não gera financeiro!');
       setTimeout(() => setError(''), 3000);
       return;
@@ -2604,6 +2723,20 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
   // Cancelar e EXCLUIR a venda
   const cancelarModalFinanceiro = async () => {
+    // Modo offline: venda ainda não foi salva, apenas limpar estado
+    if (dadosVendaOffline) {
+      setDadosVendaOffline(null);
+      setOpenFinanceiroModal(false);
+      setVendaParaFinanceiro(null);
+      setFormaPagamento('');
+      setNumeroParcelas(1);
+      setDataVencimento(new Date().toISOString().split('T')[0]);
+      setContaBancaria('');
+      setDepartamento('');
+      setCentroCusto('');
+      setAlertaLimiteFinanceiro(null);
+      return;
+    }
     // Se tem venda para financeiro, significa que foi salva mas não gerou financeiro
     if (vendaParaFinanceiro && vendaParaFinanceiro.id) {
       try {
@@ -3286,6 +3419,74 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         return;
       }
 
+      // ── MODO OFFLINE: coletar parcelas e salvar tudo no IndexedDB ─────────────
+      if (dadosVendaOffline) {
+        const operacaoLocal = operacoes.find(
+          op => op.id_operacao === parseInt(dadosVendaOffline.id_operacao)
+        );
+        const baixaAutomatica = operacaoLocal?.baixa_automatica || false;
+        const financeirosOffline = [];
+        for (let i = 0; i < numeroParcelas; i++) {
+          const dataVencOff = new Date(dataVencimento);
+          dataVencOff.setMonth(dataVencOff.getMonth() + i);
+          const vpf = parseFloat(valorParcela.toFixed(2));
+          const dataEmissao = new Date().toISOString().split('T')[0];
+          const dataVencStr = dataVencOff.toISOString().split('T')[0];
+          const deveBaixar = baixaAutomatica && (dataEmissao === dataVencStr);
+          financeirosOffline.push({
+            tipo_conta: 'receber',
+            id_cliente_fornecedor: dadosVendaOffline.id_cliente,
+            descricao: `Venda ${dadosVendaOffline.numero_documento} - Parcela ${i + 1}/${numeroParcelas}`,
+            valor_parcela: vpf,
+            valor_original: vpf,
+            saldo_devedor: vpf,
+            data_vencimento: dataVencStr,
+            data_emissao: dataEmissao,
+            forma_pagamento: formaPagamento,
+            id_venda_origem: null, // preenchido na sincronização
+            id_operacao: dadosVendaOffline.id_operacao,
+            parcela_numero: i + 1,
+            parcela_total: numeroParcelas,
+            documento_numero: dadosVendaOffline.numero_documento,
+            status_conta: deveBaixar ? 'Paga' : 'Pendente',
+            valor_liquidado: deveBaixar ? vpf : 0,
+            data_pagamento: deveBaixar ? dataEmissao : null,
+            gerencial: 0,
+            id_conta_cobranca: contaBancaria || null,
+            id_conta_baixa: deveBaixar ? (contaBancaria || null) : null,
+            id_departamento: departamento || null,
+            id_centro_custo: centroCusto || null,
+          });
+        }
+        const tempId = await salvarVendaOffline(dadosVendaOffline, financeirosOffline);
+        console.log('[OFFLINE] Venda + financeiro salvos localmente:', tempId);
+
+        // Incrementar número do documento localmente para a próxima venda offline
+        const opFinOff = operacoes.find(op => op.id_operacao === parseInt(dadosVendaOffline.id_operacao));
+        if (opFinOff?.usa_auto_numeracao && opFinOff?.id_operacao) {
+          const novoNumeroFin = parseInt(dadosVendaOffline.numero_documento || 0) + 1;
+          localStorage.setItem(`aperus_offline_num_${opFinOff.id_operacao}`, String(novoNumeroFin));
+          setOperacoes(prev => prev.map(op =>
+            op.id_operacao === opFinOff.id_operacao
+              ? { ...op, proximo_numero_nf: novoNumeroFin }
+              : op
+          ));
+          console.log('[OFFLINE] Próximo número do documento (com financeiro):', novoNumeroFin);
+        }
+
+        setDadosVendaOffline(null);
+        setSuccess(`✅ Venda e ${numeroParcelas} parcela(s) salvas offline! Serão sincronizadas automaticamente.`);
+        setOpenFinanceiroModal(false);
+        setVendaParaFinanceiro(null);
+        limparFormulario();
+        if (!embedded) { setModo('lista'); carregarDados(); }
+        if (onSaveSuccess) onSaveSuccess();
+        if (onClose) onClose();
+        setLoading(false);
+        return;
+      }
+      // ── FIM MODO OFFLINE ──────────────────────────────────────────────────────
+
       console.log('📊 Gerando financeiro:', {
         vendaParaFinanceiro,
         formaPagamento,
@@ -3529,7 +3730,15 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
     } catch (err) {
       console.error('Erro ao gerar financeiro:', err);
-      setError(`Erro ao gerar financeiro: ${err.message}`);
+
+      // Erro de rede / servidor offline
+      const httpStatus = err?.response?.status;
+      const isServerError = !err.response || httpStatus >= 500;
+      if (isServerError) {
+        setError('❌ Servidor indisponível ao gerar financeiro. Tente novamente quando a conexão for restabelecida.');
+      } else {
+        setError(`Erro ao gerar financeiro: ${err.message}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -3560,9 +3769,28 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
         console.log('👤 Vendedor padrão (Venda):', idVendedorPadrao);
         console.log('⚙️ Operação padrão (Venda):', idOperacaoPadrao);
+
+        // Salvar no cache para uso offline
+        try {
+          await cachearParametros(resUsuario.data.parametros);
+          console.log('📦 [CACHE] Parâmetros salvos no IndexedDB para uso offline');
+        } catch (cacheErr) {
+          console.warn('⚠️ [CACHE] Erro ao salvar parâmetros:', cacheErr);
+        }
       }
     } catch (err) {
       console.error('⚠️ Erro ao buscar parâmetros do usuário:', err);
+      // Fallback: usar cache gravado pela VendaRapidaPage quando estava online
+      try {
+        const cache = await buscarParametrosCache();
+        if (cache) {
+          idVendedorPadrao = cache.id_vendedor_venda || cache.id_vendedor_padrao || '';
+          idOperacaoPadrao = cache.id_operacao_venda || cache.id_operacao_padrao || '';
+          console.log('📦 [OFFLINE] Parâmetros carregados do cache:', { idVendedorPadrao, idOperacaoPadrao });
+        }
+      } catch (cacheErr) {
+        console.error('⚠️ Erro ao buscar cache de parâmetros:', cacheErr);
+      }
     }
 
     setVenda({
@@ -3611,26 +3839,38 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
     // Se houver operação padrão, buscar o próximo número baseado nela
     if (idOperacaoPadrao) {
-      try {
-        console.log('🔢 Buscando próximo número para operação:', idOperacaoPadrao);
-        const token = localStorage.getItem('accessToken');
-        const resOp = await axiosInstance.get(`/operacoes/${idOperacaoPadrao}/`);
-
-        if (resOp.data.usa_auto_numeracao) {
-          const proximoNumero = resOp.data.proximo_numero_nf || 1;
-          setVenda(prev => ({
-            ...prev,
-            numero_documento: String(proximoNumero)
-          }));
-          console.log('✅ Próximo número da operação:', proximoNumero);
+      // Primeiro tenta do estado local (funciona offline)
+      const operacaoPadrao = operacoes.find(op => op.id_operacao === parseInt(idOperacaoPadrao));
+      if (operacaoPadrao) {
+        if (operacaoPadrao.usa_auto_numeracao) {
+          // Usar contador local (offline) se disponível, senão usar do estado
+          const numLocalKey = `aperus_offline_num_${operacaoPadrao.id_operacao}`;
+          const numLocal = localStorage.getItem(numLocalKey);
+          const proximoNumero = numLocal ? parseInt(numLocal) : (operacaoPadrao.proximo_numero_nf || 1);
+          setVenda(prev => ({ ...prev, numero_documento: String(proximoNumero) }));
+          console.log('✅ Próximo número da operação (estado local):', proximoNumero);
         } else {
-          // Se não usa auto numeração, gerar número padrão
           await gerarNumeroDocumento();
         }
-      } catch (err) {
-        console.error('❌ Erro ao buscar próximo número da operação:', err);
-        // Fallback para número padrão
-        await gerarNumeroDocumento();
+      } else {
+        // Fallback: buscar na API
+        try {
+          console.log('🔢 Buscando próximo número para operação:', idOperacaoPadrao);
+          const resOp = await axiosInstance.get(`/operacoes/${idOperacaoPadrao}/`);
+          if (resOp.data.usa_auto_numeracao) {
+            const proximoNumero = resOp.data.proximo_numero_nf || 1;
+            setVenda(prev => ({
+              ...prev,
+              numero_documento: String(proximoNumero)
+            }));
+            console.log('✅ Próximo número da operação:', proximoNumero);
+          } else {
+            await gerarNumeroDocumento();
+          }
+        } catch (err) {
+          console.error('❌ Erro ao buscar próximo número da operação:', err);
+          await gerarNumeroDocumento();
+        }
       }
     } else {
       // Gerar novo número de documento padrão

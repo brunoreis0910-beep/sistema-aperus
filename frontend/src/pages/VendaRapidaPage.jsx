@@ -457,8 +457,10 @@ const VendaRapidaPage = () => {
           if (cached.vendedor)   setVendedor(cached.vendedor);
           if (cached.operacao) {
             setOperacao(cached.operacao);
-            if (cached.operacao.usa_auto_numeracao)
-              setNumeroDocumento(String(cached.operacao.proximo_numero_nf || 1));
+            if (cached.operacao.usa_auto_numeracao) {
+              const numLocal = localStorage.getItem(`aperus_offline_num_${cached.operacao.id_operacao}`);
+              setNumeroDocumento(numLocal || String(cached.operacao.proximo_numero_nf || 1));
+            }
           }
           if (cached.cliente) await selecionarClienteVenda(cached.cliente);
           console.log('[OFFLINE] Dados carregados do cache local');
@@ -533,6 +535,8 @@ const VendaRapidaPage = () => {
 
           // Definir próximo número do documento
           if (resOperacao.data.usa_auto_numeracao) {
+            // Limpar contador offline local — servidor é a fonte de verdade quando online
+            localStorage.removeItem(`aperus_offline_num_${resOperacao.data.id_operacao}`);
             setNumeroDocumento(String(resOperacao.data.proximo_numero_nf || 1));
           }
         }
@@ -559,8 +563,10 @@ const VendaRapidaPage = () => {
           if (cached.vendedor)   setVendedor(cached.vendedor);
           if (cached.operacao) {
             setOperacao(cached.operacao);
-            if (cached.operacao.usa_auto_numeracao)
-              setNumeroDocumento(String(cached.operacao.proximo_numero_nf || 1));
+            if (cached.operacao.usa_auto_numeracao) {
+              const numLocal = localStorage.getItem(`aperus_offline_num_${cached.operacao.id_operacao}`);
+              setNumeroDocumento(numLocal || String(cached.operacao.proximo_numero_nf || 1));
+            }
           }
           if (cached.cliente) await selecionarClienteVenda(cached.cliente).catch(() => {});
           console.log('[CACHE] Configuração carregada do cache local (usuário:', currentUsername, ')');
@@ -2474,6 +2480,15 @@ const VendaRapidaPage = () => {
         const dadosFinanceiros = prepararDadosFinanceiros();
         const tempId = await salvarVendaOffline(dadosVenda, dadosFinanceiros);
         console.log('[OFFLINE] Venda salva localmente:', tempId, '| financeiros:', dadosFinanceiros.length);
+
+        // Incrementar número do documento localmente para a próxima venda offline
+        if (operacao?.usa_auto_numeracao && operacao?.id_operacao) {
+          const novoNumero = String(parseInt(numeroDocumento) + 1);
+          setNumeroDocumento(novoNumero);
+          localStorage.setItem(`aperus_offline_num_${operacao.id_operacao}`, novoNumero);
+          console.log('[OFFLINE] Próximo número do documento:', novoNumero);
+        }
+
         setSuccess('✅ Venda salva localmente! Será sincronizada automaticamente quando o servidor estiver disponível.');
         setItens([]);
         setCondicoesSelecionadas([]);
@@ -2645,6 +2660,15 @@ const VendaRapidaPage = () => {
           const dadosFinanceiros = prepararDadosFinanceiros();
           const tempId = await salvarVendaOffline(dadosVenda, dadosFinanceiros);
           console.log('[OFFLINE] Venda salva offline como fallback:', tempId, '| financeiros:', dadosFinanceiros.length);
+
+          // Incrementar número do documento localmente para a próxima venda offline
+          if (operacao?.usa_auto_numeracao && operacao?.id_operacao) {
+            const novoNumero = String(parseInt(numeroDocumento) + 1);
+            setNumeroDocumento(novoNumero);
+            localStorage.setItem(`aperus_offline_num_${operacao.id_operacao}`, novoNumero);
+            console.log('[OFFLINE] Próximo número do documento (fallback):', novoNumero);
+          }
+
           setSuccess('✅ Servidor indisponível — venda salva offline! Será sincronizada automaticamente.');
           setItens([]);
           setCondicoesSelecionadas([]);
