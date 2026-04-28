@@ -295,7 +295,12 @@
                         success: false,
                         message: '',
                         data: null
-                    }
+                    },
+
+                    // Campo de Troco
+                    valorPago: 0,
+                    troco: 0,
+                    mostrarCampoTroco: false
                 }
             },
             computed: {
@@ -311,6 +316,7 @@
             },
             mounted() {
                 this.$refs.searchInput.focus();
+                this.restaurarEstado(); // Restaurar estado salvo
                 
                 // Keyboard Shortcuts
                 window.addEventListener('keydown', (e) => {
@@ -443,6 +449,10 @@
                     this.dadosVenda = null;  // Limpar dados da venda anterior
                     this.resultModal.show = false;
                     this.processing = false;
+                    this.valorPago = 0;
+                    this.troco = 0;
+                    this.mostrarCampoTroco = false;
+                    this.limparEstado(); // Limpar cache
                     setTimeout(() => this.$refs.searchInput.focus(), 100);
                 },
                 async finalizeSale() {

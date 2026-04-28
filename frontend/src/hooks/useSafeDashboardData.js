@@ -1,8 +1,30 @@
 import { useMemo } from 'react';
 
 /**
+ * Utilitário para formatar valores monetários de forma segura
+ * DECLARADO PRIMEIRO para evitar TDZ (Temporal Dead Zone)
+ */
+export const formatCurrency = (value) => {
+  const numValue = parseFloat(value);
+  return (isNaN(numValue) ? 0 : numValue).toFixed(2);
+};
+
+/**
+ * Utilitário para calcular porcentagem de forma segura
+ * DECLARADO SEGUNDO para evitar TDZ (Temporal Dead Zone)
+ */
+export const calculatePercentage = (current, target) => {
+  const numCurrent = parseFloat(current) || 0;
+  const numTarget = parseFloat(target) || 0;
+
+  if (!numTarget || numTarget === 0) return 0;
+  return Math.min((numCurrent / numTarget) * 100, 100);
+};
+
+/**
  * Hook personalizado para garantir dados seguros do dashboard
- * Retorna valores padréo caso os dados estejam undefined/null
+ * Retorna valores padrão caso os dados estejam undefined/null
+ * DECLARADO POR ÚLTIMO para garantir que todas as utilidades estejam disponíveis
  */
 export const useSafeDashboardData = (dashboardData) => {
   return useMemo(() => {
@@ -38,23 +60,4 @@ export const useSafeDashboardData = (dashboardData) => {
       }
     };
   }, [dashboardData]);
-};
-
-/**
- * Utilitário para formatar valores monetários de forma segura
- */
-export const formatCurrency = (value) => {
-  const numValue = parseFloat(value);
-  return (isNaN(numValue) ? 0 : numValue).toFixed(2);
-};
-
-/**
- * Utilitário para calcular porcentagem de forma segura
- */
-export const calculatePercentage = (current, target) => {
-  const numCurrent = parseFloat(current) || 0;
-  const numTarget = parseFloat(target) || 0;
-
-  if (!numTarget || numTarget === 0) return 0;
-  return Math.min((numCurrent / numTarget) * 100, 100);
 };
