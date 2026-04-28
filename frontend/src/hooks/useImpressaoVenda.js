@@ -14,16 +14,21 @@ const useImpressaoVenda = (axiosInstance) => {
   
   console.log('🎯 [useImpressaoVenda.js] Prestes a declarar gerarPDF...');
   const gerarPDF = async (dadosVenda) => {
+    console.log('🔥 [gerarPDF] FUNÇÃO EXECUTADA - Início');
     try {
+      console.log('🔥 [gerarPDF] Chamando setLoading(true)...');
       setLoading(true);
+      console.log('🔥 [gerarPDF] setLoading OK, continuando...');
       console.log('📄 Iniciando geração de PDF...', dadosVenda);
       console.log('💳 Forma de pagamento recebida:', dadosVenda.forma_pagamento);
       console.log('📊 Número de parcelas recebido:', dadosVenda.num_parcelas);
 
       // Buscar dados da operação para obter empresa e nome da operação
+      console.log('🔥 [gerarPDF] Declarando variáveis operacao, empresa, clienteCompleto...');
       let operacao = null;
       let empresa = null;
       let clienteCompleto = null;
+      console.log('🔥 [gerarPDF] Variáveis declaradas OK');
 
       console.log('🔍 INICIANDO BUSCA DE DADOS PARA PDF');
       console.log('📊 dadosVenda completo:', dadosVenda);
@@ -110,12 +115,15 @@ const useImpressaoVenda = (axiosInstance) => {
       console.log('  - Cliente completo:', clienteCompleto ? '✅' : '❌', clienteCompleto);
       console.log('  - Itens da venda:', dadosVenda.itens ? dadosVenda.itens.length : 0);
 
+      console.log('🔥 [gerarPDF] Declarando formatarValorSeguro...');
       // função auxiliar para converter valor seguro
       const formatarValorSeguro = (valor) => {
         const num = parseFloat(valor);
         return isNaN(num) ? 0 : num;
       };
+      console.log('🔥 [gerarPDF] formatarValorSeguro OK');
 
+      console.log('🔥 [gerarPDF] Declarando formatarDataSegura...');
       // função auxiliar para formatar data segura
       const formatarDataSegura = (data) => {
         if (!data) return new Date().toLocaleDateString('pt-BR');
@@ -125,10 +133,13 @@ const useImpressaoVenda = (axiosInstance) => {
           return new Date().toLocaleDateString('pt-BR');
         }
       };
+      console.log('🔥 [gerarPDF] formatarDataSegura OK');
 
       console.log('📄 Criando documento PDF...');
+      console.log('🔥 [gerarPDF] Chamando new jsPDF()...');
       // Criar novo documento PDF
       const doc = new jsPDF();
+      console.log('🔥 [gerarPDF] jsPDF criado OK');
 
       let yPos = 15;
 
