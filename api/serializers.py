@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from . import models  # Import correto dos models da API
 from .models import Produto, Catalogo, CatalogoItem, StatusOrdemServico, LoteProduto, Cliente, GrupoProduto, ConfiguracaoProduto, TributacaoProduto, MapaCargaItem, MapaCarga, ConfiguracaoBancaria, Boleto, SugestaoCFOP, NotaFiscalReferenciada
+from .text_utils import sanitize_field
 
 
 class ProdutoComQuantidadeField(serializers.Field):
@@ -1495,8 +1496,8 @@ class LogAuditoriaSerializer(serializers.ModelSerializer):
 
 # --- Serializer TabelaComercial ---
 class TabelaComercialSerializer(serializers.ModelSerializer):
-    """Serializer para Tabelas Comerciais (Tabelas de Pre�o)"""
-    
+    """Serializer para Tabelas Comerciais"""
+
     class Meta:
         from .models import TabelaComercial
         model = TabelaComercial
@@ -1511,6 +1512,13 @@ class TabelaComercialSerializer(serializers.ModelSerializer):
             'data_atualizacao',
         ]
         read_only_fields = ['data_criacao', 'data_atualizacao']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        for key, value in data.items():
+            if isinstance(value, str):
+                data[key] = sanitize_field(value)
+        return data
 
 
 # --- Serializer para Status de Ordem de Serviço ---

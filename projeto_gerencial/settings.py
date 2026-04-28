@@ -136,6 +136,7 @@ else:
             'CONN_MAX_AGE': 60,  # Reutiliza conexões por 60s (evita overhead de conexão/request)
             'OPTIONS': {
                 'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+                'charset': 'utf8mb4',  # FIX: Garante que caracteres especiais (acentos, ç, etc.) sejam lidos/gravados corretamente
             },
         }
     }
