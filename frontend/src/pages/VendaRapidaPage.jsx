@@ -47,7 +47,8 @@ import {
   Group as GroupIcon,
   Print as PrintIcon,
   Settings as SettingsIcon,
-  Wallpaper as WallpaperIcon
+  Wallpaper as WallpaperIcon,
+  Scale as ScaleIcon
 } from '@mui/icons-material';
 import promocaoService from '../services/promocaoService';
 import balancaService from '../services/balancaService';
@@ -157,6 +158,7 @@ const VendaRapidaPage = () => {
   const [openPerguntarTabelaFinanceiro, setOpenPerguntarTabelaFinanceiro] = useState(false);
   const [openDesconto, setOpenDesconto] = useState(false);
   const [openDescontoItem, setOpenDescontoItem] = useState(false);
+  const [itemSelecionado, setItemSelecionado] = useState(null);
   const [openCondicoesPagamento, setOpenCondicoesPagamento] = useState(false);
   const [openFinalizar, setOpenFinalizar] = useState(false);
   const [openImpressao, setOpenImpressao] = useState(false);
@@ -181,6 +183,9 @@ const VendaRapidaPage = () => {
   const [justificativaFechamento, setJustificativaFechamento] = useState('');
 
   const codigoProdutoRef = useRef(null);
+  const mpPointLoadingRef = useRef(false);
+  const mpPointAcaoRef = useRef(null);
+  const mpPointPollingRef = useRef(null);
   const { user, permissions, isLoading: authLoading, axiosInstance } = useAuth();
   const { servidorOk, marcarServidorIndisponivel } = useOfflineSync();
   const servidorOkRef = useRef(servidorOk);
@@ -1389,8 +1394,7 @@ const VendaRapidaPage = () => {
             promocao_nome: promo.nome_promocao,
             tipo_desconto: promo.tipo_desconto,
             valor_desconto: descontoFinal,
-            quantidade_minima: produtoNaPromo.quantidade_minima,
-            valor
+            quantidade_minima: produtoNaPromo.quantidade_minima
           };
         } else {
           console.log('DEBUG: Quantidade insuficiente. Mínima:', qtdMinNum, 'Informada:', qtdNum);
@@ -1952,6 +1956,9 @@ const VendaRapidaPage = () => {
   const confirmarTabelaParaFinanceiro = async (tabela) => {
     console.log('✅ Tabela confirmada para financeiro:', tabela);
 
+    // Declarado aqui para ser acessível dentro e fora do bloco if (evita TDZ)
+    let novoTotal = null;
+
     // Atualizar tabela selecionada
     setTabelaSelecionada(tabela);
 
@@ -1987,8 +1994,8 @@ const VendaRapidaPage = () => {
 
       // Forçar recálculo do total
       const novoSubtotal = itensRecalculados.reduce((acc, item) => acc + item.valor_total, 0);
-      const valorDescontoGeral = (novoSubtotal * descontoGeral) / 100;
-      const novoTotal = novoSubtotal - valorDescontoGeral;
+      const valorDescontoGeralRecalc = (novoSubtotal * descontoGeral) / 100;
+      novoTotal = novoSubtotal - valorDescontoGeralRecalc;
       setValorTotal(novoTotal);
       console.log(`💵 Total recalculado: R$ ${novoTotal.toFixed(2)}`);
     }
