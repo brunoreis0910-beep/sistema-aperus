@@ -179,6 +179,33 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   const [openModalNovaVenda, setOpenModalNovaVenda] = useState(initialMode === 'nova');
   const [showLucratividade, setShowLucratividade] = useState(false);
 
+  // Dados para formulário (declarados antes dos useEffects para evitar TDZ)
+  const [venda, setVenda] = useState({
+    numero_documento: '',
+    data_venda: new Date().toISOString().split('T')[0],
+    id_operacao: '',
+    id_cliente: '',
+    id_vendedor: '',
+    observacoes: '',
+    desconto: 0,
+    tipo_desconto_geral: 'valor',
+    taxa_entrega: 0,
+    valor_total: 0,
+    itens: [],
+    venda_futura_origem: null // ID da venda de origem quando for entrega
+  });
+
+  // Item sendo adicionado (declarado antes dos useEffects para evitar TDZ)
+  const [novoItem, setNovoItem] = useState({
+    id_produto: '',
+    quantidade: 1,
+    valor_unitario: 0,
+    desconto: 0,
+    tipo_desconto: 'valor',
+    cfop: '',
+    cst_csosn: ''
+  });
+
   useEffect(() => {
     if (initialMode) {
       setModo(initialMode);
@@ -234,25 +261,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     return () => clearTimeout(timeoutId);
   }, [venda, novoItem, modo]);
 
-
-
-
-  // Dados para formulário
-  const [venda, setVenda] = useState({
-    numero_documento: '',
-    data_venda: new Date().toISOString().split('T')[0],
-    id_operacao: '',
-    id_cliente: '',
-    id_vendedor: '',
-    observacoes: '',
-    desconto: 0,
-    tipo_desconto_geral: 'valor',
-    taxa_entrega: 0,
-    valor_total: 0,
-    itens: [],
-    venda_futura_origem: null // ID da venda de origem quando for entrega
-  });
-
   // Dados das listas
   const [operacoes, setOperacoes] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -287,17 +295,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       }
     }
   }, [initialModel, operacoes, modo]);
-
-  // Item sendo adicionado
-  const [novoItem, setNovoItem] = useState({
-    id_produto: '',
-    quantidade: 1,
-    valor_unitario: 0,
-    desconto: 0,
-    tipo_desconto: 'valor',
-    cfop: '',
-    cst_csosn: ''
-  });
 
   // Estados para limite de crédito
   const [limiteCliente, setLimiteCliente] = useState(null);
