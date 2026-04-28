@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🧹 Limpeza Completa de Cache - Sistema Aperus</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+    }
+    .container {
+      background: rgba(255,255,255,0.95);
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      color: #333;
+    }
+    h1 { color: #667eea; margin-top: 0; }
+    .btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 10px 5px;
+      transition: all 0.3s;
+    }
+    .btn:hover { background: #5568d3; transform: translateY(-2px); }
+    .btn:active { transform: translateY(0); }
+    .btn-success { background: #28a745; }
+    .btn-success:hover { background: #218838; }
+    .status {
+      margin: 20px 0;
+      padding: 15px;
+      border-radius: 8px;
+      font-weight: bold;
+    }
+    .status.info { background: #d1ecf1; color: #0c5460; }
+    .status.success { background: #d4edda; color: #155724; }
+    .status.warning { background: #fff3cd; color: #856404; }
+    .status.error { background: #f8d7da; color: #721c24; }
+    .progress {
+      background: #e9ecef;
+      height: 30px;
+      border-radius: 15px;
+      overflow: hidden;
+      margin: 20px 0;
+    }
+    .progress-bar {
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      height: 100%;
+      transition: width 0.5s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+    }
+    code {
+      background: #f4f4f4;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #e83e8c;
+    }
+    ul { text-align: left; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧹 Limpeza Completa de Cache</h1>
+    <p>Esta ferramenta limpa TODOS os caches do sistema:</p>
+    <ul>
+      <li>✅ Cache do navegador (HTTP)</li>
+      <li>✅ IndexedDB (dados offline de vendas)</li>
+      <li>✅ LocalStorage (configurações)</li>
+      <li>✅ SessionStorage (dados da sessão)</li>
+    </ul>
+
+    <div id="status"></div>
+    <div class="progress" style="display:none;" id="progressContainer">
+      <div class="progress-bar" id="progressBar">0%</div>
+    </div>
+
+    <button class="btn" onclick="limparTudo()">
+      🗑️ Limpar TUDO e Recarregar
+    </button>
+    <button class="btn btn-success" onclick="voltarSistema()">
+      ← Voltar ao Sistema
+    </button>
+
+    <hr style="margin: 30px 0;">
+    <h3>📝 Instruções Pós-Limpeza:</h3>
+    <ol>
+      <li>Clique em <strong>"Limpar TUDO e Recarregar"</strong></li>
+      <li>Aguarde a limpeza completa (5-10 segundos)</li>
+      <li>Faça login novamente no sistema</li>
+      <li>Teste a tela de Vendas</li>
+    </ol>
+
+    <div class="status info">
+      💡 <strong>Dica:</strong> Se após limpar o erro persistir, pressione <code>Ctrl + Shift + R</code> para forçar reload sem cache.
+    </div>
+  </div>
+
+  <script>
+    const log = (msg, type = 'info') => {
+      const el = document.getElementById('status');
+      const cls = type === 'success' ? 'success' : type === 'error' ? 'error' : type === 'warning' ? 'warning' : 'info';
+      el.innerHTML += `<div class="status ${cls}">${msg}</div>`;
+      console.log(`[LIMPAR CACHE] ${msg}`);
+    };
+
+    const updateProgress = (percent, text) => {
+      const container = document.getElementById('progressContainer');
+      const bar = document.getElementById('progressBar');
+      container.style.display = 'block';
+      bar.style.width = percent + '%';
+      bar.textContent = text || percent + '%';
+    };
+
+    async function limparTudo() {
+      document.getElementById('status').innerHTML = '';
+      log('🚀 Iniciando limpeza completa...', 'info');
+      updateProgress(10, 'Iniciando...');
+
+      try {
+        // 1. Limpar IndexedDB (banco de dados offline)
+        log('🗄️ Limpando IndexedDB...', 'info');
+        const dbs = ['AperusTerminalCache', 'SistemaGerencialOffline'];
+        for (const dbName of dbs) {
+          try {
+            await new Promise((resolve, reject) => {
+              const req = indexedDB.deleteDatabase(dbName);
+              req.onsuccess = () => {
+                log(`✅ IndexedDB "${dbName}" removido`, 'success');
+                resolve();
+              };
+              req.onerror = () => reject(req.error);
+            });
+          } catch (err) {
+            log(`⚠️ Erro ao remover "${dbName}": ${err.message}`, 'warning');
+          }
+        }
+        updateProgress(40, 'IndexedDB limpo');
+
+        // 2. Limpar LocalStorage
+        log('📦 Limpando LocalStorage...', 'info');
+        const keysToKeep = []; // Lista de chaves para manter (vazia = limpa tudo)
+        const allKeys = Object.keys(localStorage);
+        allKeys.forEach(key => {
+          if (!keysToKeep.includes(key)) {
+            localStorage.removeItem(key);
+          }
+        });
+        log(`✅ ${allKeys.length} itens removidos do LocalStorage`, 'success');
+        updateProgress(60, 'LocalStorage limpo');
+
+        // 3. Limpar SessionStorage
+        log('🔑 Limpando SessionStorage...', 'info');
+        sessionStorage.clear();
+        log('✅ SessionStorage limpo', 'success');
+        updateProgress(80, 'SessionStorage limpo');
+
+        // 4. Limpar Service Workers (se houver)
+        if ('serviceWorker' in navigator) {
+          log('🔧 Removendo Service Workers...', 'info');
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          for (let registration of registrations) {
+            await registration.unregister();
+          }
+          log(`✅ ${registrations.length} Service Workers removidos`, 'success');
+        }
+
+        // 5. Limpar Cache Storage API
+        if ('caches' in window) {
+          log('💾 Limpando Cache Storage...', 'info');
+          const cacheNames = await caches.keys();
+          for (let cacheName of cacheNames) {
+            await caches.delete(cacheName);
+          }
+          log(`✅ ${cacheNames.length} caches removidos`, 'success');
+        }
+        updateProgress(100, 'Concluído!');
+
+        // Sucesso!
+        log('🎉 LIMPEZA COMPLETA! Recarregando em 3 segundos...', 'success');
+        
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 3000);
+
+      } catch (err) {
+        log(`❌ ERRO: ${err.message}`, 'error');
+        console.error(err);
+      }
+    }
+
+    function voltarSistema() {
+      window.location.href = '/';
+    }
+
+    // Auto-diagnóstico ao carregar
+    window.addEventListener('load', async () => {
+      log('🔍 Verificando estado atual do cache...', 'info');
+      
+      const diagnostico = [];
+      
+      // IndexedDB
+      const dbs = await indexedDB.databases();
+      diagnostico.push(`📊 IndexedDB: ${dbs.length} banco(s) encontrado(s)`);
+      
+      // LocalStorage
+      const localKeys = Object.keys(localStorage).length;
+      diagnostico.push(`📦 LocalStorage: ${localKeys} item(s)`);
+      
+      // SessionStorage
+      const sessionKeys = Object.keys(sessionStorage).length;
+      diagnostico.push(`🔑 SessionStorage: ${sessionKeys} item(s)`);
+      
+      // Service Workers
+      if ('serviceWorker' in navigator) {
+        const sws = await navigator.serviceWorker.getRegistrations();
+        diagnostico.push(`🔧 Service Workers: ${sws.length} ativo(s)`);
+      }
+      
+      // Cache Storage
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        diagnostico.push(`💾 Cache Storage: ${cacheNames.length} cache(s)`);
+      }
+      
+      log('📋 Diagnóstico:<br>' + diagnostico.join('<br>'), 'info');
+    });
+  </script>
+</body>
+</html>
