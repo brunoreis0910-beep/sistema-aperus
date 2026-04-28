@@ -11,7 +11,8 @@ const useImpressaoVenda = (axiosInstance) => {
   
   const [loading, setLoading] = useState(false);
   console.log('🎯 [useImpressaoVenda.js] useState(loading) declarado');
-
+  
+  console.log('🎯 [useImpressaoVenda.js] Prestes a declarar gerarPDF...');
   const gerarPDF = async (dadosVenda) => {
     try {
       setLoading(true);
@@ -1057,7 +1058,8 @@ const useImpressaoVenda = (axiosInstance) => {
       return { success: false, message: 'Erro ao gerar PDF: ' + error.message };
     }
   };
-
+  
+  console.log('🎯 [useImpressaoVenda.js] gerarPDF declarado, iniciando imprimirDireto...');
   const imprimirDireto = async (dadosVenda) => {
     try {
       setLoading(true);
@@ -1102,7 +1104,8 @@ const useImpressaoVenda = (axiosInstance) => {
       setLoading(false);
       return { success: false, message: 'Erro ao imprimir: ' + error.message };
     }
-  };
+  
+  console.log('🎯 [useImpressaoVenda.js] imprimirDireto declarado, iniciando compartilharWhatsApp...');  };
 
   const compartilharWhatsApp = async (dadosVenda, clienteCompleto = null, gerarPDFJunto = false) => {
     try {
@@ -1255,7 +1258,9 @@ const useImpressaoVenda = (axiosInstance) => {
       console.error('Erro ao compartilhar no WhatsApp:', error);
       return { success: false, message: 'Erro ao compartilhar: ' + error.message };
     }
-  };
+  
+  console.log('🎯 [useImpressaoVenda.js] compartilharWhatsApp declarado, preparando return...');
+    };
 
   return {
     loading,
