@@ -2112,28 +2112,34 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
             if (validacaoLimite === 'alertar') {
               // Apenas mostra alerta mas permite continuar
+              console.log('⚠️ Modo ALERTAR: mostrando aviso mas continuando');
               setError(
-                `⚠️ ATENÇÃO! Cliente ultrapassou o limite de crédito em R$ ${limiteResponse.data.valor_excedente.toFixed(2)}\n` +
-                `Limite: R$ ${limiteResponse.data.cliente.limite_credito.toFixed(2)} | ` +
-                `Disponível: R$ ${limiteResponse.data.cliente.credito_disponivel.toFixed(2)}`
+                `⚠️ ATENÇÃO: Limite de crédito será excedido!\n` +
+                `Limite: R$ ${limiteResponse.data.cliente.limite_credito.toFixed(2)}\n` +
+                `Disponível: R$ ${limiteResponse.data.cliente.credito_disponivel.toFixed(2)}\n` +
+                `Excedente: R$ ${limiteResponse.data.valor_excedente.toFixed(2)}`
               );
-              setTimeout(() => setError(''), 5000);
+              setTimeout(() => setError(''), 8000);
               // Continua com a venda normalmente
             } else if (validacaoLimite === 'bloquear') {
               // Bloqueia completamente a venda
+              console.log('🚫 Modo BLOQUEAR: bloqueando venda');
               setMensagemBloqueio(
-                `CLIENTE ULTRAPASSOU O LIMITE DE CRÉDITO!\n\n` +
-                `💳 Limite: R$ ${limiteResponse.data.cliente.limite_credito.toFixed(2)}\n` +
-                `💰 Disponível: R$ ${limiteResponse.data.cliente.credito_disponivel.toFixed(2)}\n` +
+                `LIMITE DE CRÉDITO EXCEDIDO!\n\n` +
+                `Cliente ultrapassou o limite de crédito disponível.\n\n` +
+                `💳 Limite Total: R$ ${limiteResponse.data.cliente.limite_credito.toFixed(2)}\n` +
+                `💰 Crédito Disponível: R$ ${limiteResponse.data.cliente.credito_disponivel.toFixed(2)}\n` +
                 `📊 Saldo Devedor: R$ ${limiteResponse.data.cliente.saldo_devedor.toFixed(2)}\n` +
                 `⚠️ Valor Excedente: R$ ${limiteResponse.data.valor_excedente.toFixed(2)}\n\n` +
-                `Esta venda não pode ser finalizada.`
+                `Esta venda não pode ser finalizada.\n` +
+                `Entre em contato com o financeiro para aumentar o limite.`
               );
               setOpenBloqueioModal(true);
               setLoading(false);
               return; // Bloqueia definitivamente
             } else if (validacaoLimite === 'solicitar_senha') {
               // Solicita senha do supervisor
+              console.log('🔐 Modo SOLICITAR_SENHA: solicitando autorização');
               setLimiteInfo({
                 ...limiteResponse.data,
                 motivo: 'limite_credito',
@@ -3593,22 +3599,29 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
               // Se for modo "alertar", apenas loga mas NÃO bloqueia
               if (validacaoLimite === 'alertar') {
-                console.log('⚠️ Modo ALERTAR: continuando com geração do financeiro');
-                // Não faz nada, deixa continuar
+                console.log('⚠️ Modo ALERTAR: mostrando aviso mas continuando com geração do financeiro');
+                setError(
+                  `⚠️ ATENÇÃO: Limite de crédito será excedido!\n` +
+                  `Limite: R$ ${limiteResponse.data.cliente.limite_credito.toFixed(2)}\n` +
+                  `Disponível: R$ ${limiteResponse.data.cliente.credito_disponivel.toFixed(2)}\n` +
+                  `Excedente: R$ ${limiteResponse.data.valor_excedente.toFixed(2)}`
+                );
+                // NÃO retorna - continua com a geração do financeiro
               }
               // Se for modo "bloquear", bloqueia definitivamente
               else if (validacaoLimite === 'bloquear') {
-                console.log('❌ Modo BLOQUEAR: impedindo geração do financeiro por limite de crédito');
+                console.log('🚫 Modo BLOQUEAR: impedindo geração do financeiro por limite de crédito');
                 setMensagemBloqueio(
-                  `Cliente ultrapassou o limite de crédito!\n\n` +
-                  `Limite: R$ ${limiteResponse.data.cliente.limite_credito.toFixed(2)}\n` +
-                  `Disponível: R$ ${limiteResponse.data.cliente.credito_disponivel.toFixed(2)}\n` +
+                  `LIMITE DE CRÉDITO EXCEDIDO!\n\n` +
+                  `Cliente ultrapassou o limite de crédito disponível.\n\n` +
+                  `Limite Total: R$ ${limiteResponse.data.cliente.limite_credito.toFixed(2)}\n` +
+                  `Crédito Disponível: R$ ${limiteResponse.data.cliente.credito_disponivel.toFixed(2)}\n` +
                   `Excedente: R$ ${limiteResponse.data.valor_excedente.toFixed(2)}\n\n` +
                   `Esta operação está configurada para BLOQUEAR vendas que excedem o limite.`
                 );
                 setOpenBloqueioModal(true);
                 setLoading(false);
-                return;
+                return; // BLOQUEIA
               }
               // Se for modo "solicitar_senha", abre modal de autorização
               else if (validacaoLimite === 'solicitar_senha') {
@@ -3620,7 +3633,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                 });
                 setOpenLimiteModal(true);
                 setLoading(false);
-                return;
+                return; // AGUARDA AUTORIZAÇÃO
               }
             } else {
               console.log('✅ Limite de crédito OK - prosseguindo...');

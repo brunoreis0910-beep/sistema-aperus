@@ -2133,15 +2133,34 @@ const VendaRapidaPage = () => {
               setLimiteInfo(limiteInfo);
               setAcaoLimiteAtual(validacaoLimite);
 
-              if (validacaoLimite === 'alertar') {
-                setOpenLimiteModal(true);
-                return;
-              } else if (validacaoLimite === 'bloquear') {
-                setError(`❌ Cliente sem limite de crédito disponível para venda a prazo. Crédito disponível: R$ ${limiteData.cliente?.credito_disponivel.toFixed(2)}, Valor da venda: R$ ${valorTotal.toFixed(2)}`);
-                return;
+              if (validacaoLimite === 'bloquear') {
+                // BLOQUEAR: Impede completamente a adição da condição
+                console.log('🚫 BLOQUEIO: Limite excedido - operação bloqueada');
+                setError(
+                  `❌ LIMITE DE CRÉDITO EXCEDIDO!\n\n` +
+                  `Cliente sem limite disponível para venda a prazo.\n` +
+                  `Limite Total: R$ ${limiteData.cliente?.limite_credito.toFixed(2)}\n` +
+                  `Crédito Disponível: R$ ${limiteData.cliente?.credito_disponivel.toFixed(2)}\n` +
+                  `Valor da Venda: R$ ${valorTotal.toFixed(2)}\n` +
+                  `Valor Excedente: R$ ${limiteData.valor_excedente.toFixed(2)}\n\n` +
+                  `Entre em contato com o financeiro.`
+                );
+                return; // BLOQUEIA
+              } else if (validacaoLimite === 'alertar') {
+                // ALERTAR: Mostra aviso mas CONTINUA e adiciona a condição
+                console.log('⚠️ ALERTA: Limite excedido mas permitindo continuar');
+                setError(
+                  `⚠️ ATENÇÃO: Limite de crédito será excedido!\n` +
+                  `Limite Disponível: R$ ${limiteData.cliente?.credito_disponivel.toFixed(2)}\n` +
+                  `Valor da Venda: R$ ${valorTotal.toFixed(2)}\n` +
+                  `Excedente: R$ ${limiteData.valor_excedente.toFixed(2)}`
+                );
+                // NÃO retorna - continua e adiciona a condição
               } else if (validacaoLimite === 'solicitar_senha') {
+                // SOLICITAR SENHA: Abre modal para autorização
+                console.log('🔐 SENHA: Solicitando autorização de supervisor');
                 setOpenLimiteModal(true);
-                return;
+                return; // AGUARDA AUTORIZAÇÃO
               }
             } else {
               console.log('✅ Limite OK para venda a prazo');
