@@ -700,32 +700,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       const cliente = clienteResponse.data;
       console.log('✅ Cliente encontrado:', cliente);
 
-      // VALIDAR LIMITE AO SELECIONAR CLIENTE
-      const operacaoSelecionada = operacoes.find(op => op.id_operacao === venda.id_operacao);
-      const validacaoLimite = operacaoSelecionada?.validacao_limite_credito || 'nao_validar';
-
-      if (validacaoLimite !== 'nao_validar' && venda.id_operacao) {
-        try {
-          const limiteResponse = await axiosInstance.post('/verificar-limite-cliente/', {
-            id_cliente: idCliente,
-            valor_venda: 0 // Verificar limite atual sem adicionar nova venda
-          });
-
-          if (limiteResponse.data.ultrapassa_limite) {
-            console.log('⚠️ CLIENTE JÁ ESTÁ COM LIMITE EXCEDIDO!');
-            setError(
-              `⚠️ ATENÇÃO! Cliente já possui limite de crédito excedido!\n` +
-              `Limite: R$ ${limiteResponse.data.cliente.limite_credito.toFixed(2)} | ` +
-              `Saldo Devedor: R$ ${limiteResponse.data.cliente.saldo_devedor.toFixed(2)} | ` +
-              `Disponível: R$ ${limiteResponse.data.cliente.credito_disponivel.toFixed(2)}`
-            );
-            setTimeout(() => setError(''), 8000);
-          }
-        } catch (err) {
-          console.error('Erro ao verificar limite:', err);
-        }
-      }
-
       // VALIDAR ATRASO DO CLIENTE
       const validarAtraso = operacaoSelecionada?.validar_atraso || false;
       const diasTolerancia = operacaoSelecionada?.dias_atraso_tolerancia || 0;
@@ -2379,34 +2353,14 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       console.log(`  - Taxa de entrega: R$ ${taxaEntrega.toFixed(2)}`);
       console.log(`  - Valor total: R$ ${dadosVenda.valor_total.toFixed(2)}`);
 
-      // Validar limite de crédito (após aplicar o crédito)
-      // Só validar se o limite for maior que zero
-      if (limiteCliente && limiteCliente.limiteDisponivel > 0) {
-        const valorVenda = dadosVenda.valor_total;
-        const limiteAposVenda = limiteCliente.limiteDisponivel - valorVenda;
-
-        console.log('[CREDITO] Validando limite de credito:');
-        console.log(`  - Valor da venda (final): R$ ${valorVenda.toFixed(2)}`);
-        console.log(`  - Limite disponível: R$ ${limiteCliente.limiteDisponivel.toFixed(2)}`);
-        console.log(`  - Limite após venda: R$ ${limiteAposVenda.toFixed(2)}`);
-
-        if (limiteAposVenda < 0) {
-          const excedente = Math.abs(limiteAposVenda);
-          setError(
-            `Limite de crédito insuficiente!\n\n` +
-            `• Limite disponível: R$ ${limiteCliente.limiteDisponivel.toFixed(2)}\n` +
-            `• Valor da venda: R$ ${valorVenda.toFixed(2)}\n` +
-            `• Excedente: R$ ${excedente.toFixed(2)}\n\n` +
-            `Entre em contato com o financeiro para aumentar o limite.`
-          );
-          setLoading(false);
-          return;
-        }
-      } else if (limiteCliente && limiteCliente.limiteDisponivel === 0) {
-        console.log('[CREDITO] Limite zerado - validacao ignorada');
-      }
+      // Nota: Validação de limite de crédito removida daqui!
+      // A validação é feita APENAS ao adicionar condição de pagamento A PRAZO
+      // Veja: handleGerarFinanceiro() e adicionarCondicao() no VendaRapidaPage
 
       console.log('[VENDA] Salvando venda:', dadosVenda);
+
+      // Nota: A validação de limite de crédito é feita ao adicionar condição de pagamento a prazo,
+      // não aqui no salvamento da venda. Veja handleGerarFinanceiro() e adicionarCondicao() em VendaRapidaPage
 
       // ── OFFLINE: salvar localmente se servidor indisponível ───────────────────
       if (!servidorOk) {
