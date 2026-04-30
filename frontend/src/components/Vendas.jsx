@@ -2675,7 +2675,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   };
 
   // Fechar modal após sucesso (NÃO exclui a venda)
-  const fecharModalFinanceiro = () => {
+  const fecharModalFinanceiro = async () => {
     console.log('✅ Fechando modal após sucesso - NÃO exclui venda');
     setOpenFinanceiroModal(false);
     setVendaParaFinanceiro(null);
@@ -2687,20 +2687,21 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     setCentroCusto('');
     setAlertaLimiteFinanceiro(null);
 
-    // Fechar modal de Nova Venda
+    // Fechar modal de Nova Venda PRIMEIRO
     setOpenModalNovaVenda(false);
-    
-    // Limpar formulário
-    limparFormulario();
 
-    // Voltar para lista e recarregar dados
-    if (onSaveSuccess) onSaveSuccess();
-    if (onClose) onClose();
-
+    // Voltar para lista ANTES de limpar formulário
     if (!embedded) {
       setModo('lista');
       carregarDados();
     }
+    
+    // Chamar callbacks
+    if (onSaveSuccess) onSaveSuccess();
+    if (onClose) onClose();
+
+    // Limpar formulário por último (para preparar próxima venda)
+    await limparFormulario();
   };
 
   // ===== FUNÇÕES DE LIMITE DE CRÉDITO E AUTORIZAÇÃO =====
