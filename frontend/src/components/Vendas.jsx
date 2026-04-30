@@ -705,7 +705,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       const diasTolerancia = operacaoSelecionada?.dias_atraso_tolerancia || 0;
       const acaoAtraso = operacaoSelecionada?.acao_atraso || 'alertar';
 
-      if (validarAtraso && venda.id_operacao) {
+      // Validar atraso se a operação estiver configurada para isso
+      if (validarAtraso && operacaoSelecionada) {
         try {
           console.log('⏰ Verificando atraso do cliente...', { diasTolerancia, acaoAtraso });
           const atrasoResponse = await axiosInstance.post('/validar-cliente-atraso/', {
@@ -2060,79 +2061,18 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         }
       }
 
-      const validacaoLimite = operacaoSelecionada?.validacao_limite_credito || 'nao_validar';
-
-      console.log('🔍🔍🔍 VERIFICANDO LIMITE DE CRÉDITO DO CLIENTE...');
-      console.log('   Operação selecionada:', operacaoSelecionada);
-      console.log('   Modo de validação da operação:', validacaoLimite);
-      console.log('   ID Cliente:', venda.id_cliente);
-      console.log('   Valor total:', valorTotal);
-
-      if (validacaoLimite !== 'nao_validar') {
-        try {
-          const limiteResponse = await axiosInstance.post('/verificar-limite-cliente/', {
-            id_cliente: venda.id_cliente,
-            valor_venda: valorTotal
-          });
-
-          console.log('💳 Resposta da verificação de limite:', limiteResponse.data);
-
-          if (limiteResponse.data.ultrapassa_limite) {
-            console.log('⚠️ LIMITE DE CRÉDITO ULTRAPASSADO!');
-            console.log(`   Limite: R$ ${limiteResponse.data.cliente.limite_credito}`);
-            console.log(`   Saldo devedor: R$ ${limiteResponse.data.cliente.saldo_devedor}`);
-            console.log(`   Disponível: R$ ${limiteResponse.data.cliente.credito_disponivel}`);
-            console.log(`   Excedente: R$ ${limiteResponse.data.valor_excedente}`);
-
-            if (validacaoLimite === 'alertar') {
-              // Apenas mostra alerta mas permite continuar
-              console.log('⚠️ Modo ALERTAR: mostrando aviso mas continuando');
-              setError(
-                `⚠️ ATENÇÃO: Limite de crédito será excedido!\n` +
-                `Limite: R$ ${limiteResponse.data.cliente.limite_credito.toFixed(2)}\n` +
-                `Disponível: R$ ${limiteResponse.data.cliente.credito_disponivel.toFixed(2)}\n` +
-                `Excedente: R$ ${limiteResponse.data.valor_excedente.toFixed(2)}`
-              );
-              setTimeout(() => setError(''), 8000);
-              // Continua com a venda normalmente
-            } else if (validacaoLimite === 'bloquear') {
-              // Bloqueia completamente a venda
-              console.log('🚫 Modo BLOQUEAR: bloqueando venda');
-              setMensagemBloqueio(
-                `LIMITE DE CRÉDITO EXCEDIDO!\n\n` +
-                `Cliente ultrapassou o limite de crédito disponível.\n\n` +
-                `💳 Limite Total: R$ ${limiteResponse.data.cliente.limite_credito.toFixed(2)}\n` +
-                `💰 Crédito Disponível: R$ ${limiteResponse.data.cliente.credito_disponivel.toFixed(2)}\n` +
-                `📊 Saldo Devedor: R$ ${limiteResponse.data.cliente.saldo_devedor.toFixed(2)}\n` +
-                `⚠️ Valor Excedente: R$ ${limiteResponse.data.valor_excedente.toFixed(2)}\n\n` +
-                `Esta venda não pode ser finalizada.\n` +
-                `Entre em contato com o financeiro para aumentar o limite.`
-              );
-              setOpenBloqueioModal(true);
-              setLoading(false);
-              return; // Bloqueia definitivamente
-            } else if (validacaoLimite === 'solicitar_senha') {
-              // Solicita senha do supervisor
-              console.log('🔐 Modo SOLICITAR_SENHA: solicitando autorização');
-              setLimiteInfo({
-                ...limiteResponse.data,
-                motivo: 'limite_credito',
-                mensagem: 'Limite de crédito ultrapassado'
-              });
-              setOpenLimiteModal(true);
-              setLoading(false);
-              return; // Bloqueia até autorização do supervisor
-            }
-          }
-
-          console.log('✅ Limite de crédito OK - prosseguindo com a venda');
-        } catch (limiteErr) {
-          console.error('❌ Erro ao verificar limite de crédito:', limiteErr);
-          // Não bloqueia a venda se houver erro na verificação
-        }
-      } else {
-        console.log('ℹ️ Validação de limite desabilitada para esta operação - prosseguindo sem verificação');
-      }
+      // ===== NOTA: VALIDAÇÃO DE LIMITE DE CRÉDITO =====
+      // A validação de limite de crédito foi REMOVIDA daqui porque estava bloqueando
+      // a venda ANTES do usuário selecionar a forma de pagamento.
+      //
+      // A validação correta já existe na função de GERAÇÃO DO FINANCEIRO (gerarFinanceiro),
+      // onde é verificado se:
+      // 1. A operação gera financeiro
+      // 2. A data de vencimento é maior que a data do documento (venda a prazo)
+      // 3. O cliente possui limite disponível
+      //
+      // Isso garante que a validação só aconteça quando for realmente uma venda a prazo.
+      // =====================================================================
 
       // ===== VERIFICAÇÃO DE ESTOQUE PARA TODOS OS ITENS =====
       // Enfileirar validações de estoque por item insuficiente (alertar / solicitar_senha)
