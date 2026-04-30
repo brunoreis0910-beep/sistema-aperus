@@ -701,6 +701,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       console.log('✅ Cliente encontrado:', cliente);
 
       // VALIDAR ATRASO DO CLIENTE
+      // Buscar a operação selecionada
+      const operacaoSelecionada = operacoes.find(op => op.id_operacao === venda.id_operacao);
       const validarAtraso = operacaoSelecionada?.validar_atraso || false;
       const diasTolerancia = operacaoSelecionada?.dias_atraso_tolerancia || 0;
       const acaoAtraso = operacaoSelecionada?.acao_atraso || 'alertar';
