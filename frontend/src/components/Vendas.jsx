@@ -2142,7 +2142,12 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       }
 
       // ===== VALIDAÇÃO DE DATA DE VENCIMENTO vs DATA DO DOCUMENTO =====
-      // Se for venda a prazo E validação estiver habilitada, verificar prazo
+      // COMENTADO: Esta validação foi desabilitada porque estava ocorrendo ANTES
+      // do usuário selecionar a forma de pagamento e data de vencimento.
+      // Não faz sentido validar prazo antes de definir o prazo.
+      // Se necessário, esta validação deve ser feita na geração do financeiro.
+      /*
+      const validacaoLimite = operacaoSelecionada?.validacao_limite_credito || 'nao_validar';
       if (operacaoSelecionada && operacaoSelecionada.gera_financeiro === 1 && validacaoLimite !== 'nao_validar') {
         console.log('📅 Validando datas para venda a prazo...');
 
@@ -2193,6 +2198,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
         console.log('✅ Data de vencimento dentro do prazo permitido');
       }
+      */
 
       // Verificar se cliente tem crédito disponível E ainda não foi decidido usar ou não
       if (creditoCliente > 0 && !decisaoCreditoTomada) {
