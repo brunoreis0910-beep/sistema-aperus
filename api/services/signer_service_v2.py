@@ -1,6 +1,6 @@
 """
 Sistema de Assinatura XML para NFC-e - VERSÃO 2.0
-Replicação EXATA do formato que funciona no SEFAZ MG
+Usa signxml para Inclusive C14N correto (compatível com SEFAZ MG)
 """
 
 import base64
@@ -15,6 +15,12 @@ from cryptography import x509
 import logging
 
 logger = logging.getLogger(__name__)
+
+# signxml: biblioteca de XML Signature correta para SEFAZ
+# Monkey-patch para permitir SHA1 (SEFAZ usa SHA1 legado)
+from signxml import XMLSigner as _XMLSigner, methods as _signxml_methods
+from signxml.algorithms import SignatureMethod as _SigMethod, DigestAlgorithm as _DigestAlg, CanonicalizationMethod as _C14NMethod
+_XMLSigner.check_deprecated_methods = lambda self: None
 
 
 class XMLSignerV2:
@@ -64,141 +70,72 @@ class XMLSignerV2:
     
     def sign_xml(self, xml_string, parent_tag='infNFe'):
         """
-        Assina XML replicando EXATAMENTE o formato que funciona
-        
+        Assina XML usando signxml com Inclusive C14N correto (SEFAZ MG).
+
         Args:
             xml_string: XML a ser assinado
             parent_tag: Tag do elemento a ser assinado (default: infNFe)
-        
+
         Returns:
             XML assinado como string
         """
         try:
-            logger.info(f"=== Iniciando assinatura V2 (formato exato SEFAZ) ===")
-            
-            # Parse XML SEM remover whitespace (preserva estrutura original)
+            logger.info("=== Iniciando assinatura V2 via signxml ===")
+
+            # Remove declaração XML se existir
+            clean_xml = xml_string
+            if '?>' in clean_xml:
+                clean_xml = clean_xml.split('?>', 1)[1].strip()
+
+            # Parse XML preservando estrutura original
             parser = etree.XMLParser(
                 remove_blank_text=False,
                 remove_comments=False,
                 strip_cdata=False
             )
-            root = etree.fromstring(xml_string.encode('utf-8'), parser=parser)
-            
+            root = etree.fromstring(clean_xml.encode('utf-8'), parser=parser)
+
             # Localiza o elemento a ser assinado
-            nsmap = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
-            target = root.find(f'.//{{{nsmap["nfe"]}}}{parent_tag}')
-            
+            NFE_NS = 'http://www.portalfiscal.inf.br/nfe'
+            target = root.find(f'.//{{{NFE_NS}}}{parent_tag}')
             if target is None:
                 target = root.find(f'.//{parent_tag}')
-            
             if target is None:
                 raise ValueError(f"Elemento {parent_tag} não encontrado no XML")
-            
-            # Obtém o ID
+
             element_id = target.get('Id')
             if not element_id:
                 raise ValueError(f"Elemento {parent_tag} não possui atributo Id")
-            
+
             logger.info(f"Elemento encontrado: {element_id}")
-            
-            # === PASSO 1: Calcular DigestValue ===
-            # Calculate DigestValue using EXACT C14N
-            # CRITICAL: Use tostring with method='c14n' to canonize in context
-            digest_bytes_c14n = etree.tostring(target, method='c14n')
-            digest_bytes = hashlib.sha1(digest_bytes_c14n).digest()
-            digest_value = base64.b64encode(digest_bytes).decode('ascii')
-            
-            logger.info(f"DigestValue calculado: {digest_value}")
-            logger.debug(f"XML canonicalizado (primeiros 200 bytes): {digest_bytes_c14n[:200]}")
-            
-            # === PASSO 2: Build Signature structure ===
-            NS_DS = 'http://www.w3.org/2000/09/xmldsig#'
-            # FIX: Use ONLY default namespace to match Valid XML (Authorized NFe)
-            sig = etree.Element(f'{{{NS_DS}}}Signature', nsmap={None: NS_DS})
-            
-            # SignedInfo
-            si = etree.SubElement(sig, f'{{{NS_DS}}}SignedInfo')
-            
-            cm = etree.SubElement(si, f'{{{NS_DS}}}CanonicalizationMethod')
-            cm.set('Algorithm', 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315')
-            
-            sm = etree.SubElement(si, f'{{{NS_DS}}}SignatureMethod')
-            sm.set('Algorithm', 'http://www.w3.org/2000/09/xmldsig#rsa-sha1')
-            
-            ref = etree.SubElement(si, f'{{{NS_DS}}}Reference')
-            ref.set('URI', f'#{element_id}')
-            
-            transforms = etree.SubElement(ref, f'{{{NS_DS}}}Transforms')
-            t1 = etree.SubElement(transforms, f'{{{NS_DS}}}Transform')
-            t1.set('Algorithm', 'http://www.w3.org/2000/09/xmldsig#enveloped-signature')
-            t2 = etree.SubElement(transforms, f'{{{NS_DS}}}Transform')
-            t2.set('Algorithm', 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315')
-            
-            dm = etree.SubElement(ref, f'{{{NS_DS}}}DigestMethod')
-            dm.set('Algorithm', 'http://www.w3.org/2000/09/xmldsig#sha1')
-            
-            dv = etree.SubElement(ref, f'{{{NS_DS}}}DigestValue')
-            dv.text = digest_value
-            
-            # Format base64 with line breaks every 76 chars - RFC 2045 MIME standard
-            # SEFAZ expects this formatting in SignatureValue and X509Certificate
-            # Use \r (real CR) instead of &#13; string - lxml will serialize it correctly
-            def format_base64_with_linebreaks(b64_string, line_length=76):
-                """Add CR line breaks to base64 string every line_length characters"""
-                lines = []
-                for i in range(0, len(b64_string), line_length):
-                    lines.append(b64_string[i:i+line_length])
-                return '\r\n'.join(lines)  # Use real CRLF - lxml serializes as &#13;&#10;
-            
-            # === PASSO 3: Create placeholder SignatureValue (will be replaced) ===
-            # We need to insert the Signature into the document BEFORE calculating SignatureValue
-            # because C14N of SignedInfo depends on its position in the namespace context
-            sv = etree.SubElement(sig, f'{{{NS_DS}}}SignatureValue')
-            sv.text = ''  # Placeholder
-            
-            # KeyInfo
-            ki = etree.SubElement(sig, f'{{{NS_DS}}}KeyInfo')
-            x509data = etree.SubElement(ki, f'{{{NS_DS}}}X509Data')
-            x509cert = etree.SubElement(x509data, f'{{{NS_DS}}}X509Certificate')
-            x509cert.text = format_base64_with_linebreaks(self.cert_base64)
-            
-            # === PASSO 4: CRITICAL - Insert Signature into document BEFORE calculating SignatureValue ===
-            # This ensures SignedInfo C14N is computed in the correct namespace context
-            # (inside <Signature xmlns="..."> inside <NFe xmlns="...">)
-            # If we calculate C14N when SignedInfo is standalone, xmlns="" attributes won't appear
-            # and SEFAZ validation will fail with "Assinatura difere do calculado"
-            destination = target.getparent()
-            if destination is None:
-                destination = root
-                
-            destination.append(sig)
-            logger.debug("Signature inserida no documento (antes de calcular SignatureValue)")
-            
-            # === PASSO 5: NOW calculate SignatureValue with correct namespace context ===
-            # CRITICAL: Use tostring with method='c14n' to canonize the element IN ITS CONTEXT
-            # DO NOT use etree.ElementTree(si).write_c14n() as it creates a temporary tree and loses context!
-            si_c14n = etree.tostring(si, method='c14n')
-            
-            logger.debug(f"SignedInfo C14N (primeiros 200 bytes): {si_c14n[:200]}")
-            logger.debug(f"SignedInfo C14N (tamanho total): {len(si_c14n)} bytes")
-            
-            sig_bytes = self.private_key.sign(si_c14n, padding.PKCS1v15(), hashes.SHA1())
-            signature_value = base64.b64encode(sig_bytes).decode('ascii')
-            
-            logger.info(f"SignatureValue calculado (primeiros 50 chars): {signature_value[:50]}...")
-            
-            # === PASSO 6: Update SignatureValue with actual signature ===
-            sv.text = format_base64_with_linebreaks(signature_value)
-            
-            # Serialize using tostring to PRESERVE structure
-            result = etree.tostring(root, encoding='unicode', method='xml')
-            
-            if not result.startswith('<?xml'):
-                result = '<?xml version="1.0" encoding="UTF-8"?>' + result
-            
-            logger.info("XML assinado com sucesso (V2 - FIX SignedInfo C14N context)")
+
+            # Converte certificado para PEM (signxml precisa de PEM ou objeto crypto)
+            cert_pem = self.certificate.public_bytes(serialization.Encoding.PEM)
+
+            # Instancia o signer signxml (SHA1 necessário para SEFAZ legado)
+            signer = _XMLSigner(
+                method=_signxml_methods.enveloped,
+                signature_algorithm=_SigMethod.RSA_SHA1,
+                digest_algorithm=_DigestAlg.SHA1,
+                c14n_algorithm=_C14NMethod.CANONICAL_XML_1_0,
+            )
+
+            # Assina o XML - signxml insere <Signature> após infNFe dentro de NFe
+            signed_root = signer.sign(
+                root,
+                key=self.private_key,
+                cert=cert_pem,
+                reference_uri='#' + element_id,
+            )
+
+            # Serializa para string
+            result = '<?xml version="1.0" encoding="UTF-8"?>' + etree.tostring(
+                signed_root, encoding='unicode', method='xml'
+            )
+
+            logger.info("XML assinado com sucesso (V2 via signxml)")
             return result
-            
+
         except Exception as e:
             logger.exception(f"Erro ao assinar XML (V2): {e}")
             raise

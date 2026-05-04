@@ -3042,3 +3042,50 @@ class AtualizarEntregaView(APIView):
     def put(self, request, id_venda):
         return self.patch(request, id_venda)
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def visualizar_certificado(request):
+    import base64
+    import os
+    from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
+    from cryptography.x509.oid import NameOID
+
+    config = EmpresaConfig.get_ativa()
+    if not config or not config.certificado_digital:
+        return Response({'sucesso': False, 'mensagem': 'Nenhum certificado digital configurado.'}, status=400)
+
+    senha = (config.senha_certificado or '').encode('utf-8')
+
+    try:
+        cert_data = config.certificado_digital.strip()
+        # Tenta carregar como base64; caso falhe, trata como caminho de arquivo
+        try:
+            pfx_bytes = base64.b64decode(cert_data)
+        except Exception:
+            if not os.path.isfile(cert_data):
+                return Response({'sucesso': False, 'mensagem': 'Arquivo de certificado não encontrado.'}, status=400)
+            with open(cert_data, 'rb') as f:
+                pfx_bytes = f.read()
+
+        _private_key, cert, _chain = load_key_and_certificates(pfx_bytes, senha)
+
+        def _get_attr(name_obj, oid):
+            attrs = name_obj.get_attributes_for_oid(oid)
+            return attrs[0].value if attrs else ''
+
+        not_before = cert.not_valid_before_utc if hasattr(cert, 'not_valid_before_utc') else cert.not_valid_before
+        not_after = cert.not_valid_after_utc if hasattr(cert, 'not_valid_after_utc') else cert.not_valid_after
+
+        return Response({
+            'sucesso': True,
+            'titular': _get_attr(cert.subject, NameOID.COMMON_NAME),
+            'emissor': _get_attr(cert.issuer, NameOID.COMMON_NAME),
+            'valido_de': not_before.strftime('%d/%m/%Y %H:%M:%S'),
+            'valido_ate': not_after.strftime('%d/%m/%Y %H:%M:%S'),
+            'numero_serie': str(cert.serial_number),
+        })
+    except Exception as exc:
+        logger.exception('Erro ao ler certificado digital')
+        return Response({'sucesso': False, 'mensagem': f'Erro ao ler certificado: {exc}'}, status=400)
+
