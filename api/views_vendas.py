@@ -1635,7 +1635,7 @@ class VendaView(APIView):
 
                     'numero_documento': getattr(v, 'numero_nfe', None) or v.numero_documento or str(venda_pk),
                     'status': status_venda_original,  # Status leg�vel
-                    'status_nfe': status_venda_original,  # Status NFCe/NF-e
+                    'status_nfe': status_venda_original,  # Status NFC-e/NF-e
                     'numero_nfe': getattr(v, 'numero_nfe', None),
                     'serie_nfe': getattr(v, 'serie_nfe', None),
                     'chave_nfe': getattr(v, 'chave_nfe', '') or '',
