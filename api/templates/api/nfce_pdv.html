@@ -2182,12 +2182,19 @@
                              this.resultModal = {
                                  show: true, 
                                  success: true, // Sempre sucesso (verde), mas msg pode ser de alerta
-                                 message: magicRes.data.mensagem,
-                                 data: magicRes.data,
+                                 message: magicRes.data.mensagem || (isOffline ? 'Venda salva (Offline)' : 'NFC-e emitida com sucesso!'),
+                                 data: {
+                                     chave: magicRes.data.chave || '',
+                                     protocolo: magicRes.data.protocolo || '',
+                                     numero: magicRes.data.numero || '',
+                                     serie: magicRes.data.serie || '1',
+                                     qrcode: magicRes.data.qrcode || '',
+                                     url_consulta: magicRes.data.url_consulta || 'portalsped.fazenda.mg.gov.br/portalnfce',
+                                 },
                                  isOffline: isOffline
                              };
                          } else {
-                             throw new Error(magicRes.data.mensagem);
+                             throw new Error(magicRes.data.mensagem || magicRes.data.erro || 'Erro desconhecido ao emitir NFC-e');
                          }
 
                     } catch (e) {

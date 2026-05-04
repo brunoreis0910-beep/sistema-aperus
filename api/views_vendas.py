@@ -901,20 +901,24 @@ class SalvarVendaPDVNFCeView(APIView):
             }
             
             if not result.get('sucesso'):
-                # Tratativa de Conting�ncia / Erro ACBr
-                # Se falhar a emiss�o (ACBr desligado, Internet off), salvamos a venda assim mesmo
-                # para n�o bloquear a opera��o da loja.
-                
-                # Commitamos a venda (j� salva como 'PENDENTE' ou 'ERRO' no status_nfe pelo service)
+                # Tratativa de Contingência / Erro ACBr
+                # Se falhar a emissão (ACBr desligado, Internet off), salvamos a venda assim mesmo
+                # para não bloquear a operação da loja.
+
+                # Commitamos a venda (já salva como 'PENDENTE' ou 'ERRO' no status_nfe pelo service)
                 transaction.savepoint_commit(sid)
-                
-                # Ajustamos a mensagem para o Front avisar o usu�rio mas dar sucesso na venda
-                result['sucesso'] = True 
-                result['mensagem'] = f"Venda REALIZADA (Offline). Erro na emiss�o: {result.get('mensagem')}"
+
+                # Ajustamos a mensagem para o Front avisar o usuário mas dar sucesso na venda
+                result['sucesso'] = True
+                result['mensagem'] = f"Venda REALIZADA (Offline). Erro na emissão: {result.get('mensagem') or 'Erro desconhecido'}"
                 result['venda_offline'] = True
-                
+
                 return Response(result, status=200)
-            
+
+            # Garantir que a resposta de sucesso sempre tenha o campo 'mensagem'
+            if not result.get('mensagem'):
+                result['mensagem'] = 'NFC-e emitida com sucesso!'
+
             transaction.savepoint_commit(sid)
             return Response(result, status=200)
 
@@ -2975,4 +2979,66 @@ def pdv_nfce_page(request):
             'sucesso': False,
             'mensagem': f'Erro ao carregar a página: {str(e)}'
         }, status=500)
+
+
+class EntregasView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        status_filtro = request.query_params.get('status_logistica')
+        qs = Venda.objects.select_related('id_cliente').order_by('-data_emissao')
+        if status_filtro:
+            qs = qs.filter(status_logistica=status_filtro)
+        data = []
+        for v in qs:
+            cliente = v.id_cliente
+            data.append({
+                'id_venda': v.id_venda,
+                'numero_documento': v.numero_documento,
+                'data_emissao': v.data_emissao,
+                'cliente_nome': cliente.nome if cliente else None,
+                'status_logistica': v.status_logistica,
+                'endereco_entrega': v.endereco_entrega,
+                'data_prevista_entrega': v.data_prevista_entrega,
+                'responsavel_entrega': v.responsavel_entrega,
+                'observacao_entrega': v.observacao_entrega,
+                'valor_total': str(v.valor_total) if v.valor_total is not None else None,
+            })
+        return Response(data)
+
+
+class AtualizarEntregaView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, id_venda):
+        venda = get_object_or_404(Venda, pk=id_venda)
+        payload = request.data
+
+        campos_entrega = ['endereco_entrega', 'data_prevista_entrega', 'responsavel_entrega', 'observacao_entrega']
+        for campo in campos_entrega:
+            if campo in payload:
+                setattr(venda, campo, payload[campo] or None)
+
+        novo_status = payload.get('status_logistica')
+        status_anterior = venda.status_logistica
+        if novo_status and novo_status != status_anterior:
+            status_validos = [s[0] for s in Venda.STATUS_LOGISTICA_CHOICES]
+            if novo_status not in status_validos:
+                return Response({'sucesso': False, 'mensagem': f'Status inválido: {novo_status}'}, status=400)
+            venda.status_logistica = novo_status
+            VendaEntregaLog.objects.create(
+                id_venda=venda,
+                status_anterior=status_anterior,
+                status_novo=novo_status,
+                observacao=payload.get('observacao_log'),
+                usuario=request.user,
+                recebedor_nome=payload.get('recebedor_nome'),
+                recebedor_documento=payload.get('recebedor_documento'),
+            )
+
+        venda.save()
+        return Response({'sucesso': True, 'status_logistica': venda.status_logistica})
+
+    def put(self, request, id_venda):
+        return self.patch(request, id_venda)
 
