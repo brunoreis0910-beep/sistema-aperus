@@ -2168,6 +2168,19 @@
                          
                          const magicRes = await axios.post('/api/vendas/salvar_pdv_nfce/', customPayload);
                          
+                         // LOG DIAGNÓSTICO: exibir resposta completa do backend
+                         console.group('📦 Resposta /api/vendas/salvar_pdv_nfce/');
+                         console.log('HTTP status:', magicRes.status);
+                         console.log('sucesso:', magicRes.data.sucesso);
+                         console.log('mensagem:', magicRes.data.mensagem);
+                         console.log('chave:', magicRes.data.chave);
+                         console.log('protocolo:', magicRes.data.protocolo);
+                         console.log('cStat:', magicRes.data.cStat);
+                         console.log('xMotivo:', magicRes.data.xMotivo);
+                         console.log('venda_offline:', magicRes.data.venda_offline);
+                         console.log('dados completos:', JSON.parse(JSON.stringify(magicRes.data, (k, v) => (k === 'xml_retorno' || k === 'xml_nfe') ? '[XML OMITIDO]' : v)));
+                         console.groupEnd();
+
                          // Capturar dados_venda da resposta
                          if (magicRes.data.dados_venda) {
                              this.dadosVenda = magicRes.data.dados_venda;
@@ -2194,11 +2207,17 @@
                                  isOffline: isOffline
                              };
                          } else {
+                             console.error('❌ sucesso=false. Dados da resposta:', magicRes.data);
                              throw new Error(magicRes.data.mensagem || magicRes.data.erro || 'Erro desconhecido ao emitir NFC-e');
                          }
 
                     } catch (e) {
-                         console.error(e);
+                         // LOG DIAGNÓSTICO: distinguir erro HTTP vs erro de lógica
+                         if (e.response) {
+                             console.error('❌ Erro HTTP na requisição:', e.response.status, e.response.data);
+                         } else {
+                             console.error('❌ Erro de lógica / rede:', e.message, e);
+                         }
                          const msg = e.response?.data?.mensagem || e.message || JSON.stringify(e.response?.data);
                          this.resultModal = { show: true, success: false, message: 'Erro: ' + msg };
                     } finally {

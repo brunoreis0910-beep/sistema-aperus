@@ -874,9 +874,9 @@ class SalvarVendaPDVNFCeView(APIView):
 
             # 3. Tenta Emitir NFC-e
             service = NFCeService()
-            # OTIMIZA��O: N�o configurar ACBr antes de tentar nativo. O m�todo emitir_nfce gerencia isso.
-            # service.configurar_da_empresa() 
+            logger.info(f"[PDV-NFCe] Iniciando emissão NFC-e para venda {venda.pk} | valor={venda.valor_total} | operacao={operacao.nome_operacao}")
             result = service.emitir_nfce(venda)
+            logger.info(f"[PDV-NFCe] Resultado emitir_nfce: sucesso={result.get('sucesso')} | mensagem={result.get('mensagem')} | cStat={result.get('cStat')} | xMotivo={result.get('xMotivo')}")
             
             # Adicionar informa��es da opera��o, vendedor e cliente para exibir na tela do PDV
             result['dados_venda'] = {

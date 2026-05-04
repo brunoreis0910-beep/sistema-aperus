@@ -12,6 +12,7 @@ from .views_vendas import (
     CartaCorrecaoNFeView, CartaCorrecaoDownloadXMLView, CartaCorrecaoDeleteView, CartaCorrecaoImprimirView,
     ComplementoICMSNFeView, EmitirComplementoICMSView,
     EntregasView, AtualizarEntregaView,
+    SalvarVendaPDVNFCeView, ListarVendasPDVNFCeView,
 )
 from .views_faturamento import (
     FaturamentoView, OperacoesFiscaisView,
@@ -430,6 +431,8 @@ urlpatterns = [
     path('faturamento/converter-cupom-nfe/', ConverterCupomParaNFeView.as_view(), name='faturamento-converter-cupom-nfe'),
     path('faturamento/listar-vendas/', ListarVendasComFiltrosView.as_view(), name='faturamento-listar-vendas'),
     path('pdv-nfce/', PDVNFCeView.as_view(), name='api-pdv-nfce'),
+    path('vendas/salvar_pdv_nfce/', SalvarVendaPDVNFCeView.as_view(), name='vendas-salvar-pdv-nfce'),
+    path('vendas/pdv-nfce/', ListarVendasPDVNFCeView.as_view(), name='vendas-listar-pdv-nfce'),
     path('usuarios/me/', UserMeView.as_view(), name='user-me'),
     path('devolucoes/buscar_venda/<int:id_venda>/', buscar_venda_view, name='devolucoes-buscar-venda'),
     path('devolucoes/buscar_compra/<int:id_compra>/', buscar_compra_view, name='devolucoes-buscar-compra'),

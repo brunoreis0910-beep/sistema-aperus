@@ -344,6 +344,7 @@ class SefazService:
                     chNFe = infProt.findtext('chNFe')
                     
                     if cStatProt in ['100', '150']: # Autorizado
+                        logger.info(f"[SEFAZ] NFC-e AUTORIZADA: cStat={cStatProt} | nProt={nProt} | chNFe={chNFe}")
                         return {
                             'sucesso': True,
                             'cStat': cStatProt,
@@ -353,10 +354,11 @@ class SefazService:
                             'xml_retorno': xml_resp
                         }
                     else:
+                        logger.warning(f"[SEFAZ] NFC-e REJEITADA: cStat={cStatProt} | xMotivo={xMotivoProt}")
                         return {
                             'sucesso': False,
                             'cStat': cStatProt,
-                            'mensagem': f"Rejeição: {xMotivoProt}",
+                            'mensagem': f"Rejeição {cStatProt}: {xMotivoProt}",
                             'xMotivo': xMotivoProt
                         }
             

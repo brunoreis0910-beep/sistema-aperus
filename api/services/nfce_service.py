@@ -323,7 +323,9 @@ class NFCeService:
             except Exception as e_conn:
                 logger.warning(f"Falha na conexão com SEFAZ: {e_conn}. Tentando Contingência Off-line.")
                 return self._emitir_offline_fallback(venda, empresa, xml_unsigned, str(e_conn))
-            
+
+            logger.info(f"[NFC-e] Retorno SEFAZ: sucesso={result.get('sucesso')} | cStat={result.get('cStat')} | xMotivo={result.get('xMotivo')} | protocolo={result.get('protocolo')} | chave={result.get('chave')}")
+
             if result.get('sucesso'):
                 # --- Montagem do XML de Distribuição (nfeProc) ---
                 # O retorno da SEFAZ é um SOAP Envelope. Precisamos extrair apenas o protNFe
