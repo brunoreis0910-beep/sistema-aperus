@@ -13,6 +13,7 @@ from .views_vendas import (
     ComplementoICMSNFeView, EmitirComplementoICMSView,
     EntregasView, AtualizarEntregaView,
     SalvarVendaPDVNFCeView, ListarVendasPDVNFCeView,
+    visualizar_certificado
 )
 from .views_faturamento import (
     FaturamentoView, OperacoesFiscaisView,
@@ -645,4 +646,5 @@ urlpatterns = [
     # Health Check — monitoramento de infraestrutura
     path('health/', HealthCheckView.as_view(), name='health-check'),
     path('health/detail/', HealthCheckDetailView.as_view(), name='health-check-detail'),
+    path('certificado/visualizar/', visualizar_certificado, name='visualizar-certificado'),
 ]
