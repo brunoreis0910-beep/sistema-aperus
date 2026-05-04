@@ -1545,7 +1545,7 @@ class VendaView(APIView):
                         itens_list.append({
                             'id': item_pk,
                             'produto_id': prod.pk if prod else None,
-                            'produto_nome': prod.nome_produto if prod else 'Produto Removido',
+                            'produto': prod.nome_produto if prod else 'Produto no identificado',
                             'quantidade': str(getattr(it, 'quantidade', '0')),
                             'valor_unitario': str(getattr(it, 'valor_unitario', '0')),
                             'valor_total': str(getattr(it, 'valor_total', '0')),
@@ -2251,8 +2251,9 @@ class VendaView(APIView):
                             # Devolver quantidade ao estoque
                             estoque_obj.quantidade = (estoque_obj.quantidade or Decimal('0')) + item.quantidade
                             estoque_obj.save()
+                            print(f'[ESTOQUE] Baixa no deposito: Produto {prod_ident}, Qtd Antes: {quantidade_antes}, Qtd Apos: {estoque_obj.quantidade}')
                         except Estoque.DoesNotExist:
-                            # Se não existir registro, criar com a quantidade devolvida
+                            # Se n�o existir registro, criar com a quantidade devolvida
                             estoque_obj = Estoque.objects.create(
                                 id_produto=item.id_produto,
                                 id_deposito_id=deposito_id,
@@ -2326,7 +2327,7 @@ class ClienteProdutosView(APIView):
                     'id_venda': v.pk if v else None,
                     'data_venda': v.data_documento.isoformat() if v and v.data_documento else None,
                     'id_produto': p.pk if p else None,
-                    'nome_produto': p.nome_produto if p else 'Produto não identificado',
+                    'nome_produto': p.nome_produto if p else 'Produto no identificado',
                     'codigo_produto': p.codigo_produto if p else '',
                     'unidade_medida': getattr(p, 'unidade_medida', '') if p else '',
                     'quantidade': float(item.quantidade),
@@ -2963,164 +2964,15 @@ class EmitirComplementoICMSView(APIView):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def pdv_nfce_page(request):
-    config = EmpresaConfig.get_ativa()
-    return render(request, 'api/nfce_pdv.html', {'config': config})
-
-
-# ---------------------------------------------------------------------------
-# CONTROLE DE ENTREGA
-# ---------------------------------------------------------------------------
-
-class EntregasView(APIView):
-    """
-    GET /vendas/entregas/
-        Lista vendas para controle de entrega.
-        Query params:
-          status  - filtra pelo status_logistica (ex: PREPARANDO, DESPACHADO…)
-                    Se omitido, retorna tudo exceto ENTREGUE.
-          todos   - se '1', retorna inclusive ENTREGUE.
-          busca   - texto livre para filtrar por nº documento ou cliente.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        todos = request.query_params.get('todos', '0') == '1'
-        status_filter = request.query_params.get('status', None)
-        busca = request.query_params.get('busca', '').strip()
-
-        qs = Venda.objects.select_related('id_cliente', 'id_operacao').order_by('-data_documento')
-
-        if status_filter:
-            qs = qs.filter(status_logistica=status_filter)
-        elif not todos:
-            qs = qs.exclude(status_logistica='ENTREGUE')
-
-        if busca:
-            qs = qs.filter(
-                Q(numero_documento__icontains=busca) |
-                Q(id_cliente__nome_razao_social__icontains=busca)
-            )
-
-        qs = qs[:300]
-
-        resultado = []
-        for v in qs:
-            itens_qs = VendaItem.objects.filter(id_venda=v).select_related('id_produto')
-            itens_data = []
-            for item in itens_qs:
-                itens_data.append({
-                    'id_item': item.id_item,
-                    'produto': item.id_produto.nome_produto if item.id_produto else '',
-                    'codigo': item.id_produto.codigo_produto if item.id_produto else '',
-                    'quantidade': str(item.quantidade),
-                    'quantidade_entregue': str(item.quantidade_entregue or Decimal('0.000')),
-                    'valor_unitario': str(item.valor_unitario),
-                    'valor_total': str(item.valor_total),
-                })
-
-            logs_qs = VendaEntregaLog.objects.filter(id_venda=v).select_related('usuario').order_by('data_log')
-            logs_data = []
-            for log in logs_qs:
-                logs_data.append({
-                    'id_entrega_log': log.id_entrega_log,
-                    'status_anterior': log.status_anterior,
-                    'status_novo': log.status_novo,
-                    'observacao': log.observacao or '',
-                    'data_log': log.data_log.isoformat(),
-                    'usuario': log.usuario.get_full_name() or log.usuario.username if log.usuario else '',
-                    'recebedor_nome': log.recebedor_nome or '',
-                    'recebedor_documento': log.recebedor_documento or '',
-                })
-
-            resultado.append({
-                'id_venda': v.id_venda,
-                'numero_documento': v.numero_documento or f'#{v.id_venda}',
-                'data_documento': v.data_documento.isoformat() if v.data_documento else None,
-                'cliente': v.id_cliente.nome_razao_social if v.id_cliente else 'Consumidor Final',
-                'cliente_telefone': v.id_cliente.telefone if v.id_cliente else '',
-                'valor_total': str(v.valor_total),
-                'taxa_entrega': str(v.taxa_entrega or Decimal('0.00')),
-                'status_logistica': v.status_logistica,
-                'endereco_entrega': v.endereco_entrega or '',
-                'data_prevista_entrega': v.data_prevista_entrega.isoformat() if v.data_prevista_entrega else None,
-                'responsavel_entrega': v.responsavel_entrega or '',
-                'observacao_entrega': v.observacao_entrega or '',
-                'itens': itens_data,
-                'logs': logs_data,
-            })
-
-        return Response(resultado)
-
-
-class AtualizarEntregaView(APIView):
-    """
-    PATCH /vendas/<id_venda>/atualizar_entrega/
-        Atualiza o status logístico da venda, registra log e permite
-        atualizar as quantidades entregues por item.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def patch(self, request, id_venda):
-        venda = get_object_or_404(Venda, pk=id_venda)
-
-        novo_status = request.data.get('status_logistica')
-        observacao = request.data.get('observacao', '')
-        recebedor_nome = request.data.get('recebedor_nome', '')
-        recebedor_documento = request.data.get('recebedor_documento', '')
-        endereco_entrega = request.data.get('endereco_entrega')
-        data_prevista_entrega = request.data.get('data_prevista_entrega')
-        responsavel_entrega = request.data.get('responsavel_entrega')
-        observacao_entrega = request.data.get('observacao_entrega')
-
-        status_anterior = venda.status_logistica
-
-        # Registrar log apenas se o status mudou
-        if novo_status and novo_status != status_anterior:
-            VendaEntregaLog.objects.create(
-                id_venda=venda,
-                status_anterior=status_anterior,
-                status_novo=novo_status,
-                observacao=observacao,
-                usuario=request.user,
-                recebedor_nome=recebedor_nome,
-                recebedor_documento=recebedor_documento,
-            )
-            venda.status_logistica = novo_status
-
-        # Atualizar campos de entrega
-        if endereco_entrega is not None:
-            venda.endereco_entrega = endereco_entrega
-        if data_prevista_entrega is not None:
-            venda.data_prevista_entrega = data_prevista_entrega or None
-        if responsavel_entrega is not None:
-            venda.responsavel_entrega = responsavel_entrega
-        if observacao_entrega is not None:
-            venda.observacao_entrega = observacao_entrega
-
-        # Atualizar quantidades entregues por item
-        itens_atualizados = request.data.get('itens', [])
-        for item_data in itens_atualizados:
-            try:
-                item = VendaItem.objects.get(id_item=item_data['id_item'], id_venda=venda)
-                nova_qtd = Decimal(str(item_data.get('quantidade_entregue', item.quantidade_entregue or '0')))
-                if nova_qtd > item.quantidade:
-                    nome_prod = item.id_produto.nome_produto if item.id_produto else str(item.id_item)
-                    return Response(
-                        {'detail': f'Quantidade entregue de "{nome_prod}" ultrapassa a quantidade pedida.'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-                item.quantidade_entregue = nova_qtd
-                item.save(update_fields=['quantidade_entregue'])
-            except VendaItem.DoesNotExist:
-                pass
-            except (InvalidOperation, ValueError):
-                pass
-
-        venda.save()
-
+    logger.info("Acessando a página PDV NFC-e")
+    try:
+        config = EmpresaConfig.get_ativa()
+        logger.debug(f"Configuração ativa: {config}")
+        return render(request, 'api/nfce_pdv.html', {'config': config})
+    except Exception as e:
+        logger.exception("Erro ao carregar a página PDV NFC-e")
         return Response({
-            'ok': True,
-            'id_venda': venda.id_venda,
-            'status_logistica': venda.status_logistica,
-        })
+            'sucesso': False,
+            'mensagem': f'Erro ao carregar a página: {str(e)}'
+        }, status=500)
 
