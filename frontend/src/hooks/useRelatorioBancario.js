@@ -79,7 +79,7 @@ const useRelatorioBancario = () => {
     if (movimentos && movimentos.length > 0) {
       const tableData = movimentos.map(mov => {
         const isReceita = mov.tipo_conta === 'Receber';
-        const valor = parseFloat(mov.valor_liquidado || 0);
+        const valor = parseFloat(mov.valor_liquidado || mov.valor_parcela || 0);
         const dataPagamento = mov.data_pagamento ? new Date(mov.data_pagamento + 'T00:00:00').toLocaleDateString('pt-BR') : 'N/A';
 
         return [

@@ -184,10 +184,10 @@ function BancarioPage() {
   const calcularTotaisDosMovimentos = (lista) => {
     const receitas = lista
       .filter(m => m.tipo_conta === 'Receber')
-      .reduce((acc, m) => acc + parseFloat(m.valor_liquidado || 0), 0);
+      .reduce((acc, m) => acc + parseFloat(m.valor_liquidado || m.valor_parcela || 0), 0);
     const despesas = lista
       .filter(m => m.tipo_conta === 'Pagar')
-      .reduce((acc, m) => acc + parseFloat(m.valor_liquidado || 0), 0);
+      .reduce((acc, m) => acc + parseFloat(m.valor_liquidado || m.valor_parcela || 0), 0);
     return { receitas, despesas, saldo: receitas - despesas };
   };
 
@@ -429,7 +429,7 @@ function BancarioPage() {
                   <List sx={{ width: '100%', bgcolor: 'background.paper', mt: 1, border: '1px solid #ddd', borderRadius: 1 }}>
                     {movimentos.map((conta, index) => {
                       const isReceita = conta.tipo_conta === 'Receber';
-                      const valor = parseFloat(conta.valor_liquidado);
+                      const valor = parseFloat(conta.valor_liquidado || conta.valor_parcela || 0);
                       const corValor = isReceita ? 'success.main' : 'error.main';
                       return (
                         <React.Fragment key={conta.id_conta}>
