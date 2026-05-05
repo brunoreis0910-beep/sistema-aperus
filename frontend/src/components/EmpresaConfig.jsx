@@ -120,7 +120,13 @@ const EmpresaConfig = () => {
     controle_de_caixa: false,
     serie_dps: '1',
     ultimo_numero_dps: '',
-    codigo_municipio_ibge: ''
+    codigo_municipio_ibge: '',
+
+    // Aproveitamento ICMS (NF-e Modelo 55)
+    nfe_aproveitamento_icms_ativo: false,
+    nfe_aproveitamento_icms_aliquota: '0.0000',
+    nfe_aproveitamento_icms_mensagem: '',
+    nfe_aproveitamento_icms_csosns: []
   });
 
   useEffect(() => {
@@ -227,6 +233,14 @@ const EmpresaConfig = () => {
           serie_dps: empresa.serie_dps || '1',
           ultimo_numero_dps: empresa.ultimo_numero_dps || '',
           codigo_municipio_ibge: empresa.codigo_municipio_ibge || '',
+
+          // Aproveitamento ICMS (NF-e Modelo 55)
+          nfe_aproveitamento_icms_ativo: empresa.nfe_aproveitamento_icms_ativo || false,
+          nfe_aproveitamento_icms_aliquota: empresa.nfe_aproveitamento_icms_aliquota || '0.0000',
+          nfe_aproveitamento_icms_mensagem: empresa.nfe_aproveitamento_icms_mensagem || '',
+          nfe_aproveitamento_icms_csosns: empresa.nfe_aproveitamento_icms_csosns
+            ? empresa.nfe_aproveitamento_icms_csosns.split(',').map(c => c.trim()).filter(Boolean)
+            : [],
         });
       }
       setError(null);
@@ -314,7 +328,15 @@ const EmpresaConfig = () => {
         controle_de_caixa: empresaData.controle_de_caixa,
         serie_dps: empresaData.serie_dps,
         ultimo_numero_dps: empresaData.ultimo_numero_dps || null,
-        codigo_municipio_ibge: empresaData.codigo_municipio_ibge
+        codigo_municipio_ibge: empresaData.codigo_municipio_ibge,
+
+        // Aproveitamento ICMS (NF-e Modelo 55)
+        nfe_aproveitamento_icms_ativo: empresaData.nfe_aproveitamento_icms_ativo,
+        nfe_aproveitamento_icms_aliquota: empresaData.nfe_aproveitamento_icms_aliquota || '0.0000',
+        nfe_aproveitamento_icms_mensagem: empresaData.nfe_aproveitamento_icms_mensagem,
+        nfe_aproveitamento_icms_csosns: Array.isArray(empresaData.nfe_aproveitamento_icms_csosns)
+          ? empresaData.nfe_aproveitamento_icms_csosns.join(',')
+          : (empresaData.nfe_aproveitamento_icms_csosns || '')
       };
 
       console.log('📤 Dados que seréo enviados para a API:', dadosParaEnvio);
@@ -1143,6 +1165,111 @@ const EmpresaConfig = () => {
                     ))}
                   </Select>
                 </FormControl>
+              </Grid>
+
+              {/* --- Aproveitamento ICMS --- */}
+              <Grid item xs={12}>
+                <Divider sx={{ my: 1 }} />
+                <Typography variant="h6" sx={{ mt: 2, mb: 1, color: 'primary.main' }}>
+                  Aproveitamento de ICMS nas Observações
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Quando ativado, a mensagem será incluída automaticamente nas observações das NF-e (Modelo 55)
+                  cujos itens possuam os CSOSN selecionados.
+                </Typography>
+              </Grid>
+
+              <Grid item xs={12}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={!!empresaData.nfe_aproveitamento_icms_ativo}
+                      onChange={(e) => handleInputChange('nfe_aproveitamento_icms_ativo', e.target.checked)}
+                      disabled={!isEditing}
+                      color="primary"
+                    />
+                  }
+                  label="Ativar geração de mensagem de aproveitamento de ICMS nas observações da NF-e"
+                />
+              </Grid>
+
+              <Grid item xs={12} md={3}>
+                <TextField
+                  fullWidth
+                  label="Alíquota (%)"
+                  value={empresaData.nfe_aproveitamento_icms_aliquota}
+                  onChange={(e) => handleInputChange('nfe_aproveitamento_icms_aliquota', e.target.value)}
+                  disabled={!isEditing || !empresaData.nfe_aproveitamento_icms_ativo}
+                  variant="outlined"
+                  type="number"
+                  inputProps={{ step: '0.0001', min: '0' }}
+                  helperText="Use {PERC_ALIQ} na mensagem para substituir"
+                />
+              </Grid>
+
+              <Grid item xs={12} md={9}>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                  <TextField
+                    fullWidth
+                    label="Mensagem"
+                    multiline
+                    rows={3}
+                    value={empresaData.nfe_aproveitamento_icms_mensagem}
+                    onChange={(e) => handleInputChange('nfe_aproveitamento_icms_mensagem', e.target.value)}
+                    disabled={!isEditing || !empresaData.nfe_aproveitamento_icms_ativo}
+                    variant="outlined"
+                    placeholder="Ex: Permite o aproveitamento do credito de ICMS no valor de R$ {VLR_TOTAL}, correspondente a aliquota de {PERC_ALIQ}% nos termos do Art. 23 da LC 123."
+                  />
+                  <Box sx={{ minWidth: 180, border: '1px solid #ccc', borderRadius: 1, p: 1.5, bgcolor: '#f9f9f9' }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                      Variáveis
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      <strong>{'{PERC_ALIQ}'}</strong> — % Alíquota
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      <strong>{'{VLR_TOTAL}'}</strong> — Valor ICMS
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  CSOSN que ativam a mensagem:
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0 }}>
+                  {[101, 102, 103, 201, 202, 203, 300, 400, 500, 900].map((csosn) => {
+                    const csosnStr = String(csosn);
+                    const csosns = Array.isArray(empresaData.nfe_aproveitamento_icms_csosns)
+                      ? empresaData.nfe_aproveitamento_icms_csosns
+                      : [];
+                    const isChecked = csosns.includes(csosnStr);
+                    return (
+                      <FormControlLabel
+                        key={csosn}
+                        control={
+                          <Checkbox
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const prev = Array.isArray(empresaData.nfe_aproveitamento_icms_csosns)
+                                ? empresaData.nfe_aproveitamento_icms_csosns
+                                : [];
+                              const updated = e.target.checked
+                                ? [...prev, csosnStr]
+                                : prev.filter((c) => c !== csosnStr);
+                              handleInputChange('nfe_aproveitamento_icms_csosns', updated);
+                            }}
+                            disabled={!isEditing || !empresaData.nfe_aproveitamento_icms_ativo}
+                            size="small"
+                          />
+                        }
+                        label={`Csosn ${csosn}`}
+                        sx={{ mr: 2 }}
+                      />
+                    );
+                  })}
+                </Box>
               </Grid>
             </Grid>
           )}

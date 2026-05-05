@@ -1232,7 +1232,35 @@ class NfeXmlBuilder:
         # REGRA SEFAZ: Em homologação, adicionar aviso no infAdic
         if str(self.empresa.ambiente_nfce or "2") == "2":
             info_text = "NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL - " + info_text
-        
+
+        # --- APROVEITAMENTO ICMS (NF-e Modelo 55) ---
+        # Verifica se o recurso está ativo e se algum item da venda possui CSOSN configurado
+        if modelo == '55' and getattr(self.empresa, 'nfe_aproveitamento_icms_ativo', False):
+            csosns_config_raw = getattr(self.empresa, 'nfe_aproveitamento_icms_csosns', '') or ''
+            csosns_config = [c.strip() for c in csosns_config_raw.split(',') if c.strip()]
+            mensagem_config = getattr(self.empresa, 'nfe_aproveitamento_icms_mensagem', '') or ''
+            aliquota_config = getattr(self.empresa, 'nfe_aproveitamento_icms_aliquota', 0) or 0
+
+            if csosns_config and mensagem_config:
+                # Verifica se algum item da venda tem CSOSN que corresponde à configuração
+                csosns_venda = set()
+                for item in self.venda.itens.all():
+                    csosn_item = str(getattr(item, 'icms_cst_csosn', '') or '').strip()
+                    if csosn_item:
+                        csosns_venda.add(csosn_item)
+
+                if any(c in csosns_config for c in csosns_venda):
+                    # Substitui variáveis na mensagem
+                    valor_total = float(self.venda.valor_total or 0)
+                    aliquota_fmt = "{:.4f}".format(float(aliquota_config)).rstrip('0').rstrip('.')
+                    valor_icms = valor_total * float(aliquota_config) / 100
+
+                    msg_aproveitamento = mensagem_config
+                    msg_aproveitamento = msg_aproveitamento.replace('{PERC_ALIQ}', aliquota_fmt)
+                    msg_aproveitamento = msg_aproveitamento.replace('{VLR_TOTAL}', "R$ {:,.2f}".format(valor_icms).replace(',', 'X').replace('.', ',').replace('X', '.'))
+
+                    info_text = info_text + " " + msg_aproveitamento
+
         # CRÍTICO: Limpar texto para evitar Rejeição 297 (quebras de linha, caracteres especiais)
         info_text_limpo = self._limpar_texto(info_text, 5000)
         # Ensure strip again just in case

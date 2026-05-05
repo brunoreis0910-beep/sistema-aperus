@@ -1295,6 +1295,36 @@ class EmpresaConfig(models.Model):
     
     cnae = models.CharField(max_length=10, blank=True, null=True, help_text="Código CNAE Fiscal")
 
+    # --- Aproveitamento ICMS (NF-e Modelo 55) ---
+    nfe_aproveitamento_icms_ativo = models.BooleanField(
+        default=False,
+        blank=True,
+        null=True,
+        help_text="Ativa a geração de mensagem de aproveitamento de ICMS nas observações da NF-e"
+    )
+    nfe_aproveitamento_icms_aliquota = models.DecimalField(
+        max_digits=7,
+        decimal_places=4,
+        default=0,
+        blank=True,
+        null=True,
+        help_text="Alíquota (%) para cálculo de aproveitamento de ICMS. Use {PERC_ALIQ} na mensagem."
+    )
+    nfe_aproveitamento_icms_mensagem = models.TextField(
+        blank=True,
+        null=True,
+        help_text=(
+            "Mensagem de aproveitamento de ICMS. Variáveis: "
+            "{PERC_ALIQ} = % da alíquota, {VLR_TOTAL} = valor total da nota."
+        )
+    )
+    nfe_aproveitamento_icms_csosns = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="CSOSNs que ativam a mensagem, separados por vírgula (ex: 101,102,500)"
+    )
+
     class Meta:
         managed = False
         db_table = 'empresa_config'
