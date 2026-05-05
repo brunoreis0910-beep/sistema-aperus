@@ -187,7 +187,7 @@ const VendaRapidaPage = () => {
   const mpPointAcaoRef = useRef(null);
   const mpPointPollingRef = useRef(null);
   const { user, permissions, isLoading: authLoading, axiosInstance } = useAuth();
-  const { servidorOk, marcarServidorIndisponivel } = useOfflineSync();
+  const { servidorOk, marcarServidorIndisponivel, atualizarPendentes } = useOfflineSync();
   const servidorOkRef = useRef(servidorOk);
   const {
     buscarProdutos: buscarProdutosHook,
@@ -2499,6 +2499,7 @@ const VendaRapidaPage = () => {
         const dadosFinanceiros = prepararDadosFinanceiros();
         const tempId = await salvarVendaOffline(dadosVenda, dadosFinanceiros);
         console.log('[OFFLINE] Venda salva localmente:', tempId, '| financeiros:', dadosFinanceiros.length);
+        atualizarPendentes();
 
         // Incrementar número do documento localmente para a próxima venda offline
         if (operacao?.usa_auto_numeracao && operacao?.id_operacao) {
@@ -2679,6 +2680,7 @@ const VendaRapidaPage = () => {
           const dadosFinanceiros = prepararDadosFinanceiros();
           const tempId = await salvarVendaOffline(dadosVenda, dadosFinanceiros);
           console.log('[OFFLINE] Venda salva offline como fallback:', tempId, '| financeiros:', dadosFinanceiros.length);
+          atualizarPendentes();
 
           // Incrementar número do documento localmente para a próxima venda offline
           if (operacao?.usa_auto_numeracao && operacao?.id_operacao) {

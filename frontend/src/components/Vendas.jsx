@@ -69,7 +69,8 @@ import {
   buscarClientesCacheAll,
   buscarVendedoresCache,
   buscarProdutosCacheAll,
-  buscarFormasPagamentoCache
+  buscarFormasPagamentoCache,
+  listarVendasOffline
 } from '../utils/terminalCacheDB';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import promocaoService from '../services/promocaoService';
@@ -165,7 +166,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   console.log('✅ [Vendas.jsx] useAuth retornou:', { hasAxios: !!axiosInstance, hasUser: !!user });
   
   console.log('🌐 [Vendas.jsx] Chamando useOfflineSync...');
-  const { servidorOk, isOnline } = useOfflineSync();
+  const { servidorOk, isOnline, atualizarPendentes } = useOfflineSync();
   console.log('✅ [Vendas.jsx] useOfflineSync retornou:', { servidorOk, isOnline });
 
   // Hook de impressão (precisa do axiosInstance)
@@ -1084,6 +1085,30 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     }
   };
 
+  /**
+   * Carrega apenas as vendas salvas offline no IndexedDB e as exibe na listagem.
+   * Chamado imediatamente após salvar uma venda offline para atualização instantânea.
+   */
+  const carregarVendasOfflineLocal = async () => {
+    try {
+      const vendasOffline = await listarVendasOffline();
+      const vendasFormatadas = vendasOffline.map(v => ({
+        id: v.tempId,
+        id_venda: v.tempId,
+        numero_documento: v.dadosVenda?.numero_documento || '---',
+        data_venda: v.criadoEm ? v.criadoEm.split('T')[0] : new Date().toISOString().split('T')[0],
+        nome_cliente: v.dadosVenda?.nome_cliente || v.dadosVenda?.id_cliente || 'Cliente offline',
+        id_operacao: v.dadosVenda?.id_operacao,
+        valor_total: v.dadosVenda?.valor_total || 0,
+        status_nfe: 'PENDENTE_OFFLINE',
+        _offline: true,
+      }));
+      setVendas(vendasFormatadas);
+    } catch (err) {
+      console.error('[OFFLINE] Falha ao carregar vendas offline:', err);
+    }
+  };
+
   const carregarDados = async () => {
     try {
       setLoading(true);
@@ -1167,7 +1192,29 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         const vendasData = vendasRes.data?.results || vendasRes.data;
         const vendasCarregadas = Array.isArray(vendasData) ? vendasData : [];
         console.log('📦 Total de vendas carregadas:', vendasCarregadas.length);
-        setVendas(vendasCarregadas);
+
+        // Inclui vendas offline pendentes no topo da listagem
+        try {
+          const vendasOfflinePendentes = await listarVendasOffline();
+          if (vendasOfflinePendentes.length > 0) {
+            const vendasOfflineFormatadas = vendasOfflinePendentes.map(v => ({
+              id: v.tempId,
+              id_venda: v.tempId,
+              numero_documento: v.dadosVenda?.numero_documento || '---',
+              data_venda: v.criadoEm ? v.criadoEm.split('T')[0] : new Date().toISOString().split('T')[0],
+              nome_cliente: v.dadosVenda?.nome_cliente || v.dadosVenda?.id_cliente || 'Cliente offline',
+              id_operacao: v.dadosVenda?.id_operacao,
+              valor_total: v.dadosVenda?.valor_total || 0,
+              status_nfe: 'PENDENTE_OFFLINE',
+              _offline: true,
+            }));
+            setVendas([...vendasOfflineFormatadas, ...vendasCarregadas]);
+          } else {
+            setVendas(vendasCarregadas);
+          }
+        } catch {
+          setVendas(vendasCarregadas);
+        }
 
         // Carregar status financeiro das vendas
         console.log('🔄 Iniciando carregamento de status financeiro...');
@@ -1213,6 +1260,26 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
             setVendedores(vendCache);
             setProdutos(prodCache);
             setFormasPagamento(fpCache);
+
+            // Carregar vendas offline do IndexedDB
+            try {
+              const vendasOfflinePendentes = await listarVendasOffline();
+              const vendasOfflineFormatadas = vendasOfflinePendentes.map(v => ({
+                id: v.tempId,
+                id_venda: v.tempId,
+                numero_documento: v.dadosVenda?.numero_documento || '---',
+                data_venda: v.criadoEm ? v.criadoEm.split('T')[0] : new Date().toISOString().split('T')[0],
+                nome_cliente: v.dadosVenda?.nome_cliente || v.dadosVenda?.id_cliente || 'Cliente offline',
+                id_operacao: v.dadosVenda?.id_operacao,
+                valor_total: v.dadosVenda?.valor_total || 0,
+                status_nfe: 'PENDENTE_OFFLINE',
+                _offline: true,
+              }));
+              setVendas(vendasOfflineFormatadas);
+            } catch {
+              setVendas([]);
+            }
+
             console.log('✅ [OFFLINE] Dados carregados do cache:', {
               operacoes: operacoesFiltradas.length,
               clientes: cliCache.length,
@@ -2329,6 +2396,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         // Sem financeiro: salvar direto no IndexedDB
         const tempId = await salvarVendaOffline(dadosVenda, []);
         console.log('[OFFLINE] Venda salva localmente:', tempId);
+        atualizarPendentes();
 
         // Incrementar número do documento localmente para a próxima venda offline
         if (operacaoOffline?.usa_auto_numeracao && operacaoOffline?.id_operacao) {
@@ -2346,7 +2414,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         limparFormulario();
         if (!embedded) {
           setModo('lista');
-          carregarDados();
+          carregarVendasOfflineLocal();
         }
         if (onSaveSuccess) onSaveSuccess();
         if (onClose) onClose();
@@ -2553,11 +2621,12 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         try {
           const tempId = await salvarVendaOffline(dadosVenda, []);
           console.log('[OFFLINE] Venda salva offline como fallback:', tempId);
+          atualizarPendentes();
           setSuccess('✅ Servidor indisponível — venda salva offline! Será sincronizada automaticamente.');
           limparFormulario();
           if (!embedded) {
             setModo('lista');
-            carregarDados();
+            carregarVendasOfflineLocal();
           }
           if (onSaveSuccess) onSaveSuccess();
           if (onClose) onClose();
@@ -3369,6 +3438,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         }
         const tempId = await salvarVendaOffline(dadosVendaOffline, financeirosOffline);
         console.log('[OFFLINE] Venda + financeiro salvos localmente:', tempId);
+        atualizarPendentes();
 
         // Incrementar número do documento localmente para a próxima venda offline
         const opFinOff = operacoes.find(op => op.id_operacao === parseInt(dadosVendaOffline.id_operacao));
@@ -3388,7 +3458,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         setOpenFinanceiroModal(false);
         setVendaParaFinanceiro(null);
         limparFormulario();
-        if (!embedded) { setModo('lista'); carregarDados(); }
+        if (!embedded) { setModo('lista'); carregarVendasOfflineLocal(); }
         if (onSaveSuccess) onSaveSuccess();
         if (onClose) onClose();
         setLoading(false);
@@ -4385,8 +4455,17 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                   }).map((v) => {
                     const tipoOp = getTipoOperacao(v);
                     return (
-                      <TableRow key={v.id}>
-                        <TableCell>{v.id || v.id_venda}</TableCell>
+                      <TableRow
+                        key={v.id}
+                        sx={v._offline ? { bgcolor: 'warning.50', opacity: 0.85 } : {}}
+                      >
+                        <TableCell>
+                          {v._offline ? (
+                            <Tooltip title="Venda salva offline — aguardando sincronização">
+                              <Chip label="OFFLINE" size="small" color="warning" icon={<WifiOffIcon />} sx={{ fontSize: '0.7rem' }} />
+                            </Tooltip>
+                          ) : (v.id || v.id_venda)}
+                        </TableCell>
                         <TableCell>
                           <Chip
                             label={(() => {
