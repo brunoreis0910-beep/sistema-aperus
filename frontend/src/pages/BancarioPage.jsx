@@ -1,4 +1,4 @@
-﻿// Em: src/pages/BancarioPage.jsx
+// Em: src/pages/BancarioPage.jsx
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -180,29 +180,25 @@ function BancarioPage() {
     }
   }, [extratoContaBancaria, extratoDataInicio, extratoDataFim, axiosInstance]);
 
-  // função para calcular os totais (baseado nos filtros atuais)
+  // Calcula totais diretamente dos movimentos (sem depender do state - usado em impressao/PDF/WhatsApp)
+  const calcularTotaisDosMovimentos = (lista) => {
+    const receitas = lista
+      .filter(m => m.tipo_conta === 'Receber')
+      .reduce((acc, m) => acc + parseFloat(m.valor_liquidado || 0), 0);
+    const despesas = lista
+      .filter(m => m.tipo_conta === 'Pagar')
+      .reduce((acc, m) => acc + parseFloat(m.valor_liquidado || 0), 0);
+    return { receitas, despesas, saldo: receitas - despesas };
+  };
+
+  // funcao para calcular os totais (baseado nos filtros atuais)
   const handleCalcularTotalizador = () => {
     setLoadingTotais(true);
     setShowTotalizador(true);
 
     try {
-      // Calcula totais a partir dos movimentos j� filtrados
-      const totalReceitas = movimentos
-        .filter(conta => conta.tipo_conta === 'Receber')
-        .reduce((acc, conta) => acc + parseFloat(conta.valor_liquidado || 0), 0);
-
-      const totalDespesas = movimentos
-        .filter(conta => conta.tipo_conta === 'Pagar')
-        .reduce((acc, conta) => acc + parseFloat(conta.valor_liquidado || 0), 0);
-
-      const saldo = totalReceitas - totalDespesas;
-
-      setTotais({
-        receitas: totalReceitas,
-        despesas: totalDespesas,
-        saldo: saldo
-      });
-
+      const calculados = calcularTotaisDosMovimentos(movimentos);
+      setTotais(calculados);
     } catch (error) {
       console.error("Erro ao calcular totais:", error);
       alert("Erro ao calcular totais.");
@@ -211,7 +207,7 @@ function BancarioPage() {
     }
   };
 
-  // Funções de Relatório
+  // Funcoes de Relatorio
   const handleImprimirRelatorio = async () => {
     if (movimentos.length === 0) {
       alert('não há movimentos para imprimir. Use os filtros para buscar dados.');
@@ -229,7 +225,8 @@ function BancarioPage() {
         contaBancaria: contaBancariaNome
       };
 
-      await imprimirRelatorio(movimentos, filtros, totais, empresa);
+      const totaisRelatorio = calcularTotaisDosMovimentos(movimentos);
+      await imprimirRelatorio(movimentos, filtros, totaisRelatorio, empresa);
     } catch (error) {
       console.error('Erro ao imprimir relatório:', error);
       alert('Erro ao imprimir relatório.');
@@ -253,7 +250,8 @@ function BancarioPage() {
         contaBancaria: contaBancariaNome
       };
 
-      await baixarPDFRelatorio(movimentos, filtros, totais, empresa);
+      const totaisRelatorio = calcularTotaisDosMovimentos(movimentos);
+      await baixarPDFRelatorio(movimentos, filtros, totaisRelatorio, empresa);
       alert('PDF baixado com sucesso!');
     } catch (error) {
       console.error('Erro ao baixar PDF:', error);
@@ -278,7 +276,8 @@ function BancarioPage() {
         contaBancaria: contaBancariaNome
       };
 
-      await compartilharWhatsApp(movimentos, filtros, totais, empresa);
+      const totaisRelatorio = calcularTotaisDosMovimentos(movimentos);
+      await compartilharWhatsApp(movimentos, filtros, totaisRelatorio, empresa);
     } catch (error) {
       console.error('Erro ao compartilhar via WhatsApp:', error);
       alert('Erro ao compartilhar via WhatsApp.');
