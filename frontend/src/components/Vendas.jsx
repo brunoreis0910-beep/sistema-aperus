@@ -1086,24 +1086,34 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   };
 
   /**
+   * Converte um registro do IndexedDB (vendas_offline) para o formato da listagem de vendas.
+   * Usa os campos enriquecidos (nome_cliente, nome_vendedor, etc.) gravados no momento do save.
+   */
+  const formatarVendaOffline = (v) => ({
+    id: v.tempId,
+    id_venda: v.tempId,
+    numero_documento: v.dadosVenda?.numero_documento || '---',
+    data_venda: v.criadoEm ? v.criadoEm.split('T')[0] : new Date().toISOString().split('T')[0],
+    nome_cliente:  v.dadosVenda?.nome_cliente  || v.dadosVenda?.id_cliente  || 'Cliente offline',
+    nome_vendedor: v.dadosVenda?.nome_vendedor || '',
+    telefone_cliente: v.dadosVenda?.telefone_cliente || '',
+    whatsapp_cliente: v.dadosVenda?.whatsapp_cliente || '',
+    id_operacao: v.dadosVenda?.id_operacao,
+    valor_total: v.dadosVenda?.valor_total || 0,
+    status_nfe: 'PENDENTE_OFFLINE',
+    _offline: true,
+    _tempId: v.tempId,
+    _dadosVenda: v.dadosVenda,
+  });
+
+  /**
    * Carrega apenas as vendas salvas offline no IndexedDB e as exibe na listagem.
    * Chamado imediatamente após salvar uma venda offline para atualização instantânea.
    */
   const carregarVendasOfflineLocal = async () => {
     try {
       const vendasOffline = await listarVendasOffline();
-      const vendasFormatadas = vendasOffline.map(v => ({
-        id: v.tempId,
-        id_venda: v.tempId,
-        numero_documento: v.dadosVenda?.numero_documento || '---',
-        data_venda: v.criadoEm ? v.criadoEm.split('T')[0] : new Date().toISOString().split('T')[0],
-        nome_cliente: v.dadosVenda?.nome_cliente || v.dadosVenda?.id_cliente || 'Cliente offline',
-        id_operacao: v.dadosVenda?.id_operacao,
-        valor_total: v.dadosVenda?.valor_total || 0,
-        status_nfe: 'PENDENTE_OFFLINE',
-        _offline: true,
-      }));
-      setVendas(vendasFormatadas);
+      setVendas(vendasOffline.map(formatarVendaOffline));
     } catch (err) {
       console.error('[OFFLINE] Falha ao carregar vendas offline:', err);
     }
@@ -1197,17 +1207,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         try {
           const vendasOfflinePendentes = await listarVendasOffline();
           if (vendasOfflinePendentes.length > 0) {
-            const vendasOfflineFormatadas = vendasOfflinePendentes.map(v => ({
-              id: v.tempId,
-              id_venda: v.tempId,
-              numero_documento: v.dadosVenda?.numero_documento || '---',
-              data_venda: v.criadoEm ? v.criadoEm.split('T')[0] : new Date().toISOString().split('T')[0],
-              nome_cliente: v.dadosVenda?.nome_cliente || v.dadosVenda?.id_cliente || 'Cliente offline',
-              id_operacao: v.dadosVenda?.id_operacao,
-              valor_total: v.dadosVenda?.valor_total || 0,
-              status_nfe: 'PENDENTE_OFFLINE',
-              _offline: true,
-            }));
+            const vendasOfflineFormatadas = vendasOfflinePendentes.map(formatarVendaOffline);
             setVendas([...vendasOfflineFormatadas, ...vendasCarregadas]);
           } else {
             setVendas(vendasCarregadas);
@@ -1264,18 +1264,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
             // Carregar vendas offline do IndexedDB
             try {
               const vendasOfflinePendentes = await listarVendasOffline();
-              const vendasOfflineFormatadas = vendasOfflinePendentes.map(v => ({
-                id: v.tempId,
-                id_venda: v.tempId,
-                numero_documento: v.dadosVenda?.numero_documento || '---',
-                data_venda: v.criadoEm ? v.criadoEm.split('T')[0] : new Date().toISOString().split('T')[0],
-                nome_cliente: v.dadosVenda?.nome_cliente || v.dadosVenda?.id_cliente || 'Cliente offline',
-                id_operacao: v.dadosVenda?.id_operacao,
-                valor_total: v.dadosVenda?.valor_total || 0,
-                status_nfe: 'PENDENTE_OFFLINE',
-                _offline: true,
-              }));
-              setVendas(vendasOfflineFormatadas);
+              setVendas(vendasOfflinePendentes.map(formatarVendaOffline));
             } catch {
               setVendas([]);
             }
@@ -2380,6 +2369,27 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       // ── OFFLINE: salvar localmente se servidor indisponível ───────────────────
       if (!servidorOk) {
         const operacaoOffline = operacoes.find(op => op.id_operacao === parseInt(dadosVenda.id_operacao));
+
+        // Enriquecer dadosVenda com nomes resolvidos do cache local (para exibição e impressão offline)
+        const clienteOff = clientes.find(c => String(c.id_cliente || c.id) === String(dadosVenda.id_cliente));
+        const vendedorOff = vendedores.find(v => String(v.id_vendedor || v.id) === String(dadosVenda.id_vendedor));
+        dadosVenda.nome_cliente  = clienteOff ? (clienteOff.razao_social || clienteOff.nome_fantasia || clienteOff.nome || '') : (dadosVenda.nome_cliente || '');
+        dadosVenda.nome_vendedor = vendedorOff ? (vendedorOff.nome || vendedorOff.name || '') : (dadosVenda.nome_vendedor || '');
+        dadosVenda.telefone_cliente  = clienteOff?.telefone_celular || clienteOff?.telefone || clienteOff?.fone || '';
+        dadosVenda.whatsapp_cliente  = clienteOff?.whatsapp || clienteOff?.telefone_celular || clienteOff?.fone || '';
+        dadosVenda.nome_operacao  = operacaoOffline?.nome_operacao || '';
+        // Itens enriquecidos para impressão (com nome do produto)
+        dadosVenda._itens_display = itensComQuantidade.map(item => ({
+          id_produto: item.id_produto,
+          codigo_produto: item.codigo_produto || item.codigo || '',
+          produto_nome: item.nome_produto || item.produto_nome || item.produto || 'Produto',
+          nome_produto: item.nome_produto || item.produto_nome || item.produto || 'Produto',
+          quantidade: item.quantidade,
+          valor_unitario: item.valor_unitario,
+          desconto_valor: item.desconto_valor || item.desconto || 0,
+          subtotal: item.subtotal || (parseFloat(item.quantidade) * parseFloat(item.valor_unitario) - parseFloat(item.desconto_valor || item.desconto || 0)),
+        }));
+
         if (operacaoOffline?.gera_financeiro) {
           // Precisa de financeiro: guardar dados e abrir modal para coletar forma de pagamento
           console.log('[OFFLINE] Operação gera financeiro — abrindo modal para coletar pagamento');
@@ -2619,6 +2629,25 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       const isServerError = !err.response || httpStatus >= 500;
       if (isServerError && dadosVenda) {
         try {
+          // Enriquecer com nomes resolvidos antes de salvar offline
+          const clienteOff = clientes.find(c => String(c.id_cliente || c.id) === String(dadosVenda.id_cliente));
+          const vendedorOff = vendedores.find(v => String(v.id_vendedor || v.id) === String(dadosVenda.id_vendedor));
+          const operacaoOff = operacoes.find(op => op.id_operacao === parseInt(dadosVenda.id_operacao));
+          dadosVenda.nome_cliente  = clienteOff ? (clienteOff.razao_social || clienteOff.nome_fantasia || clienteOff.nome || '') : (dadosVenda.nome_cliente || '');
+          dadosVenda.nome_vendedor = vendedorOff ? (vendedorOff.nome || vendedorOff.name || '') : (dadosVenda.nome_vendedor || '');
+          dadosVenda.telefone_cliente = clienteOff?.telefone_celular || clienteOff?.telefone || clienteOff?.fone || '';
+          dadosVenda.whatsapp_cliente = clienteOff?.whatsapp || clienteOff?.telefone_celular || clienteOff?.fone || '';
+          dadosVenda.nome_operacao = operacaoOff?.nome_operacao || '';
+          dadosVenda._itens_display = itensComQuantidade.map(item => ({
+            id_produto: item.id_produto,
+            codigo_produto: item.codigo_produto || item.codigo || '',
+            produto_nome: item.nome_produto || item.produto_nome || item.produto || 'Produto',
+            nome_produto: item.nome_produto || item.produto_nome || item.produto || 'Produto',
+            quantidade: item.quantidade,
+            valor_unitario: item.valor_unitario,
+            desconto_valor: item.desconto_valor || item.desconto || 0,
+            subtotal: item.subtotal || 0,
+          }));
           const tempId = await salvarVendaOffline(dadosVenda, []);
           console.log('[OFFLINE] Venda salva offline como fallback:', tempId);
           atualizarPendentes();
@@ -4036,48 +4065,71 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
       console.log('🖨️ Iniciando impressão da venda:', venda);
 
-      // Buscar dados completos da venda
-      const idVenda = venda.id || venda.id_venda;
-      console.log('🔍 ID da venda para buscar:', idVenda);
+      let dadosImpressao;
 
-      const response = await axiosInstance.get(`/vendas/${idVenda}/`);
-      const vendaCompleta = response.data;
-      console.log('✅ ===== DADOS COMPLETOS DA VENDA RECEBIDOS =====');
-      console.log(JSON.stringify(vendaCompleta, null, 2));
-      console.log('🔍 vendaCompleta.operacao:', vendaCompleta.operacao);
-      console.log('🔍 Tipo de vendaCompleta.operacao:', typeof vendaCompleta.operacao);
-      console.log('🔍 vendaCompleta.itens:', vendaCompleta.itens);
+      // ── Modo offline: usa dados do IndexedDB sem chamada à API ─────────────
+      if (venda._offline && venda._dadosVenda) {
+        const dv = venda._dadosVenda;
+        const operacaoOff = operacoes.find(op => op.id_operacao === parseInt(dv.id_operacao)) || null;
+        dadosImpressao = {
+          numero_documento: dv.numero_documento,
+          data_venda: venda.data_venda,
+          valor_total: dv.valor_total,
+          nome_cliente: venda.nome_cliente,
+          nome_vendedor: venda.nome_vendedor,
+          forma_pagamento: dv.forma_pagamento,
+          num_parcelas: dv.num_parcelas,
+          itens: dv._itens_display || dv.itens || [],
+          id_operacao: dv.id_operacao,
+          id_cliente: dv.id_cliente,
+          desconto: dv.desconto,
+          taxa_entrega: dv.taxa_entrega,
+          observacoes: dv.observacoes,
+          operacao: operacaoOff,
+        };
+      } else {
+        // ── Modo online: busca dados completos da venda na API ─────────────────
+        const idVenda = venda.id || venda.id_venda;
+        console.log('🔍 ID da venda para buscar:', idVenda);
 
-      // ⚠️ VERIFICAÇÃO CRÍTICA: Se operacao está undefined mas id_operacao existe
-      if (!vendaCompleta.operacao && vendaCompleta.id_operacao) {
-        console.error('❌❌❌ PROBLEMA CRÍTICO: Backend não retornou campo operacao! ❌❌❌');
-        console.error('   id_operacao existe:', vendaCompleta.id_operacao);
-        console.error('   operacao está:', vendaCompleta.operacao);
-        console.error('   BACKEND PRECISA RETORNAR CAMPO operacao COM nome_operacao!');
+        const response = await axiosInstance.get(`/vendas/${idVenda}/`);
+        const vendaCompleta = response.data;
+        console.log('✅ ===== DADOS COMPLETOS DA VENDA RECEBIDOS =====');
+        console.log(JSON.stringify(vendaCompleta, null, 2));
+        console.log('🔍 vendaCompleta.operacao:', vendaCompleta.operacao);
+        console.log('🔍 Tipo de vendaCompleta.operacao:', typeof vendaCompleta.operacao);
+        console.log('🔍 vendaCompleta.itens:', vendaCompleta.itens);
+
+        // ⚠️ VERIFICAÇÃO CRÍTICA: Se operacao está undefined mas id_operacao existe
+        if (!vendaCompleta.operacao && vendaCompleta.id_operacao) {
+          console.error('❌❌❌ PROBLEMA CRÍTICO: Backend não retornou campo operacao! ❌❌❌');
+          console.error('   id_operacao existe:', vendaCompleta.id_operacao);
+          console.error('   operacao está:', vendaCompleta.operacao);
+          console.error('   BACKEND PRECISA RETORNAR CAMPO operacao COM nome_operacao!');
+        }
+
+        if (vendaCompleta.operacao && typeof vendaCompleta.operacao === 'object') {
+          console.log('✅ Operação é objeto com nome_operacao:', vendaCompleta.operacao.nome_operacao);
+          console.log('✅ Operação tem empresa?', vendaCompleta.operacao.empresa ? 'SIM' : 'NÃO');
+        }
+
+        dadosImpressao = {
+          numero_documento: vendaCompleta.numero_documento,
+          data_venda: vendaCompleta.data_venda,
+          valor_total: vendaCompleta.valor_total,
+          nome_cliente: buscarNomeClienteSeguro(vendaCompleta),
+          nome_vendedor: buscarNomeVendedorSeguro(vendaCompleta),
+          forma_pagamento: vendaCompleta.forma_pagamento,
+          num_parcelas: vendaCompleta.num_parcelas,
+          itens: vendaCompleta.itens || [],
+          id_operacao: vendaCompleta.id_operacao,
+          id_cliente: vendaCompleta.id_cliente,
+          desconto: vendaCompleta.desconto,
+          taxa_entrega: vendaCompleta.taxa_entrega,
+          observacoes: vendaCompleta.observacoes,
+          operacao: vendaCompleta.operacao,
+        };
       }
-
-      if (vendaCompleta.operacao && typeof vendaCompleta.operacao === 'object') {
-        console.log('✅ Operação é objeto com nome_operacao:', vendaCompleta.operacao.nome_operacao);
-        console.log('✅ Operação tem empresa?', vendaCompleta.operacao.empresa ? 'SIM' : 'NÃO');
-      }
-
-      // Transformar dados da venda para o formato esperado
-      const dadosImpressao = {
-        numero_documento: vendaCompleta.numero_documento,
-        data_venda: vendaCompleta.data_venda,
-        valor_total: vendaCompleta.valor_total,
-        nome_cliente: buscarNomeClienteSeguro(vendaCompleta),
-        nome_vendedor: buscarNomeVendedorSeguro(vendaCompleta),
-        forma_pagamento: vendaCompleta.forma_pagamento,
-        num_parcelas: vendaCompleta.num_parcelas,
-        itens: vendaCompleta.itens || [],
-        id_operacao: vendaCompleta.id_operacao,
-        id_cliente: vendaCompleta.id_cliente,
-        desconto: vendaCompleta.desconto,
-        taxa_entrega: vendaCompleta.taxa_entrega,
-        observacoes: vendaCompleta.observacoes,
-        operacao: vendaCompleta.operacao  // Passa o objeto completo da operação
-      };
 
       console.log('📄 Dados formatados para impressão:', dadosImpressao);
       console.log('📄 dadosImpressao.operacao:', dadosImpressao.operacao);
@@ -4110,49 +4162,73 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
       console.log('📄 Gerando PDF da venda:', venda);
 
-      // Buscar dados completos da venda com itens detalhados
-      let vendaCompleta = venda;
-      if (venda.id || venda.id_venda) {
-        const idVenda = venda.id || venda.id_venda;
-        console.log('📡 Buscando dados completos da venda ID:', idVenda);
-        try {
-          const response = await axiosInstance.get(`/vendas/${idVenda}/`);
-          vendaCompleta = response.data;
-          console.log('✅ Dados completos da venda:', vendaCompleta);
+      let dadosImpressao;
 
-          // Se for ORÇAMENTO e não passou incluirImagens, abrir modal de confirmação
-          const nomeOperacao = vendaCompleta.operacao?.nome_operacao || '';
-          if (nomeOperacao.toUpperCase().includes('ORÇAMENTO') && incluirImagens === false && !vendaParaPDF) {
-            console.log('🖼️ É um ORÇAMENTO! Perguntando sobre imagens...');
-            setVendaParaPDF(vendaCompleta);
-            setOpenImagemPDFModal(true);
-            setLoading(false);
-            return; // Interrompe aqui e espera a resposta do modal
+      // ── Modo offline: usa dados do IndexedDB sem chamada à API ─────────────
+      if (venda._offline && venda._dadosVenda) {
+        const dv = venda._dadosVenda;
+        const operacaoOff = operacoes.find(op => op.id_operacao === parseInt(dv.id_operacao)) || null;
+        dadosImpressao = {
+          numero_documento: dv.numero_documento,
+          data_venda: venda.data_venda,
+          valor_total: dv.valor_total,
+          nome_cliente: venda.nome_cliente,
+          nome_vendedor: venda.nome_vendedor,
+          id_operacao: dv.id_operacao,
+          operacao: operacaoOff,
+          id_cliente: dv.id_cliente,
+          forma_pagamento: dv.forma_pagamento,
+          num_parcelas: dv.num_parcelas,
+          desconto: dv.desconto,
+          taxa_entrega: dv.taxa_entrega,
+          observacoes: dv.observacoes,
+          itens: dv._itens_display || dv.itens || [],
+          incluirImagens,
+        };
+      } else {
+        // ── Modo online: busca dados completos da venda com itens detalhados ──
+        let vendaCompleta = venda;
+        if (venda.id || venda.id_venda) {
+          const idVenda = venda.id || venda.id_venda;
+          console.log('📡 Buscando dados completos da venda ID:', idVenda);
+          try {
+            const response = await axiosInstance.get(`/vendas/${idVenda}/`);
+            vendaCompleta = response.data;
+            console.log('✅ Dados completos da venda:', vendaCompleta);
+
+            // Se for ORÇAMENTO e não passou incluirImagens, abrir modal de confirmação
+            const nomeOperacao = vendaCompleta.operacao?.nome_operacao || '';
+            if (nomeOperacao.toUpperCase().includes('ORÇAMENTO') && incluirImagens === false && !vendaParaPDF) {
+              console.log('🖼️ É um ORÇAMENTO! Perguntando sobre imagens...');
+              setVendaParaPDF(vendaCompleta);
+              setOpenImagemPDFModal(true);
+              setLoading(false);
+              return; // Interrompe aqui e espera a resposta do modal
+            }
+          } catch (err) {
+            console.error('❌ Erro ao buscar dados completos da venda:', err);
+            console.log('⚠️ Usando dados da lista (podem estar incompletos)');
           }
-        } catch (err) {
-          console.error('❌ Erro ao buscar dados completos da venda:', err);
-          console.log('⚠️ Usando dados da lista (podem estar incompletos)');
         }
-      }
 
-      // Transformar dados da venda para o formato esperado
-      const dadosImpressao = {
-        numero_documento: vendaCompleta.numero_documento,
-        data_venda: vendaCompleta.data_venda || vendaCompleta.data_documento,
-        valor_total: vendaCompleta.valor_total,
-        nome_cliente: vendaCompleta.cliente || buscarNomeClienteSeguro(vendaCompleta),
-        nome_vendedor: vendaCompleta.vendedor || buscarNomeVendedorSeguro(vendaCompleta),
-        id_operacao: vendaCompleta.id_operacao,
-        operacao: vendaCompleta.operacao,  // ✅ ADICIONADO - Passa o objeto completo da operação
-        id_cliente: vendaCompleta.id_cliente,
-        forma_pagamento: vendaCompleta.forma_pagamento, // ✅ ADICIONADO
-        num_parcelas: vendaCompleta.num_parcelas,       // ✅ ADICIONADO
-        desconto: vendaCompleta.desconto,
-        taxa_entrega: vendaCompleta.taxa_entrega,
-        observacoes: vendaCompleta.observacoes,
-        itens: vendaCompleta.itens || [], // Itens com dados completos
-        incluirImagens: incluirImagens // ✅ Parâmetro para incluir imagens dos produtos
-      };
+        dadosImpressao = {
+          numero_documento: vendaCompleta.numero_documento,
+          data_venda: vendaCompleta.data_venda || vendaCompleta.data_documento,
+          valor_total: vendaCompleta.valor_total,
+          nome_cliente: vendaCompleta.cliente || buscarNomeClienteSeguro(vendaCompleta),
+          nome_vendedor: vendaCompleta.vendedor || buscarNomeVendedorSeguro(vendaCompleta),
+          id_operacao: vendaCompleta.id_operacao,
+          operacao: vendaCompleta.operacao,
+          id_cliente: vendaCompleta.id_cliente,
+          forma_pagamento: vendaCompleta.forma_pagamento,
+          num_parcelas: vendaCompleta.num_parcelas,
+          desconto: vendaCompleta.desconto,
+          taxa_entrega: vendaCompleta.taxa_entrega,
+          observacoes: vendaCompleta.observacoes,
+          itens: vendaCompleta.itens || [],
+          incluirImagens,
+        };
+      }
 
       console.log('📋 Dados para impressão:', dadosImpressao);
       console.log('🖼️ Incluir imagens?', incluirImagens);
@@ -4160,10 +4236,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       dadosImpressao.itens.forEach((item, i) => {
         console.log(`  Item ${i + 1}:`, {
           codigo_produto: item.codigo_produto,
-          produto_nome: item.produto_nome,
+          produto_nome: item.produto_nome || item.nome_produto,
           produto: item.produto,
-          marca_produto: item.marca_produto,
-          marca: item.marca,
           quantidade: item.quantidade,
           valor_unitario: item.valor_unitario
         });
