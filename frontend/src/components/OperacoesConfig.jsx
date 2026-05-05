@@ -269,7 +269,8 @@ const OperacoesConfig = () => {
         ind_faturamento: currentOperacao.ind_faturamento ? true : false,
         tipo_faturamento: currentOperacao.tipo_faturamento || '',
         validar_estoque_fiscal: currentOperacao.validar_estoque_fiscal ? true : false,
-        finalidade_emissao: currentOperacao.finalidade_emissao || '1'
+        finalidade_emissao: currentOperacao.finalidade_emissao || '1',
+        limite_desconto_percentual: parseFloat(currentOperacao.limite_desconto_percentual) || 0,
       };
 
       let response;

@@ -29,7 +29,8 @@ import {
   DialogContent,
   DialogActions,
   Autocomplete,
-  Tooltip
+  Tooltip,
+  Snackbar
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -377,6 +378,9 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   const [senhaSupervisorDesconto, setSenhaSupervisorDesconto] = useState({ username: '', password: '' });
   const [verificandoSenhaDesconto, setVerificandoSenhaDesconto] = useState(false);
   const [whatsappDisponivelDesconto, setWhatsappDisponivelDesconto] = useState(null);
+
+  // Snackbar de aviso de limite de desconto excedido (por item)
+  const [snackDesconto, setSnackDesconto] = useState({ open: false, msg: '' });
 
   // Estados para modal de financeiro
   const [openFinanceiroModal, setOpenFinanceiroModal] = useState(false);
@@ -1977,6 +1981,11 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   // Alterar desconto de um item na tabela
   const alterarDescontoItem = (index, novoDesconto, tipo) => {
     const desc = parseFloat(novoDesconto) || 0;
+
+    // Verificar limite de desconto da operação selecionada
+    const operacaoAtual = operacoes.find(op => op.id_operacao === venda.id_operacao);
+    const limiteOp = parseFloat(operacaoAtual?.limite_desconto_percentual) || 0;
+
     setVenda(prev => {
       const novosItens = [...prev.itens];
       const item = novosItens[index];
@@ -1989,6 +1998,12 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         descontoVal = desc;
         descontoPerc = valorItem > 0 ? (desc / valorItem) * 100 : 0;
       }
+
+      // Avisar se excede o limite (sem bloquear — o bloqueio já ocorre ao salvar)
+      if (limiteOp > 0 && descontoPerc > limiteOp) {
+        setSnackDesconto({ open: true, msg: `⚠️ Limite de desconto da operação: ${limiteOp.toFixed(1)}%. Será necessária autorização ao salvar.` });
+      }
+
       novosItens[index] = {
         ...item,
         desconto: descontoVal,
@@ -5774,7 +5789,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                                       value={item.desconto_tipo_edicao === 'percentual' ? (parseFloat(item.desconto_percentual) || 0) : (parseFloat(item.desconto) || 0)}
                                       onChange={(e) => alterarDescontoItem(index, e.target.value, item.desconto_tipo_edicao || 'valor')}
                                       inputProps={{ min: 0, step: 0.01 }}
-                                      sx={{ width: 75 }}
+                                      sx={{ width: 105 }}
                                       InputProps={{
                                         startAdornment: (
                                           <InputAdornment position="start">
@@ -5871,10 +5886,38 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                       type="number"
                       label="Desc Geral"
                       value={venda.desconto}
-                      onChange={(e) => setVenda(prev => ({ ...prev, desconto: e.target.value }))}
+                      onChange={(e) => {
+                        const novoDesc = e.target.value;
+                        setVenda(prev => ({ ...prev, desconto: novoDesc }));
+                        // Aviso de limite de desconto
+                        const opAtual = operacoes.find(op => op.id_operacao === venda.id_operacao);
+                        const limOp = parseFloat(opAtual?.limite_desconto_percentual) || 0;
+                        if (limOp > 0) {
+                          const subtotal = venda.itens.reduce((acc, it) => acc + parseFloat(it.quantidade || 0) * parseFloat(it.valor_unitario || 0), 0);
+                          const descNum = parseFloat(novoDesc) || 0;
+                          const percDesc = venda.tipo_desconto_geral === 'percentual' ? descNum : (subtotal > 0 ? (descNum / subtotal) * 100 : 0);
+                          if (percDesc > limOp) {
+                            setSnackDesconto({ open: true, msg: `⚠️ Limite de desconto da operação: ${limOp.toFixed(1)}%. Será necessária autorização ao salvar.` });
+                          }
+                        }
+                      }}
                       onBlur={(e) => setVenda(prev => ({ ...prev, desconto: parseFloat(e.target.value) || 0 }))}
                       onFocus={(e) => e.target.select()}
                       inputProps={{ min: 0, step: 0.01 }}
+                      helperText={
+                        <Box
+                          component="span"
+                          onClick={() => !vendaBloqueadaParaEdicao && setVenda(prev => ({ ...prev, tipo_desconto_geral: prev.tipo_desconto_geral === 'valor' ? 'percentual' : 'valor' }))}
+                          sx={{ cursor: vendaBloqueadaParaEdicao ? 'default' : 'pointer', color: 'primary.main', fontWeight: 'bold', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.2 }}
+                          title="Clique para alternar entre R$ e %"
+                        >
+                          {venda.tipo_desconto_geral === 'valor'
+                            ? <><span style={{ background: '#1976d2', color: '#fff', borderRadius: 4, padding: '0 4px', fontSize: '0.7rem' }}>R$</span><span style={{ color: '#888', fontSize: '0.7rem' }}>| %</span></>
+                            : <><span style={{ color: '#888', fontSize: '0.7rem' }}>R$ |</span><span style={{ background: '#1976d2', color: '#fff', borderRadius: 4, padding: '0 4px', fontSize: '0.7rem' }}>%</span></>
+                          }
+                        </Box>
+                      }
+                      FormHelperTextProps={{ component: 'div' }}
                       InputProps={{
                         startAdornment: (
                           <InputAdornment position="start">
@@ -7569,6 +7612,15 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       </Dialog>
 
       {/* Modal de Dados do Veículo Novo */}
+      {/* Snackbar: aviso de limite de desconto excedido por item */}
+      <Snackbar
+        open={snackDesconto.open}
+        autoHideDuration={5000}
+        onClose={() => setSnackDesconto({ open: false, msg: '' })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        message={snackDesconto.msg}
+        ContentProps={{ sx: { bgcolor: 'warning.main', color: '#fff', fontWeight: 'bold' } }}
+      />
       <Dialog open={openVeiculoModal} onClose={() => {}} maxWidth="md" fullWidth disableEscapeKeyDown>
         <DialogTitle>🚗 Dados do Veículo Novo</DialogTitle>
         <DialogContent>
