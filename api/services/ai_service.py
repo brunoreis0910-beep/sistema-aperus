@@ -468,7 +468,7 @@ Retorne APENAS um JSON válido com a estrutura:
         query = Venda.objects.all()
         
         if inicio and fim:
-            query = query.filter(data_documento__range=[inicio, fim])
+            query = query.filter(data_documento__date__range=[inicio, fim])
         
         # Totais
         totais = query.aggregate(
@@ -636,7 +636,7 @@ Retorne APENAS um JSON válido com a estrutura:
             from api.models import Venda
             query = Venda.objects.exclude(status_nfe__isnull=True)
             if inicio and fim:
-                query = query.filter(data_documento__range=[inicio, fim])
+                query = query.filter(data_documento__date__range=[inicio, fim])
             totais = query.aggregate(
                 total=Count('id_venda'),
                 valor_total=Sum('valor_total'),
@@ -1395,7 +1395,7 @@ Relatórios disponíveis para exportação em PDF:
         hoje_str = hoje.strftime('%Y-%m-%d')
 
         # ── Vendas ────────────────────────────────────────────────────────────
-        vendas_qs = Venda.objects.filter(data_documento__range=[inicio_30_str, hoje_str])
+        vendas_qs = Venda.objects.filter(data_documento__date__range=[inicio_30_str, hoje_str])
         totais_venda = vendas_qs.aggregate(
             faturamento=Sum('valor_total'),
             qtd=Count('id_venda'),
