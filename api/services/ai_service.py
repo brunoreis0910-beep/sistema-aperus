@@ -282,6 +282,11 @@ class AIService:
 3. Filtros específicos (produto, cliente, vendedor, status, etc)
 4. Tipo de agregação (total, média, contagem, lista, etc)
 
+IMPORTANTE para classificação:
+- Use "vendas" quando o usuário fala de relatório de vendas, faturamento, quanto vendeu, vendas do dia/mês etc.
+- Use "fiscal_nfe" ou "fiscal_nfce" APENAS quando mencionar explicitamente NF-e, NFC-e, nota fiscal eletrônica, cupom fiscal ou SEFAZ.
+- Não confunda "relatorio de vendas" com "nota fiscal" — são coisas diferentes!
+
 Pergunta: "{pergunta}"
 
 Retorne APENAS um JSON válido com a estrutura:
@@ -346,10 +351,10 @@ Retorne APENAS um JSON válido com a estrutura:
             tipo = 'fiscal_nfce'
         elif any(word in pergunta_lower for word in ['mdf-e', 'mdfe', 'manifesto']):
             tipo = 'fiscal_mdfe'
-        elif any(word in pergunta_lower for word in ['relatório', 'relatorio', 'dre', 'comissão', 'comissoes']):
-            tipo = 'relatorios'
         elif any(word in pergunta_lower for word in ['vend', 'fatur', 'receit']):
             tipo = 'vendas'
+        elif any(word in pergunta_lower for word in ['relatório', 'relatorio', 'dre', 'comissão', 'comissoes']):
+            tipo = 'relatorios'
         elif any(word in pergunta_lower for word in ['estoque', 'produto']):
             tipo = 'estoque'
         elif any(word in pergunta_lower for word in ['pagar', 'receber', 'financeiro', 'contas']):
