@@ -106,7 +106,8 @@ const OperacoesConfig = () => {
     id_numeracao: null,
     ind_faturamento: false,
     tipo_faturamento: '',
-    validar_estoque_fiscal: false
+    validar_estoque_fiscal: false,
+    finalidade_emissao: '1'
   });
 
   useEffect(() => {
@@ -267,7 +268,8 @@ const OperacoesConfig = () => {
         tipo_entrega_futura: currentOperacao.tipo_entrega_futura || 'origem',
         ind_faturamento: currentOperacao.ind_faturamento ? true : false,
         tipo_faturamento: currentOperacao.tipo_faturamento || '',
-        validar_estoque_fiscal: currentOperacao.validar_estoque_fiscal ? true : false
+        validar_estoque_fiscal: currentOperacao.validar_estoque_fiscal ? true : false,
+        finalidade_emissao: currentOperacao.finalidade_emissao || '1'
       };
 
       let response;
@@ -339,7 +341,8 @@ const OperacoesConfig = () => {
       // Garantir que os tipos de estoque sejam mantidos
       tipo_estoque_baixa: operacao.tipo_estoque_baixa || 'Nenhum',
       tipo_estoque_incremento: operacao.tipo_estoque_incremento || 'Nenhum',
-      id_numeracao: operacao.id_numeracao || null
+      id_numeracao: operacao.id_numeracao || null,
+      finalidade_emissao: operacao.finalidade_emissao || '1'
     });
     setIsEditing(true);
     setOpenDialog(true);
@@ -376,7 +379,8 @@ const OperacoesConfig = () => {
       baixa_automatica: false,
       entrega_futura: false,
       tipo_entrega_futura: 'origem',
-      id_numeracao: null
+      id_numeracao: null,
+      finalidade_emissao: '1'
     });
     setIsEditing(false);
     setOpenDialog(true);
@@ -793,6 +797,25 @@ const OperacoesConfig = () => {
                         {getTransacaoLabel(tipo)}
                       </MenuItem>
                     ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Finalidade de Emissão NF-e (finNFe)</InputLabel>
+                  <Select
+                    value={currentOperacao.finalidade_emissao || '1'}
+                    onChange={(e) => handleInputChange('finalidade_emissao', e.target.value)}
+                    label="Finalidade de Emissão NF-e (finNFe)"
+                  >
+                    <MenuItem value="1">1 - Normal</MenuItem>
+                    <MenuItem value="2">2 - Complementar</MenuItem>
+                    <MenuItem value="3">3 - Ajuste</MenuItem>
+                    <MenuItem value="4">4 - Devolução de Mercadoria</MenuItem>
+                    <MenuItem value="5">5 - Nota de Crédito (NT 2025.002)</MenuItem>
+                    <MenuItem value="6">6 - Nota de Débito - Pgto Antecipado (NT 2025.002)</MenuItem>
+                    <MenuItem value="7">7 - Nota de Débito - Perda em Estoque (NT 2025.002)</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>

@@ -251,13 +251,45 @@ class NfeXmlBuilder:
         ide = ET.SubElement(infNFe, f"{{{self.ns}}}ide")
         ET.SubElement(ide, f"{{{self.ns}}}cUF").text = cUF
         ET.SubElement(ide, f"{{{self.ns}}}cNF").text = cNF
-        ET.SubElement(ide, f"{{{self.ns}}}natOp").text = "VENDA AO CONSUMIDOR"
+
+        # --- Determinar finalidade de emissão (finNFe) ---
+        # Prioridade: campo finalidade_emissao da operação > fallback por nome da operação
+        fin_nfe = "1"  # Normal por padrão
+        if self.venda.id_operacao:
+            op_fin = str(getattr(self.venda.id_operacao, 'finalidade_emissao', '') or '').strip()
+            if op_fin in ('1', '2', '3', '4', '5', '6', '7'):
+                fin_nfe = op_fin
+            elif 'DEVOLU' in (self.venda.id_operacao.nome_operacao or '').upper():
+                # Fallback para operações antigas sem o campo preenchido
+                fin_nfe = "4"
+
+        # natOp: descrição da natureza da operação derivada da finalidade
+        _NAT_OP_MAP = {
+            '1': 'VENDA',
+            '2': 'COMPLEMENTO DE NOTA FISCAL',
+            '3': 'AJUSTE DE NOTA FISCAL',
+            '4': 'DEVOLUCAO DE MERCADORIA',
+            '5': 'NOTA DE CREDITO',
+            '6': 'NOTA DE DEBITO - PAGAMENTO ANTECIPADO',
+            '7': 'NOTA DE DEBITO - PERDA EM ESTOQUE',
+        }
+        nat_op = _NAT_OP_MAP.get(fin_nfe, 'VENDA')
+        # Se a operação tem nome explícito, usa o nome da operação
+        if self.venda.id_operacao and self.venda.id_operacao.nome_operacao:
+            nat_op = str(self.venda.id_operacao.nome_operacao).upper()
+
+        ET.SubElement(ide, f"{{{self.ns}}}natOp").text = nat_op
         ET.SubElement(ide, f"{{{self.ns}}}mod").text = modelo
         # ✅ Não precisa converter novamente, já foi validado acima
         ET.SubElement(ide, f"{{{self.ns}}}serie").text = serie.lstrip('0') or '1'  # Remove zeros à esquerda
         ET.SubElement(ide, f"{{{self.ns}}}nNF").text = numero.lstrip('0') or '1'
         ET.SubElement(ide, f"{{{self.ns}}}dhEmi").text = self._dhEmi_str
-        ET.SubElement(ide, f"{{{self.ns}}}tpNF").text = "1" # Saída
+        # tpNF: 0=Entrada (devoluções de fornecedor, notas de crédito recebidas),
+        #       1=Saída (emissões próprias: vendas, devoluções de clientes, complementar, ajuste, débito)
+        # Finalidade 5 (Nota de Crédito emitida pelo fornecedor ao cliente = Entrada para o emitente se for
+        # o receptor, mas na reforma tributária a NF de crédito é emitida pelo EMITENTE, então tpNF=1)
+        tp_nf = "1"  # Saída por padrão para todos os casos de emissão própria
+        ET.SubElement(ide, f"{{{self.ns}}}tpNF").text = tp_nf
         ET.SubElement(ide, f"{{{self.ns}}}idDest").text = "1" # Interna
         # FIX: Codigo IBGE de Patrocinio MG
         ET.SubElement(ide, f"{{{self.ns}}}cMunFG").text = "3148103" 
@@ -277,13 +309,11 @@ class NfeXmlBuilder:
         
         ET.SubElement(ide, f"{{{self.ns}}}tpAmb").text = amb
         
-        # Determine finNFe based on operacao
-        fin_nfe = "1" # Normal by default
-        if self.venda.id_operacao and 'DEVOLU' in (self.venda.id_operacao.nome_operacao or '').upper():
-            fin_nfe = "4" # Devolucao
-            
         ET.SubElement(ide, f"{{{self.ns}}}finNFe").text = fin_nfe
-        ET.SubElement(ide, f"{{{self.ns}}}indFinal").text = "1"
+        # indFinal: 0=Normal (B2B), 1=Consumidor Final
+        # Para notas de crédito/débito (5, 6, 7) e complementar/ajuste (2, 3), indFinal=0 é mais adequado
+        ind_final = "0" if fin_nfe in ('2', '3', '5', '6', '7') else "1"
+        ET.SubElement(ide, f"{{{self.ns}}}indFinal").text = ind_final
         ET.SubElement(ide, f"{{{self.ns}}}indPres").text = "1"
         ET.SubElement(ide, f"{{{self.ns}}}procEmi").text = "0"
         ET.SubElement(ide, f"{{{self.ns}}}verProc").text = "1.0.2.0"
