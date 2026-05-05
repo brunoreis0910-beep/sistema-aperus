@@ -12,10 +12,37 @@ from rest_framework import status
 from django.http import HttpResponse
 import datetime
 import logging
+from django.utils import timezone
 
 from api.services_pdf_fiscal import pdf_fiscal_service
 
 logger = logging.getLogger(__name__)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def relatorio_cte_condutores(request):
+    """
+    Retorna lista de condutores distintos cadastrados nos CT-e.
+    GET /api/relatorios/cte/condutores/
+    """
+    try:
+        from cte.models import ConhecimentoTransporte
+        condutores = (
+            ConhecimentoTransporte.objects
+            .exclude(condutor_nome__isnull=True)
+            .exclude(condutor_nome='')
+            .values('condutor_nome', 'condutor_cpf')
+            .distinct()
+            .order_by('condutor_nome')
+        )
+        return Response([
+            {'nome': c['condutor_nome'], 'cpf': c['condutor_cpf'] or ''}
+            for c in condutores
+        ])
+    except Exception as e:
+        logger.error(f"Erro ao listar condutores: {e}", exc_info=True)
+        return Response({'erro': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -41,11 +68,14 @@ def relatorio_cte_json(request):
         numero_cte = request.query_params.get('numero_cte')
         chave_acesso = request.query_params.get('chave_acesso')
         tipo_servico = request.query_params.get('tipo_servico', 'todos')
+        condutor = request.query_params.get('condutor')
 
         if data_inicio_str:
-            qs = qs.filter(data_emissao__date__gte=data_inicio_str)
+            dt_inicio = timezone.make_aware(datetime.datetime.strptime(data_inicio_str, '%Y-%m-%d'))
+            qs = qs.filter(data_emissao__gte=dt_inicio)
         if data_fim_str:
-            qs = qs.filter(data_emissao__date__lte=data_fim_str)
+            dt_fim = timezone.make_aware(datetime.datetime.strptime(data_fim_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59))
+            qs = qs.filter(data_emissao__lte=dt_fim)
         if destinatario_id:
             qs = qs.filter(destinatario_id=destinatario_id)
         if remetente_id:
@@ -58,8 +88,26 @@ def relatorio_cte_json(request):
             qs = qs.filter(chave_cte__icontains=chave_acesso)
         if tipo_servico and tipo_servico != 'todos':
             qs = qs.filter(tipo_servico=tipo_servico)
+        if condutor:
+            qs = qs.filter(condutor_nome__iexact=condutor)
 
         TIPO_SERVICO_MAP = {0: 'Normal', 1: 'Subcontratação', 2: 'Redespacho', 3: 'Redespacho Intermediário', 4: 'Multimodal'}
+
+        # Busca nomes de remetente/destinatário para filtros_aplicados
+        remetente_nome = None
+        destinatario_nome = None
+        if remetente_id:
+            from api.models import Cliente
+            try:
+                remetente_nome = Cliente.objects.get(pk=remetente_id).nome_razao_social
+            except Cliente.DoesNotExist:
+                pass
+        if destinatario_id:
+            from api.models import Cliente
+            try:
+                destinatario_nome = Cliente.objects.get(pk=destinatario_id).nome_razao_social
+            except Cliente.DoesNotExist:
+                pass
 
         ctes = []
         for c in qs[:500]:
@@ -77,7 +125,11 @@ def relatorio_cte_json(request):
                 'origem': f"{c.cidade_origem_nome or ''}/{c.cidade_origem_uf or ''}".strip('/'),
                 'destino': f"{c.cidade_destino_nome or ''}/{c.cidade_destino_uf or ''}".strip('/'),
                 'placa': c.placa_veiculo,
+                'veiculo_uf': c.veiculo_uf,
+                'veiculo_renavam': c.veiculo_renavam,
+                'rntrc': c.rntrc,
                 'condutor': c.condutor_nome,
+                'condutor_cpf': c.condutor_cpf,
                 'produto': c.produto_predominante,
                 'valor_total': float(c.valor_total_servico or 0),
                 'tipo_servico': TIPO_SERVICO_MAP.get(c.tipo_servico, 'Normal'),
@@ -96,8 +148,13 @@ def relatorio_cte_json(request):
             'filtros_aplicados': [
                 f for f in [
                     f"Período: {data_inicio_str} a {data_fim_str}" if data_inicio_str and data_fim_str else None,
+                    f"Remetente: {remetente_nome}" if remetente_nome else None,
+                    f"Destinatário: {destinatario_nome}" if destinatario_nome else None,
                     f"Status: {status_filtro}" if status_filtro != 'todos' else None,
                     f"Nº CT-e: {numero_cte}" if numero_cte else None,
+                    f"Chave: ...{chave_acesso[-12:]}" if chave_acesso else None,
+                    f"Tipo Serviço: {TIPO_SERVICO_MAP.get(int(tipo_servico), tipo_servico)}" if tipo_servico != 'todos' else None,
+                    f"Condutor: {condutor}" if condutor else None,
                 ] if f
             ]
         })
@@ -131,11 +188,14 @@ def relatorio_cte_excel(request):
         numero_cte = request.query_params.get('numero_cte')
         chave_acesso = request.query_params.get('chave_acesso')
         tipo_servico = request.query_params.get('tipo_servico', 'todos')
+        condutor = request.query_params.get('condutor')
 
         if data_inicio_str:
-            qs = qs.filter(data_emissao__date__gte=data_inicio_str)
+            dt_inicio = timezone.make_aware(datetime.datetime.strptime(data_inicio_str, '%Y-%m-%d'))
+            qs = qs.filter(data_emissao__gte=dt_inicio)
         if data_fim_str:
-            qs = qs.filter(data_emissao__date__lte=data_fim_str)
+            dt_fim = timezone.make_aware(datetime.datetime.strptime(data_fim_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59))
+            qs = qs.filter(data_emissao__lte=dt_fim)
         if destinatario_id:
             qs = qs.filter(destinatario_id=destinatario_id)
         if remetente_id:
@@ -148,6 +208,8 @@ def relatorio_cte_excel(request):
             qs = qs.filter(chave_cte__icontains=chave_acesso)
         if tipo_servico and tipo_servico != 'todos':
             qs = qs.filter(tipo_servico=tipo_servico)
+        if condutor:
+            qs = qs.filter(condutor_nome__iexact=condutor)
 
         TIPO_SERVICO_MAP = {0: 'Normal', 1: 'Subcontratação', 2: 'Redespacho', 3: 'Redespacho Intermediário', 4: 'Multimodal'}
 
@@ -160,9 +222,10 @@ def relatorio_cte_excel(request):
         center = Alignment(horizontal='center', vertical='center')
 
         headers = ['Nº CT-e', 'Série', 'Data Emissão', 'Remetente', 'Destinatário',
-                   'Origem', 'Destino', 'Placa', 'Condutor', 'Produto',
+                   'Origem', 'Destino', 'Placa', 'UF Veíc.', 'RENAVAM', 'RNTRC',
+                   'Condutor', 'CPF Condutor', 'Produto',
                    'Valor (R$)', 'Tipo Serviço', 'Status', 'Chave Acesso']
-        col_widths = [10, 8, 18, 35, 35, 20, 20, 12, 30, 30, 14, 22, 14, 50]
+        col_widths = [10, 8, 18, 35, 35, 20, 20, 12, 8, 20, 12, 30, 16, 30, 14, 22, 14, 50]
 
         for col_idx, (h, w) in enumerate(zip(headers, col_widths), 1):
             cell = ws.cell(row=1, column=col_idx, value=h)
@@ -181,7 +244,11 @@ def relatorio_cte_excel(request):
                 f"{c.cidade_origem_nome or ''}/{c.cidade_origem_uf or ''}".strip('/'),
                 f"{c.cidade_destino_nome or ''}/{c.cidade_destino_uf or ''}".strip('/'),
                 c.placa_veiculo or '',
+                c.veiculo_uf or '',
+                c.veiculo_renavam or '',
+                c.rntrc or '',
                 c.condutor_nome or '',
+                c.condutor_cpf or '',
                 c.produto_predominante or '',
                 float(c.valor_total_servico or 0),
                 TIPO_SERVICO_MAP.get(c.tipo_servico, 'Normal'),
