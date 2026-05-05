@@ -138,24 +138,29 @@ const NFCePage = () => {
     // Função de emissão
     const handleEmitirNFCe = async (vendaId) => {
         if (processingId) return;
-        
+
         setProcessingId(vendaId);
         showToast('Solicitando emissão de NFC-e...', 'info');
-        
+
         try {
-            // Aumentando timeout para 60 segundos (emissão pode ser lenta em homologação/SOAP)
-            const response = await axiosInstance.post(`/vendas/${vendaId}/emitir_nfce/`, {}, { timeout: 60000 });
-            
-            console.log("✅ Emissão concluída:", response.data);
-            
+            const requestData = {
+                ...csosnConfig.isEnabled && {
+                    observacoes: {
+                        mensagem: csosnConfig.message,
+                        csosns: csosnConfig.selectedCsosns
+                    }
+                }
+            };
+
+            const response = await axiosInstance.post(`/vendas/${vendaId}/emitir_nfce/`, requestData, { timeout: 60000 });
+
+            console.log('✅ Emissão concluída:', response.data);
             const msg = response.data.message || 'NFC-e Emitida com Sucesso!';
             showToast(msg, 'success');
-            
-            // Recarrega a lista para atualizar status
+
             fetchVendas();
-            
         } catch (err) {
-            console.error("❌ Erro na emissão:", err);
+            console.error('❌ Erro na emissão:', err);
             const errorMsg = err.response?.data?.details || err.response?.data?.error || err.response?.data?.message || 'Erro desconhecido ao emitir';
             showToast(`Erro na emissão: ${errorMsg}`, 'error');
         } finally {
@@ -379,6 +384,32 @@ const NFCePage = () => {
             return <Chip icon={<BlockIcon />} label="INUTILIZADA" color="default" size="small" variant="outlined" />;
         }
         return <Chip label="PENDENTE" color="default" size="small" variant="outlined" />;
+    };
+
+    // Adicionando estados para a funcionalidade de configuração de CSOSN e mensagem
+    const [csosnConfig, setCsosnConfig] = useState({
+        isEnabled: false,
+        message: '',
+        selectedCsosns: []
+    });
+
+    // Função para atualizar o estado da configuração de CSOSN
+    const handleCsosnConfigChange = (field, value) => {
+        setCsosnConfig((prev) => ({
+            ...prev,
+            [field]: value
+        }));
+    };
+
+    // Função para salvar as configurações no backend
+    const saveCsosnConfig = async () => {
+        try {
+            await axiosInstance.post('/configuracoes/csosn', csosnConfig);
+            showToast('Configurações salvas com sucesso!', 'success');
+        } catch (error) {
+            console.error('Erro ao salvar configurações:', error);
+            showToast('Erro ao salvar configurações.', 'error');
+        }
     };
 
     // Efeito inicial
@@ -711,6 +742,67 @@ const NFCePage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Adicionando seção para configurar CSOSN e mensagem */}
+            <Paper elevation={1} sx={{ p: 3, mb: 3, borderRadius: 2 }}>
+                <Typography variant="h6" sx={{ mb: 2 }}>Configurações de Observações para NFe Modelo 55</Typography>
+
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Typography>Habilitar:</Typography>
+                        <Button
+                            variant={csosnConfig.isEnabled ? 'contained' : 'outlined'}
+                            color={csosnConfig.isEnabled ? 'success' : 'default'}
+                            onClick={() => handleCsosnConfigChange('isEnabled', !csosnConfig.isEnabled)}
+                        >
+                            {csosnConfig.isEnabled ? 'Ativado' : 'Desativado'}
+                        </Button>
+                    </Box>
+
+                    <TextField
+                        label="Mensagem"
+                        multiline
+                        rows={3}
+                        value={csosnConfig.message}
+                        onChange={(e) => handleCsosnConfigChange('message', e.target.value)}
+                        disabled={!csosnConfig.isEnabled}
+                        fullWidth
+                    />
+
+                    <Box>
+                        <Typography>CSOSNs:</Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                            {[101, 102, 103, 201, 202, 203, 300, 400, 500, 900].map((csosn) => (
+                                <Button
+                                    key={csosn}
+                                    variant={csosnConfig.selectedCsosns.includes(csosn) ? 'contained' : 'outlined'}
+                                    onClick={() => {
+                                        const isSelected = csosnConfig.selectedCsosns.includes(csosn);
+                                        handleCsosnConfigChange(
+                                            'selectedCsosns',
+                                            isSelected
+                                                ? csosnConfig.selectedCsosns.filter((item) => item !== csosn)
+                                                : [...csosnConfig.selectedCsosns, csosn]
+                                        );
+                                    }}
+                                    disabled={!csosnConfig.isEnabled}
+                                >
+                                    CSOSN {csosn}
+                                </Button>
+                            ))}
+                        </Box>
+                    </Box>
+
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={saveCsosnConfig}
+                        disabled={!csosnConfig.isEnabled}
+                    >
+                        Salvar Configurações
+                    </Button>
+                </Box>
+            </Paper>
         </Box>
     );
 };
