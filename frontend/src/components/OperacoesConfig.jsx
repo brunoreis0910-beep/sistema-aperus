@@ -98,6 +98,7 @@ const OperacoesConfig = () => {
     validar_estoque: false,
     acao_estoque: 'nao_validar',
     limite_desconto_percentual: 0,
+    tipo_desconto: 'venda',
     cashback_percentual: 0,
     cashback_validade_dias: 30,
     baixa_automatica: false,
@@ -271,6 +272,7 @@ const OperacoesConfig = () => {
         validar_estoque_fiscal: currentOperacao.validar_estoque_fiscal ? true : false,
         finalidade_emissao: currentOperacao.finalidade_emissao || '1',
         limite_desconto_percentual: parseFloat(currentOperacao.limite_desconto_percentual) || 0,
+        tipo_desconto: currentOperacao.tipo_desconto || 'venda',
       };
 
       let response;
@@ -332,6 +334,7 @@ const OperacoesConfig = () => {
       venda_veiculo_novo: operacao.venda_veiculo_novo === 1 || operacao.venda_veiculo_novo === true,
       baixa_automatica: operacao.baixa_automatica === 1 || operacao.baixa_automatica === true,
       limite_desconto_percentual: parseFloat(operacao.limite_desconto_percentual) || 0,
+      tipo_desconto: operacao.tipo_desconto || 'venda',
       cashback_percentual: parseFloat(operacao.cashback_percentual) || 0,
       cashback_validade_dias: parseInt(operacao.cashback_validade_dias) || 30,
       entrega_futura: operacao.entrega_futura === 1 || operacao.entrega_futura === true,
@@ -375,6 +378,7 @@ const OperacoesConfig = () => {
       validar_estoque: false,
       acao_estoque: 'nao_validar',
       limite_desconto_percentual: 0,
+      tipo_desconto: 'venda',
       cashback_percentual: 0,
       cashback_validade_dias: 30,
       baixa_automatica: false,
@@ -1332,6 +1336,34 @@ const OperacoesConfig = () => {
                     </Grid>
 
                     <Grid item xs={12} md={6}>
+                      <FormControl fullWidth sx={{ bgcolor: 'white' }}>
+                        <InputLabel>Tipo de Aplicação do Desconto</InputLabel>
+                        <Select
+                          value={currentOperacao.tipo_desconto || 'venda'}
+                          label="Tipo de Aplicação do Desconto"
+                          onChange={(e) => handleInputChange('tipo_desconto', e.target.value)}
+                        >
+                          <MenuItem value="item">
+                            <Box>
+                              <Typography variant="body2" fontWeight="bold">📦 Por Item</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                O desconto % é aplicado em cada item individualmente
+                              </Typography>
+                            </Box>
+                          </MenuItem>
+                          <MenuItem value="venda">
+                            <Box>
+                              <Typography variant="body2" fontWeight="bold">🛒 Por Venda</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                O desconto total é rateado proporcionalmente nos itens
+                              </Typography>
+                            </Box>
+                          </MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+
+                    <Grid item xs={12}>
                       <Box
                         sx={{
                           p: 2,
@@ -1339,15 +1371,14 @@ const OperacoesConfig = () => {
                           borderRadius: 1,
                           border: '1px solid',
                           borderColor: 'warning.light',
-                          height: '100%',
-                          display: 'flex',
-                          alignItems: 'center'
                         }}
                       >
                         <Typography variant="body2" color="text.secondary">
                           {(parseFloat(currentOperacao.limite_desconto_percentual) || 0) > 0 ? (
                             <>
-                              ✅ Descontos até <strong>{(parseFloat(currentOperacao.limite_desconto_percentual) || 0).toFixed(2)}%</strong> permitidos. Acima disso, requer aprovação do supervisor via WhatsApp
+                              ✅ Descontos até <strong>{(parseFloat(currentOperacao.limite_desconto_percentual) || 0).toFixed(2)}%</strong> permitidos
+                              {' '}({currentOperacao.tipo_desconto === 'item' ? 'por item' : 'sobre o total da venda'}).
+                              Acima disso, requer aprovação do supervisor.
                             </>
                           ) : (
                             '⚠️ Limite 0%: Qualquer desconto requer aprovação do supervisor'

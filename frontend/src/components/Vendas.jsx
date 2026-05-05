@@ -204,6 +204,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     observacoes: '',
     desconto: 0,
     tipo_desconto_geral: 'valor',
+    _desconto_item_geral: 0,  // usado quando tipo_desconto='item' na operação
     taxa_entrega: 0,
     valor_total: 0,
     itens: [],
@@ -3832,6 +3833,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       observacoes: '',
       desconto: 0,
       tipo_desconto_geral: 'valor',
+      _desconto_item_geral: 0,
       taxa_entrega: 0,
       valor_total: 0,
       itens: []
@@ -5879,6 +5881,65 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                 </Typography>
 
                 <Grid container spacing={1.5} alignItems="center">
+                  {/* ─── Campo de desconto — comportamento depende do tipo_desconto da operação ─── */}
+                  {(() => {
+                    const opAtualDesc = operacoes.find(op => op.id_operacao === venda.id_operacao);
+                    const tipoDescOp = opAtualDesc?.tipo_desconto || 'venda';
+                    const limiteOp = parseFloat(opAtualDesc?.limite_desconto_percentual) || 0;
+
+                    if (tipoDescOp === 'item') {
+                      // ── Modo Item: digita % e aplica em todos os itens ao clicar/blur ──
+                      return (
+                        <Grid item xs={6} md={2}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            type="number"
+                            label="Desc % (todos os itens)"
+                            value={venda._desconto_item_geral ?? ''}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setVenda(prev => ({ ...prev, _desconto_item_geral: v }));
+                            }}
+                            onBlur={(e) => {
+                              const perc = parseFloat(e.target.value) || 0;
+                              if (limiteOp > 0 && perc > limiteOp) {
+                                setSnackDesconto({ open: true, msg: `⚠️ Limite de desconto da operação: ${limiteOp.toFixed(1)}%. Será necessária autorização ao salvar.` });
+                              }
+                              // Aplica o % em cada item individualmente
+                              setVenda(prev => {
+                                const novosItens = prev.itens.map(item => {
+                                  const valorItem = parseFloat(item.quantidade) * parseFloat(item.valor_unitario);
+                                  const descontoVal = (valorItem * perc) / 100;
+                                  return {
+                                    ...item,
+                                    desconto: descontoVal,
+                                    desconto_valor: descontoVal,
+                                    desconto_percentual: perc,
+                                    desconto_tipo_edicao: 'percentual',
+                                    subtotal: valorItem - descontoVal,
+                                  };
+                                });
+                                const novoTotal = novosItens.reduce((acc, it) => acc + parseFloat(it.subtotal || 0), 0);
+                                const taxaEntrega = parseFloat(prev.taxa_entrega) || 0;
+                                return { ...prev, itens: novosItens, desconto: 0, _desconto_item_geral: perc, valor_total: novoTotal + taxaEntrega };
+                              });
+                            }}
+                            onFocus={(e) => e.target.select()}
+                            inputProps={{ min: 0, max: 100, step: 0.01 }}
+                            InputProps={{
+                              startAdornment: <InputAdornment position="start"><span style={{ fontWeight: 'bold', color: '#1976d2' }}>%</span></InputAdornment>,
+                            }}
+                            InputLabelProps={{ shrink: true }}
+                            helperText={`📦 Aplica em todos os ${venda.itens.filter(i => parseFloat(i.quantidade) > 0).length} itens`}
+                            disabled={vendaBloqueadaParaEdicao}
+                          />
+                        </Grid>
+                      );
+                    }
+
+                    // ── Modo Venda (padrão): desconto geral rateado ──
+                    return (
                   <Grid item xs={6} md={2}>
                     <TextField
                       fullWidth
@@ -5935,6 +5996,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                       disabled={vendaBloqueadaParaEdicao}
                     />
                   </Grid>
+                    ); // fim return modo venda
+                  })(/* fim IIFE tipo_desconto */)}
 
                   <Grid item xs={6} md={2}>
                     <TextField

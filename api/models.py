@@ -594,6 +594,20 @@ class Operacao(models.Model):
         db_column='finalidade_emissao',
         help_text="Finalidade de emissão da NF-e (finNFe): 1-Normal, 2-Complementar, 3-Ajuste, 4-Devolução, 5-Crédito, 6-Débito Pgto Antecipado, 7-Débito Perda Estoque"
     )
+    # Tipo de aplicação de desconto: por item ou por venda (rateado)
+    TIPO_DESCONTO_CHOICES = [
+        ('item', 'Por Item — desconto aplicado em cada item individualmente'),
+        ('venda', 'Por Venda — desconto geral rateado proporcionalmente nos itens'),
+    ]
+    tipo_desconto = models.CharField(
+        max_length=5,
+        blank=True,
+        null=True,
+        choices=TIPO_DESCONTO_CHOICES,
+        default='venda',
+        db_column='tipo_desconto',
+        help_text="Define como o desconto é aplicado: 'item' = mesmo % em cada item; 'venda' = desconto total rateado pelos itens"
+    )
 
     class Meta:
         managed = True
