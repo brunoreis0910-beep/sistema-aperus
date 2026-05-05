@@ -752,7 +752,7 @@ const NFCePage = () => {
                         <Typography>Habilitar:</Typography>
                         <Button
                             variant={csosnConfig.isEnabled ? 'contained' : 'outlined'}
-                            color={csosnConfig.isEnabled ? 'success' : 'default'}
+                            color={csosnConfig.isEnabled ? 'success' : 'inherit'}
                             onClick={() => handleCsosnConfigChange('isEnabled', !csosnConfig.isEnabled)}
                         >
                             {csosnConfig.isEnabled ? 'Ativado' : 'Desativado'}
