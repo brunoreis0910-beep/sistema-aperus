@@ -1122,11 +1122,24 @@ const OrdemServicoPage = () => {
 
     try {
       const { Share } = await import('@capacitor/share');
-      await Share.share({
-        title: `OS ${ordemAtual?.id_os ? `OS-${ordemAtual.id_os}` : 'Nova OS'}`,
-        text: texto,
-        dialogTitle: 'Compartilhar Ordem de Serviço',
-      });
+      const canShareResult = await Share.canShare();
+      if (canShareResult.value) {
+        await Share.share({
+          title: `OS ${ordemAtual?.id_os ? `OS-${ordemAtual.id_os}` : 'Nova OS'}`,
+          text: texto,
+          dialogTitle: 'Compartilhar Ordem de Serviço',
+        });
+      } else {
+        // Fallback: abrir WhatsApp Web
+        const telBruto = ordemAtual?.cliente_telefone || '';
+        const telLimpo = telBruto.replace(/\D/g, '');
+        const telComPais = telLimpo ? (telLimpo.startsWith('55') ? telLimpo : `55${telLimpo}`) : '';
+        const encoded = encodeURIComponent(texto);
+        const url = telComPais
+          ? `https://wa.me/${telComPais}?text=${encoded}`
+          : `https://wa.me/?text=${encoded}`;
+        window.open(url, '_blank');
+      }
     } catch {
       // Fallback: abrir WhatsApp Web
       const telBruto = ordemAtual?.cliente_telefone || '';
@@ -2296,11 +2309,20 @@ const OrdemServicoPage = () => {
 
     try {
       const { Share } = await import('@capacitor/share');
-      await Share.share({
-        title: `OS-${ordem.id_os}`,
-        text: texto,
-        dialogTitle: 'Compartilhar Ordem de Serviço',
-      });
+      const canShareResult = await Share.canShare();
+      if (canShareResult.value) {
+        await Share.share({
+          title: `OS-${ordem.id_os}`,
+          text: texto,
+          dialogTitle: 'Compartilhar Ordem de Serviço',
+        });
+      } else {
+        const encoded = encodeURIComponent(texto);
+        const url = telComPais
+          ? `https://wa.me/${telComPais}?text=${encoded}`
+          : `https://wa.me/?text=${encoded}`;
+        window.open(url, '_blank');
+      }
     } catch {
       const encoded = encodeURIComponent(texto);
       const url = telComPais
