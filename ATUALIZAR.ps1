@@ -90,6 +90,11 @@ Write-Host ""
 Write-Host "[4/6] Build do frontend..." -ForegroundColor Cyan
 if ((Test-Path "frontend\package.json") -and (Get-Command npm -ErrorAction SilentlyContinue)) {
     Push-Location frontend
+    if (Test-Path "package-lock.json") {
+        npm ci --silent 2>&1 | Out-Null
+    } else {
+        npm install --silent 2>&1 | Out-Null
+    }
     npm run build 2>&1 | Out-Null
     $buildExit = $LASTEXITCODE
     Pop-Location
