@@ -27,13 +27,27 @@ export const visualizarPDF = async (doc, filename) => {
       
       console.log('📄 Arquivo salvo:', savedFile.uri);
       
-      // Compartilha (usuário pode escolher visualizar ou enviar)
-      await Share.share({
-        title: `${filename}.pdf`,
-        text: 'Visualizar ou compartilhar PDF',
-        url: savedFile.uri,
-        dialogTitle: 'Abrir PDF'
-      });
+      // Verifica se compartilhamento está disponível
+      const canShareResult = await Share.canShare();
+      if (canShareResult.value) {
+        // Compartilha (usuário pode escolher visualizar ou enviar)
+        await Share.share({
+          title: `${filename}.pdf`,
+          text: 'Visualizar ou compartilhar PDF',
+          url: savedFile.uri,
+          dialogTitle: 'Abrir PDF'
+        });
+      } else {
+        // Fallback: abre o arquivo salvo (se possível) ou alerta
+        alert('Compartilhamento não disponível neste dispositivo. O PDF foi salvo temporariamente.');
+        // Tenta abrir o arquivo se for possível
+        try {
+          // No Capacitor, podemos tentar usar um viewer externo, mas por enquanto alerta
+          console.log('PDF salvo em:', savedFile.uri);
+        } catch (openError) {
+          console.error('Erro ao tentar abrir PDF:', openError);
+        }
+      }
       
       return true;
     } catch (error) {
@@ -66,12 +80,18 @@ export const compartilharPDF = async (doc, filename) => {
         directory: Directory.Cache,
       });
       
-      await Share.share({
-        title: filename,
-        text: `Compartilhar ${filename}`,
-        url: savedFile.uri,
-        dialogTitle: 'Compartilhar PDF'
-      });
+      const canShareResult = await Share.canShare();
+      if (canShareResult.value) {
+        await Share.share({
+          title: filename,
+          text: `Compartilhar ${filename}`,
+          url: savedFile.uri,
+          dialogTitle: 'Compartilhar PDF'
+        });
+      } else {
+        alert('Compartilhamento não disponível neste dispositivo.');
+        return false;
+      }
       
       console.log('✅ PDF compartilhado');
       return true;
@@ -110,13 +130,20 @@ export const visualizarPDFBlob = async (blob, filename) => {
         directory: Directory.Cache,
       });
       
-      // Compartilha (usuário pode escolher visualizar ou enviar)
-      await Share.share({
-        title: filename,
-        text: 'Visualizar ou compartilhar PDF',
-        url: savedFile.uri,
-        dialogTitle: 'Abrir PDF'
-      });
+      const canShareResult = await Share.canShare();
+      if (canShareResult.value) {
+        // Compartilha (usuário pode escolher visualizar ou enviar)
+        await Share.share({
+          title: filename,
+          text: 'Visualizar ou compartilhar PDF',
+          url: savedFile.uri,
+          dialogTitle: 'Abrir PDF'
+        });
+      } else {
+        // Fallback: alerta que não pode compartilhar
+        alert('Compartilhamento não disponível neste dispositivo. O PDF foi salvo temporariamente.');
+        console.log('PDF salvo em:', savedFile.uri);
+      }
       
       return true;
     } catch (error) {
@@ -152,12 +179,18 @@ export const compartilharPDFBlob = async (blob, filename) => {
         directory: Directory.Cache,
       });
       
-      await Share.share({
-        title: filename,
-        text: `Compartilhar ${filename}`,
-        url: savedFile.uri,
-        dialogTitle: 'Compartilhar PDF'
-      });
+      const canShareResult = await Share.canShare();
+      if (canShareResult.value) {
+        await Share.share({
+          title: filename,
+          text: `Compartilhar ${filename}`,
+          url: savedFile.uri,
+          dialogTitle: 'Compartilhar PDF'
+        });
+      } else {
+        alert('Compartilhamento não disponível neste dispositivo.');
+        return false;
+      }
       
       return true;
     } catch (error) {
