@@ -41,7 +41,10 @@ import {
   Delete as DeleteIcon,
   Info as InfoIcon,
   CleaningServices as CleanIcon,
-  WhatsApp as WhatsAppIcon
+  WhatsApp as WhatsAppIcon,
+  Article as ArticleIcon,
+  ShoppingCart as ShoppingCartIcon,
+  ViewList as ViewListIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
@@ -57,6 +60,7 @@ const NFCePage = () => {
     // Filtros
     const [filterDateStart, setFilterDateStart] = useState('');
     const [filterDateEnd, setFilterDateEnd] = useState('');
+    const [filterType, setFilterType] = useState('65'); // 'todos', 'pedido', '65', '55'
 
     const [processingId, setProcessingId] = useState(null);
     const [error, setError] = useState(null);
@@ -88,13 +92,20 @@ const NFCePage = () => {
         setLoading(true);
         setError(null);
         try {
-            console.log("🔍 Buscando vendas NFC-e (modelo=65)...");
-            
+            let logMessage = "🔍 Buscando vendas";
             const params = {
                 ordering: '-id_venda',
                 limit: 50,
-                modelo: '65' 
             };
+
+            if (filterType && filterType !== 'todos') {
+                params.modelo = filterType;
+                logMessage += ` (modelo=${filterType})`;
+            } else {
+                logMessage += " (todos os modelos)";
+            }
+            
+            console.log(logMessage);
 
             if (filterDateStart) params.data_inicial = filterDateStart;
             if (filterDateEnd) params.data_final = filterDateEnd;
@@ -386,10 +397,10 @@ const NFCePage = () => {
         return <Chip label="PENDENTE" color="default" size="small" variant="outlined" />;
     };
 
-    // Efeito inicial
+    // Efeito inicial e ao mudar filtros
     useEffect(() => {
         fetchVendas();
-    }, []);
+    }, [filterType]);
 
     return (
         <Box sx={{ p: 3, maxWidth: '100%', margin: '0 auto', bgcolor: '#f4f6f8', minHeight: 'calc(100vh - 64px)' }}>
@@ -399,10 +410,10 @@ const NFCePage = () => {
                 <Box>
                     <Typography variant="h5" component="h1" sx={{ color: '#1a237e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
                         <ReceiptIcon sx={{ fontSize: 32 }} />
-                        Emissão de NFC-e
+                        Consulta de Vendas e Documentos
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                        Gerencie e emita suas Notas Fiscais de Consumidor Eletrônica (Modelo 65)
+                        Gerencie e emita suas Vendas, Pedidos, NFC-e (Modelo 65) e NF-e (Modelo 55)
                     </Typography>
                 </Box>
                 
@@ -448,6 +459,40 @@ const NFCePage = () => {
                 </Box>
             </Paper>
 
+            {/* Filtros de Tipo */}
+            <Paper elevation={0} sx={{ p: 2, mb: 3, borderRadius: 2, bgcolor: '#fff' }}>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button
+                        variant={filterType === 'todos' ? 'contained' : 'outlined'}
+                        startIcon={<ViewListIcon />}
+                        onClick={() => setFilterType('todos')}
+                    >
+                        Todas
+                    </Button>
+                    <Button
+                        variant={filterType === 'pedido' ? 'contained' : 'outlined'}
+                        startIcon={<ShoppingCartIcon />}
+                        onClick={() => setFilterType('pedido')}
+                    >
+                        Pedidos
+                    </Button>
+                    <Button
+                        variant={filterType === '65' ? 'contained' : 'outlined'}
+                        startIcon={<ReceiptIcon />}
+                        onClick={() => setFilterType('65')}
+                    >
+                        NFC-e (Cupons)
+                    </Button>
+                    <Button
+                        variant={filterType === '55' ? 'contained' : 'outlined'}
+                        startIcon={<ArticleIcon />}
+                        onClick={() => setFilterType('55')}
+                    >
+                        NF-e
+                    </Button>
+                </Box>
+            </Paper>
+
             {/* Error Message */}
             {error && (
                 <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
@@ -473,7 +518,7 @@ const NFCePage = () => {
                                 <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>
                                     <Tooltip title="Apenas vendas configuradas com Modelo 65 são exibidas">
                                         <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                            Operação / NFC-e
+                                            Operação / Documento
                                             <SearchIcon fontSize="small" color="action" />
                                         </Box>
                                     </Tooltip>
@@ -488,10 +533,10 @@ const NFCePage = () => {
                                 <TableRow>
                                     <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                                         <Typography variant="h6" color="text.disabled">
-                                            Nenhuma venda NFC-e encontrada recentement.
+                                            Nenhum documento encontrado para os filtros selecionados.
                                         </Typography>
                                         <Typography variant="body2" color="text.disabled">
-                                            Verifique se as vendas estão cadastradas com a Operação correta (Modelo 65).
+                                            Tente alterar o tipo de documento ou o período da busca.
                                         </Typography>
                                     </TableCell>
                                 </TableRow>
