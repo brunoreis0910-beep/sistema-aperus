@@ -5,7 +5,29 @@ import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const isCapacitor = () => {
-  return !!(window.Capacitor);
+  if (typeof window === 'undefined' || !window.Capacitor) return false;
+  if (typeof window.Capacitor.getPlatform === 'function') {
+    return window.Capacitor.getPlatform() !== 'web';
+  }
+  if (typeof window.Capacitor.isNativePlatform === 'function') {
+    return window.Capacitor.isNativePlatform();
+  }
+  if (window.location.hostname === 'localhost' && !window.location.port) return true;
+  if (navigator.userAgent.includes('; wv)')) return true;
+  return false;
+};
+
+const hasShareCapability = async () => {
+  if (typeof Share.canShare === 'function') {
+    try {
+      const result = await Share.canShare();
+      return !!result?.value;
+    } catch {
+      return false;
+    }
+  }
+
+  return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 };
 
 /**
@@ -28,8 +50,8 @@ export const visualizarPDF = async (doc, filename) => {
       console.log('📄 Arquivo salvo:', savedFile.uri);
       
       // Verifica se compartilhamento está disponível
-      const canShareResult = await Share.canShare();
-      if (canShareResult.value) {
+      const canShareResult = await hasShareCapability();
+      if (canShareResult) {
         // Compartilha (usuário pode escolher visualizar ou enviar)
         await Share.share({
           title: `${filename}.pdf`,
@@ -80,8 +102,8 @@ export const compartilharPDF = async (doc, filename) => {
         directory: Directory.Cache,
       });
       
-      const canShareResult = await Share.canShare();
-      if (canShareResult.value) {
+      const canShareResult = await hasShareCapability();
+      if (canShareResult) {
         await Share.share({
           title: filename,
           text: `Compartilhar ${filename}`,
@@ -130,8 +152,8 @@ export const visualizarPDFBlob = async (blob, filename) => {
         directory: Directory.Cache,
       });
       
-      const canShareResult = await Share.canShare();
-      if (canShareResult.value) {
+      const canShareResult = await hasShareCapability();
+      if (canShareResult) {
         // Compartilha (usuário pode escolher visualizar ou enviar)
         await Share.share({
           title: filename,
@@ -179,8 +201,8 @@ export const compartilharPDFBlob = async (blob, filename) => {
         directory: Directory.Cache,
       });
       
-      const canShareResult = await Share.canShare();
-      if (canShareResult.value) {
+      const canShareResult = await hasShareCapability();
+      if (canShareResult) {
         await Share.share({
           title: filename,
           text: `Compartilhar ${filename}`,
