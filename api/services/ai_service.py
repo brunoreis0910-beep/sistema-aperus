@@ -207,7 +207,24 @@ class AIService:
             logger.info(f"ℹ️ Dispatcher não identificou comando. Usando análise conversacional para: {pergunta[:50]}...")
             # Analisa a intenção da pergunta
             intencao = self._analisar_intencao(pergunta)
-            
+
+            # ── Proteção: evita confundir "relatório de vendas" com NF-e/NFC-e ──
+            # "Vendas" no contexto gerencial engloba TODAS as vendas (fiscais + gerenciais).
+            # Só classifica como fiscal quando o usuário menciona explicitamente termos fiscais.
+            TERMOS_FISCAIS_EXPLICITOS = [
+                'nf-e', 'nfe', 'nfc-e', 'nfce', 'nota fiscal eletrônica',
+                'nota fiscal eletronica', 'cupom fiscal', 'sefaz', 'danfe',
+            ]
+            if intencao.get('tipo') in ('fiscal_nfe', 'fiscal_nfce') and not any(
+                t in pergunta.lower() for t in TERMOS_FISCAIS_EXPLICITOS
+            ):
+                logger.info(
+                    "⚠️ Reclassificando '%s' de '%s' para 'vendas' (nenhum termo fiscal explícito encontrado).",
+                    pergunta[:50], intencao['tipo']
+                )
+                intencao['tipo'] = 'vendas'
+                intencao['navegar'] = False  # não redireciona para tela de NFC-e
+
             # Busca dados relevantes do banco
             dados = self._buscar_dados(intencao, usuario, pergunta)
             
@@ -282,10 +299,18 @@ class AIService:
 3. Filtros específicos (produto, cliente, vendedor, status, etc)
 4. Tipo de agregação (total, média, contagem, lista, etc)
 
-IMPORTANTE para classificação:
-- Use "vendas" quando o usuário fala de relatório de vendas, faturamento, quanto vendeu, vendas do dia/mês etc.
-- Use "fiscal_nfe" ou "fiscal_nfce" APENAS quando mencionar explicitamente NF-e, NFC-e, nota fiscal eletrônica, cupom fiscal ou SEFAZ.
-- Não confunda "relatorio de vendas" com "nota fiscal" — são coisas diferentes!
+IMPORTANTE para classificação — LEIA COM ATENÇÃO:
+- Use "vendas" para QUALQUER pergunta sobre relatório de vendas, faturamento, quanto vendeu, vendas do dia/mês/ano, receita de vendas, total de vendas, etc.
+  → "Relatório de vendas" = tipo "vendas" (inclui TODAS as vendas: fiscal + gerencial).
+- Use "fiscal_nfe" SOMENTE se a mensagem mencionar literalmente as palavras: NF-e, NFe, nota fiscal eletrônica, DANFE ou SEFAZ (para NF-e).
+- Use "fiscal_nfce" SOMENTE se a mensagem mencionar literalmente as palavras: NFC-e, NFCe, cupom fiscal eletrônico ou PDV fiscal.
+- NUNCA classifique como "fiscal_nfce" apenas porque o usuário falou "vendas". No sistema, "vendas" é um módulo gerencial que inclui ALL tipos de venda.
+- Exemplos CORRETOS:
+  * "relatório de vendas" → tipo: "vendas"
+  * "quanto vendemos hoje" → tipo: "vendas"
+  * "faturamento do mês" → tipo: "vendas"
+  * "emitir NFC-e" → tipo: "fiscal_nfce"
+  * "status das NF-e" → tipo: "fiscal_nfe"
 
 Pergunta: "{pergunta}"
 
@@ -433,10 +458,21 @@ Retorne APENAS um JSON válido com a estrutura:
         """Busca dados relevantes do banco baseado na intenção"""
         tipo = intencao.get('tipo', 'geral')
         periodo = intencao.get('periodo', {})
-        
+
         inicio = periodo.get('inicio')
         fim = periodo.get('fim')
-        
+
+        # Segurança extra: se o tipo for fiscal mas a pergunta não menciona termos fiscais
+        # explícitos, busca todas as vendas (comportamento gerencial).
+        TERMOS_FISCAIS_EXPLICITOS = [
+            'nf-e', 'nfe', 'nfc-e', 'nfce', 'nota fiscal eletrônica',
+            'nota fiscal eletronica', 'cupom fiscal', 'sefaz', 'danfe',
+        ]
+        if tipo in ('fiscal_nfe', 'fiscal_nfce') and not any(
+            t in pergunta.lower() for t in TERMOS_FISCAIS_EXPLICITOS
+        ):
+            tipo = 'vendas'
+
         try:
             if tipo == 'vendas':
                 return self._buscar_dados_vendas(inicio, fim, intencao.get('filtros', {}))
