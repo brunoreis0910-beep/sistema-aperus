@@ -419,19 +419,38 @@ class PDFFiscalService:
         - Resumo por Cliente (Top 10)
         
         Args:
-            filtros: Dict com filtros (data_inicio, data_fim, cliente_id, vendedor_id, etc)
+            filtros: Dict com filtros (data_inicio, data_fim, cliente_id, vendedor_id, device, etc)
             
         Returns:
             BytesIO: Buffer com o PDF gerado
         """
         buffer = BytesIO()
+        
+        # Determina tamanho de página baseado no device
+        device = filtros.get('device', 'desktop')
+        if device == 'mobile':
+            # Para mobile: usar Letter (menor) e margens reduzidas
+            from reportlab.lib.pagesizes import Letter
+            pagesize = Letter
+            rightMargin = 0.8*cm
+            leftMargin = 0.8*cm
+            topMargin = 0.5*cm
+            bottomMargin = 0.5*cm
+        else:
+            # Para desktop: usar A4 padrão
+            pagesize = A4
+            rightMargin = 1.5*cm
+            leftMargin = 1.5*cm
+            topMargin = 1*cm
+            bottomMargin = 1*cm
+        
         doc = SimpleDocTemplate(
             buffer,
-            pagesize=A4,
-            rightMargin=1.5*cm,
-            leftMargin=1.5*cm,
-            topMargin=1*cm,
-            bottomMargin=1*cm
+            pagesize=pagesize,
+            rightMargin=rightMargin,
+            leftMargin=leftMargin,
+            topMargin=topMargin,
+            bottomMargin=bottomMargin
         )
         
         elements = []
@@ -444,6 +463,7 @@ class PDFFiscalService:
         vendedor_id = filtros.get('vendedor_id')
         operacao_id = filtros.get('operacao_id')
         status_filtro = filtros.get('status', 'todos')
+        device = filtros.get('device', 'desktop')
         # Seções a incluir: lista de strings. None = todas
         resumos = filtros.get('resumos')  # ex: ['listagem', 'pagamento', 'grupo', 'operacao', 'cidade', 'clientes']
         if resumos is None:
@@ -451,6 +471,19 @@ class PDFFiscalService:
 
         def mostrar(secao):
             return secao in resumos
+        
+        # Define multiplicador de largura baseado no device
+        # Mobile = 0.7x, Desktop = 1.0x
+        col_multiplier = 0.7 if device == 'mobile' else 1.0
+        
+        # Define tamanhos de fonte baseado no device
+        font_header = 7.5 if device == 'mobile' else 9
+        font_body = 7 if device == 'mobile' else 8
+        font_small = 6 if device == 'mobile' else 7
+        
+        # Função helper para ajustar tamanhos de coluna
+        def adjust_col_width(width):
+            return width * col_multiplier
         
         # Cabeçalho
         periodo_str = f"{data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}"
@@ -513,7 +546,7 @@ class PDFFiscalService:
             titulo_style = ParagraphStyle(
                 'TituloSecao',
                 parent=styles['Heading2'],
-                fontSize=12,
+                fontSize=10 if device == 'mobile' else 12,
                 spaceAfter=10,
                 textColor=colors.HexColor('#1976d2'),
                 spaceBefore=15
@@ -521,7 +554,7 @@ class PDFFiscalService:
             
             elements.append(Paragraph('📊 RESUMO GERAL', titulo_style))
             
-            resumo_table = Table(resumo_data, colWidths=[7*cm, 5*cm])
+            resumo_table = Table(resumo_data, colWidths=[adjust_col_width(7*cm), adjust_col_width(5*cm)])
             resumo_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#e3f2fd')),
                 ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
@@ -529,7 +562,7 @@ class PDFFiscalService:
                 ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
                 ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
                 ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('FONTSIZE', (0, 0), (-1, -1), 9 if device == 'mobile' else 10),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
@@ -555,7 +588,7 @@ class PDFFiscalService:
                         f'R$ {v.valor_total:,.2f}',
                     ])
                 
-                lista_table = Table(lista_data, colWidths=[2*cm, 2.2*cm, 6*cm, 4.5*cm, 3.3*cm])
+                lista_table = Table(lista_data, colWidths=[adjust_col_width(2*cm), adjust_col_width(2.2*cm), adjust_col_width(6*cm), adjust_col_width(4.5*cm), adjust_col_width(3.3*cm)])
                 lista_table.setStyle(TableStyle([
                     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1976d2')),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -618,7 +651,7 @@ class PDFFiscalService:
                             f'{perc:.1f}%'
                         ])
 
-                    pg_table = Table(pg_data, colWidths=[7*cm, 2*cm, 3.5*cm, 2.5*cm])
+                    pg_table = Table(pg_data, colWidths=[adjust_col_width(7*cm), adjust_col_width(2*cm), adjust_col_width(3.5*cm), adjust_col_width(2.5*cm)])
                     pg_table.setStyle(TableStyle([
                         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4caf50')),
                         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -673,7 +706,7 @@ class PDFFiscalService:
                             f'{perc:.1f}%'
                         ])
 
-                    grupo_table = Table(grupo_data, colWidths=[7*cm, 2*cm, 3.5*cm, 2.5*cm])
+                    grupo_table = Table(grupo_data, colWidths=[adjust_col_width(7*cm), adjust_col_width(2*cm), adjust_col_width(3.5*cm), adjust_col_width(2.5*cm)])
                     grupo_table.setStyle(TableStyle([
                         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ff9800')),
                         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -725,7 +758,7 @@ class PDFFiscalService:
                             f'{perc:.1f}%'
                         ])
 
-                    op_table = Table(op_data, colWidths=[7*cm, 2*cm, 3.5*cm, 2.5*cm])
+                    op_table = Table(op_data, colWidths=[adjust_col_width(7*cm), adjust_col_width(2*cm), adjust_col_width(3.5*cm), adjust_col_width(2.5*cm)])
                     op_table.setStyle(TableStyle([
                         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2196f3')),
                         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -777,7 +810,7 @@ class PDFFiscalService:
                             f'{perc:.1f}%'
                         ])
 
-                    cidade_table = Table(cidade_data, colWidths=[7*cm, 2*cm, 3.5*cm, 2.5*cm])
+                    cidade_table = Table(cidade_data, colWidths=[adjust_col_width(7*cm), adjust_col_width(2*cm), adjust_col_width(3.5*cm), adjust_col_width(2.5*cm)])
                     cidade_table.setStyle(TableStyle([
                         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#9c27b0')),
                         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -830,7 +863,7 @@ class PDFFiscalService:
                             f'R$ {total_cli:,.2f}'
                         ])
 
-                    cliente_table = Table(cliente_data, colWidths=[6*cm, 3*cm, 1.5*cm, 3.5*cm])
+                    cliente_table = Table(cliente_data, colWidths=[adjust_col_width(6*cm), adjust_col_width(3*cm), adjust_col_width(1.5*cm), adjust_col_width(3.5*cm)])
                     cliente_table.setStyle(TableStyle([
                         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f44336')),
                         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),

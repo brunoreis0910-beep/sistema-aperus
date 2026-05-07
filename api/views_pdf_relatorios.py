@@ -396,7 +396,7 @@ def relatorio_vendas_pdf(request):
     """
     Gera PDF do relatório completo de vendas com múltiplos resumos
     
-    GET /api/relatorios/vendas/pdf/?data_inicio=2026-02-01&data_fim=2026-03-17
+    GET /api/relatorios/vendas/pdf/?data_inicio=2026-02-01&data_fim=2026-03-17&device=mobile
     
     Query params:
         data_inicio: Data inicial (YYYY-MM-DD)
@@ -405,6 +405,7 @@ def relatorio_vendas_pdf(request):
         vendedor: ID do vendedor (opcional)
         operacao: ID da operação (opcional)
         status: Status da venda (opcional: todos, aberta, faturada, cancelada)
+        device: Tipo de dispositivo (opcional: mobile, desktop; padrão: desktop)
     """
     try:
         # Extrai parâmetros
@@ -414,6 +415,7 @@ def relatorio_vendas_pdf(request):
         vendedor_id = request.query_params.get('vendedor')
         operacao_id = request.query_params.get('operacao')
         status_filtro = request.query_params.get('status', 'todos')
+        device = request.query_params.get('device', 'desktop')
         resumos_str = request.query_params.get('resumos')
         resumos = resumos_str.split(',') if resumos_str else None
         
@@ -436,9 +438,9 @@ def relatorio_vendas_pdf(request):
         if data_inicio > data_fim:
             return Response({
                 'erro': 'data_inicio não pode ser maior que data_fim'
-            }, status=status.HTTP_400_BAD_REQUEST)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-        logger.info(f"Gerando relatório de vendas completo: {data_inicio} a {data_fim} (usuário: {request.user.username})")
+        logger.info(f"Gerando relatório de vendas completo: {data_inicio} a {data_fim} (usuário: {request.user.username}, device: {device})")
         
         # Monta filtros
         filtros = {
@@ -448,7 +450,8 @@ def relatorio_vendas_pdf(request):
             'vendedor_id': vendedor_id,
             'operacao_id': operacao_id,
             'status': status_filtro,
-            'resumos': resumos
+            'resumos': resumos,
+            'device': device
         }
         
         # Gera o PDF
@@ -467,6 +470,7 @@ def relatorio_vendas_pdf(request):
         return Response({
             'erro': f'Erro ao gerar relatório: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 @api_view(['GET'])

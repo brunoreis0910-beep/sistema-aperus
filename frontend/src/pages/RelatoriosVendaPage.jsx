@@ -1286,10 +1286,14 @@ function RelatorioCompletoDialog({ open, onClose, axiosInstance, filterData }) {
     if (!dataInicio || !dataFim) return;
     setGerando(true);
     try {
+      // Detecta se é dispositivo móvel
+      const isMobile = window.Capacitor ? true : window.innerWidth < 768;
+      
       const params = {
         data_inicio: dataInicio,
         data_fim: dataFim,
         status: statusFiltro,
+        device: isMobile ? 'mobile' : 'desktop',
       };
       if (clienteId) params.cliente = clienteId;
       if (vendedorId) params.vendedor = vendedorId;
