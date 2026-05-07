@@ -5,6 +5,13 @@ Write-Host ""
 # 1. Build do frontend
 Write-Host "📦 Step 1/3: Building frontend..." -ForegroundColor Yellow
 Set-Location frontend
+
+Write-Host "  Instalando dependências..." -ForegroundColor DarkGray
+npm install --legacy-peer-deps 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "⚠️  Aviso ao instalar dependências npm" -ForegroundColor Yellow
+}
+
 Remove-Item -Recurse -Force node_modules\.vite -ErrorAction SilentlyContinue
 npm run build
 if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1) {

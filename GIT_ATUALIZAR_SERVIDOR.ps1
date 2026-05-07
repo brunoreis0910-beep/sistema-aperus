@@ -143,9 +143,15 @@ function Run-FrontendBuild {
     }
 
     Write-Host ""
-    Write-Host "⚡ Executando build do frontend..." -ForegroundColor Cyan
+    Write-Host "⚡ Instalando dependências do frontend..." -ForegroundColor Cyan
     Push-Location "frontend"
-    npm run build 2>&1
+    npm install --legacy-peer-deps 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  ⚠️  Erro ao instalar dependências npm." -ForegroundColor Yellow
+    }
+    
+    Write-Host "⚡ Executando build do frontend..." -ForegroundColor Cyan
+    npm run build 2>&1 | Out-Null
     Pop-Location
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  ✅ Build do frontend concluído." -ForegroundColor Green
