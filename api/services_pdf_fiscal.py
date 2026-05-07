@@ -552,7 +552,7 @@ class PDFFiscalService:
                 spaceBefore=15
             )
             
-            elements.append(Paragraph('📊 RESUMO GERAL', titulo_style))
+            elements.append(Paragraph('RESUMO GERAL', titulo_style))
             
             resumo_table = Table(resumo_data, colWidths=[adjust_col_width(7*cm), adjust_col_width(5*cm)])
             resumo_table.setStyle(TableStyle([
@@ -574,7 +574,7 @@ class PDFFiscalService:
 
             # ===== LISTAGEM DAS VENDAS =====
             if mostrar('listagem'):
-                elements.append(Paragraph('🛒 LISTAGEM DE VENDAS', titulo_style))
+                elements.append(Paragraph('LISTAGEM DE VENDAS', titulo_style))
                 
                 lista_vendas = vendas.select_related('id_cliente', 'id_operacao').order_by('data_documento')[:200]
                 
@@ -618,7 +618,7 @@ class PDFFiscalService:
 
             # ===== RESUMO POR FORMA DE PAGAMENTO =====
             if mostrar('pagamento'):
-                elements.append(Paragraph('💳 RESUMO POR FORMA DE PAGAMENTO', titulo_style))
+                elements.append(Paragraph('RESUMO POR FORMA DE PAGAMENTO', titulo_style))
 
                 # Busca pagamentos relacionados às vendas (tipo Receber)
                 financeiro = FinanceiroConta.objects.filter(
@@ -678,7 +678,7 @@ class PDFFiscalService:
 
             # ===== RESUMO POR GRUPO DE PRODUTOS =====
             if mostrar('grupo'):
-                elements.append(Paragraph('📦 RESUMO POR GRUPO DE PRODUTOS', titulo_style))
+                elements.append(Paragraph('RESUMO POR GRUPO DE PRODUTOS', titulo_style))
 
                 # Busca itens de venda agrupados por grupo
                 itens = VendaItem.objects.filter(
@@ -733,7 +733,7 @@ class PDFFiscalService:
 
             # ===== RESUMO POR OPERAÇÃO FISCAL =====
             if mostrar('operacao'):
-                elements.append(Paragraph('📋 RESUMO POR OPERAÇÃO FISCAL', titulo_style))
+                elements.append(Paragraph('RESUMO POR OPERAÇÃO FISCAL', titulo_style))
 
                 operacoes_stats = vendas.values(
                     'id_operacao__nome_operacao'
@@ -785,7 +785,7 @@ class PDFFiscalService:
 
             # ===== RESUMO POR CIDADE =====
             if mostrar('cidade'):
-                elements.append(Paragraph('🏙️ RESUMO POR CIDADE DO CLIENTE', titulo_style))
+                elements.append(Paragraph('RESUMO POR CIDADE DO CLIENTE', titulo_style))
 
                 cidades_stats = vendas.values(
                     'id_cliente__cidade'
@@ -837,7 +837,7 @@ class PDFFiscalService:
 
             # ===== TOP 10 CLIENTES =====
             if mostrar('clientes'):
-                elements.append(Paragraph('🏆 TOP 10 CLIENTES', titulo_style))
+                elements.append(Paragraph('TOP 10 CLIENTES', titulo_style))
 
                 clientes_stats = vendas.values(
                     'id_cliente__nome_razao_social',
