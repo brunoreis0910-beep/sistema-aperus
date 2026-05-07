@@ -580,11 +580,19 @@ class PDFFiscalService:
                 
                 lista_data = [['Data', 'Nº Doc', 'Cliente', 'Operação', 'Valor']]
                 for v in lista_vendas:
+                    cliente_nome = 'Consumidor'
+                    if v.id_cliente and v.id_cliente.nome_razao_social:
+                        cliente_nome = v.id_cliente.nome_razao_social[:25]
+                    
+                    operacao_nome = '-'
+                    if v.id_operacao and v.id_operacao.nome_operacao:
+                        operacao_nome = v.id_operacao.nome_operacao[:20]
+                    
                     lista_data.append([
                         v.data_documento.strftime('%d/%m/%Y') if v.data_documento else '-',
                         str(v.numero_documento or v.id_venda),
-                        (v.id_cliente.nome_razao_social[:25] if v.id_cliente else 'Consumidor')[:25],
-                        (v.id_operacao.nome_operacao[:20] if v.id_operacao else '-')[:20],
+                        cliente_nome,
+                        operacao_nome,
                         f'R$ {v.valor_total:,.2f}',
                     ])
                 
@@ -636,16 +644,21 @@ class PDFFiscalService:
 
                     for fin in financeiro:
                         forma = fin['forma_pagamento'] or 'Não Definido'
-                        # Limpa formatação de forma de pagamento se houver (ex: "PIX: R$ 100,00" -> "PIX")
-                        if ':' in forma and 'R$' in forma:
-                            forma = forma.split(':')[0].strip()
+                        if forma and isinstance(forma, str):
+                            # Limpa formatação de forma de pagamento se houver (ex: "PIX: R$ 100,00" -> "PIX")
+                            if ':' in forma and 'R$' in forma:
+                                forma = forma.split(':')[0].strip()
+                        else:
+                            forma = 'Não Definido'
+                        
+                        forma = str(forma)[:40] if forma else 'Não Definido'
 
                         qtd = fin['quantidade']
                         total_pg = fin['total'] or 0
                         perc = (total_pg / valor_total * 100) if valor_total > 0 else 0
 
                         pg_data.append([
-                            forma[:40],
+                            forma,
                             str(qtd),
                             f'R$ {total_pg:,.2f}',
                             f'{perc:.1f}%'
@@ -695,12 +708,13 @@ class PDFFiscalService:
 
                     for item in itens:
                         grupo = item['id_produto__id_grupo__nome_grupo'] or 'Sem Grupo'
+                        grupo = str(grupo)[:40] if grupo else 'Sem Grupo'
                         qtd = item['quantidade'] or 0
                         total_grupo = item['total'] or 0
                         perc = (total_grupo / valor_total * 100) if valor_total > 0 else 0
 
                         grupo_data.append([
-                            grupo[:40],
+                            grupo,
                             f'{qtd:.2f}',
                             f'R$ {total_grupo:,.2f}',
                             f'{perc:.1f}%'
@@ -747,12 +761,13 @@ class PDFFiscalService:
 
                     for op in operacoes_stats:
                         nome_op = op['id_operacao__nome_operacao'] or 'Sem Operação'
+                        nome_op = str(nome_op)[:45] if nome_op else 'Sem Operação'
                         qtd = op['quantidade']
                         total_op = op['total'] or 0
                         perc = (total_op / valor_total * 100) if valor_total > 0 else 0
 
                         op_data.append([
-                            nome_op[:45],
+                            nome_op,
                             str(qtd),
                             f'R$ {total_op:,.2f}',
                             f'{perc:.1f}%'
@@ -799,12 +814,13 @@ class PDFFiscalService:
 
                     for cidade in cidades_stats:
                         nome_cidade = cidade['id_cliente__cidade'] or 'Não Informada'
+                        nome_cidade = str(nome_cidade)[:35] if nome_cidade else 'Não Informada'
                         qtd = cidade['quantidade']
                         total_cidade = cidade['total'] or 0
                         perc = (total_cidade / valor_total * 100) if valor_total > 0 else 0
 
                         cidade_data.append([
-                            nome_cidade[:35],
+                            nome_cidade,
                             str(qtd),
                             f'R$ {total_cidade:,.2f}',
                             f'{perc:.1f}%'
@@ -852,13 +868,15 @@ class PDFFiscalService:
 
                     for cli in clientes_stats:
                         nome = cli['id_cliente__nome_razao_social'] or 'Não Informado'
+                        nome = str(nome)[:28] if nome else 'Não Informado'
                         cidade_cli = cli['id_cliente__cidade'] or '-'
+                        cidade_cli = str(cidade_cli)[:15] if cidade_cli else '-'
                         qtd = cli['quantidade']
                         total_cli = cli['total'] or 0
 
                         cliente_data.append([
-                            nome[:28],
-                            cidade_cli[:15],
+                            nome,
+                            cidade_cli,
                             str(qtd),
                             f'R$ {total_cli:,.2f}'
                         ])
