@@ -6,14 +6,25 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const isCapacitor = () => {
   if (typeof window === 'undefined' || !window.Capacitor) return false;
-  if (typeof window.Capacitor.getPlatform === 'function') {
-    return window.Capacitor.getPlatform() !== 'web';
+  
+  try {
+    // Verifica se está em plataforma nativa (iOS, Android, etc)
+    if (typeof window.Capacitor.getPlatform === 'function') {
+      const platform = window.Capacitor.getPlatform();
+      // Se é 'web', não é nativo
+      if (platform === 'web') return false;
+      // Se é 'ios', 'android', 'electron', etc - é nativo
+      return true;
+    }
+    
+    if (typeof window.Capacitor.isNativePlatform === 'function') {
+      return window.Capacitor.isNativePlatform() === true;
+    }
+  } catch (e) {
+    console.warn('Erro ao detectar Capacitor:', e);
+    return false;
   }
-  if (typeof window.Capacitor.isNativePlatform === 'function') {
-    return window.Capacitor.isNativePlatform();
-  }
-  if (window.location.hostname === 'localhost' && !window.location.port) return true;
-  if (navigator.userAgent.includes('; wv)')) return true;
+  
   return false;
 };
 
@@ -36,53 +47,59 @@ const hasShareCapability = async () => {
  * @param {string} filename - Nome do arquivo (sem extensão)
  */
 export const visualizarPDF = async (doc, filename) => {
-  if (isCapacitor()) {
-    try {
-      const pdfBase64 = doc.output('dataurlstring').split(',')[1];
-      
-      // Salva temporariamente
-      const savedFile = await Filesystem.writeFile({
-        path: `${filename}.pdf`,
-        data: pdfBase64,
-        directory: Directory.Cache,
-      });
-      
-      console.log('📄 Arquivo salvo:', savedFile.uri);
-      
-      // Verifica se compartilhamento está disponível
-      const canShareResult = await hasShareCapability();
-      if (canShareResult) {
-        // Compartilha (usuário pode escolher visualizar ou enviar)
-        await Share.share({
-          title: `${filename}.pdf`,
-          text: 'Visualizar ou compartilhar PDF',
-          url: savedFile.uri,
-          dialogTitle: 'Abrir PDF'
+  try {
+    if (isCapacitor()) {
+      try {
+        const pdfBase64 = doc.output('dataurlstring').split(',')[1];
+        
+        const savedFile = await Filesystem.writeFile({
+          path: `${filename}.pdf`,
+          data: pdfBase64,
+          directory: Directory.Cache,
         });
-      } else {
-        // Fallback: abre o arquivo salvo (se possível) ou alerta
-        alert('Compartilhamento não disponível neste dispositivo. O PDF foi salvo temporariamente.');
-        // Tenta abrir o arquivo se for possível
-        try {
-          // No Capacitor, podemos tentar usar um viewer externo, mas por enquanto alerta
-          console.log('PDF salvo em:', savedFile.uri);
-        } catch (openError) {
-          console.error('Erro ao tentar abrir PDF:', openError);
+        
+        console.log('📄 Arquivo salvo:', savedFile.uri);
+        
+        const canShareResult = await hasShareCapability();
+        if (canShareResult) {
+          try {
+            await Share.share({
+              title: `${filename}.pdf`,
+              text: 'Visualizar ou compartilhar PDF',
+              url: savedFile.uri,
+              dialogTitle: 'Abrir PDF'
+            });
+            return true;
+          } catch (shareError) {
+            console.warn('Erro ao compartilhar, fazendo fallback para navegador:', shareError);
+            const pdfBlob = doc.output('blob');
+            const url = URL.createObjectURL(pdfBlob);
+            window.open(url, '_blank');
+            return true;
+          }
+        } else {
+          const pdfBlob = doc.output('blob');
+          const url = URL.createObjectURL(pdfBlob);
+          window.open(url, '_blank');
+          return true;
         }
+      } catch (error) {
+        console.warn('Erro em Capacitor, fazendo fallback para navegador:', error);
+        const pdfBlob = doc.output('blob');
+        const url = URL.createObjectURL(pdfBlob);
+        window.open(url, '_blank');
+        return true;
       }
-      
+    } else {
+      const pdfBlob = doc.output('blob');
+      const url = URL.createObjectURL(pdfBlob);
+      window.open(url, '_blank');
       return true;
-    } catch (error) {
-      console.error('❌ Erro ao abrir PDF:', error);
-      alert('Erro ao abrir PDF.');
-      return false;
     }
-  } else {
-    // No navegador: abrir em nova aba
-    const pdfBlob = doc.output('blob');
-    const url = URL.createObjectURL(pdfBlob);
-    window.open(url, '_blank');
-    return true;
+  } catch (error) {
+    console.error('❌ Erro ao abrir PDF:', error);
+    alert('Erro ao abrir PDF.');
+    return false;
   }
 };
 
@@ -92,40 +109,49 @@ export const visualizarPDF = async (doc, filename) => {
  * @param {string} filename - Nome do arquivo (sem extensão)
  */
 export const compartilharPDF = async (doc, filename) => {
-  if (isCapacitor()) {
-    try {
-      const pdfBase64 = doc.output('dataurlstring').split(',')[1];
-      
-      const savedFile = await Filesystem.writeFile({
-        path: `${filename}.pdf`,
-        data: pdfBase64,
-        directory: Directory.Cache,
-      });
-      
-      const canShareResult = await hasShareCapability();
-      if (canShareResult) {
-        await Share.share({
-          title: filename,
-          text: `Compartilhar ${filename}`,
-          url: savedFile.uri,
-          dialogTitle: 'Compartilhar PDF'
+  try {
+    if (isCapacitor()) {
+      try {
+        const pdfBase64 = doc.output('dataurlstring').split(',')[1];
+        
+        const savedFile = await Filesystem.writeFile({
+          path: `${filename}.pdf`,
+          data: pdfBase64,
+          directory: Directory.Cache,
         });
-      } else {
-        alert('Compartilhamento não disponível neste dispositivo.');
+        
+        const canShareResult = await hasShareCapability();
+        if (canShareResult) {
+          try {
+            await Share.share({
+              title: filename,
+              text: `Compartilhar ${filename}`,
+              url: savedFile.uri,
+              dialogTitle: 'Compartilhar PDF'
+            });
+            return true;
+          } catch (shareError) {
+            console.warn('Erro ao compartilhar:', shareError);
+            alert('Compartilhamento não disponível.');
+            return false;
+          }
+        } else {
+          alert('Compartilhamento não disponível neste dispositivo.');
+          return false;
+        }
+      } catch (error) {
+        console.warn('Erro em Capacitor:', error);
+        alert('Erro ao compartilhar PDF.');
         return false;
       }
-      
-      console.log('✅ PDF compartilhado');
+    } else {
+      doc.save(`${filename}.pdf`);
       return true;
-    } catch (error) {
-      console.error('❌ Erro ao compartilhar PDF:', error);
-      alert('Erro ao compartilhar PDF.');
-      return false;
     }
-  } else {
-    // No navegador: fazer download
-    doc.save(`${filename}.pdf`);
-    return true;
+  } catch (error) {
+    console.error('❌ Erro ao compartilhar PDF:', error);
+    alert('Erro ao compartilhar PDF.');
+    return false;
   }
 };
 
@@ -135,48 +161,64 @@ export const compartilharPDF = async (doc, filename) => {
  * @param {string} filename - Nome do arquivo
  */
 export const visualizarPDFBlob = async (blob, filename) => {
-  if (isCapacitor()) {
-    try {
-      // Converte blob para base64
-      const reader = new FileReader();
-      const base64Data = await new Promise((resolve, reject) => {
-        reader.onloadend = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      
-      // Salva temporariamente
-      const savedFile = await Filesystem.writeFile({
-        path: filename,
-        data: base64Data,
-        directory: Directory.Cache,
-      });
-      
-      const canShareResult = await hasShareCapability();
-      if (canShareResult) {
-        // Compartilha (usuário pode escolher visualizar ou enviar)
-        await Share.share({
-          title: filename,
-          text: 'Visualizar ou compartilhar PDF',
-          url: savedFile.uri,
-          dialogTitle: 'Abrir PDF'
+  try {
+    if (isCapacitor()) {
+      try {
+        // Tenta salvar em cache
+        const reader = new FileReader();
+        const base64Data = await new Promise((resolve, reject) => {
+          reader.onloadend = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
         });
-      } else {
-        // Fallback: alerta que não pode compartilhar
-        alert('Compartilhamento não disponível neste dispositivo. O PDF foi salvo temporariamente.');
-        console.log('PDF salvo em:', savedFile.uri);
+        
+        const savedFile = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache,
+        });
+        
+        const canShareResult = await hasShareCapability();
+        if (canShareResult) {
+          try {
+            // Compartilha (usuário pode escolher visualizar ou enviar)
+            await Share.share({
+              title: filename,
+              text: 'Visualizar ou compartilhar PDF',
+              url: savedFile.uri,
+              dialogTitle: 'Abrir PDF'
+            });
+            return true;
+          } catch (shareError) {
+            console.warn('Erro ao compartilhar, fazendo fallback para navegador:', shareError);
+            // Fallback: abre em nova aba no navegador
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+            return true;
+          }
+        } else {
+          // Share não disponível, abre em nova aba
+          const url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+          return true;
+        }
+      } catch (error) {
+        console.warn('Erro em Capacitor, fazendo fallback para navegador:', error);
+        // Fallback: abre em nova aba
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        return true;
       }
-      
+    } else {
+      // Navegador web: abre em nova aba
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
       return true;
-    } catch (error) {
-      console.error('❌ Erro ao abrir PDF:', error);
-      alert('Erro ao abrir PDF.');
-      return false;
     }
-  } else {
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    return true;
+  } catch (error) {
+    console.error('❌ Erro ao abrir PDF:', error);
+    alert('Erro ao abrir PDF.');
+    return false;
   }
 };
 
@@ -186,50 +228,62 @@ export const visualizarPDFBlob = async (blob, filename) => {
  * @param {string} filename - Nome do arquivo
  */
 export const compartilharPDFBlob = async (blob, filename) => {
-  if (isCapacitor()) {
-    try {
-      const reader = new FileReader();
-      const base64Data = await new Promise((resolve, reject) => {
-        reader.onloadend = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      
-      const savedFile = await Filesystem.writeFile({
-        path: filename,
-        data: base64Data,
-        directory: Directory.Cache,
-      });
-      
-      const canShareResult = await hasShareCapability();
-      if (canShareResult) {
-        await Share.share({
-          title: filename,
-          text: `Compartilhar ${filename}`,
-          url: savedFile.uri,
-          dialogTitle: 'Compartilhar PDF'
+  try {
+    if (isCapacitor()) {
+      try {
+        const reader = new FileReader();
+        const base64Data = await new Promise((resolve, reject) => {
+          reader.onloadend = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
         });
-      } else {
-        alert('Compartilhamento não disponível neste dispositivo.');
+        
+        const savedFile = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache,
+        });
+        
+        const canShareResult = await hasShareCapability();
+        if (canShareResult) {
+          try {
+            await Share.share({
+              title: filename,
+              text: `Compartilhar ${filename}`,
+              url: savedFile.uri,
+              dialogTitle: 'Compartilhar PDF'
+            });
+            return true;
+          } catch (shareError) {
+            console.warn('Erro ao compartilhar:', shareError);
+            alert('Compartilhamento não disponível.');
+            return false;
+          }
+        } else {
+          alert('Compartilhamento não disponível neste dispositivo.');
+          return false;
+        }
+      } catch (error) {
+        console.warn('Erro em Capacitor:', error);
+        alert('Erro ao compartilhar PDF.');
         return false;
       }
-      
+    } else {
+      // No navegador: fazer download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       return true;
-    } catch (error) {
-      console.error('❌ Erro ao compartilhar PDF:', error);
-      alert('Erro ao compartilhar PDF.');
-      return false;
     }
-  } else {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    return true;
+  } catch (error) {
+    console.error('❌ Erro ao compartilhar PDF:', error);
+    alert('Erro ao compartilhar PDF.');
+    return false;
   }
 };
 
