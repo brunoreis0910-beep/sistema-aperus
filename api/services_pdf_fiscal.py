@@ -429,9 +429,9 @@ class PDFFiscalService:
         # Determina tamanho de página baseado no device
         device = filtros.get('device', 'desktop')
         if device == 'mobile':
-            # Para mobile: usar Letter (menor) e margens reduzidas
-            from reportlab.lib.pagesizes import Letter
-            pagesize = Letter
+            # Para mobile: usar letter (menor) e margens reduzidas
+            from reportlab.lib.pagesizes import letter
+            pagesize = letter
             rightMargin = 0.8*cm
             leftMargin = 0.8*cm
             topMargin = 0.5*cm
