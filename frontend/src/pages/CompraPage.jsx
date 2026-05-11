@@ -129,6 +129,7 @@ function CompraPage() {
   
   // Controle de abas
   const [abaAtiva, setAbaAtiva] = useState(0)
+  const [operacaoGeraFinanceiro, setOperacaoGeraFinanceiro] = useState(false)
 
   // Estados da Manifestação do Destinatário inline
   const [dialogManifestacao, setDialogManifestacao] = useState(false)
@@ -236,6 +237,20 @@ function CompraPage() {
     if (authLoading) return
     carregarDados()
   }, [authLoading])
+
+  // Observa a operação selecionada para mostrar/esconder o botão "Gerar Financeiro"
+  useEffect(() => {
+    if (form.id_operacao) {
+      const operacaoSelecionada = operacoes.find(op => op.id_operacao === parseInt(form.id_operacao))
+      if (operacaoSelecionada && operacaoSelecionada.gera_financeiro === 1) {
+        setOperacaoGeraFinanceiro(true);
+      } else {
+        setOperacaoGeraFinanceiro(false);
+      }
+    } else {
+      setOperacaoGeraFinanceiro(false);
+    }
+  }, [form.id_operacao, operacoes]);
 
   // Detectar retorno do Cadastro Normal de Produto e restaurar estado do formulário
   useEffect(() => {
@@ -1446,7 +1461,7 @@ function CompraPage() {
     consultarNFesSeafaz()
   }
 
-  const importarNFeFromSeafaz = async (nfe) => {
+  const importarNFeFromSeafaz = async (nfe) =>
     try {
       setImportandoNsuSeafaz(nfe.nsu)
       const xmlBlob = new Blob([nfe.xml], { type: 'text/xml' })
@@ -1928,28 +1943,6 @@ function CompraPage() {
                     InputLabelProps={{ shrink: true }}
                     variant="outlined"
                     helperText="Data da nota fiscal (manual ou do XML)"
-                    sx={{
-                      '& .MuiOutlinedInput-root': {
-                        borderRadius: 2,
-                        '&:hover fieldset': {
-                          borderColor: 'primary.main',
-                        },
-                      },
-                    }}
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={3}>
-                  <TextField
-                    fullWidth
-                    required
-                    type="date"
-                    label="Data de Entrada *"
-                    value={form.data_entrada}
-                    onChange={(e) => setForm({ ...form, data_entrada: e.target.value })}
-                    InputLabelProps={{ shrink: true }}
-                    variant="outlined"
-                    helperText="Data de entrada no estoque (sugestão: hoje)"
                     sx={{
                       '& .MuiOutlinedInput-root': {
                         borderRadius: 2,
@@ -3064,6 +3057,44 @@ function CompraPage() {
                   >
                     Salvar Compra
                   </Button>
+                  {editandoId && operacaoGeraFinanceiro && (
+                    <Tooltip title="Gerar contas a pagar para esta compra">
+                      <Button
+                        variant="contained"
+                        color="success"
+                        startIcon={<AttachMoneyIcon />}
+                        onClick={() => {
+                          const compraAtual = compras.find(c => c.id_compra === editandoId);
+                          if (compraAtual) {
+                            setDadosFinanceiro({
+                              id_compra: editandoId,
+                              valor_total: parseFloat(compraAtual.valor_total) || 0,
+                              numero_parcelas: 1,
+                              data_vencimento: compraAtual.data_entrada || new Date().toISOString().split('T')[0],
+                              forma_pagamento: 'Boleto',
+                              obrigatorio: true
+                            });
+                            setModalFinanceiro(true);
+                          } else {
+                            toast.error("Não foi possível encontrar os dados da compra para gerar o financeiro.");
+                          }
+                        }}
+                        sx={{
+                          fontWeight: 'bold',
+                          px: 4,
+                          py: 1.5,
+                          borderRadius: 2,
+                          boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                          '&:hover': {
+                            transform: 'translateY(-2px)',
+                            boxShadow: '0 6px 25px rgba(0,0,0,0.4)',
+                          },
+                        }}
+                      >
+                        Gerar Financeiro
+                      </Button>
+                    </Tooltip>
+                  )}
                 </Stack>
               </Stack>
             </Paper>
@@ -4401,7 +4432,8 @@ function CompraPage() {
                 <Button
                   variant="outlined"
                   startIcon={<CloudSyncIcon />}
-                  onClick={() => consultarNFesSeafaz(maxNsuSeafaz)}
+                  onClick={() => { setNfesSeafaz([]); consultarNFesSeafaz(); }}
+                  disabled={consultandoNFes}
                 >
                   Carregar mais (a partir do NSU {maxNsuSeafaz})
                 </Button>
@@ -4575,6 +4607,7 @@ function CompraPage() {
                   <MenuItem value="M3">Metro³ (M3)</MenuItem>
                   <MenuItem value="CX">Caixa (CX)</MenuItem>
                   <MenuItem value="PCT">Pacote (PCT)</MenuItem>
+                  <MenuItem value="FD">Fardo (FD)</MenuItem>
                   <MenuItem value="PC">Peça (PC)</MenuItem>
                 </TextField>
               </Grid>
