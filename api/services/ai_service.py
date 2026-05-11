@@ -506,7 +506,8 @@ Retorne APENAS um JSON válido com a estrutura:
         """Busca dados de vendas"""
         from api.models import Venda, VendaItem
         
-        query = Venda.objects.all()
+        # Por padrão, exclui vendas canceladas para relatórios gerenciais
+        query = Venda.objects.exclude(status_nfe='CANCELADA')
         
         if inicio and fim:
             query = query.filter(data_documento__date__range=[inicio, fim])
