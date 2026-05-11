@@ -507,11 +507,17 @@ class PDFFiscalService:
         
         if status_filtro and status_filtro != 'todos':
             if status_filtro == 'faturada':
-                query &= Q(status_venda='Faturada')
+                # Considera documentos fiscais emitidos
+                query &= Q(status_nfe='EMITIDA')
             elif status_filtro == 'cancelada':
-                query &= Q(status_venda='Cancelada')
+                query &= Q(status_nfe='CANCELADA')
             elif status_filtro == 'aberta':
-                query &= Q(status_venda='Aberta')
+                # Considera vendas pendentes de emissão fiscal
+                query &= Q(status_nfe='PENDENTE')
+        else:
+            # Se o status for 'todos', inclui tudo, exceto as canceladas.
+            # Isso garante que Pedidos, NFC-e e NF-e emitidas entrem no relatório.
+            query &= ~Q(status_nfe='CANCELADA')
         
         # Busca vendas
         vendas = Venda.objects.filter(query).select_related(
