@@ -286,14 +286,7 @@ class FinanceiroContaViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def list(self, request, *args, **kwargs):
-        response = super().list(request, *args, **kwargs)
-        contas = response.data if isinstance(response.data, list) else response.data.get('results', [])
-        pagar = [c for c in contas if c.get('tipo_conta') == 'Pagar']
-        receber = [c for c in contas if c.get('tipo_conta') == 'Receber']
-        print(f'[FINANCEIRO_API] Total contas: {len(contas)} | A Pagar: {len(pagar)} | A Receber: {len(receber)}')
-        if pagar:
-            print(f'[FINANCEIRO_API] Primeiras contas a pagar: {[c.get("id_conta") for c in pagar[:3]]}')
-        return response
+        return super().list(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'])
     def estornar(self, request, pk=None):
