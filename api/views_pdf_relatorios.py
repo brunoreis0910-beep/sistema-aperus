@@ -486,17 +486,59 @@ def relatorio_estoque_pdf(request):
     }, status=status.HTTP_501_NOT_IMPLEMENTED)
 
 
+from api.services_pdf_gerencial import PDFGerencialService
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def relatorio_financeiro_pdf(request):
     """
-    Gera PDF do relatório financeiro (placeholder - implementar conforme necessidade)
+    Gera PDF do relatório financeiro com filtros opcionais.
     
-    GET /api/relatorios/financeiro/pdf/?data_inicio=2026-02-01&data_fim=2026-03-17
+    GET /api/relatorios/financeiro/pdf/?data_inicio=...&data_fim=...
+    
+    Filtros (opcionais):
+    - centro_custo_id: ID do Centro de Custo
+    - forma_pagamento: Nome da Forma de Pagamento
+    - conta_baixa_id: ID da Conta Bancária de baixa
+    - conta_lancamento_id: ID da Conta Bancária de lançamento/cobrança
     """
-    return Response({
-        'mensagem': 'Relatório financeiro ainda não implementado.'
-    }, status=status.HTTP_501_NOT_IMPLEMENTED)
+    try:
+        data_inicio_str = request.query_params.get('data_inicio')
+        data_fim_str = request.query_params.get('data_fim')
+        
+        if not data_inicio_str or not data_fim_str:
+            return Response({'erro': 'Parâmetros data_inicio e data_fim são obrigatórios.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        data_inicio = datetime.datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        data_fim = datetime.datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+
+        if data_inicio > data_fim:
+            return Response({'erro': 'Data de início não pode ser maior que a data de fim.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        filtros = {
+            'data_inicio': data_inicio,
+            'data_fim': data_fim,
+            'centro_custo_id': request.query_params.get('centro_custo_id'),
+            'forma_pagamento': request.query_params.get('forma_pagamento'),
+            'conta_baixa_id': request.query_params.get('conta_baixa_id'),
+            'conta_lancamento_id': request.query_params.get('conta_lancamento_id'),
+        }
+
+        logger.info(f"Gerando relatório financeiro: {data_inicio} a {data_fim} com filtros {filtros}")
+        
+        pdf_buffer = PDFGerencialService.gerar_pdf_financeiro(filtros)
+        
+        response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+        filename = f'Relatorio_Financeiro_{data_inicio.strftime("%Y%m%d")}_{data_fim.strftime("%Y%m%d")}.pdf'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        logger.info(f"Relatório financeiro gerado: {filename}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Erro ao gerar relatório financeiro: {e}", exc_info=True)
+        return Response({'erro': f'Erro ao gerar relatório: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])

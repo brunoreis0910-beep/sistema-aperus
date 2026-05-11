@@ -10,6 +10,7 @@ import datetime
 from django.urls import reverse
 from django.utils import timezone
 from typing import Dict, Any, Optional, Tuple
+from api.models import CentroCusto, ContaBancaria, FormaPagamento
 
 
 class AIDispatcher:
@@ -322,3 +323,47 @@ class AIDispatcher:
         """
         resultado = self.resolver()
         return resultado['acao'] != 'comando_nao_identificado'
+
+    def _extrair_filtros_financeiros(self) -> Dict[str, str]:
+        """
+        Extrai filtros financeiros da query, buscando IDs no banco de dados.
+        """
+        filtros = {}
+        query_lower = self.query.lower()
+
+        # Mapeamento de termos para nomes de campo e modelos
+        mapa_filtros = {
+            'centro de custo': ('centro_custo_id', CentroCusto, 'nome_centro_custo'),
+            'cc': ('centro_custo_id', CentroCusto, 'nome_centro_custo'),
+            'conta de baixa': ('conta_baixa_id', ContaBancaria, 'nome_conta'),
+            'conta baixa': ('conta_baixa_id', ContaBancaria, 'nome_conta'),
+            'conta de lançamento': ('conta_lancamento_id', ContaBancaria, 'nome_conta'),
+            'conta lançamento': ('conta_lancamento_id', ContaBancaria, 'nome_conta'),
+            'forma de pagamento': ('forma_pagamento', FormaPagamento, 'nome_forma'),
+        }
+
+        for termo, (campo_filtro, modelo, campo_modelo) in mapa_filtros.items():
+            # Usa regex para encontrar o valor após o termo
+            # Ex: "centro de custo VENDAS" -> captura "VENDAS"
+            match = re.search(f'{termo}\\s+([\\w\\s\\-]+)', query_lower)
+            if match:
+                valor_str = match.group(1).strip()
+                try:
+                    # Busca o objeto no banco para obter o ID ou o nome exato
+                    filtro_lookup = {f'{campo_modelo}__iexact': valor_str}
+                    objeto = modelo.objects.filter(**filtro_lookup).first()
+                    
+                    if objeto:
+                        if 'id' in campo_filtro:
+                            filtros[campo_filtro] = objeto.pk
+                        else:
+                            filtros[campo_filtro] = getattr(objeto, campo_modelo)
+                        
+                        logger.info(f"Filtro financeiro encontrado: {campo_filtro} = {filtros[campo_filtro]}")
+
+                except modelo.DoesNotExist:
+                    logger.warning(f"Valor de filtro financeiro '{valor_str}' não encontrado para o modelo {modelo.__name__}")
+                except Exception as e:
+                    logger.error(f"Erro ao buscar filtro financeiro '{valor_str}': {e}")
+        
+        return filtros
