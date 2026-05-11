@@ -1,6 +1,7 @@
 # Em: C:\Projetos\SistemaGerencial\api\views.py
 
 from rest_framework import viewsets, generics, permissions, filters, status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -209,11 +210,16 @@ class ProdutoViewSet(viewsets.ModelViewSet):
         categorias_filtradas = [cat for cat in categorias if cat and cat.strip()]
         return Response(categorias_filtradas)
 
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 100
+    page_size_query_param = 'page_size'
+    max_page_size = 1000
+
 class FinanceiroContaViewSet(viewsets.ModelViewSet):
     queryset = FinanceiroConta.objects.all().order_by('-id_conta')  # Ordenar por ID decrescente (mais recentes primeiro)
     serializer_class = FinanceiroContaSerializer
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = None  # Desabilitar paginação para retornar todos os registros
+    pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = {
         'tipo_conta': ['exact'],
