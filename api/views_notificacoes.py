@@ -61,7 +61,26 @@ class NotificacoesIniciaisView(APIView):
             })
             _id += 1
 
-        # 2. Contas a Pagar Vencendo Hoje
+        # 2. Contas a Pagar Vencidas
+        pagar_vencidas = FinanceiroConta.objects.filter(
+            tipo_conta='Pagar',
+            status_conta='Pendente',
+            data_vencimento__lt=hoje
+        )
+        if pagar_vencidas.exists():
+            qtd = pagar_vencidas.count()
+            total = pagar_vencidas.aggregate(sum=Sum('valor_parcela'))['sum'] or 0
+            notificacoes.append({
+                'id': _id,
+                'type': 'error',
+                'title': 'Contas a Pagar Vencidas',
+                'message': f'⚠️ Atenção: Você tem {qtd} conta(s) a pagar vencida(s) (Total: R$ {total:,.2f}).',
+                'icon': 'WarningAmber',
+                'link': '/financeiro'
+            })
+            _id += 1
+
+        # 2.5 Contas a Pagar Vencendo Hoje
         pagar_hoje = FinanceiroConta.objects.filter(
             tipo_conta='Pagar',
             status_conta='Pendente',

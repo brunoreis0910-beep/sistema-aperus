@@ -17,6 +17,7 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import InfoIcon from '@mui/icons-material/Info';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import CakeIcon from '@mui/icons-material/Cake';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import CashbacksVencendoDialog from './CashbacksVencendoDialog';
@@ -27,6 +28,7 @@ import FornecedoresCotacaoDialog from './FornecedoresCotacaoDialog';
 const iconMap = {
   MoneyOff: <MoneyOffIcon color="error" />,
   EventBusy: <EventBusyIcon color="warning" />,
+  WarningAmber: <WarningAmberIcon color="error" />,
   Inventory: <InventoryIcon color="info" />,
   LocalOffer: <LocalOfferIcon color="success" />,
   Cake: <CakeIcon color="secondary" />
