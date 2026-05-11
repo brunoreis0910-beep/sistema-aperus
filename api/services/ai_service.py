@@ -1437,7 +1437,9 @@ Relatórios disponíveis para exportação em PDF:
         hoje_str = hoje.strftime('%Y-%m-%d')
 
         # ── Vendas ────────────────────────────────────────────────────────────
-        vendas_qs = Venda.objects.filter(data_documento__date__range=[inicio_30_str, hoje_str])
+        from django.utils import timezone
+        hoje = timezone.now().date()
+        vendas_qs = Venda.objects.filter(data_documento__date=hoje).exclude(status_nfe='CANCELADA')
         totais_venda = vendas_qs.aggregate(
             faturamento=Sum('valor_total'),
             qtd=Count('id_venda'),
