@@ -589,7 +589,11 @@ export default function EntregasPage() {
       const resp = await fetch(getApiUrl(`vendas/entregas/?${params}`), {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (!resp.ok) throw new Error('Erro ao buscar entregas')
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => null)
+        const detail = errData?.detail || errData?.error || `Status ${resp.status}: ${resp.statusText}`
+        throw new Error(`Erro ao buscar entregas: ${detail}`)
+      }
       const data = await resp.json()
       setVendas(data)
     } catch (e) {
