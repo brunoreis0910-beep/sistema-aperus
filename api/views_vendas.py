@@ -2985,70 +2985,77 @@ class EntregasView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from django.db.models import Q
-        
-        status_filtro = request.query_params.get('status') or request.query_params.get('status_logistica')
-        mostrar_todos = request.query_params.get('todos') == '1'
-        busca = request.query_params.get('busca')
-        
-        qs = Venda.objects.select_related('id_cliente').prefetch_related('itens', 'itens__id_produto', 'logs_entrega', 'logs_entrega__usuario').order_by('-data_documento')
-        
-        if not mostrar_todos:
-            # Não mostrar os ENTREGUE se "mostrar_todos" não for 1
-            qs = qs.exclude(status_logistica='ENTREGUE')
+        import traceback
+        try:
+            from django.db.models import Q
             
-        if status_filtro:
-            qs = qs.filter(status_logistica=status_filtro)
+            status_filtro = request.query_params.get('status') or request.query_params.get('status_logistica')
+            mostrar_todos = request.query_params.get('todos') == '1'
+            busca = request.query_params.get('busca')
             
-        if busca:
-            qs = qs.filter(
-                Q(numero_documento__icontains=busca) |
-                Q(id_cliente__nome__icontains=busca) |
-                Q(endereco_entrega__icontains=busca)
-            )
-
-        data = []
-        for v in qs:
-            cliente = v.id_cliente
+            qs = Venda.objects.select_related('id_cliente').prefetch_related('itens', 'itens__id_produto', 'logs_entrega', 'logs_entrega__usuario').order_by('-data_documento')
             
-            itens = []
-            for item in v.itens.all():
-                itens.append({
-                    'id_item': item.id_item,
-                    'descricao': item.id_produto.descricao if item.id_produto else 'Produto não identificado',
-                    'quantidade': str(item.quantidade),
-                    'quantidade_entregue': str(item.quantidade_entregue) if item.quantidade_entregue is not None else '0'
-                })
+            if not mostrar_todos:
+                # Não mostrar os ENTREGUE se "mostrar_todos" não for 1
+                qs = qs.exclude(status_logistica='ENTREGUE')
                 
-            logs = []
-            for log in v.logs_entrega.all().order_by('-data_log'):
-                logs.append({
-                    'id_entrega_log': log.id_entrega_log,
-                    'data_log': log.data_log.isoformat() if log.data_log else None,
-                    'status_novo': log.status_novo,
-                    'status_anterior': log.status_anterior,
-                    'observacao': log.observacao,
-                    'usuario': log.usuario.username if log.usuario else '',
-                    'recebedor_nome': log.recebedor_nome,
-                    'recebedor_documento': log.recebedor_documento
+            if status_filtro:
+                qs = qs.filter(status_logistica=status_filtro)
+                
+            if busca:
+                qs = qs.filter(
+                    Q(numero_documento__icontains=busca) |
+                    Q(id_cliente__nome_razao_social__icontains=busca) |
+                    Q(id_cliente__nome_fantasia__icontains=busca) |
+                    Q(endereco_entrega__icontains=busca)
+                )
+
+            data = []
+            for v in qs:
+                cliente = v.id_cliente
+                
+                itens = []
+                for item in v.itens.all():
+                    itens.append({
+                        'id_item': item.id_item,
+                        'descricao': item.id_produto.descricao if item.id_produto else 'Produto não identificado',
+                        'quantidade': str(item.quantidade),
+                        'quantidade_entregue': str(item.quantidade_entregue) if item.quantidade_entregue is not None else '0'
+                    })
+                    
+                logs = []
+                for log in v.logs_entrega.all().order_by('-data_log'):
+                    logs.append({
+                        'id_entrega_log': log.id_entrega_log,
+                        'data_log': log.data_log.isoformat() if log.data_log else None,
+                        'status_novo': log.status_novo,
+                        'status_anterior': log.status_anterior,
+                        'observacao': log.observacao,
+                        'usuario': log.usuario.username if log.usuario else '',
+                        'recebedor_nome': log.recebedor_nome,
+                        'recebedor_documento': log.recebedor_documento
+                    })
+                
+                data.append({
+                    'id_venda': v.id_venda,
+                    'numero_documento': v.numero_documento,
+                    'data_documento': v.data_documento.isoformat() if v.data_documento else None,
+                    'cliente': (cliente.nome_razao_social or cliente.nome_fantasia) if cliente else 'Cliente não informado',
+                    'status_logistica': v.status_logistica,
+                    'endereco_entrega': v.endereco_entrega,
+                    'data_prevista_entrega': v.data_prevista_entrega.isoformat() if v.data_prevista_entrega else None,
+                    'responsavel_entrega': v.responsavel_entrega,
+                    'observacao_entrega': v.observacao_entrega,
+                    'valor_total': str(v.valor_total) if v.valor_total is not None else '0',
+                    'taxa_entrega': str(v.taxa_entrega) if v.taxa_entrega is not None else '0',
+                    'itens': itens,
+                    'logs': logs
                 })
-            
-            data.append({
-                'id_venda': v.id_venda,
-                'numero_documento': v.numero_documento,
-                'data_documento': v.data_documento.isoformat() if v.data_documento else None,
-                'cliente': cliente.nome if cliente else 'Cliente não informado',
-                'status_logistica': v.status_logistica,
-                'endereco_entrega': v.endereco_entrega,
-                'data_prevista_entrega': v.data_prevista_entrega.isoformat() if v.data_prevista_entrega else None,
-                'responsavel_entrega': v.responsavel_entrega,
-                'observacao_entrega': v.observacao_entrega,
-                'valor_total': str(v.valor_total) if v.valor_total is not None else '0',
-                'taxa_entrega': str(v.taxa_entrega) if v.taxa_entrega is not None else '0',
-                'itens': itens,
-                'logs': logs
-            })
-        return Response(data)
+            return Response(data)
+        except Exception as e:
+            print(f"ERRO EM ENTREGASVIEW: {str(e)}")
+            traceback.print_exc()
+            return Response({"error": str(e), "detail": traceback.format_exc()}, status=500)
 
 
 class AtualizarEntregaView(APIView):
