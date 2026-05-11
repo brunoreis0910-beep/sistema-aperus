@@ -1273,13 +1273,11 @@ function CompraPage() {
           id_compra_origem: dadosFinanceiro.id_compra,
           tipo_conta: 'Pagar',
           descricao: `Compra #${dadosFinanceiro.id_compra} - Parcela ${i + 1}/${dadosFinanceiro.numero_parcelas}`,
-          valor: parseFloat(valorParcela),
-          valor_parcela: parseFloat(valorParcela), // Campo adicional
+          valor_parcela: parseFloat(valorParcela),
           data_vencimento: dataVencimento.toISOString().split('T')[0],
           data_emissao: new Date().toISOString().split('T')[0],
           status_conta: 'Pendente',
-          forma_pagamento: dadosFinanceiro.forma_pagamento,
-          gerencial: true // Campo adicional obrigatório
+          forma_pagamento: dadosFinanceiro.forma_pagamento
         })
       }
 
