@@ -86,16 +86,43 @@ class PDFGerencialService:
         periodo_str = f"{data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}"
         PDFFiscalService._criar_cabecalho(elements, 'RELATÓRIO FINANCEIRO', periodo_str)
 
-        query = Q(data_emissao__range=[data_inicio, data_fim])
+        # Filtra pelo tipo de data. O padrão é data de vencimento.
+        query = Q(data_vencimento__range=[data_inicio, data_fim])
         
         if filtros.get('centro_custo_id'):
             query &= Q(id_centro_custo=filtros['centro_custo_id'])
         if filtros.get('forma_pagamento'):
+            # Busca pelo ID da forma de pagamento
             query &= Q(forma_pagamento__iexact=filtros['forma_pagamento'])
         if filtros.get('conta_baixa_id'):
             query &= Q(id_conta_baixa=filtros['conta_baixa_id'])
         if filtros.get('conta_lancamento_id'):
             query &= Q(id_conta_cobranca=filtros['conta_lancamento_id'])
+
+        # Filtros adicionais de Cliente/Fornecedor
+        cliente_fornecedor_id = filtros.get('cliente') or filtros.get('fornecedor')
+        if cliente_fornecedor_id:
+            query &= Q(id_cliente_fornecedor=cliente_fornecedor_id)
+        
+        # Filtro de Tipo de Movimentação
+        tipo_movimentacao = filtros.get('tipo')
+        if tipo_movimentacao and tipo_movimentacao != 'todos':
+            if tipo_movimentacao == 'entrada':
+                query &= Q(tipo_conta='Receber')
+            elif tipo_movimentacao == 'saida':
+                query &= Q(tipo_conta='Pagar')
+        
+        # Filtro de Status
+        status_filtro = filtros.get('status')
+        if status_filtro and status_filtro != 'todos':
+            if status_filtro == 'pendente':
+                query &= Q(status_conta__iexact='Pendente')
+            elif status_filtro == 'pago':
+                # No modelo, o status de pago é "Paga"
+                query &= Q(status_conta__iexact='Paga')
+            else:
+                # Permite outros status se existirem
+                query &= Q(status_conta__iexact=status_filtro)
 
         contas = FinanceiroConta.objects.filter(query).select_related(
             'id_cliente_fornecedor', 'id_centro_custo', 'id_conta_baixa', 'id_conta_cobranca'

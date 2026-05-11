@@ -523,6 +523,10 @@ def relatorio_financeiro_pdf(request):
             'forma_pagamento': request.query_params.get('forma_pagamento'),
             'conta_baixa_id': request.query_params.get('conta_baixa_id'),
             'conta_lancamento_id': request.query_params.get('conta_lancamento_id'),
+            'cliente': request.query_params.get('cliente'),
+            'fornecedor': request.query_params.get('fornecedor'),
+            'tipo': request.query_params.get('tipo'),
+            'status': request.query_params.get('status'),
         }
 
         logger.info(f"Gerando relatório financeiro: {data_inicio} a {data_fim} com filtros {filtros}")
