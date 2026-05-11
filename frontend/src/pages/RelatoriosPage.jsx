@@ -65,6 +65,9 @@ function RelatoriosPage() {
         vendedor: '',
         operacao: '',
         formaPagamento: '',
+        centroCusto: '',
+        contaBaixa: '',
+        contaLancamento: '',
         tipoData: 'vencimento',
         ordenacao: 'data_vencimento',
         resumoPor: [],
@@ -84,6 +87,8 @@ function RelatoriosPage() {
     const [vendedores, setVendedores] = useState([]);
     const [operacoes, setOperacoes] = useState([]);
     const [formasPagamento, setFormasPagamento] = useState([]);
+    const [centrosCusto, setCentrosCusto] = useState([]);
+    const [contasBancarias, setContasBancarias] = useState([]);
 
     const relatorios = [
         {
@@ -123,7 +128,7 @@ function RelatoriosPage() {
             icone: <FinanceIcon sx={{ fontSize: 40 }} />,
             cor: '#9c27b0',
             disponivel: true,
-            filtrosDisponiveis: ['dataInicio', 'dataFim', 'tipo', 'cliente', 'fornecedor', 'formaPagamento', 'status'],
+            filtrosDisponiveis: ['dataInicio', 'dataFim', 'tipo', 'cliente', 'fornecedor', 'formaPagamento', 'status', 'centroCusto', 'contaBaixa', 'contaLancamento'],
             categoria: 'financeiro'
         },
         {
@@ -313,7 +318,7 @@ function RelatoriosPage() {
 
     const carregarDados = async () => {
         try {
-            const [resClientes, resProdutos, resFornecedores, resDepositos, resGrupos, resVendedores, resOperacoes, resFormasPagamento] = await Promise.all([
+            const [resClientes, resProdutos, resFornecedores, resDepositos, resGrupos, resVendedores, resOperacoes, resFormasPagamento, resCentrosCusto, resContasBancarias] = await Promise.all([
                 axiosInstance.get('/clientes/?page_size=1000'),
                 axiosInstance.get('/produtos/?page_size=1000'),
                 axiosInstance.get('/fornecedores/?page_size=100'),
@@ -321,7 +326,9 @@ function RelatoriosPage() {
                 axiosInstance.get('/grupos-produto/').catch(() => ({ data: [] })),
                 axiosInstance.get('/vendedores/').catch(() => ({ data: [] })),
                 axiosInstance.get('/operacoes/?page_size=500').catch(() => ({ data: [] })),
-                axiosInstance.get('/formas-pagamento/?page_size=100').catch(() => ({ data: [] }))
+                axiosInstance.get('/formas-pagamento/?page_size=100').catch(() => ({ data: [] })),
+                axiosInstance.get('/centro-custo/?page_size=100').catch(() => ({ data: [] })),
+                axiosInstance.get('/contas-bancarias/?page_size=100').catch(() => ({ data: [] }))
             ]);
 
             // Verificar se é paginado ou array direto
@@ -333,6 +340,8 @@ function RelatoriosPage() {
             const vendedoresData = Array.isArray(resVendedores.data) ? resVendedores.data : (resVendedores.data?.results || []);
             const operacoesData = Array.isArray(resOperacoes.data) ? resOperacoes.data : (resOperacoes.data?.results || []);
             const formasPagamentoData = Array.isArray(resFormasPagamento.data) ? resFormasPagamento.data : (resFormasPagamento.data?.results || []);
+            const centrosCustoData = Array.isArray(resCentrosCusto.data) ? resCentrosCusto.data : (resCentrosCusto.data?.results || []);
+            const contasBancariasData = Array.isArray(resContasBancarias.data) ? resContasBancarias.data : (resContasBancarias.data?.results || []);
 
             setClientes(clientesData);
             setProdutos(produtosData);
@@ -342,6 +351,8 @@ function RelatoriosPage() {
             setVendedores(vendedoresData);
             setOperacoes(operacoesData);
             setFormasPagamento(formasPagamentoData);
+            setCentrosCusto(centrosCustoData);
+            setContasBancarias(contasBancariasData);
         } catch (error) {
             console.error('Erro ao carregar dados:', error);
         }
@@ -365,6 +376,9 @@ function RelatoriosPage() {
             vendedor: '',
             operacao: '',
             formaPagamento: '',
+            centroCusto: '',
+            contaBaixa: '',
+            contaLancamento: '',
             tipoData: 'vencimento',
             ordenacao: 'data_vencimento',
             resumoPor: [],
@@ -957,6 +971,66 @@ function RelatoriosPage() {
                                         {formasPagamento.map(forma => (
                                             <MenuItem key={forma.id_forma_pagamento} value={forma.id_forma_pagamento}>
                                                 {forma.nome_forma_pagamento}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                        )}
+
+                        {mostrarFiltro('centroCusto') && (
+                            <Grid item xs={12}>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel>Centro de Custo</InputLabel>
+                                    <Select
+                                        value={filtros.centroCusto || ''}
+                                        onChange={(e) => setFiltros({ ...filtros, centroCusto: e.target.value })}
+                                        label="Centro de Custo"
+                                    >
+                                        <MenuItem value="">Todos</MenuItem>
+                                        {centrosCusto.map(cc => (
+                                            <MenuItem key={cc.id_centro_custo} value={cc.id_centro_custo}>
+                                                {cc.nome_centro_custo}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                        )}
+
+                        {mostrarFiltro('contaLancamento') && (
+                            <Grid item xs={12}>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel>Conta de Lançamento</InputLabel>
+                                    <Select
+                                        value={filtros.contaLancamento || ''}
+                                        onChange={(e) => setFiltros({ ...filtros, contaLancamento: e.target.value })}
+                                        label="Conta de Lançamento"
+                                    >
+                                        <MenuItem value="">Todas</MenuItem>
+                                        {contasBancarias.map(conta => (
+                                            <MenuItem key={conta.id_conta_bancaria} value={conta.id_conta_bancaria}>
+                                                {conta.nome_conta}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                        )}
+
+                        {mostrarFiltro('contaBaixa') && (
+                            <Grid item xs={12}>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel>Conta de Baixa</InputLabel>
+                                    <Select
+                                        value={filtros.contaBaixa || ''}
+                                        onChange={(e) => setFiltros({ ...filtros, contaBaixa: e.target.value })}
+                                        label="Conta de Baixa"
+                                    >
+                                        <MenuItem value="">Todas</MenuItem>
+                                        {contasBancarias.map(conta => (
+                                            <MenuItem key={conta.id_conta_bancaria} value={conta.id_conta_bancaria}>
+                                                {conta.nome_conta}
                                             </MenuItem>
                                         ))}
                                     </Select>
