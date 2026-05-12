@@ -12,7 +12,7 @@ from .views_vendas import (
     CartaCorrecaoNFeView, CartaCorrecaoDownloadXMLView, CartaCorrecaoDeleteView, CartaCorrecaoImprimirView,
     ComplementoICMSNFeView, EmitirComplementoICMSView,
     EntregasView, AtualizarEntregaView,
-    SalvarVendaPDVNFCeView, ListarVendasPDVNFCeView,
+    SalvarVendaPDVNFCeView, ListarVendasPDVNFCeView, TransmitirNFCeView,
     visualizar_certificado
 )
 from .views_faturamento import (
