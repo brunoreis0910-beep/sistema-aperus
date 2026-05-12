@@ -60,6 +60,16 @@ def ensure_financeiro_for_venda(venda, payload=None, force=False):
     """
     print("[FINANCEIRO_FIX_v2] Função ensure_financeiro_for_venda executando com correção para compras!")
     payload = payload or {}
+    logging.info(
+        'ensure_financeiro_for_venda iniciar: venda=%s, id_venda=%s, id_compra=%s, id_operacao=%s, id_fornecedor=%s, force=%s, payload=%s',
+        getattr(venda, 'pk', None),
+        getattr(venda, 'id_venda', None),
+        getattr(venda, 'id_compra', None),
+        getattr(getattr(venda, 'id_operacao', None), 'pk', None),
+        getattr(venda, 'id_fornecedor', None) or getattr(venda, 'id_cliente', None),
+        force,
+        payload,
+    )
     
     # Detectar se é venda ou compra
     is_compra = hasattr(venda, 'id_compra')
@@ -79,10 +89,14 @@ def ensure_financeiro_for_venda(venda, payload=None, force=False):
     else:
         existing_qs = FinanceiroConta.objects.filter(id_venda_origem=venda_key)
     if existing_qs.exists():
+        logging.info('ensure_financeiro_for_venda: financeiro existente encontrado para %s=%s',
+                     'compra' if is_compra else 'venda', venda_key)
         if not force:
             return (False, getattr(existing_qs.first(), 'pk', getattr(existing_qs.first(), 'id_conta', None)), None)
         # deletar existentes
         existing_qs.delete()
+        logging.info('ensure_financeiro_for_venda: financeiros existentes excluídos para forçar recriação %s=%s',
+                     'compra' if is_compra else 'venda', venda_key)
 
     # decidir se deve criar financeiro
     explicit_flag_present = False
@@ -139,6 +153,9 @@ def ensure_financeiro_for_venda(venda, payload=None, force=False):
             data_venc = None
     if not data_venc:
         data_venc = timezone.now().date()
+
+    logging.info('ensure_financeiro_for_venda escolher parametros: forma_id=%s, vencimento=%s, parcela_valor=%s, data_venc=%s, tipo_conta=%s',
+                 forma_id, vencimento_str, parcela_valor, data_venc, 'Pagar' if is_compra else 'Receber')
 
     try:
         # Determinar se é "Receber" (venda) ou "Pagar" (compra)
@@ -216,6 +233,11 @@ def ensure_financeiro_for_venda(venda, payload=None, force=False):
                 cliente_obj = None
             if cliente_obj:
                 fc_data['id_cliente_fornecedor_id'] = cliente_obj.pk
+            else:
+                logging.warning(
+                    'ensure_financeiro_for_venda: fornecedor id=%s não corresponde a Cliente válido, campo id_cliente_fornecedor_id omitido',
+                    id_fornecedor_valor
+                )
         
         # Definir origem correta (venda ou compra)
         if is_compra:
@@ -223,7 +245,12 @@ def ensure_financeiro_for_venda(venda, payload=None, force=False):
         else:
             fc_data['id_venda_origem'] = venda_key
         
+        logging.info('ensure_financeiro_for_venda: criando FinanceiroConta com dados %s', fc_data)
         fc = FinanceiroConta.objects.create(**fc_data)
+        logging.info('ensure_financeiro_for_venda: FinanceiroConta criado id=%s para %s=%s',
+                     getattr(fc, 'id_conta', getattr(fc, 'pk', None)),
+                     'compra' if is_compra else 'venda',
+                     venda_key)
         
         # Atualizar flag gerou_financeiro na venda/compra (se existir)
         if hasattr(venda, 'gerou_financeiro'):

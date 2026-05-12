@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction, IntegrityError
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+import logging
 from .models import Compra, CompraItem, Produto, Operacao, Estoque, FinanceiroConta
 from django.utils import timezone
 from .services.venda_financeiro import ensure_financeiro_for_venda
@@ -1054,8 +1055,7 @@ class CompraViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
             
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            logging.exception('gerar_financeiro: erro ao criar contas para compra=%s', pk)
             return Response(
                 {'error': f'Erro ao salvar fração: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1069,9 +1069,11 @@ class CompraViewSet(viewsets.ModelViewSet):
         
         try:
             compra = self.get_object()
+            logging.info('gerar_financeiro compra=%s requisitado: data=%s', pk, request.data)
             
             # Verifica se já tem financeiro gerado
             if FinanceiroConta.objects.filter(id_compra_origem=pk).exists():
+                logging.warning('gerar_financeiro: já existe financeiro para compra=%s', pk)
                 return Response({'error': 'Financeiro já foi gerado para esta compra'}, status=status.HTTP_400_BAD_REQUEST)
             
             # Pega dados do request
@@ -1123,6 +1125,7 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'vencimento': str(data_vcto)
                     })
             
+            logging.info('gerar_financeiro: criado %s contas para compra=%s', len(contas_criadas), pk)
             return Response({
                 'success': True,
                 'mensagem': f'{num_parcelas} conta(s) criada(s) com sucesso',
@@ -1130,8 +1133,10 @@ class CompraViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_201_CREATED)
             
         except Compra.DoesNotExist:
+            logging.exception('gerar_financeiro: compra não encontrada pk=%s', pk)
             return Response({'error': 'Compra não encontrada'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
+            logging.exception('gerar_financeiro: erro inesperado ao gerar financeiro para compra=%s', pk)
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'], url_path='calcular-precificacao')
