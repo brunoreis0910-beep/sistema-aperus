@@ -4,7 +4,7 @@ import logging
 
 from django.utils import timezone
 
-from ..models import FinanceiroConta, FormaPagamento
+from ..models import FinanceiroConta, FormaPagamento, Cliente
 from .. import finance_policies
 
 
@@ -208,9 +208,14 @@ def ensure_financeiro_for_venda(venda, payload=None, force=False):
             'parcela_total': 1,
         }
         
-        # Usar _id para contornar problema de ForeignKey(Cliente) não aceitar Fornecedor
+        # Usar _id apenas se o fornecedor/cliente corresponder a um Cliente válido
         if id_fornecedor_valor:
-            fc_data['id_cliente_fornecedor_id'] = id_fornecedor_valor
+            try:
+                cliente_obj = Cliente.objects.filter(pk=id_fornecedor_valor).first()
+            except Exception:
+                cliente_obj = None
+            if cliente_obj:
+                fc_data['id_cliente_fornecedor_id'] = cliente_obj.pk
         
         # Definir origem correta (venda ou compra)
         if is_compra:

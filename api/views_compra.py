@@ -1115,7 +1115,6 @@ class CompraViewSet(viewsets.ModelViewSet):
                         forma_pagamento=forma_pagamento.nome_forma,
                         parcela_numero=i + 1,
                         parcela_total=num_parcelas,
-                        id_cliente_fornecedor=compra.id_fornecedor
                     )
                     contas_criadas.append({
                         'id': conta.pk,
