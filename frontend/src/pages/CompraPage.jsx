@@ -1459,7 +1459,7 @@ function CompraPage() {
     consultarNFesSeafaz()
   }
 
-  const importarNFeFromSeafaz = async (nfe) =>
+  const importarNFeFromSeafaz = async (nfe) => {
     try {
       setImportandoNsuSeafaz(nfe.nsu)
       const xmlBlob = new Blob([nfe.xml], { type: 'text/xml' })

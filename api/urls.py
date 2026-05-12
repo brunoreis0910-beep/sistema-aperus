@@ -420,6 +420,7 @@ urlpatterns = [
     path('vendas/<int:id_venda>/inutilizar_nfce/', InutilizarNFCeView.as_view(), name='vendas-inutilizar-nfce'),
     path('vendas/<int:id_venda>/limpar_nfce_erro/', LimparNFCeErroView.as_view(), name='vendas-limpar-nfce-erro'),
     path('vendas/<int:id_venda>/imprimir_danfce/', ImprimirDanfceNFCeView.as_view(), name='vendas-imprimir-danfce'),
+    path('vendas/transmitir_nfce/', TransmitirNFCeView.as_view(), name='vendas-transmitir-nfce'),
     path('vendas/download_lote_xml/', BaixarLoteXMLView.as_view(), name='vendas-download-lote-xml'),
     # Controle de Entrega
     path('vendas/entregas/', EntregasView.as_view(), name='vendas-entregas'),

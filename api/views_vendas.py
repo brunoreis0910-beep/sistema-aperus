@@ -3140,3 +3140,140 @@ def visualizar_certificado(request):
         logger.exception('Erro ao ler certificado digital')
         return Response({'sucesso': False, 'mensagem': f'Erro ao ler certificado: {exc}'}, status=400)
 
+
+class TransmitirNFCeView(APIView):
+    """
+    Endpoint para transmissão de NFC-e a partir de dados coletados no APK.
+    Recebe JSON com produtos, quantidades, CPF cliente e forma de pagamento.
+    Cria venda, calcula tributos e emite NFC-e automaticamente.
+    
+    URL: POST /api/vendas/transmitir_nfce/
+    Payload: {
+        "produtos": [{"id_produto": int, "quantidade": float}],
+        "cpf_cliente": "string" (opcional),
+        "forma_pagamento": "DINHEIRO|CARTAO|PIX"
+    }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from django.contrib.auth.models import User
+        from .models import Cliente
+        
+        data = request.data
+        produtos = data.get('produtos', [])
+        cpf_cliente = data.get('cpf_cliente', '').strip()
+        forma_pagamento = data.get('forma_pagamento', 'DINHEIRO').upper()
+        
+        if not produtos:
+            return Response({'sucesso': False, 'mensagem': 'Lista de produtos obrigatória'}, status=400)
+        
+        # Validar produtos
+        produto_ids = [p.get('id_produto') for p in produtos if p.get('id_produto')]
+        if len(produto_ids) != len(produtos):
+            return Response({'sucesso': False, 'mensagem': 'Todos os produtos devem ter id_produto'}, status=400)
+        
+        produtos_objs = Produto.objects.filter(id_produto__in=produto_ids)
+        if len(produtos_objs) != len(produto_ids):
+            return Response({'sucesso': False, 'mensagem': 'Alguns produtos não encontrados'}, status=400)
+        
+        produtos_dict = {p.id_produto: p for p in produtos_objs}
+        
+        # Buscar cliente se CPF informado
+        cliente = None
+        if cpf_cliente:
+            cliente = Cliente.objects.filter(cpf_cnpj__icontains=cpf_cliente.replace('.', '').replace('-', '')).first()
+        
+        # Buscar operação padrão para NFC-e
+        operacao = Operacao.objects.filter(tipo_documento='NFC-e', padrao=True).first()
+        if not operacao:
+            operacao = Operacao.objects.filter(tipo_documento='NFC-e').first()
+        
+        if not operacao:
+            return Response({'sucesso': False, 'mensagem': 'Operação fiscal para NFC-e não configurada'}, status=400)
+        
+        try:
+            with transaction.atomic():
+                # Criar venda
+                venda = Venda.objects.create(
+                    id_operacao=operacao,
+                    id_cliente=cliente,
+                    criado_por=request.user,
+                    origem='APK',
+                    status_pagamento='APROVADO',  # Assumir aprovado no APK
+                    status_logistica='ENTREGUE',  # NFC-e é imediata
+                )
+                
+                valor_total = Decimal('0.00')
+                
+                # Adicionar itens
+                for item_data in produtos:
+                    produto = produtos_dict[item_data['id_produto']]
+                    quantidade = Decimal(str(item_data['quantidade']))
+                    valor_unitario = produto.preco_venda or Decimal('0.00')
+                    valor_item = quantidade * valor_unitario
+                    
+                    # Tributar item
+                    tributacao = _tributar_item(
+                        produto_id=produto.id_produto,
+                        empresa_id=None,  # Usar configuração ativa
+                        uf_destino=None,  # Cliente final
+                        tipo_operacao='INTERNA',
+                        tipo_cliente='CONSUMIDOR_FINAL',
+                        valor_unitario=float(valor_unitario),
+                        quantidade=float(quantidade)
+                    )
+                    
+                    VendaItem.objects.create(
+                        id_venda=venda,
+                        id_produto=produto,
+                        quantidade=quantidade,
+                        valor_unitario=valor_unitario,
+                        valor_total=valor_item,
+                        # Campos tributários podem ser preenchidos da tributacao
+                    )
+                    
+                    valor_total += valor_item
+                
+                venda.valor_total = valor_total
+                venda.save()
+                
+                # Gerar financeiro se necessário
+                ensure_financeiro_for_venda(venda)
+                
+                # Emitir NFC-e
+                service = NFCeService()
+                result = service.emitir_nfce(venda)
+                
+                if result.get('sucesso'):
+                    # Retornar dados para impressão
+                    response_data = {
+                        'sucesso': True,
+                        'id_venda': venda.id_venda,
+                        'numero_nfce': venda.numero_nfe,
+                        'chave_nfe': venda.chave_nfe,
+                        'qrcode_nfe': venda.qrcode_nfe,
+                        'protocolo_nfe': venda.protocolo_nfe,
+                        'xml_nfe': venda.xml_nfe,
+                        'mensagem': 'NFC-e emitida com sucesso'
+                    }
+                    
+                    # Gerar DANFE se possível
+                    try:
+                        danfe_service = DanfeGenerator()
+                        pdf_data = danfe_service.gerar_danfe(venda, modelo='65')
+                        if pdf_data:
+                            response_data['danfe_base64'] = pdf_data.decode('latin1') if isinstance(pdf_data, bytes) else pdf_data
+                    except Exception as e:
+                        logger.warning(f"Erro ao gerar DANFE: {e}")
+                    
+                    return Response(response_data)
+                else:
+                    # Se falhou, deletar venda criada
+                    venda.delete()
+                    return Response(result, status=400)
+                    
+        except Exception as e:
+            logger.exception(f"Erro ao transmitir NFC-e: {e}")
+            return Response({'sucesso': False, 'mensagem': f'Erro interno: {str(e)}'}, status=500)
+
