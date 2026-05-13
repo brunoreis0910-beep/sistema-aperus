@@ -62,7 +62,7 @@ def calcular_preco_final(produto, cliente, valor_tabela):
             valor_desc = (valor_tabela * (valor_desconto / Decimal("100")))
             desconto_percentual = valor_desconto
         else:  # FIXO
-            valor_desc = valor_desconto
+            valor_desc = min(valor_desconto, valor_tabela)
             desconto_percentual = (valor_desc / valor_tabela * Decimal("100")) if valor_tabela > 0 else Decimal("0.00")
         
         preco_com_desconto = valor_tabela - valor_desc
