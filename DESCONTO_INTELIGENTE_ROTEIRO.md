@@ -169,7 +169,7 @@ Response (200 OK):
 // ClienteDescontosTab.jsx
 import React, { useState, useEffect } from 'react';
 import {
-  Card, CardContent, CardHeader, CardTitle,
+  Card, CardContent, CardHeader,
   TextField, Select, MenuItem, Switch, FormControlLabel,
   Button, Alert, CircularProgress, Chip,
   FormGroup, FormLabel, Box, Grid, Tooltip, Typography
@@ -358,6 +358,7 @@ const useCalculoDesconto = (cliente, produto, valorTabela) => {
 
 // Uso no componente de venda:
 function AdicionarItemVenda() {
+  const { axiosInstance } = useAuth();
   const { resultado: descontoCalc, loading: loadingDesc } = useCalculoDesconto(
     cliente, 
     produtoSelecionado, 
@@ -463,7 +464,7 @@ export const descontosAPI = {
       valor_tabela: valorTabela
     }),
   
-  validar: (clienteId, produtoId, descontoFroposto) =>
+  validar: (clienteId, produtoId, descontoProposto) =>
     axiosInstance.post('/api/descontos/validar/', {
       id_cliente: clienteId,
       id_produto: produtoId,

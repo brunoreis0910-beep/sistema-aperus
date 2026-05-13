@@ -71,6 +71,7 @@ class Cliente(models.Model):
         'GrupoProduto',
         blank=True,
         related_name='clientes_com_excecao',
+        through='ClienteGrupoExcecao',
         help_text='Grupos de produtos que NÃO receberão o desconto'
     )
     priorizar_desconto_cliente = models.BooleanField(
@@ -110,6 +111,18 @@ class Cliente(models.Model):
         if not self.codigo_municipio_ibge: return ""
         return re.sub(r'[^0-9]', '', self.codigo_municipio_ibge)
 
+
+class ClienteGrupoExcecao(models.Model):
+    id = models.AutoField(primary_key=True)
+    cliente = models.ForeignKey('Cliente', on_delete=models.CASCADE, db_column='cliente_id')
+    grupoproduto = models.ForeignKey('GrupoProduto', on_delete=models.CASCADE, db_column='grupoproduto_id')
+
+    class Meta:
+        managed = True
+        db_table = 'clientes_grupos_excecao'
+        unique_together = (('cliente', 'grupoproduto'),)
+        verbose_name = 'Exceção de Grupo de Cliente'
+        verbose_name_plural = 'Exceções de Grupo de Clientes'
 
 
 # --- Modelo Fornecedor (mesmos campos que Cliente) ---
@@ -5863,4 +5876,3 @@ class TributacaoUF(models.Model):
 
     def __str__(self):
         return f'{self.tipo_tributacao.nome} → {self.uf_destino} | ICMS {self.icms_aliq}%'
-
