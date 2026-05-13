@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿﻿import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -1477,6 +1477,7 @@ const VendaRapidaPage = () => {
     const novoItem = {
       id: Date.now(),
       id_produto: idProd,
+      travado: travado,
       codigo: cod,
       nome: nome,
       quantidade: parseFloat(qtd),
@@ -1486,6 +1487,7 @@ const VendaRapidaPage = () => {
       desconto_valor: valorDesconto,
       valor_total: valorTotalItem,
       tem_promocao: !!promocao,
+      descricaoPromocao: descricaoPromocao,
       id_lote: lotePreSelecionado?.id_lote || null,
       numero_lote: lotePreSelecionado?.numero_lote || '',
     };
@@ -1581,6 +1583,7 @@ const VendaRapidaPage = () => {
           setItemPendenteEstoque({
             codigoProduto,
             idProdutoSelecionado,
+            grupoProdutoSelecionado,
             nomeProduto,
             quantidade,
             valorUnitario,
@@ -1632,9 +1635,9 @@ const VendaRapidaPage = () => {
     let clienteDescontoValor = 0;
     let clienteDescontoAplicado = false;
     
-    if (cliente && cliente.tipo_desconto && cliente.valor_desconto > 0) {
+    if (cliente && cliente.tipo_desconto && parseFloat(cliente.valor_desconto || 0) > 0) {
       const grupos_excecao = Array.isArray(cliente.grupos_excecao) ? cliente.grupos_excecao : [];
-      if (grupoProdutoSelecionado && grupos_excecao.includes(grupoProdutoSelecionado)) {
+      if (grupoProdutoSelecionado && grupos_excecao.some(g => String(g.id_grupo || g) === String(grupoProdutoSelecionado))) {
         clienteTemExcecao = true;
         console.log('⚠️ Produto em grupo de exceção para desconto do cliente!');
       }
@@ -1696,6 +1699,7 @@ const VendaRapidaPage = () => {
     const novoItem = {
       id: Date.now(),
       id_produto: idProdutoSelecionado,  // Incluir ID do produto
+      travado: cliente?.priorizar_desconto_cliente || false,
       codigo: codigoProduto,
       nome: nomeProduto,  // Adicionar nome do produto
       quantidade: parseFloat(quantidade),
@@ -1705,6 +1709,7 @@ const VendaRapidaPage = () => {
       desconto_valor: valorDesconto,
       valor_total: valorTotalItem,
       tem_promocao: !!promocao,
+      descricaoPromocao: descricaoPromocao,
       id_lote: lotePreSelecionado?.id_lote || null,
       numero_lote: lotePreSelecionado?.numero_lote || '',
     };
@@ -6020,7 +6025,3 @@ const VendaRapidaPage = () => {
 };
 
 export default VendaRapidaPage;
-
-
-
-

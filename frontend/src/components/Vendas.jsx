@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿﻿import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -1594,26 +1594,59 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
     const valorItem = parseFloat(quantidade) * parseFloat(valor_unitario || produto.valor_venda || produto.preco_venda || produto.preco || 0);
 
-    // Chamar endpoint da API para simular desconto
-    try {
-      const simularDescontoResponse = await axiosInstance.post('/descontos/simular/', {
-        id_cliente: venda.id_cliente,
-        id_produto: id_produto,
-        valor_tabela: valor_unitario // Passa o valor unitário como valor de tabela para cálculo
-      });
+    const promocao = verificarPromocao(id_produto, quantidade);
 
-      const { preco, desconto_aplicado, desconto_percentual, travado: isTravado, motivo } = simularDescontoResponse.data;
+    // ========== VERIFICAR DESCONTO DO CLIENTE ==========
+    let clienteTemExcecao = false;
+    let clienteDescontoValor = 0;
+    let clienteDescontoAplicado = false;
+    let clientePrioridade = false;
 
-      descontoPerc = desconto_percentual;
-      descontoVal = desconto_aplicado;
-      descricaoPromocao = motivo ? ` (${motivo})` : '';
-      travado = isTravado;
+    // Buscar o objeto cliente completo na lista
+    const clienteCompleto = clientes.find(c => String(c.id_cliente || c.id) === String(venda.id_cliente));
 
-      console.log('[DESCONTO-API] Resposta da simulação:', simularDescontoResponse.data);
+    if (clienteCompleto && clienteCompleto.tipo_desconto && parseFloat(clienteCompleto.valor_desconto || 0) > 0) {
+      const grupos_excecao = Array.isArray(clienteCompleto.grupos_excecao) ? clienteCompleto.grupos_excecao : [];
+      const idGrupo = produto.id_grupo || produto.grupo_produto;
+      
+      if (idGrupo && grupos_excecao.some(g => String(g.id_grupo || g) === String(idGrupo))) {
+        clienteTemExcecao = true;
+      }
+      
+      if (!clienteTemExcecao) {
+        if (clienteCompleto.tipo_desconto === 'PERCENTUAL') {
+          clienteDescontoValor = parseFloat(clienteCompleto.valor_desconto);
+        } else { // FIXO
+          const precoUnitario = parseFloat(valor_unitario || produto.valor_venda || 0);
+          clienteDescontoValor = precoUnitario > 0 ? (parseFloat(clienteCompleto.valor_desconto) / precoUnitario) * 100 : 0;
+        }
+        clienteDescontoAplicado = true;
+        clientePrioridade = clienteCompleto.priorizar_desconto_cliente || false;
+      }
+    }
 
-    } catch (apiError) {
-      console.error('Erro ao simular desconto do cliente via API:', apiError);
-      // Fallback para o desconto original do itemData ou 0
+    // Hierarquia: Exceção > Cliente > Promoção > Manual
+    if (clienteTemExcecao) {
+      descontoPerc = 0;
+      descontoVal = 0;
+      descricaoPromocao = 'Exceção de Grupo (Sem Desconto)';
+      travado = clientePrioridade;
+    } else if (clienteDescontoAplicado) {
+      descontoPerc = clienteDescontoValor;
+      descontoVal = (valorItem * descontoPerc) / 100;
+      descricaoPromocao = `Desconto Cliente`;
+      travado = clientePrioridade;
+    } else if (promocao) {
+      if (promocao.tipo_desconto === 'percentual') {
+        descontoPerc = promocao.desconto_percentual;
+        descontoVal = (valorItem * descontoPerc) / 100;
+      } else {
+        descontoVal = promocao.valor_desconto;
+        descontoPerc = valorItem > 0 ? (descontoVal / valorItem) * 100 : 0;
+      }
+      descricaoPromocao = promocao.promocao_nome;
+    } else {
+      // Manual
       const desc = parseFloat(desconto || 0);
       if (tipoDesconto === 'percentual') {
         descontoPerc = desc;
@@ -1622,8 +1655,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         descontoVal = desc;
         descontoPerc = valorItem > 0 ? (desc / valorItem) * 100 : 0;
       }
-      descricaoPromocao = ''; // Limpa descrição em caso de erro na API
-      travado = false; // Não trava se a API falhou
     }
 
     const valorTotalItem = valorItem - descontoVal;
@@ -1641,7 +1672,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       desconto_percentual: descontoPerc,
       subtotal: valorTotalItem,
       tem_promocao: !!promocao,
-      nome_promocao: promocao?.promocao_nome || '',
+      nome_promocao: descricaoPromocao || '',
       cfop: itemData.cfop || (() => {
         const trib = produto.tributacao_detalhada || null;
         return trib?.cfop || '5102';
