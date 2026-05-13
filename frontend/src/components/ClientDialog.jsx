@@ -15,7 +15,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
 import PersonIcon from '@mui/icons-material/Person'; 
-import { FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { FormControl, InputLabel, Select, MenuItem, FormControlLabel, Checkbox } from '@mui/material';
 import TabPanel from './TabPanel'; 
 import { useAuth } from '../context/AuthContext';
 
@@ -26,12 +26,16 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
   const [clientFormData, setClientFormData] = useState({
     nome_razao_social: '', nome_fantasia: '', cpf_cnpj: '', inscricao_estadual: '',
     endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '',
-    telefone: '', email: '', limite_credito: 0, logo_url: '', sexo: ''
+    telefone: '', email: '', limite_credito: 0, logo_url: '', sexo: '',
+    tipo_desconto: 'PERCENTUAL', valor_desconto: 0, percentual_arredondamento: 0,
+    priorizar_desconto_cliente: false, grupos_excecao: [],
   });
   
   const [savingClient, setSavingClient] = useState(false);
   const [loadingCNPJ, setLoadingCNPJ] = useState(false);
   const [loadingCEP, setLoadingCEP] = useState(false);
+  const [loadingGrupos, setLoadingGrupos] = useState(false);
+  const [gruposExcecaoOptions, setGruposExcecaoOptions] = useState([]);
   const [clientTabValue, setClientTabValue] = useState(0); 
 
   useEffect(() => {
@@ -52,17 +56,40 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
         email: clientToEdit.email || '',
         limite_credito: clientToEdit.limite_credito || 0,
         logo_url: clientToEdit.logo_url || '',
-        sexo: clientToEdit.sexo || ''
+        sexo: clientToEdit.sexo || '',
+        tipo_desconto: clientToEdit.tipo_desconto || 'PERCENTUAL',
+        valor_desconto: clientToEdit.valor_desconto || 0,
+        percentual_arredondamento: clientToEdit.percentual_arredondamento || 0,
+        priorizar_desconto_cliente: clientToEdit.priorizar_desconto_cliente || false,
+        grupos_excecao: clientToEdit.grupos_excecao ? clientToEdit.grupos_excecao.map(g => g.id_grupo || g.id || g) : [],
       });
     } else {
       // Limpa o form para "Adicionar Novo"
       setClientFormData({
         nome_razao_social: '', nome_fantasia: '', cpf_cnpj: '', inscricao_estadual: '',
         endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '',
-        telefone: '', email: '', limite_credito: 0, logo_url: '', sexo: ''
+        telefone: '', email: '', limite_credito: 0, logo_url: '', sexo: '',
+        tipo_desconto: 'PERCENTUAL', valor_desconto: 0, percentual_arredondamento: 0,
+        priorizar_desconto_cliente: false, grupos_excecao: [],
       });
     }
   }, [clientToEdit, open]);
+
+  useEffect(() => {
+    const fetchGrupos = async () => {
+      setLoadingGrupos(true);
+      try {
+        const res = await axiosInstance.get('/grupos-produto/');
+        setGruposExcecaoOptions(res.data || []);
+      } catch (error) {
+        console.error('Erro ao carregar grupos de exceção:', error);
+      } finally {
+        setLoadingGrupos(false);
+      }
+    };
+
+    fetchGrupos();
+  }, [axiosInstance]);
 
   const handleClientFormChange = (e) => { 
     const { name, value } = e.target; 
@@ -159,6 +186,7 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
                   <Tabs value={clientTabValue} onChange={handleClientTabChange}>
                     <Tab label="Dados Principais" />
                     <Tab label="Endereço" />
+                    <Tab label="Desconto" />
                     <Tab label="Logotipo" />
                   </Tabs>
                 </Box>
@@ -197,6 +225,88 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
                 </TabPanel>
 
                 <TabPanel value={clientTabValue} index={2}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={4}>
+                      <FormControl fullWidth>
+                        <InputLabel id="tipo-desconto-label">Tipo de Desconto</InputLabel>
+                        <Select
+                          labelId="tipo-desconto-label"
+                          name="tipo_desconto"
+                          value={clientFormData.tipo_desconto}
+                          onChange={handleClientFormChange}
+                          label="Tipo de Desconto"
+                          disabled={savingClient}
+                        >
+                          <MenuItem value="PERCENTUAL">Percentual (%)</MenuItem>
+                          <MenuItem value="FIXO">Valor Fixo (R$)</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <TextField
+                        name="valor_desconto"
+                        label="Valor do Desconto"
+                        type="number"
+                        value={clientFormData.valor_desconto}
+                        onChange={handleClientFormChange}
+                        disabled={savingClient}
+                        fullWidth
+                        InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <TextField
+                        name="percentual_arredondamento"
+                        label="Arredondamento (%)"
+                        type="number"
+                        value={clientFormData.percentual_arredondamento}
+                        onChange={handleClientFormChange}
+                        disabled={savingClient}
+                        fullWidth
+                        InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            name="priorizar_desconto_cliente"
+                            checked={Boolean(clientFormData.priorizar_desconto_cliente)}
+                            onChange={(e) => setClientFormData(prev => ({ ...prev, priorizar_desconto_cliente: e.target.checked }))}
+                            disabled={savingClient}
+                          />
+                        }
+                        label="Priorizar desconto do cliente"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth>
+                        <InputLabel id="grupos-excecao-label">Grupos de Exceção</InputLabel>
+                        <Select
+                          labelId="grupos-excecao-label"
+                          name="grupos_excecao"
+                          multiple
+                          value={clientFormData.grupos_excecao}
+                          onChange={(e) => setClientFormData(prev => ({ ...prev, grupos_excecao: e.target.value }))}
+                          label="Grupos de Exceção"
+                          disabled={savingClient || loadingGrupos}
+                          renderValue={(selected) => selected.length === 0 ? 'Nenhum grupo selecionado' : selected.map((id) => {
+                            const grupo = gruposExcecaoOptions.find((g) => (g.id_grupo || g.id) === id);
+                            return grupo ? (grupo.nome_grupo || grupo.nome) : id;
+                          }).join(', ')}
+                        >
+                          {gruposExcecaoOptions.map((grupo) => (
+                            <MenuItem key={grupo.id_grupo || grupo.id} value={grupo.id_grupo || grupo.id}>
+                              {grupo.nome_grupo || grupo.nome}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  </Grid>
+                </TabPanel>
+
+                <TabPanel value={clientTabValue} index={3}>
                   <Grid container spacing={2} alignItems="center">
                     <Grid item xs={12} sm={8}><TextField name="logo_url" label="URL do Logotipo" value={clientFormData.logo_url} onChange={handleClientFormChange} disabled={savingClient} fullWidth helperText="Insira a URL de uma imagem para o logotipo."/></Grid>
                     <Grid item xs={12} sm={4} sx={{ display: 'flex', justifyContent: 'center' }}>

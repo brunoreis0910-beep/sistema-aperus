@@ -37,6 +37,46 @@ class Cliente(models.Model):
         ('F', 'Feminino'),
     ]
     sexo = models.CharField(max_length=1, blank=True, null=True, choices=SEXO_CHOICES)
+    
+    # ===== NOVOS CAMPOS - MÓDULO DE DESCONTOS INTELIGENTES =====
+    TIPO_DESCONTO_CHOICES = [
+        ('FIXO', 'Fixo (R$)'),
+        ('PERCENTUAL', 'Percentual (%)'),
+    ]
+    tipo_desconto = models.CharField(
+        max_length=10, 
+        choices=TIPO_DESCONTO_CHOICES, 
+        default='PERCENTUAL',
+        blank=True,
+        null=True,
+        help_text='Tipo de desconto a aplicar: Fixo em R$ ou Percentual (%)'
+    )
+    valor_desconto = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        default=0.00,
+        blank=True,
+        null=True,
+        help_text='Valor do desconto (em R$ se FIXO, em % se PERCENTUAL). 0 = sem desconto'
+    )
+    percentual_arredondamento = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=0.00,
+        blank=True,
+        null=True,
+        help_text='Percentual de margem de arredondamento permitido (ex: 0.5 = até 0.5% de ajuste)'
+    )
+    grupos_excecao = models.ManyToManyField(
+        'GrupoProduto',
+        blank=True,
+        related_name='clientes_com_excecao',
+        help_text='Grupos de produtos que NÃO receberão o desconto'
+    )
+    priorizar_desconto_cliente = models.BooleanField(
+        default=False,
+        help_text='Se True, usa desconto do cliente. Se False, permite operação decidir (padrão)'
+    )
 
     class Meta:
         managed = False 

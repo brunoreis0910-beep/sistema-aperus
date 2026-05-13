@@ -101,6 +101,7 @@ const ClientePageComplete = () => {
   const [editingId, setEditingId] = useState(null);
   const [loadingCNPJ, setLoadingCNPJ] = useState(false);
   const [loadingCEP, setLoadingCEP] = useState(false);
+  const [gruposProduto, setGruposProduto] = useState([]);
 
   // Estados da inativação
   const [inativarDialogOpen, setInativarDialogOpen] = useState(false);
@@ -127,7 +128,12 @@ const ClientePageComplete = () => {
     estado: '',
     data_aniversario: '',
     observacoes: '',
-    limite_credito: 0
+    limite_credito: 0,
+    tipo_desconto: 'PERCENTUAL',
+    valor_desconto: 0,
+    percentual_arredondamento: 0,
+    priorizar_desconto_cliente: false,
+    grupos_excecao: []
   });
 
   // Fun��o para formatar CPF ou CNPJ automaticamente
@@ -246,6 +252,16 @@ const ClientePageComplete = () => {
       setError('Erro ao carregar lista de clientes');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const carregarGruposProduto = async () => {
+    try {
+      const response = await axiosInstance.get('/grupos-produto/');
+      const data = Array.isArray(response.data) ? response.data : response.data?.results || [];
+      setGruposProduto(data);
+    } catch (err) {
+      console.error('Erro ao carregar grupos de produto:', err);
     }
   };
 
@@ -410,7 +426,12 @@ const ClientePageComplete = () => {
         data_nascimento: formData.data_aniversario || null,
         observacoes: formData.observacoes || '',
         limite_credito: parseFloat(formData.limite_credito) || 0,
-        sexo: formData.sexo || null
+        sexo: formData.sexo || null,
+        tipo_desconto: formData.tipo_desconto || 'PERCENTUAL',
+        valor_desconto: parseFloat(formData.valor_desconto) || 0,
+        percentual_arredondamento: parseFloat(formData.percentual_arredondamento) || 0,
+        priorizar_desconto_cliente: Boolean(formData.priorizar_desconto_cliente),
+        grupos_excecao: Array.isArray(formData.grupos_excecao) ? formData.grupos_excecao : []
       };
 
       console.log('📤 Enviando dados para o backend:', dadosParaSalvar);
@@ -473,7 +494,12 @@ const ClientePageComplete = () => {
       data_aniversario: '',
       observacoes: '',
       limite_credito: 0,
-      sexo: ''
+      sexo: '',
+      tipo_desconto: 'PERCENTUAL',
+      valor_desconto: 0,
+      percentual_arredondamento: 0,
+      priorizar_desconto_cliente: false,
+      grupos_excecao: []
     });
     setEditingId(null);
     setError('');
@@ -502,7 +528,12 @@ const ClientePageComplete = () => {
       data_aniversario: clienteNormalizado.data_aniversario,
       observacoes: clienteNormalizado.observacoes,
       limite_credito: clienteNormalizado.limite_credito || 0,
-      sexo: cliente.sexo || ''
+      sexo: clienteNormalizado.sexo || '',
+      tipo_desconto: clienteNormalizado.tipo_desconto || 'PERCENTUAL',
+      valor_desconto: clienteNormalizado.valor_desconto || 0,
+      percentual_arredondamento: clienteNormalizado.percentual_arredondamento || 0,
+      priorizar_desconto_cliente: Boolean(clienteNormalizado.priorizar_desconto_cliente),
+      grupos_excecao: clienteNormalizado.grupos_excecao || []
     });
     setEditingId(cliente.id);
     setOpen(true);
@@ -621,6 +652,7 @@ const ClientePageComplete = () => {
 
   useEffect(() => {
     carregarClientes();
+    carregarGruposProduto();
 
     // Teste de conectividade com o backend
     testBackendConnection();
@@ -1124,7 +1156,90 @@ const ClientePageComplete = () => {
               />
             </Grid>
 
-            {/* Seçéo: Contato */}
+            {/* Seção: Descontos Inteligentes */}
+            <Grid item xs={12}>
+              <Typography variant="h6" sx={{ mb: 2, mt: 2, color: '#1976d2' }}>
+                <SendIcon sx={{ mr: 1, verticalAlign: 'bottom' }} />
+                Descontos Inteligentes
+              </Typography>
+            </Grid>
+
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth>
+                <InputLabel>Tipo de Desconto</InputLabel>
+                <Select
+                  value={formData.tipo_desconto}
+                  label="Tipo de Desconto"
+                  onChange={(e) => setFormData({ ...formData, tipo_desconto: e.target.value })}
+                >
+                  <MenuItem value="PERCENTUAL">Percentual (%)</MenuItem>
+                  <MenuItem value="FIXO">Fixo (R$)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                label="Valor do Desconto"
+                type="number"
+                value={formData.valor_desconto}
+                onChange={(e) => setFormData({ ...formData, valor_desconto: e.target.value })}
+                inputProps={{ min: 0, step: 0.01 }}
+                helperText={formData.tipo_desconto === 'PERCENTUAL' ? 'Valor em %' : 'Valor em R$'}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                label="Arredondamento (%)"
+                type="number"
+                value={formData.percentual_arredondamento}
+                onChange={(e) => setFormData({ ...formData, percentual_arredondamento: e.target.value })}
+                inputProps={{ min: 0, step: 0.01 }}
+                helperText="Margem de ajuste permitida"
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={Boolean(formData.priorizar_desconto_cliente)}
+                    onChange={(e) => setFormData({ ...formData, priorizar_desconto_cliente: e.target.checked })}
+                  />
+                }
+                label="Priorizar desconto do cliente"
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Grupos de Exceção</InputLabel>
+                <Select
+                  multiple
+                  value={formData.grupos_excecao}
+                  onChange={(e) => setFormData({ ...formData, grupos_excecao: e.target.value })}
+                  label="Grupos de Exceção"
+                  renderValue={(selected) =>
+                    gruposProduto
+                      .filter((grupo) => selected.includes(grupo.id_grupo || grupo.id))
+                      .map((grupo) => grupo.nome_grupo || grupo.nome)
+                      .join(', ')
+                  }
+                >
+                  {gruposProduto.map((grupo) => (
+                    <MenuItem key={grupo.id_grupo || grupo.id} value={grupo.id_grupo || grupo.id}>
+                      <Checkbox checked={formData.grupos_excecao.includes(grupo.id_grupo || grupo.id)} />
+                      <Typography>{grupo.nome_grupo || grupo.nome}</Typography>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            {/* Seção: Contato */}
             <Grid item xs={12}>
               <Typography variant="h6" sx={{ mb: 2, mt: 2, color: '#1976d2' }}>
                 <PhoneIcon sx={{ mr: 1, verticalAlign: 'bottom' }} />

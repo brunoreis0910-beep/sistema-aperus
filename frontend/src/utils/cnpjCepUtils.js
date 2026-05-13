@@ -375,6 +375,18 @@ export const normalizeClienteData = (data) => {
     data_aniversario: data.data_nascimento || data.data_aniversario || data.birthday || '',
     observacoes: data.observacoes || data.notes || '',
     limite_credito: data.limite_credito || 0,
+    tipo_desconto: data.tipo_desconto || 'PERCENTUAL',
+    valor_desconto: data.valor_desconto || 0,
+    percentual_arredondamento: data.percentual_arredondamento || 0,
+    priorizar_desconto_cliente: Boolean(data.priorizar_desconto_cliente),
+    grupos_excecao: Array.isArray(data.grupos_excecao)
+      ? data.grupos_excecao.map((item) => {
+          if (typeof item === 'object') {
+            return item.id || item.id_grupo || item.pk || item.value || null;
+          }
+          return item;
+        }).filter(Boolean)
+      : [],
     ativo: data.ativo !== undefined ? data.ativo : true,
     data_inativacao: data.data_inativacao || null,
     motivo_inativacao: data.motivo_inativacao || '',

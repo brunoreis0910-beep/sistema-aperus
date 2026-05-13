@@ -248,6 +248,16 @@ from .views import (
     SolicitacaoAprovacaoViewSet,
     DepositoViewSet,
     EstoqueViewSet,
+    verificar_limite_cliente,
+    validar_cliente_atraso,
+)
+from .views_descontos import (
+    simular_desconto_cliente,
+    validar_desconto_proposto,
+    obter_config_desconto_cliente,
+    listar_clientes_com_desconto,
+)
+from .views import (
     EstoqueMovimentacaoViewSet,
     PetViewSet,
     TipoServicoViewSet,
@@ -447,6 +457,11 @@ urlpatterns = [
     path('verificar-senha-supervisor/', verificar_senha_supervisor, name='verificar-senha-supervisor'),
     path('verificar-limite-cliente/', verificar_limite_cliente, name='verificar-limite-cliente'),
     path('validar-cliente-atraso/', validar_cliente_atraso, name='validar-cliente-atraso'),
+    # ===== MÓDULO DE DESCONTOS INTELIGENTES =====
+    path('descontos/simular/', simular_desconto_cliente, name='descontos-simular'),
+    path('descontos/validar/', validar_desconto_proposto, name='descontos-validar'),
+    path('descontos/cliente/<int:cliente_id>/', obter_config_desconto_cliente, name='descontos-config-cliente'),
+    path('descontos/clientes-com-desconto/', listar_clientes_com_desconto, name='descontos-clientes-lista'),
     path('proxy-image/', proxy_image, name='proxy-image'),
     # Cadastro Turbo de Produtos (EAN + IA + Preços Regionais)
     path('produtos/cadastro-turbo/', cadastro_turbo_produto, name='produtos-cadastro-turbo'),

@@ -198,7 +198,10 @@ function ClientPage() {
                           </> 
                         }>
                             <Avatar src={cliente.logo_url} alt="Logo" sx={{ mr: 2 }}>{!cliente.logo_url && <PersonIcon />}</Avatar>
-                            <ListItemText primary={cliente.nome_razao_social} secondary={`CPF/CNPJ: ${cliente.cpf_cnpj} | Email: ${cliente.email || '-'}`}/>
+                            <ListItemText
+                              primary={cliente.nome_razao_social}
+                              secondary={`CPF/CNPJ: ${cliente.cpf_cnpj} | Email: ${cliente.email || '-'} | Desconto: ${cliente.tipo_desconto === 'FIXO' ? `R$ ${cliente.valor_desconto ?? 0}` : `${cliente.valor_desconto ?? 0}%`} ${cliente.priorizar_desconto_cliente ? '(Prioriza cliente)' : ''}`}
+                            />
                         </ListItem>
                         {index < clientes.length - 1 && <Divider component="li" />}
                     </React.Fragment>
