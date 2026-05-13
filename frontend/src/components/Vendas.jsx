@@ -1582,61 +1582,38 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
   // Adicionar item
   // Função auxiliar para efetivamente adicionar o item (sem validação)
-  const efetivarAdicaoItem = (itemData, produtoData) => {
+  const efetivarAdicaoItem = async (itemData, produtoData) => {
     const { quantidade, valor_unitario, desconto, id_produto } = itemData;
     const tipoDesconto = itemData.tipo_desconto || 'valor';
     const produto = produtoData;
 
-    // Verificar promocao
-    let promocao = null;
     let descontoPerc = 0;
     let descontoVal = 0;
     let descricaoPromocao = '';
+    let travado = false; // Nova variável para controlar se o campo de desconto deve ser travado
 
     const valorItem = parseFloat(quantidade) * parseFloat(valor_unitario || produto.valor_venda || produto.preco_venda || produto.preco || 0);
 
-    const promoDB = verificarPromocao(id_produto, quantidade);
+    // Chamar endpoint da API para simular desconto
+    try {
+      const simularDescontoResponse = await axiosInstance.post('/descontos/simular/', {
+        id_cliente: venda.id_cliente,
+        id_produto: id_produto,
+        valor_tabela: valor_unitario // Passa o valor unitário como valor de tabela para cálculo
+      });
 
-    // ========== VERIFICAR DESCONTO DO CLIENTE ==========
-    let clienteTemExcecao = false;
-    let clienteDescontoAplicado = false;
-    const clienteSelecionado = clientes.find(c => String(c.id || c.id_cliente) === String(venda.id_cliente));
+      const { preco, desconto_aplicado, desconto_percentual, travado: isTravado, motivo } = simularDescontoResponse.data;
 
-    if (clienteSelecionado && clienteSelecionado.tipo_desconto && clienteSelecionado.valor_desconto > 0) {
-      const grupos_excecao = Array.isArray(clienteSelecionado.grupos_excecao) ? clienteSelecionado.grupos_excecao : [];
-      if (produto.id_grupo && grupos_excecao.includes(produto.id_grupo)) {
-        clienteTemExcecao = true;
-      }
-      
-      if (!clienteTemExcecao) {
-        if (clienteSelecionado.tipo_desconto === 'PERCENTUAL') {
-          descontoPerc = parseFloat(clienteSelecionado.valor_desconto);
-          descontoVal = (valorItem * descontoPerc) / 100;
-        } else { // FIXO
-          descontoVal = parseFloat(clienteSelecionado.valor_desconto);
-          descontoPerc = valorItem > 0 ? (descontoVal / valorItem) * 100 : 0;
-        }
-        clienteDescontoAplicado = true;
-      }
-    }
+      descontoPerc = desconto_percentual;
+      descontoVal = desconto_aplicado;
+      descricaoPromocao = motivo ? ` (${motivo})` : '';
+      travado = isTravado;
 
-    if (clienteTemExcecao) {
-      descontoPerc = 0;
-      descontoVal = 0;
-      descricaoPromocao = ` (Exceção de Grupo)`;
-    } else if (clienteDescontoAplicado) {
-      descricaoPromocao = ` (Desconto Cliente)`;
-    } else if (promoDB) {
-      promocao = promoDB;
-      if (promocao.tipo_desconto === 'percentual') {
-        descontoPerc = parseFloat(promocao.valor_desconto);
-        descontoVal = (valorItem * descontoPerc) / 100;
-      } else {
-        descontoVal = parseFloat(promocao.valor_desconto);
-        descontoPerc = valorItem > 0 ? (descontoVal / valorItem) * 100 : 0;
-      }
-      descricaoPromocao = ` (${promocao.promocao_nome})`;
-    } else {
+      console.log('[DESCONTO-API] Resposta da simulação:', simularDescontoResponse.data);
+
+    } catch (apiError) {
+      console.error('Erro ao simular desconto do cliente via API:', apiError);
+      // Fallback para o desconto original do itemData ou 0
       const desc = parseFloat(desconto || 0);
       if (tipoDesconto === 'percentual') {
         descontoPerc = desc;
@@ -1645,6 +1622,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         descontoVal = desc;
         descontoPerc = valorItem > 0 ? (desc / valorItem) * 100 : 0;
       }
+      descricaoPromocao = ''; // Limpa descrição em caso de erro na API
+      travado = false; // Não trava se a API falhou
     }
 
     const valorTotalItem = valorItem - descontoVal;
@@ -1652,6 +1631,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     const item = {
       id: Date.now(),
       id_produto: id_produto,
+      travado: travado, // Adicionar propriedade travado
       codigo_produto: produto.codigo_produto || produto.codigo || produto.code || produto.sku || `P${produto.id_produto || produto.id}`,
       nome_produto: produto.nome_produto || produto.nome || produto.name || produto.title,
       quantidade: parseFloat(quantidade),
@@ -5815,33 +5795,39 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                                   <>R$ {parseFloat(item.desconto || 0).toFixed(2)}</>
                                 ) : (
                                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
-                                    <TextField
-                                      type="number"
-                                      size="small"
-                                      value={item.desconto_tipo_edicao === 'percentual' ? (parseFloat(item.desconto_percentual) || 0) : (parseFloat(item.desconto) || 0)}
-                                      onChange={(e) => alterarDescontoItem(index, e.target.value, item.desconto_tipo_edicao || 'valor')}
-                                      inputProps={{ min: 0, step: 0.01 }}
-                                      sx={{ width: 105 }}
-                                      InputProps={{
-                                        startAdornment: (
-                                          <InputAdornment position="start">
-                                            <Box
-                                              onClick={() => {
-                                                const novoTipo = (item.desconto_tipo_edicao || 'valor') === 'valor' ? 'percentual' : 'valor';
-                                                setVenda(prev => ({
-                                                  ...prev,
-                                                  itens: prev.itens.map((it, i) => i === index ? { ...it, desconto_tipo_edicao: novoTipo } : it)
-                                                }));
-                                              }}
-                                              sx={{ cursor: 'pointer', fontWeight: 'bold', color: 'primary.main', userSelect: 'none', fontSize: '0.75rem', minWidth: 16 }}
-                                              title="Clique para alternar entre R$ e %"
-                                            >
-                                              {(item.desconto_tipo_edicao || 'valor') === 'valor' ? 'R$' : '%'}
-                                            </Box>
-                                          </InputAdornment>
-                                        ),
-                                      }}
-                                    />
+                                    <Tooltip title={item.travado ? item.descricaoPromocao : ""} placement="top" arrow>
+                                      <TextField
+                                        type="number"
+                                        size="small"
+                                        value={item.desconto_tipo_edicao === 'percentual' ? (parseFloat(item.desconto_percentual) || 0) : (parseFloat(item.desconto) || 0)}
+                                        onChange={(e) => alterarDescontoItem(index, e.target.value, item.desconto_tipo_edicao || 'valor')}
+                                        inputProps={{ min: 0, step: 0.01 }}
+                                        sx={{ width: 105 }}
+                                        disabled={item.travado} // Desabilitar se travado
+                                        InputProps={{
+                                          readOnly: item.travado, // Campo apenas para leitura se travado
+                                          startAdornment: (
+                                            <InputAdornment position="start">
+                                              <Box
+                                                onClick={() => {
+                                                  if (!item.travado) { // Só permitir alternar se não estiver travado
+                                                    const novoTipo = (item.desconto_tipo_edicao || 'valor') === 'valor' ? 'percentual' : 'valor';
+                                                    setVenda(prev => ({
+                                                      ...prev,
+                                                      itens: prev.itens.map((it, i) => i === index ? { ...it, desconto_tipo_edicao: novoTipo } : it)
+                                                    }));
+                                                  }
+                                                }}
+                                                sx={{ cursor: item.travado ? 'default' : 'pointer', fontWeight: 'bold', color: 'primary.main', userSelect: 'none', fontSize: '0.75rem', minWidth: 16 }}
+                                                title={item.travado ? item.descricaoPromocao : "Clique para alternar entre R$ e %"}
+                                              >
+                                                {(item.desconto_tipo_edicao || 'valor') === 'valor' ? 'R$' : '%'}
+                                              </Box>
+                                            </InputAdornment>
+                                          ),
+                                        }}
+                                      />
+                                    </Tooltip>
                                   </Box>
                                 )}
                               </TableCell>

@@ -3052,7 +3052,7 @@ const VendaRapidaPage = () => {
     `;
   };
 
-  const imprimirVenda = () => {
+  const imprimirVenda = async () => {
     if (!dadosVendaCompleta) return;
 
     const dados = dadosVendaCompleta;
