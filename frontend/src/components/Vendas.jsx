@@ -1596,7 +1596,37 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     const valorItem = parseFloat(quantidade) * parseFloat(valor_unitario || produto.valor_venda || produto.preco_venda || produto.preco || 0);
 
     const promoDB = verificarPromocao(id_produto, quantidade);
-    if (promoDB) {
+
+    // ========== VERIFICAR DESCONTO DO CLIENTE ==========
+    let clienteTemExcecao = false;
+    let clienteDescontoAplicado = false;
+    const clienteSelecionado = clientes.find(c => String(c.id || c.id_cliente) === String(venda.id_cliente));
+
+    if (clienteSelecionado && clienteSelecionado.tipo_desconto && clienteSelecionado.valor_desconto > 0) {
+      const grupos_excecao = Array.isArray(clienteSelecionado.grupos_excecao) ? clienteSelecionado.grupos_excecao : [];
+      if (produto.id_grupo && grupos_excecao.includes(produto.id_grupo)) {
+        clienteTemExcecao = true;
+      }
+      
+      if (!clienteTemExcecao) {
+        if (clienteSelecionado.tipo_desconto === 'PERCENTUAL') {
+          descontoPerc = parseFloat(clienteSelecionado.valor_desconto);
+          descontoVal = (valorItem * descontoPerc) / 100;
+        } else { // FIXO
+          descontoVal = parseFloat(clienteSelecionado.valor_desconto);
+          descontoPerc = valorItem > 0 ? (descontoVal / valorItem) * 100 : 0;
+        }
+        clienteDescontoAplicado = true;
+      }
+    }
+
+    if (clienteTemExcecao) {
+      descontoPerc = 0;
+      descontoVal = 0;
+      descricaoPromocao = ` (Exceção de Grupo)`;
+    } else if (clienteDescontoAplicado) {
+      descricaoPromocao = ` (Desconto Cliente)`;
+    } else if (promoDB) {
       promocao = promoDB;
       if (promocao.tipo_desconto === 'percentual') {
         descontoPerc = parseFloat(promocao.valor_desconto);

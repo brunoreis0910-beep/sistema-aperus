@@ -108,6 +108,7 @@ const VendaRapidaPage = () => {
   const [quantidade, setQuantidade] = useState(1);
   const [valorUnitario, setValorUnitario] = useState(0);
   const [idProdutoSelecionado, setIdProdutoSelecionado] = useState(null);
+  const [grupoProdutoSelecionado, setGrupoProdutoSelecionado] = useState(null);
   const [descontoItem, setDescontoItem] = useState(0);
   const [descontoItemEdit, setDescontoItemEdit] = useState(0);
   const [precoBaseProduto, setPrecoBaseProduto] = useState(0);
@@ -1106,7 +1107,7 @@ const VendaRapidaPage = () => {
                     `/estoque/?id_produto=${produto.id_produto}&id_deposito=${operacao.id_deposito_baixa}`
                   );
 
-                  // A API de estoque também pode retornar array ou objeto
+                  // A API de estoque também pode retornar array ou objeto com results
                   const estoqueData = Array.isArray(resEstoque.data) ? resEstoque.data : (resEstoque.data.results || []);
 
                   if (estoqueData && estoqueData.length > 0) {
@@ -1205,6 +1206,7 @@ const VendaRapidaPage = () => {
       setValorUnitario(precoFinal);
       setCodigoProduto(produto.codigo_produto);
       setIdProdutoSelecionado(produto.id_produto);  // Armazenar ID do produto
+      setGrupoProdutoSelecionado(produto.id_grupo); // Armazenar ID do grupo
       // Usar nome_produto ou descricao, o que estiver disponível
       setNomeProduto(produto.nome_produto || produto.descricao || produto.codigo_produto);
       setControlaProdutoLote(produto.controla_lote || false);
@@ -1495,10 +1497,10 @@ const VendaRapidaPage = () => {
     // Limpar campos
     setCodigoProduto('');
     setIdProdutoSelecionado(null);
+    setGrupoProdutoSelecionado(null);
     setNomeProduto('');
     setQuantidade(1);
     setValorUnitario(0);
-    setPrecoBaseProduto(0);
     setDescontoItem(0);
     setProdutoBalanca(null);
     setControlaProdutoLote(false);
@@ -1573,7 +1575,7 @@ const VendaRapidaPage = () => {
             produto: produto.nome_produto || nomeProduto,
             disponivel: estoqueDisponivel,
             solicitado: quantidadeSolicitada,
-            faltam: faltam
+            faltam
           });
           setAcaoEstoqueAtual(operacao.acao_estoque);
           setItemPendenteEstoque({
@@ -1590,7 +1592,7 @@ const VendaRapidaPage = () => {
             setOpenEstoqueModal(true);
             deveProsseguir = false; // NÃO adiciona o item - usuário precisa clicar em 'Continuar Mesmo Assim'
           } else if (operacao.acao_estoque === 'bloquear') {
-            setError(`❌ Estoque insuficiente. Disponível: ${estoqueDisponivel.toFixed(3)}, Solicitado: ${quantidadeSolicitada.toFixed(3)}`);
+            setError(`❌ Estoque insuficiente. Disponível: ${estoqueDisponivel.toFixed(3)}`, 'NÃO');
             deveProsseguir = false;
           } else if (operacao.acao_estoque === 'solicitar_senha') {
             setOpenEstoqueModal(true);
@@ -1624,11 +1626,44 @@ const VendaRapidaPage = () => {
     let descricaoPromocao = '';
 
     console.log('🔍 Verificando promoção para produto:', idProdutoSelecionado, 'com quantidade:', quantidade);
+    
+    // ========== VERIFICAR DESCONTO DO CLIENTE ==========
+    let clienteTemExcecao = false;
+    let clienteDescontoValor = 0;
+    let clienteDescontoAplicado = false;
+    
+    if (cliente && cliente.tipo_desconto && cliente.valor_desconto > 0) {
+      const grupos_excecao = Array.isArray(cliente.grupos_excecao) ? cliente.grupos_excecao : [];
+      if (grupoProdutoSelecionado && grupos_excecao.includes(grupoProdutoSelecionado)) {
+        clienteTemExcecao = true;
+        console.log('⚠️ Produto em grupo de exceção para desconto do cliente!');
+      }
+      
+      if (!clienteTemExcecao) {
+        if (cliente.tipo_desconto === 'PERCENTUAL') {
+          clienteDescontoValor = parseFloat(cliente.valor_desconto);
+        } else { // FIXO
+          const precoUnitario = parseFloat(valorUnitario);
+          clienteDescontoValor = precoUnitario > 0 ? (parseFloat(cliente.valor_desconto) / precoUnitario) * 100 : 0;
+        }
+        clienteDescontoAplicado = true;
+      }
+    }
+
     // Verificar promoção
     const promocao = verificarPromocao(idProdutoSelecionado, quantidade);
-    console.log('📌 Resultado da verificação:', promocao);
+    console.log('📌 Resultado da verificação da promoção:', promocao);
 
-    if (promocao) {
+    // Aplicar a hierarquia: Exceção (não tem desconto) > Desconto Cliente > Promoção/Operação
+    if (clienteTemExcecao) {
+      desconto = 0; // Nenhum desconto aplicado
+      descricaoPromocao = ` (Exceção de Grupo)`;
+      console.log('❌ Grupo de exceção: Nenhum desconto aplicado');
+    } else if (clienteDescontoAplicado) {
+      desconto = clienteDescontoValor;
+      descricaoPromocao = ` (Desconto Cliente)`;
+      console.log('💎 Aplicando desconto de cliente:', cliente.tipo_desconto, cliente.valor_desconto);
+    } else if (promocao) {
       console.log('✅ PROMOÇÃO ENCONTRADA:', promocao.promocao_nome);
       if (promocao.tipo_desconto === 'percentual') {
         desconto = promocao.desconto_percentual;
@@ -1641,7 +1676,7 @@ const VendaRapidaPage = () => {
       }
       descricaoPromocao = ` (${promocao.promocao_nome})`;
     } else {
-      console.log('❌ Nenhuma promoção encontrada para este produto');
+      console.log('❌ Nenhuma promoção ou desconto de cliente encontrado para este produto');
     }
 
     const valorItem = quantidade * valorUnitario;
@@ -1664,8 +1699,8 @@ const VendaRapidaPage = () => {
       codigo: codigoProduto,
       nome: nomeProduto,  // Adicionar nome do produto
       quantidade: parseFloat(quantidade),
-      preco_base: precoBaseProduto || parseFloat(valorUnitario),  // Usar preço base guardado
-      valor_unitario: parseFloat(valorUnitario),
+      preco_base: precoBaseProduto || parseFloat(valor),
+      valor_unitario: parseFloat(valor),
       desconto_percentual: parseFloat(desconto),
       desconto_valor: valorDesconto,
       valor_total: valorTotalItem,
@@ -1682,11 +1717,12 @@ const VendaRapidaPage = () => {
     // Limpar campos
     setCodigoProduto('');
     setIdProdutoSelecionado(null);
+    setGrupoProdutoSelecionado(null);
     setNomeProduto('');
     setQuantidade(1);
     setValorUnitario(0);
-    setPrecoBaseProduto(0);
     setDescontoItem(0);
+    setProdutoBalanca(null);
     setControlaProdutoLote(false);
     setLotePreSelecionado(null);
 
@@ -1733,10 +1769,10 @@ const VendaRapidaPage = () => {
     setLotePreSelecionado(null);
     setCodigoProduto('');
     setIdProdutoSelecionado(null);
+    setGrupoProdutoSelecionado(null);
     setNomeProduto('');
     setQuantidade(1);
     setValorUnitario(0);
-    setPrecoBaseProduto(0);
     setDescontoItem(0);
     setControlaProdutoLote(false);
     setSuccess('Item adicionado com lote!');
@@ -1887,7 +1923,7 @@ const VendaRapidaPage = () => {
 
               // Se ação for bloquear, interrompe imediatamente
               if (operacao.acao_estoque === 'bloquear') {
-                setError(`❌ Estoque insuficiente para "${produto.nome_produto}". Disponível: ${estoqueDisponivel.toFixed(3)} | Solicitado: ${quantidadeSolicitada.toFixed(3)}`);
+                setError(`❌ Estoque insuficiente para "${produto.nome_produto}". Disponível: ${estoqueDisponivel.toFixed(3)}`);
                 return; // Cancela a finalização
               }
 
@@ -2148,7 +2184,7 @@ const VendaRapidaPage = () => {
                 return; // BLOQUEIA
               } else if (validacaoLimite === 'alertar') {
                 // ALERTAR: Mostra aviso mas CONTINUA e adiciona a condição
-                console.log('⚠️ ALERTA: Limite excedido mas permitindo continuar');
+                console.log('⚠️ ALERTA: Limite de crédito será excedido!');
                 setError(
                   `⚠️ ATENÇÃO: Limite de crédito será excedido!\n` +
                   `Limite Disponível: R$ ${limiteData.cliente?.credito_disponivel.toFixed(2)}\n` +
@@ -2751,11 +2787,14 @@ const VendaRapidaPage = () => {
     setDadosVendaCompleta(null);
     setOpenImpressao(false);
     setCodigoProduto('');
+    setIdProdutoSelecionado(null);
+    setGrupoProdutoSelecionado(null);
     setNomeProduto('');
     setQuantidade(1);
     setValorUnitario(0);
     setDescontoItem(0);
     setIdProdutoSelecionado(null);
+    setGrupoProdutoSelecionado(null);
     // Resetar flags de autorização
     setLimiteAutorizado(false);
     setAtrasoAutorizado(false);
@@ -3034,39 +3073,7 @@ const VendaRapidaPage = () => {
     const larguraJanela = usarA4 ? 'width=900,height=700' : 'width=300,height=600';
     const conteudo = usarA4 ? gerarConteudoImpressaoA4(dados) : gerarConteudoImpressao(dados);
 
-    // Abrir janela de impressão
-    const janelaImpressao = window.open('', '_blank', larguraJanela);
-    janelaImpressao.document.write(conteudo);
-    janelaImpressao.document.close();
-    janelaImpressao.focus();
-
-    setTimeout(() => {
-      janelaImpressao.print();
-      janelaImpressao.close();
-    }, 250);
-
-    // Limpar venda após impressão
-    setTimeout(() => {
-      limparVenda();
-    }, 500);
-  };
-
-  const carregarVendas = async () => {
-    try {
-      setLoadingVendas(true);
-      const token = getToken();
-
-      // Buscar vendas do dia
-      const hoje = new Date().toISOString().split('T')[0];
-      const res = await axiosInstance.get(`/vendas/?data=${hoje}`);
-
-      console.log('📋 Vendas carregadas (raw):', res.data);
-
-      // Garantir que vendas seja sempre um array
-      let vendasArray = Array.isArray(res.data) ? res.data : (res.data.results || []);
-
-      // Log da primeira venda para verificar estrutura
-      if (vendasArray.length > 0) {
+    // Abrir janela de impress
         console.log('🔍 DEBUG Tabela - Primeira venda:', vendasArray[0]);
         console.log('🔍 DEBUG Tabela - Cliente:', vendasArray[0].cliente);
         console.log('🔍 DEBUG Tabela - Tipo cliente:', typeof vendasArray[0].cliente);
@@ -4671,7 +4678,6 @@ const VendaRapidaPage = () => {
                     startAdornment: <InputAdornment position="start">R$</InputAdornment>,
                   }}
                   size="small"
-                  placeholder="Digite o valor pago"
                 />
               </Grid>
               <Grid item xs={6}>
@@ -5732,7 +5738,7 @@ const VendaRapidaPage = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Modal de Seleção de Tabela Comercial */}
+      {/* Dialog de Seleção de Tabela Comercial */}
       <Dialog
         open={openSelecionarTabela}
         onClose={() => {
@@ -5803,7 +5809,7 @@ const VendaRapidaPage = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Modal de Pergunta - Alterar Tabela Comercial no Financeiro */}
+      {/* Dialog de Pergunta - Alterar Tabela Comercial no Financeiro */}
       <Dialog
         open={openPerguntarTabelaFinanceiro}
         onClose={() => setOpenPerguntarTabelaFinanceiro(false)}
@@ -5942,10 +5948,10 @@ const VendaRapidaPage = () => {
             // Modo pré-seleção: cancelar limpa produto selecionado
             setCodigoProduto('');
             setIdProdutoSelecionado(null);
+            setGrupoProdutoSelecionado(null);
             setNomeProduto('');
             setQuantidade(1);
             setValorUnitario(0);
-            setPrecoBaseProduto(0);
             setDescontoItem(0);
             setControlaProdutoLote(false);
             setLotePreSelecionado(null);
@@ -5995,10 +6001,10 @@ const VendaRapidaPage = () => {
             } else {
               setCodigoProduto('');
               setIdProdutoSelecionado(null);
+              setGrupoProdutoSelecionado(null);
               setNomeProduto('');
               setQuantidade(1);
               setValorUnitario(0);
-              setPrecoBaseProduto(0);
               setDescontoItem(0);
               setControlaProdutoLote(false);
               setLotePreSelecionado(null);
