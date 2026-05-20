@@ -1227,13 +1227,20 @@ const ClientePageComplete = () => {
                   label="Grupos de Exceção"
                   renderValue={(selected) => {
                     const selectedArray = Array.isArray(selected) ? selected : [];
-                    return gruposProduto
+                    if (selectedArray.length === 0) return <em style={{ color: '#aaa' }}>Nenhum grupo selecionado</em>;
+                    const nomes = gruposProduto
                       .filter((grupo) => {
                         const gid = grupo.id_grupo || grupo.id;
                         return selectedArray.map(Number).includes(Number(gid));
                       })
-                      .map((grupo) => grupo.nome_grupo || grupo.nome)
-                      .join(', ');
+                      .map((grupo) => grupo.nome_grupo || grupo.nome);
+                    return (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {nomes.map((nome) => (
+                          <Chip key={nome} label={nome} size="small" sx={{ backgroundColor: '#1565C0', color: 'white', fontSize: '0.75rem' }} />
+                        ))}
+                      </Box>
+                    );
                   }}
                 >
                   {gruposProduto.map((grupo) => {
@@ -1249,6 +1256,34 @@ const ClientePageComplete = () => {
                   })}
                 </Select>
               </FormControl>
+
+              {/* Exibição clara dos grupos selecionados */}
+              {Array.isArray(formData.grupos_excecao) && formData.grupos_excecao.length > 0 ? (
+                <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {formData.grupos_excecao.map((gid) => {
+                    const grupo = gruposProduto.find(g => Number(g.id_grupo || g.id) === Number(gid));
+                    const nome = grupo ? (grupo.nome_grupo || grupo.nome) : `Grupo #${gid}`;
+                    return (
+                      <Chip
+                        key={gid}
+                        label={nome}
+                        size="small"
+                        onDelete={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            grupos_excecao: prev.grupos_excecao.filter(id => Number(id) !== Number(gid))
+                          }));
+                        }}
+                        sx={{ backgroundColor: '#E3F2FD', color: '#1565C0', fontWeight: 'bold', border: '1px solid #90CAF9' }}
+                      />
+                    );
+                  })}
+                </Box>
+              ) : (
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                  Nenhum grupo de exceção selecionado — o desconto será aplicado a todos os grupos
+                </Typography>
+              )}
             </Grid>
 
             {/* Seção: Contato */}
