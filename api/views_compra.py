@@ -1,4 +1,4 @@
-﻿from rest_framework import viewsets, serializers, status
+from rest_framework import viewsets, serializers, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction, IntegrityError
@@ -24,8 +24,9 @@ class CompraItemSerializer(serializers.ModelSerializer):
         # Inclui valor_unitario como alias de valor_compra para compatibilidade com frontend
         representation['valor_unitario'] = representation.get('valor_compra')
         # Retorna fração salva para o frontend restaurar os campos de fração
-        fracao = instance.fracao_aplicada
-        qtd_fracionada = instance.quantidade_fracionada
+        # Usa getattr com fallback pois fracao_aplicada não é campo formal do modelo
+        fracao = getattr(instance, 'fracao_aplicada', None)
+        qtd_fracionada = getattr(instance, 'quantidade_fracionada', None)
         representation['fracao_memorizada'] = float(fracao) if fracao is not None else 1
         representation['quantidade_com_fracao'] = float(qtd_fracionada) if qtd_fracionada is not None else None
         return representation
