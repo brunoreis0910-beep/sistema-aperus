@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -1219,22 +1219,34 @@ const ClientePageComplete = () => {
                 <InputLabel>Grupos de Exceção</InputLabel>
                 <Select
                   multiple
-                  value={formData.grupos_excecao}
-                  onChange={(e) => setFormData({ ...formData, grupos_excecao: e.target.value })}
+                  value={formData.grupos_excecao || []}
+                  onChange={(e) => {
+                    const val = Array.isArray(e.target.value) ? e.target.value : [];
+                    setFormData({ ...formData, grupos_excecao: val.map(Number) });
+                  }}
                   label="Grupos de Exceção"
-                  renderValue={(selected) =>
-                    gruposProduto
-                      .filter((grupo) => selected.includes(grupo.id_grupo || grupo.id))
+                  renderValue={(selected) => {
+                    const selectedArray = Array.isArray(selected) ? selected : [];
+                    return gruposProduto
+                      .filter((grupo) => {
+                        const gid = grupo.id_grupo || grupo.id;
+                        return selectedArray.map(Number).includes(Number(gid));
+                      })
                       .map((grupo) => grupo.nome_grupo || grupo.nome)
-                      .join(', ')
-                  }
+                      .join(', ');
+                  }}
                 >
-                  {gruposProduto.map((grupo) => (
-                    <MenuItem key={grupo.id_grupo || grupo.id} value={grupo.id_grupo || grupo.id}>
-                      <Checkbox checked={formData.grupos_excecao.includes(grupo.id_grupo || grupo.id)} />
-                      <Typography>{grupo.nome_grupo || grupo.nome}</Typography>
-                    </MenuItem>
-                  ))}
+                  {gruposProduto.map((grupo) => {
+                    const gid = grupo.id_grupo || grupo.id;
+                    const isChecked = Array.isArray(formData.grupos_excecao) && 
+                      formData.grupos_excecao.map(Number).includes(Number(gid));
+                    return (
+                      <MenuItem key={gid} value={Number(gid)}>
+                        <Checkbox checked={isChecked} readOnly />
+                        <Typography>{grupo.nome_grupo || grupo.nome}</Typography>
+                      </MenuItem>
+                    );
+                  })}
                 </Select>
               </FormControl>
             </Grid>

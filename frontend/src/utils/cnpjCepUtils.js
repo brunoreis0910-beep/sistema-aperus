@@ -1,4 +1,4 @@
-﻿// Utilitários para consulta de CNPJ e CEP
+// Utilitários para consulta de CNPJ e CEP
 import { API_ENDPOINT } from '../config/api';
 
 // função para limpar strings (remove caracteres especiais)
@@ -381,10 +381,12 @@ export const normalizeClienteData = (data) => {
     priorizar_desconto_cliente: Boolean(data.priorizar_desconto_cliente),
     grupos_excecao: Array.isArray(data.grupos_excecao)
       ? data.grupos_excecao.map((item) => {
+          if (item === null || item === undefined) return null;
           if (typeof item === 'object') {
-            return item.id || item.id_grupo || item.pk || item.value || null;
+            const val = item.id || item.id_grupo || item.pk || item.value || null;
+            return val ? Number(val) : null;
           }
-          return item;
+          return Number(item);
         }).filter(Boolean)
       : [],
     ativo: data.ativo !== undefined ? data.ativo : true,
