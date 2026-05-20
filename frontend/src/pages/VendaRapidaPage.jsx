@@ -398,6 +398,11 @@ const VendaRapidaPage = () => {
     }
   }, [servidorOk]);
 
+  // 🔹 RECALCULAR TOTAL SEMPRE QUE ITENS OU DESCONTO GERAL MUDAREM
+  useEffect(() => {
+    calcularTotal();
+  }, [itens, descontoGeral]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 🔹 SELECIONAR TABELA COMERCIAL DO PARÂMETRO DO USUÁRIO
   // Observa quando usuario e tabelas comerciais são carregados e então seleciona automaticamente
   useEffect(() => {
@@ -1459,13 +1464,15 @@ const VendaRapidaPage = () => {
         const descontoVal = desconto_aplicado * parseFloat(item.quantidade);
         const valorTotalItem = (parseFloat(item.quantidade) * parseFloat(item.valor_unitario)) - descontoVal;
 
+        // motivo vindo da API = desconto de cliente — não é promoção real
         itensAtualizados.push({
           ...item,
           travado: isTravado,
           desconto_percentual: parseFloat(descontoPerc),
           desconto_valor: descontoVal,
           valor_total: valorTotalItem,
-          tem_promocao: motivo ? true : false,
+          tem_promocao: false,           // preserva promoções reais já definidas? não, zera pra não misturar
+          tem_desconto_cliente: motivo ? true : false,
           descricaoPromocao: motivo ? `${motivo}` : ''
         });
       } catch (error) {
@@ -1502,6 +1509,7 @@ const VendaRapidaPage = () => {
 
     let desconto = desc;
     let descricaoPromocao = '';
+    let isDescontoCliente = false; // true = desconto por regra de cliente; false = promoção real
     let travado = false;
     let valorDesconto = 0;
 
@@ -1522,7 +1530,9 @@ const VendaRapidaPage = () => {
       
       desconto = desconto_percentual;
       valorDesconto = desconto_aplicado * qtd;
+      // motivo do backend é desconto de cliente/exceção — NÃO é promoção
       descricaoPromocao = motivo ? `${motivo}` : '';
+      isDescontoCliente = true;  // sinaliza que veio da regra de cliente (não é promoção)
       travado = isTravado;
       
       console.log(`[DESCONTO-API] 🎯 Valores Aplicados -> Perc: ${desconto}%, Valor: R$ ${valorDesconto}, Travado: ${travado}`);
@@ -1566,7 +1576,9 @@ const VendaRapidaPage = () => {
       desconto_percentual: parseFloat(desconto),
       desconto_valor: valorDesconto,
       valor_total: valorTotalItem,
-      tem_promocao: descricaoPromocao !== '',
+      // tem_promocao: apenas promoções reais do sistema local (não desconto de cliente)
+      tem_promocao: descricaoPromocao !== '' && !isDescontoCliente,
+      tem_desconto_cliente: isDescontoCliente && descricaoPromocao !== '',
       descricaoPromocao: descricaoPromocao,
       id_lote: lotePreSelecionado?.id_lote || null,
       numero_lote: lotePreSelecionado?.numero_lote || '',
@@ -4181,6 +4193,18 @@ const VendaRapidaPage = () => {
                               size="small"
                               sx={{
                                 backgroundColor: '#FF6B35',
+                                color: 'white',
+                                fontWeight: 'bold',
+                                fontSize: '0.7rem'
+                              }}
+                            />
+                          )}
+                          {item.tem_desconto_cliente && (
+                            <Chip
+                              label="DESCONTO"
+                              size="small"
+                              sx={{
+                                backgroundColor: '#1565C0',
                                 color: 'white',
                                 fontWeight: 'bold',
                                 fontSize: '0.7rem'
