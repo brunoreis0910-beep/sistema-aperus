@@ -2985,77 +2985,26 @@ class EntregasView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        import traceback
-        try:
-            from django.db.models import Q
-            
-            status_filtro = request.query_params.get('status') or request.query_params.get('status_logistica')
-            mostrar_todos = request.query_params.get('todos') == '1'
-            busca = request.query_params.get('busca')
-            
-            qs = Venda.objects.select_related('id_cliente').prefetch_related('itens', 'itens__id_produto', 'logs_entrega', 'logs_entrega__usuario').order_by('-data_documento')
-            
-            if not mostrar_todos:
-                # Não mostrar os ENTREGUE se "mostrar_todos" não for 1
-                qs = qs.exclude(status_logistica='ENTREGUE')
-                
-            if status_filtro:
-                qs = qs.filter(status_logistica=status_filtro)
-                
-            if busca:
-                qs = qs.filter(
-                    Q(numero_documento__icontains=busca) |
-                    Q(id_cliente__nome_razao_social__icontains=busca) |
-                    Q(id_cliente__nome_fantasia__icontains=busca) |
-                    Q(endereco_entrega__icontains=busca)
-                )
-
-            data = []
-            for v in qs:
-                cliente = v.id_cliente
-                
-                itens = []
-                for item in v.itens.all():
-                    itens.append({
-                        'id_item': item.id_item,
-                        'descricao': item.id_produto.descricao if item.id_produto else 'Produto não identificado',
-                        'quantidade': str(item.quantidade),
-                        'quantidade_entregue': str(item.quantidade_entregue) if item.quantidade_entregue is not None else '0'
-                    })
-                    
-                logs = []
-                for log in v.logs_entrega.all().order_by('-data_log'):
-                    logs.append({
-                        'id_entrega_log': log.id_entrega_log,
-                        'data_log': log.data_log.isoformat() if log.data_log else None,
-                        'status_novo': log.status_novo,
-                        'status_anterior': log.status_anterior,
-                        'observacao': log.observacao,
-                        'usuario': log.usuario.username if log.usuario else '',
-                        'recebedor_nome': log.recebedor_nome,
-                        'recebedor_documento': log.recebedor_documento
-                    })
-                
-                data.append({
-                    'id_venda': v.id_venda,
-                    'numero_documento': v.numero_documento,
-                    'data_documento': v.data_documento.isoformat() if v.data_documento else None,
-                    'cliente': (cliente.nome_razao_social or cliente.nome_fantasia) if cliente else 'Cliente não informado',
-                    'status_logistica': v.status_logistica,
-                    'endereco_entrega': v.endereco_entrega,
-                    'data_prevista_entrega': v.data_prevista_entrega.isoformat() if v.data_prevista_entrega else None,
-                    'responsavel_entrega': v.responsavel_entrega,
-                    'observacao_entrega': v.observacao_entrega,
-                    'valor_total': str(v.valor_total) if v.valor_total is not None else '0',
-                    'taxa_entrega': str(v.taxa_entrega) if v.taxa_entrega is not None else '0',
-                    'itens': itens,
-                    'logs': logs
-                })
-            return Response(data)
-        except Exception as e:
-            print(f"ERRO EM ENTREGASVIEW: {str(e)}")
-            traceback.print_exc()
-            return Response({"error": str(e), "detail": traceback.format_exc()}, status=500)
+        status_filtro = request.query_params.get('status_logistica')
+        qs = Venda.objects.select_related('id_cliente').order_by('-data_emissao')
+        if status_filtro:
+            qs = qs.filter(status_logistica=status_filtro)
+        data = []
+        for v in qs:
+            cliente = v.id_cliente
+            data.append({
+                'id_venda': v.id_venda,
+                'numero_documento': v.numero_documento,
+                'data_emissao': v.data_emissao,
+                'cliente_nome': cliente.nome if cliente else None,
+                'status_logistica': v.status_logistica,
+                'endereco_entrega': v.endereco_entrega,
+                'data_prevista_entrega': v.data_prevista_entrega,
+                'responsavel_entrega': v.responsavel_entrega,
+                'observacao_entrega': v.observacao_entrega,
+                'valor_total': str(v.valor_total) if v.valor_total is not None else None,
+            })
+        return Response(data)
 
 
 class AtualizarEntregaView(APIView):
@@ -3092,188 +3041,4 @@ class AtualizarEntregaView(APIView):
 
     def put(self, request, id_venda):
         return self.patch(request, id_venda)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def visualizar_certificado(request):
-    import base64
-    import os
-    from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
-    from cryptography.x509.oid import NameOID
-
-    config = EmpresaConfig.get_ativa()
-    if not config or not config.certificado_digital:
-        return Response({'sucesso': False, 'mensagem': 'Nenhum certificado digital configurado.'}, status=400)
-
-    senha = (config.senha_certificado or '').encode('utf-8')
-
-    try:
-        cert_data = config.certificado_digital.strip()
-        # Tenta carregar como base64; caso falhe, trata como caminho de arquivo
-        try:
-            pfx_bytes = base64.b64decode(cert_data)
-        except Exception:
-            if not os.path.isfile(cert_data):
-                return Response({'sucesso': False, 'mensagem': 'Arquivo de certificado não encontrado.'}, status=400)
-            with open(cert_data, 'rb') as f:
-                pfx_bytes = f.read()
-
-        _private_key, cert, _chain = load_key_and_certificates(pfx_bytes, senha)
-
-        def _get_attr(name_obj, oid):
-            attrs = name_obj.get_attributes_for_oid(oid)
-            return attrs[0].value if attrs else ''
-
-        not_before = cert.not_valid_before_utc if hasattr(cert, 'not_valid_before_utc') else cert.not_valid_before
-        not_after = cert.not_valid_after_utc if hasattr(cert, 'not_valid_after_utc') else cert.not_valid_after
-
-        return Response({
-            'sucesso': True,
-            'titular': _get_attr(cert.subject, NameOID.COMMON_NAME),
-            'emissor': _get_attr(cert.issuer, NameOID.COMMON_NAME),
-            'valido_de': not_before.strftime('%d/%m/%Y %H:%M:%S'),
-            'valido_ate': not_after.strftime('%d/%m/%Y %H:%M:%S'),
-            'numero_serie': str(cert.serial_number),
-        })
-    except Exception as exc:
-        logger.exception('Erro ao ler certificado digital')
-        return Response({'sucesso': False, 'mensagem': f'Erro ao ler certificado: {exc}'}, status=400)
-
-
-class TransmitirNFCeView(APIView):
-    """
-    Endpoint para transmissão de NFC-e a partir de dados coletados no APK.
-    Recebe JSON com produtos, quantidades, CPF cliente e forma de pagamento.
-    Cria venda, calcula tributos e emite NFC-e automaticamente.
-    
-    URL: POST /api/vendas/transmitir_nfce/
-    Payload: {
-        "produtos": [{"id_produto": int, "quantidade": float}],
-        "cpf_cliente": "string" (opcional),
-        "forma_pagamento": "DINHEIRO|CARTAO|PIX"
-    }
-    """
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        from django.contrib.auth.models import User
-        from .models import Cliente
-        
-        data = request.data
-        produtos = data.get('produtos', [])
-        cpf_cliente = data.get('cpf_cliente', '').strip()
-        forma_pagamento = data.get('forma_pagamento', 'DINHEIRO').upper()
-        
-        if not produtos:
-            return Response({'sucesso': False, 'mensagem': 'Lista de produtos obrigatória'}, status=400)
-        
-        # Validar produtos
-        produto_ids = [p.get('id_produto') for p in produtos if p.get('id_produto')]
-        if len(produto_ids) != len(produtos):
-            return Response({'sucesso': False, 'mensagem': 'Todos os produtos devem ter id_produto'}, status=400)
-        
-        produtos_objs = Produto.objects.filter(id_produto__in=produto_ids)
-        if len(produtos_objs) != len(produto_ids):
-            return Response({'sucesso': False, 'mensagem': 'Alguns produtos não encontrados'}, status=400)
-        
-        produtos_dict = {p.id_produto: p for p in produtos_objs}
-        
-        # Buscar cliente se CPF informado
-        cliente = None
-        if cpf_cliente:
-            cliente = Cliente.objects.filter(cpf_cnpj__icontains=cpf_cliente.replace('.', '').replace('-', '')).first()
-        
-        # Buscar operação padrão para NFC-e
-        operacao = Operacao.objects.filter(tipo_documento='NFC-e', padrao=True).first()
-        if not operacao:
-            operacao = Operacao.objects.filter(tipo_documento='NFC-e').first()
-        
-        if not operacao:
-            return Response({'sucesso': False, 'mensagem': 'Operação fiscal para NFC-e não configurada'}, status=400)
-        
-        try:
-            with transaction.atomic():
-                # Criar venda
-                venda = Venda.objects.create(
-                    id_operacao=operacao,
-                    id_cliente=cliente,
-                    criado_por=request.user,
-                    origem='APK',
-                    status_pagamento='APROVADO',  # Assumir aprovado no APK
-                    status_logistica='ENTREGUE',  # NFC-e é imediata
-                )
-                
-                valor_total = Decimal('0.00')
-                
-                # Adicionar itens
-                for item_data in produtos:
-                    produto = produtos_dict[item_data['id_produto']]
-                    quantidade = Decimal(str(item_data['quantidade']))
-                    valor_unitario = produto.preco_venda or Decimal('0.00')
-                    valor_item = quantidade * valor_unitario
-                    
-                    # Tributar item
-                    tributacao = _tributar_item(
-                        produto_id=produto.id_produto,
-                        empresa_id=None,  # Usar configuração ativa
-                        uf_destino=None,  # Cliente final
-                        tipo_operacao='INTERNA',
-                        tipo_cliente='CONSUMIDOR_FINAL',
-                        valor_unitario=float(valor_unitario),
-                        quantidade=float(quantidade)
-                    )
-                    
-                    VendaItem.objects.create(
-                        id_venda=venda,
-                        id_produto=produto,
-                        quantidade=quantidade,
-                        valor_unitario=valor_unitario,
-                        valor_total=valor_item,
-                        # Campos tributários podem ser preenchidos da tributacao
-                    )
-                    
-                    valor_total += valor_item
-                
-                venda.valor_total = valor_total
-                venda.save()
-                
-                # Gerar financeiro se necessário
-                ensure_financeiro_for_venda(venda)
-                
-                # Emitir NFC-e
-                service = NFCeService()
-                result = service.emitir_nfce(venda)
-                
-                if result.get('sucesso'):
-                    # Retornar dados para impressão
-                    response_data = {
-                        'sucesso': True,
-                        'id_venda': venda.id_venda,
-                        'numero_nfce': venda.numero_nfe,
-                        'chave_nfe': venda.chave_nfe,
-                        'qrcode_nfe': venda.qrcode_nfe,
-                        'protocolo_nfe': venda.protocolo_nfe,
-                        'xml_nfe': venda.xml_nfe,
-                        'mensagem': 'NFC-e emitida com sucesso'
-                    }
-                    
-                    # Gerar DANFE se possível
-                    try:
-                        danfe_service = DanfeGenerator()
-                        pdf_data = danfe_service.gerar_danfe(venda, modelo='65')
-                        if pdf_data:
-                            response_data['danfe_base64'] = pdf_data.decode('latin1') if isinstance(pdf_data, bytes) else pdf_data
-                    except Exception as e:
-                        logger.warning(f"Erro ao gerar DANFE: {e}")
-                    
-                    return Response(response_data)
-                else:
-                    # Se falhou, deletar venda criada
-                    venda.delete()
-                    return Response(result, status=400)
-                    
-        except Exception as e:
-            logger.exception(f"Erro ao transmitir NFC-e: {e}")
-            return Response({'sucesso': False, 'mensagem': f'Erro interno: {str(e)}'}, status=500)
 

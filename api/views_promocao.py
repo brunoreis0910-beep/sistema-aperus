@@ -670,7 +670,7 @@ class PromocaoViewSet(viewsets.ModelViewSet):
         if tipo_envio == 'todos':
             clientes_qs = (
                 Cliente.objects
-                .values('id_cliente', 'nome_razao_social', 'whatsapp', 'telefone', 'sexo')
+                .values('id_cliente', 'nome_razao_social', 'whatsapp', 'telefone')
                 .order_by('nome_razao_social')[:1000]
             )
             clientes_lista = [
@@ -679,7 +679,6 @@ class PromocaoViewSet(viewsets.ModelViewSet):
                     'nome': c['nome_razao_social'] or '',
                     'whatsapp': c['whatsapp'] or '',
                     'telefone': c['telefone'] or '',
-                    'sexo': c['sexo'] or '',
                     'ultima_compra': None,
                     'total_compras': None,
                     'produtos_comprados': [],
@@ -723,7 +722,6 @@ class PromocaoViewSet(viewsets.ModelViewSet):
                 'id_venda__id_cliente__nome_razao_social',
                 'id_venda__id_cliente__whatsapp',
                 'id_venda__id_cliente__telefone',
-                'id_venda__id_cliente__sexo',
                 'id_venda__data_documento',
                 'id_produto__nome_produto',
                 'id_produto__marca',
@@ -744,7 +742,6 @@ class PromocaoViewSet(viewsets.ModelViewSet):
                     'nome': row['id_venda__id_cliente__nome_razao_social'] or '',
                     'whatsapp': row['id_venda__id_cliente__whatsapp'] or '',
                     'telefone': row['id_venda__id_cliente__telefone'] or '',
-                    'sexo': row['id_venda__id_cliente__sexo'] or '',
                     'ultima_compra': row['id_venda__data_documento'],
                     'total_compras': 1,
                     'produtos_comprados': set(),
@@ -772,7 +769,6 @@ class PromocaoViewSet(viewsets.ModelViewSet):
                 'nome': cliente_data['nome'],
                 'whatsapp': cliente_data['whatsapp'],
                 'telefone': cliente_data['telefone'],
-                'sexo': cliente_data.get('sexo', ''),
                 'ultima_compra': ultima_compra,
                 'total_compras': cliente_data['total_compras'],
                 'produtos_comprados': sorted(list(cliente_data['produtos_comprados']))[:5],

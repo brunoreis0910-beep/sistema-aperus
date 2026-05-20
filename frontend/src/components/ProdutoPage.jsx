@@ -1147,9 +1147,9 @@ const ProdutoPage = () => {
                   helperText="Público-alvo do produto"
                 >
                   <MenuItem value="">Não especificado</MenuItem>
-                  <MenuItem value="FEMININO">Feminino</MenuItem>
-                  <MenuItem value="MASCULINO">Masculino</MenuItem>
-                  <MenuItem value="UNISSEX">Unissex</MenuItem>
+                  <MenuItem value="feminino">Feminino</MenuItem>
+                  <MenuItem value="masculino">Masculino</MenuItem>
+                  <MenuItem value="unissex">Unissex</MenuItem>
                 </TextField>
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -1255,12 +1255,12 @@ const ProdutoPage = () => {
                     label="Classificação"
                   >
                     <MenuItem value="">Nenhuma</MenuItem>
-                    <MenuItem value="REVENDA">Revenda</MenuItem>
-                    <MenuItem value="SERVICO">Serviço</MenuItem>
-                    <MenuItem value="CONSUMO">Consumo</MenuItem>
-                    <MenuItem value="INSUMO">Insumo</MenuItem>
-                    <MenuItem value="IMOBILIZADO">Imobilizado</MenuItem>
-                    <MenuItem value="MATERIA-PRIMA">Matéria-Prima</MenuItem>
+                    <MenuItem value="Revenda">Revenda</MenuItem>
+                    <MenuItem value="Servico">Serviço</MenuItem>
+                    <MenuItem value="Consumo">Consumo</MenuItem>
+                    <MenuItem value="Insumo">Insumo</MenuItem>
+                    <MenuItem value="Imobilizado">Imobilizado</MenuItem>
+                    <MenuItem value="Materia-Prima">Matéria-Prima</MenuItem>
                   </Select>
                   <FormHelperText>Tipo/classificação do produto</FormHelperText>
                 </FormControl>
@@ -1274,9 +1274,9 @@ const ProdutoPage = () => {
                     label="Gênero"
                   >
                     <MenuItem value="">Não especificado</MenuItem>
-                    <MenuItem value="FEMININO">Feminino</MenuItem>
-                    <MenuItem value="MASCULINO">Masculino</MenuItem>
-                    <MenuItem value="UNISSEX">Unissex</MenuItem>
+                    <MenuItem value="feminino">Feminino</MenuItem>
+                    <MenuItem value="masculino">Masculino</MenuItem>
+                    <MenuItem value="unissex">Unissex</MenuItem>
                   </Select>
                   <FormHelperText>Público-alvo do produto</FormHelperText>
                 </FormControl>

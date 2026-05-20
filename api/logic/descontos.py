@@ -40,15 +40,18 @@ def calcular_preco_final(produto, cliente, valor_tabela):
     valor_tabela = Decimal(str(valor_tabela))
     
     # ========== REGRA 1: Verifica exceção por grupo de produto ==========
-    if produto.id_grupo and cliente.grupos_excecao.filter(id_grupo=produto.id_grupo).exists():
+    if produto.id_grupo and cliente.grupos_excecao.filter(pk=produto.id_grupo.pk).exists():
         grupo_exceto = produto.id_grupo
         grupo_nome = produto.id_grupo.nome_grupo if hasattr(produto.id_grupo, 'nome_grupo') else str(grupo_exceto)
+        
+        # Travado se o cliente possui qualquer desconto configurado (mesmo estando na exceção)
+        cliente_tem_desconto = bool(cliente.valor_desconto and cliente.valor_desconto > 0)
         
         return {
             "preco": valor_tabela,
             "desconto_aplicado": Decimal("0.00"),
             "desconto_percentual": Decimal("0.00"),
-            "travado": False,
+            "travado": cliente_tem_desconto,
             "motivo": f"Produto em grupo de exceção: {grupo_nome}",
             "grupo_excecao": grupo_nome
         }
@@ -82,7 +85,7 @@ def calcular_preco_final(produto, cliente, valor_tabela):
             "preco": preco_com_desconto,
             "desconto_aplicado": valor_desc,
             "desconto_percentual": desconto_percentual,
-            "travado": cliente.priorizar_desconto_cliente,  # Travado se cliente tem prioridade
+            "travado": True,  # Sempre travar se o cliente possui desconto personalizado
             "motivo": f"Desconto de Cliente: {cliente.tipo_desconto} - {cliente.valor_desconto}",
         }
     

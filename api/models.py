@@ -32,51 +32,15 @@ class Cliente(models.Model):
     # SPED / Fiscal
     codigo_municipio_ibge = models.CharField(max_length=7, blank=True, null=True, help_text="Código IBGE do Município (7 dígitos)")
 
-    SEXO_CHOICES = [
-        ('M', 'Masculino'),
-        ('F', 'Feminino'),
-    ]
-    sexo = models.CharField(max_length=1, blank=True, null=True, choices=SEXO_CHOICES)
-    
-    # ===== NOVOS CAMPOS - MÓDULO DE DESCONTOS INTELIGENTES =====
-    TIPO_DESCONTO_CHOICES = [
-        ('FIXO', 'Fixo (R$)'),
-        ('PERCENTUAL', 'Percentual (%)'),
-    ]
-    tipo_desconto = models.CharField(
-        max_length=10, 
-        choices=TIPO_DESCONTO_CHOICES, 
-        default='PERCENTUAL',
-        blank=True,
-        null=True,
-        help_text='Tipo de desconto a aplicar: Fixo em R$ ou Percentual (%)'
-    )
-    valor_desconto = models.DecimalField(
-        max_digits=10, 
-        decimal_places=2, 
-        default=0.00,
-        blank=True,
-        null=True,
-        help_text='Valor do desconto (em R$ se FIXO, em % se PERCENTUAL). 0 = sem desconto'
-    )
-    percentual_arredondamento = models.DecimalField(
-        max_digits=5, 
-        decimal_places=2, 
-        default=0.00,
-        blank=True,
-        null=True,
-        help_text='Percentual de margem de arredondamento permitido (ex: 0.5 = até 0.5% de ajuste)'
-    )
+    # Descontos Inteligentes
+    tipo_desconto = models.CharField(max_length=10, default='PERCENTUAL')
+    valor_desconto = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    percentual_arredondamento = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    priorizar_desconto_cliente = models.BooleanField(default=False)
     grupos_excecao = models.ManyToManyField(
         'GrupoProduto',
-        blank=True,
-        related_name='clientes_com_excecao',
         through='ClienteGrupoExcecao',
-        help_text='Grupos de produtos que NÃO receberão o desconto'
-    )
-    priorizar_desconto_cliente = models.BooleanField(
-        default=False,
-        help_text='Se True, usa desconto do cliente. Se False, permite operação decidir (padrão)'
+        related_name='clientes_com_excecao'
     )
 
     class Meta:
@@ -86,18 +50,6 @@ class Cliente(models.Model):
     
     def __str__(self):
         return self.nome_razao_social
-
-    def save(self, *args, **kwargs):
-        # Converter campos de texto para maiúsculo
-        _campos_upper_excluidos = {'email', 'logo_url', 'imagem_url', 'slug'}
-        for field in self._meta.fields:
-            if field.name in _campos_upper_excluidos:
-                continue
-            if isinstance(field, (models.CharField, models.TextField)):
-                valor = getattr(self, field.name)
-                if isinstance(valor, str):
-                    setattr(self, field.name, valor.upper())
-        super().save(*args, **kwargs)
 
     @property
     def cpf_cnpj_limpo(self):
@@ -113,16 +65,18 @@ class Cliente(models.Model):
 
 
 class ClienteGrupoExcecao(models.Model):
-    id = models.AutoField(primary_key=True)
-    cliente = models.ForeignKey('Cliente', on_delete=models.CASCADE, db_column='cliente_id')
-    grupoproduto = models.ForeignKey('GrupoProduto', on_delete=models.CASCADE, db_column='grupoproduto_id')
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, db_column='cliente_id', related_name='excecoes')
+    grupo = models.ForeignKey('GrupoProduto', on_delete=models.CASCADE, db_column='grupoproduto_id')
 
     class Meta:
-        managed = True
+        managed = False
         db_table = 'clientes_grupos_excecao'
-        unique_together = (('cliente', 'grupoproduto'),)
-        verbose_name = 'Exceção de Grupo de Cliente'
-        verbose_name_plural = 'Exceções de Grupo de Clientes'
+        unique_together = ('cliente', 'grupo')
+
+    @property
+    def desconto_percentual(self):
+        from decimal import Decimal
+        return Decimal('0.00')
 
 
 # --- Modelo Fornecedor (mesmos campos que Cliente) ---
@@ -157,18 +111,6 @@ class Fornecedor(models.Model):
     def __str__(self):
         return self.nome_razao_social
 
-    def save(self, *args, **kwargs):
-        # Converter campos de texto para maiúsculo
-        _campos_upper_excluidos = {'email', 'logo_url', 'imagem_url', 'slug'}
-        for field in self._meta.fields:
-            if field.name in _campos_upper_excluidos:
-                continue
-            if isinstance(field, (models.CharField, models.TextField)):
-                valor = getattr(self, field.name)
-                if isinstance(valor, str):
-                    setattr(self, field.name, valor.upper())
-        super().save(*args, **kwargs)
-
     @property
     def cpf_cnpj_limpo(self):
         import re
@@ -195,15 +137,6 @@ class GrupoProduto(models.Model):
 
     def __str__(self):
         return self.nome_grupo
-
-    def save(self, *args, **kwargs):
-        # Converter campos de texto para maiúsculo
-        for field in self._meta.fields:
-            if isinstance(field, (models.CharField, models.TextField)):
-                valor = getattr(self, field.name)
-                if isinstance(valor, str):
-                    setattr(self, field.name, valor.upper())
-        super().save(*args, **kwargs)
 
 # --- Modelo Produto ---
 class Produto(models.Model):
@@ -238,9 +171,9 @@ class Produto(models.Model):
     variacao = models.CharField(max_length=100, blank=True, null=True, help_text='Descrição da variação (ex: 20mm, 25mm, Branco)')
     controla_lote = models.BooleanField(default=False, help_text='Exige seleção de lote na venda quando True')
     GENERO_CHOICES = [
-        ('FEMININO', 'Feminino'),
-        ('MASCULINO', 'Masculino'),
-        ('UNISSEX', 'Unissex'),
+        ('feminino', 'Feminino'),
+        ('masculino', 'Masculino'),
+        ('unissex', 'Unissex'),
     ]
     genero = models.CharField(max_length=20, blank=True, null=True, choices=GENERO_CHOICES, help_text='Gênero do produto: feminino, masculino ou unissex')
 
@@ -253,15 +186,6 @@ class Produto(models.Model):
         return self.nome_produto
     
     def save(self, *args, **kwargs):
-        # Converter campos de texto para maiúsculo
-        _campos_upper_excluidos = {'email', 'logo_url', 'imagem_url', 'slug'}
-        for field in self._meta.fields:
-            if field.name in _campos_upper_excluidos:
-                continue
-            if isinstance(field, (models.CharField, models.TextField)):
-                valor = getattr(self, field.name)
-                if isinstance(valor, str):
-                    setattr(self, field.name, valor.upper())
         super().save(*args, **kwargs)
         # Automacao Reforma Tributaria - Atualizar Tributacao baseada no NCM
         if self.ncm:
@@ -627,39 +551,6 @@ class Operacao(models.Model):
         default=False,
         db_column='validar_estoque_fiscal',
         help_text="Se TRUE, valida o estoque fiscal antes de autorizar a emissão (diferente do estoque gerencial)"
-    )
-    # Finalidade de emissão da NF-e (finNFe)
-    FINALIDADE_EMISSAO_CHOICES = [
-        ('1', '1 - Normal'),
-        ('2', '2 - Complementar'),
-        ('3', '3 - Ajuste'),
-        ('4', '4 - Devolução de Mercadoria'),
-        ('5', '5 - Nota de Crédito (Reforma Tributária NT 2025.002)'),
-        ('6', '6 - Nota de Débito - Pagamento Antecipado (NT 2025.002)'),
-        ('7', '7 - Nota de Débito - Perda em Estoque (NT 2025.002)'),
-    ]
-    finalidade_emissao = models.CharField(
-        max_length=1,
-        blank=True,
-        null=True,
-        choices=FINALIDADE_EMISSAO_CHOICES,
-        default='1',
-        db_column='finalidade_emissao',
-        help_text="Finalidade de emissão da NF-e (finNFe): 1-Normal, 2-Complementar, 3-Ajuste, 4-Devolução, 5-Crédito, 6-Débito Pgto Antecipado, 7-Débito Perda Estoque"
-    )
-    # Tipo de aplicação de desconto: por item ou por venda (rateado)
-    TIPO_DESCONTO_CHOICES = [
-        ('item', 'Por Item — desconto aplicado em cada item individualmente'),
-        ('venda', 'Por Venda — desconto geral rateado proporcionalmente nos itens'),
-    ]
-    tipo_desconto = models.CharField(
-        max_length=5,
-        blank=True,
-        null=True,
-        choices=TIPO_DESCONTO_CHOICES,
-        default='venda',
-        db_column='tipo_desconto',
-        help_text="Define como o desconto é aplicado: 'item' = mesmo % em cada item; 'venda' = desconto total rateado pelos itens"
     )
 
     class Meta:
@@ -1380,36 +1271,6 @@ class EmpresaConfig(models.Model):
     natureza_juridica = models.CharField(max_length=4, blank=True, null=True, help_text="Código da Natureza Jurídica (Tabela IBGE)")
     
     cnae = models.CharField(max_length=10, blank=True, null=True, help_text="Código CNAE Fiscal")
-
-    # --- Aproveitamento ICMS (NF-e Modelo 55) ---
-    nfe_aproveitamento_icms_ativo = models.BooleanField(
-        default=False,
-        blank=True,
-        null=True,
-        help_text="Ativa a geração de mensagem de aproveitamento de ICMS nas observações da NF-e"
-    )
-    nfe_aproveitamento_icms_aliquota = models.DecimalField(
-        max_digits=7,
-        decimal_places=4,
-        default=0,
-        blank=True,
-        null=True,
-        help_text="Alíquota (%) para cálculo de aproveitamento de ICMS. Use {PERC_ALIQ} na mensagem."
-    )
-    nfe_aproveitamento_icms_mensagem = models.TextField(
-        blank=True,
-        null=True,
-        help_text=(
-            "Mensagem de aproveitamento de ICMS. Variáveis: "
-            "{PERC_ALIQ} = % da alíquota, {VLR_TOTAL} = valor total da nota."
-        )
-    )
-    nfe_aproveitamento_icms_csosns = models.CharField(
-        max_length=100,
-        blank=True,
-        null=True,
-        help_text="CSOSNs que ativam a mensagem, separados por vírgula (ex: 101,102,500)"
-    )
 
     class Meta:
         managed = False
@@ -2366,7 +2227,6 @@ class CompraItem(models.Model):
     id_produto = models.ForeignKey(Produto, models.SET_NULL, db_column='id_produto', blank=True, null=True)
     quantidade = models.DecimalField(max_digits=15, decimal_places=6, default=0.000000, db_column='quantidade')
     quantidade_fracionada = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, db_column='quantidade_fracionada')
-    fracao_aplicada = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, db_column='fracao_aplicada', help_text='Fração aplicada (ex: 12.0 para caixa com 12 unidades)')
     unidade = models.CharField(max_length=10, default='UN', db_column='unidade')
     valor_compra = models.DecimalField(max_digits=15, decimal_places=6, default=0.00, db_column='valor_unitario')
     valor_total = models.DecimalField(max_digits=15, decimal_places=6, default=0.00, db_column='valor_total')
@@ -2384,55 +2244,7 @@ class CompraItem(models.Model):
         managed = False
 
     def __str__(self):
-        return f'CompraItem {self.id_item} (Prod: {getattr(self.id_produto, "codigo_produto", None)})'
-
-
-class FornecedorProdutoFracao(models.Model):
-    """
-    Armazena frações customizadas por fornecedor para produtos.
-    Permite memorizar como cada fornecedor vende um produto (ex: caixa com 10 unidades).
-    """
-    id = models.AutoField(primary_key=True)
-    fornecedor = models.ForeignKey(
-        'Fornecedor',
-        on_delete=models.CASCADE,
-        db_column='id_fornecedor',
-        related_name='fracoes_produto',
-        help_text='Fornecedor que utiliza esta fração'
-    )
-    produto = models.ForeignKey(
-        'Produto',
-        on_delete=models.CASCADE,
-        db_column='id_produto',
-        related_name='fracoes_fornecedor',
-        help_text='Produto ao qual a fração se aplica'
-    )
-    gtin = models.CharField(
-        max_length=14,
-        help_text='GTIN/EAN do produto no XML do fornecedor',
-        db_index=True
-    )
-    fracao = models.DecimalField(
-        max_digits=15,
-        decimal_places=6,
-        help_text='Fator de conversão (ex: 10.0 para caixa com 10 unidades)'
-    )
-    data_criacao = models.DateTimeField(auto_now_add=True)
-    data_atualizacao = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        db_table = 'fornecedor_produto_fracao'
-        managed = True
-        unique_together = [('fornecedor', 'produto', 'gtin')]
-        verbose_name = 'Fração de Produto por Fornecedor'
-        verbose_name_plural = 'Frações de Produtos por Fornecedor'
-        ordering = ['-data_atualizacao']
-    
-    def __str__(self):
-        return f'{self.fornecedor.nome_razao_social} - {self.produto.nome_produto} (GTIN: {self.gtin}) = {self.fracao}x'
-
-
-# Adicione estes modelos ao final do arquivo api/models.py
+        return f'CompraItem {self.id_item} (Prod: {getattr(self.id_produto, "codigo_produto", None)})'# Adicione estes modelos ao final do arquivo api/models.py
 
 class Deposito(models.Model):
     """Depósitos/Locais de armazenamento"""
@@ -4452,27 +4264,6 @@ class UserAtalho(models.Model):
         return f"{self.user.username} - {self.tecla}: {self.caminho}"
 
 
-class UserPreferencia(models.Model):
-    """Armazena preferências de interface por usuário (chave → valor)."""
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='preferencias',
-        db_column='id_user'
-    )
-    chave = models.CharField(max_length=100, help_text='Nome da preferência')
-    valor = models.TextField(blank=True, null=True, help_text='Valor da preferência')
-    atualizado_em = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'user_preferencias'
-        managed = True
-        unique_together = [('user', 'chave')]
-
-    def __str__(self):
-        return f"{self.user.username} - {self.chave}"
-
-
 class Numeracao(models.Model):
     id_numeracao = models.AutoField(primary_key=True)
     descricao = models.CharField(max_length=20)
@@ -5399,7 +5190,6 @@ class ConfiguracaoImpressao(models.Model):
     TIPO_IMPRESSORA_CHOICES = [
         ('termica', 'Térmica (Cupom)'),
         ('a4', 'A4 (Folha)'),
-        ('a4_fotos', 'A4 com Fotos e Assinatura'),
     ]
     LARGURA_TERMICA_CHOICES = [
         ('58mm', '58mm'),
@@ -5876,3 +5666,4 @@ class TributacaoUF(models.Model):
 
     def __str__(self):
         return f'{self.tipo_tributacao.nome} → {self.uf_destino} | ICMS {self.icms_aliq}%'
+

@@ -36,7 +36,6 @@ from .models import (
     Pet, TipoServico, Agendamento, Avaliacao, SessaoAgendamento,  # <-- NOVOS (Pet Shop)
     LogAuditoria,  # <-- NOVO (Auditoria)
     UserAtalho,
-    UserPreferencia,
     MapaCarga, MapaCargaItem, ConfiguracaoBancaria, Boleto  # <-- Sistema de Logística e Boletos
 )
 
@@ -3347,3 +3346,95 @@ class LoteProdutoViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(lotes, many=True)
         return Response(serializer.data)
 
+
+# ====================================================
+# API de Desconto Inteligente
+# ====================================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def simular_desconto(request):
+    """
+    Simula um desconto inteligente para um produto e cliente específicos.
+    Prioriza:
+    1. Promoções ativas para o produto.
+    2. Desconto preferencial do cliente.
+    3. Desconto máximo do produto.
+    4. Regra geral (ex: 5% de desconto).
+
+    Payload esperado:
+    {
+        "id_cliente": 1,
+        "id_produto": 1,
+        "valor_tabela": 100.00
+    }
+    """
+    from decimal import Decimal
+    from .models import Cliente, Produto, Promocao, PromocaoProduto, ClienteGrupoExcecao
+
+    id_cliente = request.data.get('id_cliente')
+    id_produto = request.data.get('id_produto')
+    valor_tabela = Decimal(str(request.data.get('valor_tabela', 0)))
+
+    if not id_cliente or not id_produto or valor_tabela is None:
+        return Response({'error': 'id_cliente, id_produto e valor_tabela são obrigatórios.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        cliente = Cliente.objects.get(id_cliente=id_cliente)
+        produto = Produto.objects.get(id_produto=id_produto)
+    except (Cliente.DoesNotExist, Produto.DoesNotExist):
+        return Response({'error': 'Cliente ou Produto não encontrados.'}, status=status.HTTP_404_NOT_FOUND)
+
+    desconto_aplicado = Decimal('0.00')
+    desconto_percentual = Decimal('0.00')
+    travado = False
+    motivo = "Nenhum desconto aplicado"
+
+    # Extrai descontos de forma segura (tratando None)
+    desconto_cliente = cliente.valor_desconto if (cliente.tipo_desconto == 'PERCENTUAL' and cliente.valor_desconto) else Decimal('0')
+    desconto_produto = produto.desconto_maximo_percentual if produto.desconto_maximo_percentual else Decimal('0')
+    priorizar_cliente = cliente.priorizar_desconto_cliente if cliente.priorizar_desconto_cliente else False
+
+    # Verifica exceção de grupo do cliente
+    excecao_grupo = None
+    if produto.id_grupo:
+        excecao_grupo = ClienteGrupoExcecao.objects.filter(cliente=cliente, grupo=produto.id_grupo).first()
+    
+    desconto_excecao = excecao_grupo.desconto_percentual if excecao_grupo and excecao_grupo.desconto_percentual else Decimal('0')
+
+    # 1. Verificar promoções ativas para o produto
+    promocoes_ativas = Promocao.objects.filter(
+        data_inicio__lte=timezone.now(),
+        data_fim__gte=timezone.now(),
+        status='ativa',
+        promocao_produtos__id_produto=produto
+    ).first()
+
+    if promocoes_ativas:
+        promo_produto = PromocaoProduto.objects.filter(id_promocao=promocoes_ativas, id_produto=produto).first()
+        if promo_produto and promo_produto.quantidade_minima <= 1: # Assumindo 1 para simulação inicial
+            desconto_percentual = promo_produto.valor_desconto_produto if promo_produto.valor_desconto_produto is not None else promocoes_ativas.valor_desconto
+            desconto_aplicado = valor_tabela * (desconto_percentual / 100)
+            travado = True
+            motivo = f"Promoção: {promocoes_ativas.nome_promocao}"
+    elif desconto_cliente > 0:
+        desconto_percentual = desconto_cliente
+        desconto_aplicado = valor_tabela * (desconto_percentual / 100)
+        travado = True
+        motivo = f"Desconto preferencial do cliente ({desconto_cliente}%)"
+    elif desconto_produto > 0:
+        desconto_percentual = desconto_produto
+        desconto_aplicado = valor_tabela * (desconto_percentual / 100)
+        motivo = f"Desconto máximo do produto ({desconto_produto}%)"
+    else:
+        # Regra geral: 5% de desconto padrão se nada mais se aplicar
+        desconto_percentual = Decimal('5.00')
+        desconto_aplicado = valor_tabela * (desconto_percentual / 100)
+        motivo = "Desconto padrão (5%)"
+
+    return Response({
+        'desconto_aplicado': float(desconto_aplicado),
+        'desconto_percentual': float(desconto_percentual),
+        'travado': travado,
+        'motivo': motivo
+    })

@@ -147,21 +147,27 @@ export const GruposProdutoProvider = ({ children }) => {
       const dadosParaEnvio = {
         nome_grupo: grupoData.nome
       };
-      if (grupoData.descricao !== undefined) {
-        dadosParaEnvio.descricao = grupoData.descricao;
-      }
 
-      console.log('📤 Editando grupo via API:', dadosParaEnvio, 'ID:', id);
+      console.log('📤 Editando grupo via API:', dadosParaEnvio);
       await axiosInstance.patch(`/grupos-produto/${id}/`, dadosParaEnvio);
 
-      // Recarregar grupos após edição
+      // Recarregar grupos após ediçéo
       await carregarGrupos();
 
       console.log('✅ Grupo editado com sucesso via API');
       return grupos.find(g => g.id === id);
     } catch (error) {
       console.error('❌ Erro ao editar grupo via API:', error);
-      throw error;
+
+      // Fallback para localStorage em caso de erro
+      const novosGrupos = grupos.map(grupo =>
+        grupo.id === id ? { ...grupo, ...grupoData } : grupo
+      );
+
+      setGrupos(novosGrupos);
+      localStorage.setItem('grupos_produto', JSON.stringify(novosGrupos));
+
+      return novosGrupos.find(g => g.id === id);
     }
   };
 

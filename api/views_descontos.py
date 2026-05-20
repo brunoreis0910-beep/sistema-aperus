@@ -9,13 +9,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from decimal import Decimal
 import logging
+from django.utils import timezone
 
-from .models import Cliente, Produto
-from .logic.descontos import (
-    calcular_preco_final,
-    validar_desconto,
-    gerar_resumo_desconto_cliente
-)
+from .models import Cliente, Produto, Promocao, PromocaoProduto, ClienteGrupoExcecao
+from .logic.descontos import validar_desconto, gerar_resumo_desconto_cliente
 
 logger = logging.getLogger(__name__)
 
@@ -75,30 +72,92 @@ def simular_desconto_cliente(request):
             }, status=status.HTTP_404_NOT_FOUND)
         
         # Calcular
-        valor_tabela = Decimal(str(valor_tabela))
-        resultado = calcular_preco_final(produto, cliente, valor_tabela)
-        
-        # Gerar mensagem de tooltip para o React
-        if resultado['travado']:
-            if resultado.get('grupo_excecao'):
-                mensagem_tooltip = f"Desconto de {resultado['desconto_percentual']}% aplicado automaticamente para este cliente (Grupo {resultado['grupo_excecao']} não incluso na exceção)"
+        try:
+            if not valor_tabela:
+                valor_tabela = Decimal('0.00')
             else:
-                mensagem_tooltip = f"Desconto de {resultado['desconto_percentual']}% aplicado automaticamente para este cliente - Campo travado"
-        else:
-            mensagem_tooltip = resultado['motivo']
+                valor_tabela = Decimal(str(valor_tabela))
+        except Exception:
+            valor_tabela = Decimal('0.00')
         
-        logger.info(f"[DESCONTO] Simulação para Cliente {id_cliente}, Produto {id_produto}: {resultado['motivo']}")
+        # 1. Verificar se há promoção ativa
+        promocoes_ativas = Promocao.objects.filter(
+            data_inicio__lte=timezone.now(),
+            data_fim__gte=timezone.now(),
+            status='ativa',
+            promocao_produtos__id_produto=produto
+        ).first()
+
+        priorizar_cliente = cliente.priorizar_desconto_cliente if cliente.priorizar_desconto_cliente else False
+
+        # Calcular o desconto do cliente usando a lógica centralizada
+        from .logic.descontos import calcular_preco_final
+        resultado_cliente = calcular_preco_final(produto, cliente, valor_tabela)
+        desconto_cliente_aplicado = resultado_cliente["desconto_aplicado"]
+
+        # Determinar qual regra aplicar seguindo a hierarquia
+        if priorizar_cliente and desconto_cliente_aplicado > 0:
+            # Prioriza desconto do cliente
+            preco_final = resultado_cliente["preco"]
+            desconto_aplicado = resultado_cliente["desconto_aplicado"]
+            desconto_percentual = resultado_cliente["desconto_percentual"]
+            travado = resultado_cliente["travado"]
+            motivo = resultado_cliente["motivo"]
+        elif promocoes_ativas:
+            # Promoção ativa tem preferência se o cliente não priorizar o seu próprio desconto ou não tiver desconto
+            promo_produto = PromocaoProduto.objects.filter(id_promocao=promocoes_ativas, id_produto=produto).first()
+            desconto_percentual = promo_produto.valor_desconto_produto if (promo_produto and promo_produto.valor_desconto_produto is not None) else promocoes_ativas.valor_desconto
+            desconto_aplicado = valor_tabela * (desconto_percentual / Decimal('100'))
+            preco_final = valor_tabela - desconto_aplicado
+            travado = True
+            motivo = f"Promoção: {promocoes_ativas.nome_promocao}"
+        elif desconto_cliente_aplicado > 0:
+            # Desconto do cliente padrão
+            preco_final = resultado_cliente["preco"]
+            desconto_aplicado = resultado_cliente["desconto_aplicado"]
+            desconto_percentual = resultado_cliente["desconto_percentual"]
+            travado = resultado_cliente["travado"]
+            motivo = resultado_cliente["motivo"]
+        elif produto.desconto_maximo_percentual and produto.desconto_maximo_percentual > 0:
+            # Desconto máximo do produto
+            desconto_percentual = produto.desconto_maximo_percentual
+            desconto_aplicado = valor_tabela * (desconto_percentual / Decimal('100'))
+            preco_final = valor_tabela - desconto_aplicado
+            travado = False
+            motivo = f"Desconto máximo do produto ({desconto_percentual}%)"
+        else:
+            # Sem desconto
+            preco_final = valor_tabela
+            desconto_aplicado = Decimal('0.00')
+            desconto_percentual = Decimal('0.00')
+            travado = False
+            motivo = "Nenhum desconto aplicado"
+
+        # Tratamento de grupo de exceção
+        if "grupo de exceção" in resultado_cliente["motivo"]:
+            mensagem_tooltip = resultado_cliente["motivo"]
+            preco_final = valor_tabela
+            desconto_aplicado = Decimal('0.00')
+            desconto_percentual = Decimal('0.00')
+            travado = resultado_cliente["travado"]
+            motivo = resultado_cliente["motivo"]
+        else:
+            mensagem_tooltip = f"Desconto de {desconto_percentual}% aplicado automaticamente." if travado else motivo
+            
+        logger.info(f"[DESCONTO] Simulação para Cliente {id_cliente}, Produto {id_produto}: {motivo}")
         
         return Response({
             'success': True,
-            'preco': float(resultado['preco']),
-            'desconto_aplicado': float(resultado['desconto_aplicado']),
-            'desconto_percentual': float(resultado['desconto_percentual']),
-            'travado': resultado['travado'],
-            'motivo': resultado['motivo'],
+            'preco': float(preco_final),
+            'desconto_aplicado': float(desconto_aplicado),
+            'desconto_percentual': float(desconto_percentual),
+            'travado': travado,
+            'motivo': motivo,
             'mensagem_tooltip': mensagem_tooltip,
             'cliente_nome': cliente.nome_razao_social,
             'produto_nome': produto.nome_produto,
+            'tipo_desconto': cliente.tipo_desconto,
+            'cliente_tem_desconto': bool(cliente.valor_desconto and cliente.valor_desconto > 0),
         }, status=status.HTTP_200_OK)
         
     except Exception as e:

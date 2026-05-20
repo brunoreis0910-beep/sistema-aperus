@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from . import models  # Import correto dos models da API
 from .models import Produto, Catalogo, CatalogoItem, StatusOrdemServico, LoteProduto, Cliente, GrupoProduto, ConfiguracaoProduto, TributacaoProduto, MapaCargaItem, MapaCarga, ConfiguracaoBancaria, Boleto, SugestaoCFOP, NotaFiscalReferenciada
-from .text_utils import sanitize_field
 
 
 class ProdutoComQuantidadeField(serializers.Field):
@@ -250,10 +249,43 @@ from .models import (
 
 # --- Serializers Antigos (Sem altera��o) ---
 class ClienteSerializer(serializers.ModelSerializer):
+    grupos_excecao = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=GrupoProduto.objects.all(),
+        required=False
+    )
+
     class Meta:
         model = Cliente
         fields = '__all__'
         read_only_fields = ['id_cliente', 'data_cadastro']
+
+    def create(self, validated_data):
+        from .models import ClienteGrupoExcecao
+        grupos_data = validated_data.pop('grupos_excecao', None)
+        
+        cliente = super().create(validated_data)
+        
+        if grupos_data is not None:
+            for grupo in grupos_data:
+                ClienteGrupoExcecao.objects.create(cliente=cliente, grupo=grupo)
+                
+        return cliente
+
+    def update(self, instance, validated_data):
+        from .models import ClienteGrupoExcecao
+        grupos_data = validated_data.pop('grupos_excecao', None)
+        
+        cliente = super().update(instance, validated_data)
+        
+        if grupos_data is not None:
+            # Remover associações antigas
+            ClienteGrupoExcecao.objects.filter(cliente=cliente).delete()
+            # Criar novas associações
+            for grupo in grupos_data:
+                ClienteGrupoExcecao.objects.create(cliente=cliente, grupo=grupo)
+                
+        return cliente
 
 class GrupoProdutoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -1496,8 +1528,8 @@ class LogAuditoriaSerializer(serializers.ModelSerializer):
 
 # --- Serializer TabelaComercial ---
 class TabelaComercialSerializer(serializers.ModelSerializer):
-    """Serializer para Tabelas Comerciais"""
-
+    """Serializer para Tabelas Comerciais (Tabelas de Pre�o)"""
+    
     class Meta:
         from .models import TabelaComercial
         model = TabelaComercial
@@ -1512,13 +1544,6 @@ class TabelaComercialSerializer(serializers.ModelSerializer):
             'data_atualizacao',
         ]
         read_only_fields = ['data_criacao', 'data_atualizacao']
-
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        for key, value in data.items():
-            if isinstance(value, str):
-                data[key] = sanitize_field(value)
-        return data
 
 
 # --- Serializer para Status de Ordem de Serviço ---

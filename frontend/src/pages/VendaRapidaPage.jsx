@@ -1,4 +1,4 @@
-﻿﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -767,8 +767,20 @@ const VendaRapidaPage = () => {
     });
   };
 
-  const selecionarClienteVenda = async (clienteSelecionado) => {
-    console.log('🎯🎯🎯 selecionarClienteVenda CHAMADA:', clienteSelecionado);
+  const selecionarClienteVenda = async (clienteSelecionadoObj) => {
+    console.log('🎯🎯🎯 selecionarClienteVenda CHAMADA:', clienteSelecionadoObj);
+
+    // Buscar dados atualizados do cliente na API para garantir que temos os descontos mais recentes (ignora cache)
+    let clienteSelecionado = clienteSelecionadoObj;
+    if (servidorOkRef.current && clienteSelecionadoObj?.id_cliente) {
+      try {
+        const res = await axiosInstance.get(`/clientes/${clienteSelecionadoObj.id_cliente}/`);
+        clienteSelecionado = res.data;
+      } catch (e) {
+        console.warn("⚠️ Não foi possível buscar dados atualizados do cliente, usando o objeto atual.", e);
+      }
+    }
+
     console.log('🔍 Operação atual:', operacao);
     console.log('🔍 validar_atraso:', operacao?.validar_atraso);
     console.log('🔍 acao_atraso:', operacao?.acao_atraso);
@@ -785,6 +797,17 @@ const VendaRapidaPage = () => {
       setEstoqueAutorizado(false);
     } else {
       console.log('ℹ️ Primeiro cliente ou mesmo cliente - Mantendo flags');
+    }
+
+    // 💰 Log e alerta se o cliente tem desconto preferencial
+    const temDesconto = parseFloat(clienteSelecionado.valor_desconto || 0) > 0;
+    if (temDesconto) {
+      const valorFormatado = clienteSelecionado.tipo_desconto === 'PERCENTUAL' 
+        ? `${clienteSelecionado.valor_desconto}%` 
+        : `R$ ${clienteSelecionado.valor_desconto}`;
+      console.log(`💰 Cliente ${clienteSelecionado.nome_razao_social} selecionado com desconto configurado de ${valorFormatado}`);
+      setSuccess(`O desconto de ${valorFormatado} será aplicado após selecionar os produtos que estão nos grupos definidos, exceto.`);
+      setTimeout(() => setSuccess(''), 8000); // Remover alerta após 8 segundos
     }
 
     // Verificar se há operação configurada
@@ -966,6 +989,7 @@ const VendaRapidaPage = () => {
       // Armazenar a fila e processar a primeira
       setFilaValidacoes(validacoesPendentes);
       setCliente(clienteSelecionado);
+      recalcularDescontosClientesItensVendaRapida(clienteSelecionado.id_cliente, itens);
       setOpenSelecionarCliente(false);
       setBuscaCliente('');
 
@@ -990,6 +1014,7 @@ const VendaRapidaPage = () => {
     // O reset deve acontecer apenas ao limpar a venda
 
     setCliente(clienteSelecionado);
+    recalcularDescontosClientesItensVendaRapida(clienteSelecionado.id_cliente, itens);
     setOpenSelecionarCliente(false);
     setBuscaCliente('');
   };
@@ -1271,7 +1296,7 @@ const VendaRapidaPage = () => {
               produto: produto.nome_produto || produto.descricao,
               disponivel: estoqueDisponivel,
               solicitado: 1,
-              faltam: 1 - estoqueDisponivel
+              faltam: 1 - estoque
             });
             setAcaoEstoqueAtual(operacao.acao_estoque);
 
@@ -1414,6 +1439,44 @@ const VendaRapidaPage = () => {
     return null;
   };
 
+  const recalcularDescontosClientesItensVendaRapida = async (clienteId, itensAtuais) => {
+    if (!itensAtuais || itensAtuais.length === 0) return;
+    
+    console.log(`[DESCONTO] Recalculando descontos de ${itensAtuais.length} itens para o cliente ID ${clienteId} (Venda Rápida)`);
+    const itensAtualizados = [];
+    
+    for (const item of itensAtuais) {
+      try {
+        const simularDescontoResponse = await axiosInstance.post('/descontos/simular/', {
+          id_cliente: clienteId,
+          id_produto: item.id_produto,
+          valor_tabela: item.valor_unitario
+        });
+
+        const { preco, desconto_aplicado, desconto_percentual, travado: isTravado, motivo } = simularDescontoResponse.data;
+
+        const descontoPerc = desconto_percentual;
+        const descontoVal = desconto_aplicado * parseFloat(item.quantidade);
+        const valorTotalItem = (parseFloat(item.quantidade) * parseFloat(item.valor_unitario)) - descontoVal;
+
+        itensAtualizados.push({
+          ...item,
+          travado: isTravado,
+          desconto_percentual: parseFloat(descontoPerc),
+          desconto_valor: descontoVal,
+          valor_total: valorTotalItem,
+          tem_promocao: motivo ? true : false,
+          descricaoPromocao: motivo ? `${motivo}` : ''
+        });
+      } catch (error) {
+        console.error(`[DESCONTO] Erro ao recalcular item ${item.id_produto} na Venda Rápida:`, error);
+        itensAtualizados.push(item);
+      }
+    }
+
+    setItens(itensAtualizados);
+  };
+
   // Função auxiliar para adicionar item sem validação (após autorização)
   const efetivarAdicaoItem = async (itemData) => {
     const timestamp = Date.now();
@@ -1439,29 +1502,46 @@ const VendaRapidaPage = () => {
 
     let desconto = desc;
     let descricaoPromocao = '';
-
-    console.log('🔍 Verificando promoção para produto:', idProd, 'com quantidade:', qtd);
-    const promocao = verificarPromocao(idProd, qtd);
-    console.log('📌 Resultado da verificação:', promocao);
-
-    if (promocao) {
-      console.log('✅ PROMOÇÃO ENCONTRADA:', promocao.promocao_nome);
-      if (promocao.tipo_desconto === 'percentual') {
-        desconto = promocao.desconto_percentual;
-        console.log('📊 Desconto percentual:', desconto, '%');
-      } else {
-        // Para desconto em valor, converter para percentual
-        const valorItem = qtd * valor;
-        desconto = (promocao.valor_desconto / valorItem) * 100;
-        console.log('[DESCONTO] Desconto em valor: R$', promocao.valor_desconto, '->', desconto.toFixed(2), '%');
-      }
-      descricaoPromocao = ` (${promocao.promocao_nome})`;
-    } else {
-      console.log('❌ Nenhuma promoção encontrada para este produto');
-    }
+    let travado = false;
+    let valorDesconto = 0;
 
     const valorItem = qtd * valor;
-    const valorDesconto = (valorItem * desconto) / 100;
+
+    console.log(`[DESCONTO-API] 🚀 Iniciando simulação Produto: ${idProd}, Cliente: ${cliente?.id_cliente}, Tabela: R$ ${valor}`);
+    try {
+      if (!cliente?.id_cliente) throw new Error('Sem cliente');
+      
+      const res = await axiosInstance.post('/descontos/simular/', {
+        id_cliente: cliente.id_cliente,
+        id_produto: idProd,
+        valor_tabela: parseFloat(valor)
+      });
+      
+      const { desconto_aplicado, desconto_percentual, travado: isTravado, motivo } = res.data;
+      console.log('[DESCONTO-API] ✅ Resposta da simulação (Sucesso):', res.data);
+      
+      desconto = desconto_percentual;
+      valorDesconto = desconto_aplicado * qtd;
+      descricaoPromocao = motivo ? `${motivo}` : '';
+      travado = isTravado;
+      
+      console.log(`[DESCONTO-API] 🎯 Valores Aplicados -> Perc: ${desconto}%, Valor: R$ ${valorDesconto}, Travado: ${travado}`);
+    } catch (err) {
+      console.log('🔍 Fallback para promoção local:', err.message);
+      const promocao = verificarPromocao(idProd, qtd);
+      if (promocao) {
+        if (promocao.tipo_desconto === 'percentual') {
+          desconto = promocao.desconto_percentual;
+          valorDesconto = (valorItem * desconto) / 100;
+        } else {
+          valorDesconto = promocao.valor_desconto;
+          desconto = valorItem > 0 ? (valorDesconto / valorItem) * 100 : 0;
+        }
+        descricaoPromocao = promocao.promocao_nome;
+      } else {
+        valorDesconto = (valorItem * desconto) / 100;
+      }
+    }
     const valorTotalItem = valorItem - valorDesconto;
 
     console.log('[DESCONTO] Valores calculados:', { valorItem, desconto: desconto.toFixed(2), valorDesconto: valorDesconto.toFixed(2), valorTotalItem: valorTotalItem.toFixed(2) });
@@ -1486,7 +1566,7 @@ const VendaRapidaPage = () => {
       desconto_percentual: parseFloat(desconto),
       desconto_valor: valorDesconto,
       valor_total: valorTotalItem,
-      tem_promocao: !!promocao,
+      tem_promocao: descricaoPromocao !== '',
       descricaoPromocao: descricaoPromocao,
       id_lote: lotePreSelecionado?.id_lote || null,
       numero_lote: lotePreSelecionado?.numero_lote || '',
@@ -1510,8 +1590,8 @@ const VendaRapidaPage = () => {
 
     codigoProdutoRef.current?.focus();
 
-    if (promocao) {
-      setSuccess(`Item adicionado! Promocao: ${promocao.promocao_nome}`);
+    if (descricaoPromocao !== '') {
+      setSuccess(`Item adicionado! Desconto/Promoção: ${descricaoPromocao}`);
       setTimeout(() => setSuccess(''), 3000);
     } else {
       setSuccess('Item adicionado!');
@@ -1625,123 +1705,15 @@ const VendaRapidaPage = () => {
 
     console.log('ℹ️ Adicionando produto com tabela:', tabelaSelecionada?.nome || 'Nenhuma');
 
-    let desconto = descontoItem;
-    let descricaoPromocao = '';
-
-    console.log('🔍 Verificando promoção para produto:', idProdutoSelecionado, 'com quantidade:', quantidade);
-    
-    // ========== VERIFICAR DESCONTO DO CLIENTE ==========
-    let clienteTemExcecao = false;
-    let clienteDescontoValor = 0;
-    let clienteDescontoAplicado = false;
-    
-    if (cliente && cliente.tipo_desconto && parseFloat(cliente.valor_desconto || 0) > 0) {
-      const grupos_excecao = Array.isArray(cliente.grupos_excecao) ? cliente.grupos_excecao : [];
-      if (grupoProdutoSelecionado && grupos_excecao.some(g => String(g.id_grupo || g) === String(grupoProdutoSelecionado))) {
-        clienteTemExcecao = true;
-        console.log('⚠️ Produto em grupo de exceção para desconto do cliente!');
-      }
-      
-      if (!clienteTemExcecao) {
-        if (cliente.tipo_desconto === 'PERCENTUAL') {
-          clienteDescontoValor = parseFloat(cliente.valor_desconto);
-        } else { // FIXO
-          const precoUnitario = parseFloat(valorUnitario);
-          clienteDescontoValor = precoUnitario > 0 ? (parseFloat(cliente.valor_desconto) / precoUnitario) * 100 : 0;
-        }
-        clienteDescontoAplicado = true;
-      }
-    }
-
-    // Verificar promoção
-    const promocao = verificarPromocao(idProdutoSelecionado, quantidade);
-    console.log('📌 Resultado da verificação da promoção:', promocao);
-
-    // Aplicar a hierarquia: Exceção (não tem desconto) > Desconto Cliente > Promoção/Operação
-    if (clienteTemExcecao) {
-      desconto = 0; // Nenhum desconto aplicado
-      descricaoPromocao = ` (Exceção de Grupo)`;
-      console.log('❌ Grupo de exceção: Nenhum desconto aplicado');
-    } else if (clienteDescontoAplicado) {
-      desconto = clienteDescontoValor;
-      descricaoPromocao = ` (Desconto Cliente)`;
-      console.log('💎 Aplicando desconto de cliente:', cliente.tipo_desconto, cliente.valor_desconto);
-    } else if (promocao) {
-      console.log('✅ PROMOÇÃO ENCONTRADA:', promocao.promocao_nome);
-      if (promocao.tipo_desconto === 'percentual') {
-        desconto = promocao.desconto_percentual;
-        console.log('📊 Desconto percentual:', desconto, '%');
-      } else {
-        // Para desconto em valor, converter para percentual
-        const valorItem = quantidade * valorUnitario;
-        desconto = (promocao.valor_desconto / valorItem) * 100;
-        console.log('[DESCONTO] Desconto em valor: R$', promocao.valor_desconto, '->', desconto.toFixed(2), '%');
-      }
-      descricaoPromocao = ` (${promocao.promocao_nome})`;
-    } else {
-      console.log('❌ Nenhuma promoção ou desconto de cliente encontrado para este produto');
-    }
-
-    const valorItem = quantidade * valorUnitario;
-    const valorDesconto = (valorItem * desconto) / 100;
-    const valorTotalItem = valorItem - valorDesconto;
-
-    console.log('[DESCONTO] Valores calculados:', { valorItem, desconto: desconto.toFixed(2), valorDesconto: valorDesconto.toFixed(2), valorTotalItem: valorTotalItem.toFixed(2) });
-
-    // Verificar se este produto exige seleção de lote
-    if (controlaProdutoLote) {
-      if (!lotePreSelecionado) {
-        setError('Este produto exige seleção de lote. Selecione um lote antes de adicionar.');
-        return;
-      }
-    }
-
-    const novoItem = {
-      id: Date.now(),
-      id_produto: idProdutoSelecionado,  // Incluir ID do produto
-      travado: cliente?.priorizar_desconto_cliente || false,
-      codigo: codigoProduto,
-      nome: nomeProduto,  // Adicionar nome do produto
-      quantidade: parseFloat(quantidade),
-      preco_base: precoBaseProduto || parseFloat(valor),
-      valor_unitario: parseFloat(valor),
-      desconto_percentual: parseFloat(desconto),
-      desconto_valor: valorDesconto,
-      valor_total: valorTotalItem,
-      tem_promocao: !!promocao,
-      descricaoPromocao: descricaoPromocao,
-      id_lote: lotePreSelecionado?.id_lote || null,
-      numero_lote: lotePreSelecionado?.numero_lote || '',
-    };
-
-    console.log('[DESCONTO] Item criado:', { id_produto: novoItem.id_produto, quantidade: novoItem.quantidade, desconto_valor: novoItem.desconto_valor });
-    console.log(`➕ [${timestamp}] ADICIONANDO ITEM DIRETO (sem modal) - Produto: ${novoItem.nome_produto}`);
-
-    setItens(prevItens => [...prevItens, novoItem]);
-
-    // Limpar campos
-    setCodigoProduto('');
-    setIdProdutoSelecionado(null);
-    setGrupoProdutoSelecionado(null);
-    setNomeProduto('');
-    setQuantidade(1);
-    setValorUnitario(0);
-    setDescontoItem(0);
-    setProdutoBalanca(null);
-    setControlaProdutoLote(false);
-    setLotePreSelecionado(null);
-
-    // Focar no código do produto novamente
-    codigoProdutoRef.current?.focus();
-
-    // Mostrar mensagem com promoção se houver
-    if (promocao) {
-      setSuccess(`Item adicionado! Promocao: ${promocao.promocao_nome}`);
-      setTimeout(() => setSuccess(''), 3000);
-    } else {
-      setSuccess('Item adicionado!');
-      setTimeout(() => setSuccess(''), 2000);
-    }
+    efetivarAdicaoItem({
+      codigoProduto,
+      idProdutoSelecionado,
+      grupoProdutoSelecionado,
+      nomeProduto,
+      quantidade,
+      valorUnitario,
+      descontoItem
+    });
   };
 
   const removerItem = (id) => {
@@ -1786,6 +1758,7 @@ const VendaRapidaPage = () => {
   };
 
   const abrirDescontoItem = (item) => {
+    if (item.travado) return;
     setItemSelecionado(item);
     setDescontoItemEdit(item.desconto_percentual || 0);
     setOpenDescontoItem(true);
@@ -3065,11 +3038,11 @@ const VendaRapidaPage = () => {
     // Debug - verificar dados
     console.log('🖨️ Dados para impressão:', dados);
     console.log('🏢 Empresa:', dados.empresa);
-    console.log('� Vendedor completo:', dados.vendedor);
+    console.log('👥 Vendedor completo:', dados.vendedor);
     console.log('👤 Nome do vendedor:', dados.vendedor?.nome_vendedor);
     console.log('👥 Cliente completo:', dados.cliente);
     console.log('👥 Nome do cliente:', dados.cliente?.nome_razao);
-    console.log('�📦 Itens:', dados.itens);
+    console.log('📦 Itens:', dados.itens);
     console.log('💳 Formas de pagamento:', dados.condicoesPagamento);
     console.log('💳 Primeira forma:', dados.condicoesPagamento?.[0]);
 
@@ -3078,32 +3051,72 @@ const VendaRapidaPage = () => {
     const larguraJanela = usarA4 ? 'width=900,height=700' : 'width=300,height=600';
     const conteudo = usarA4 ? gerarConteudoImpressaoA4(dados) : gerarConteudoImpressao(dados);
 
-    // Abrir janela de impress
+    // Abrir janela de impressão
+    const janelaImpressao = window.open('', '_blank', larguraJanela);
+    if (janelaImpressao) {
+      janelaImpressao.document.write(conteudo);
+      janelaImpressao.document.close();
+      janelaImpressao.focus();
+
+      setTimeout(() => {
+        janelaImpressao.print();
+        janelaImpressao.close();
+      }, 250);
+    }
+
+    // Limpar venda após impressão
+    setTimeout(() => {
+      limparVenda();
+    }, 500);
+  };
+
+  const carregarVendas = async () => {
+    try {
+      setLoadingVendas(true);
+      const token = getToken();
+
+      // Buscar vendas do dia
+      const hoje = new Date().toISOString().split('T')[0];
+      const res = await axiosInstance.get(`/vendas/?data=${hoje}`);
+
+      console.log('📋 Vendas carregadas (raw):', res.data);
+
+      // Garantir que vendas seja sempre um array
+      let vendasArray = Array.isArray(res.data) ? res.data : (res.data.results || []);
+
+      // Log da primeira venda para verificar estrutura
+      if (vendasArray.length > 0) {
         console.log('🔍 DEBUG Tabela - Primeira venda:', vendasArray[0]);
         console.log('🔍 DEBUG Tabela - Cliente:', vendasArray[0].cliente);
         console.log('🔍 DEBUG Tabela - Tipo cliente:', typeof vendasArray[0].cliente);
       }
 
       // Expandir dados do cliente se vier como ID
-      const vendasComCliente = await Promise.all(
-        vendasArray.map(async (venda) => {
-          if (typeof venda.cliente === 'number') {
-            try {
-              const resCliente = await axiosInstance.get(`/clientes/${venda.cliente}/`);
-              return { ...venda, cliente: resCliente.data };
-            } catch (err) {
-              console.error(`Erro ao buscar cliente ${venda.cliente}:`, err);
-              return venda; // Retorna venda original se falhar
+      try {
+        const vendasComCliente = await Promise.all(
+          vendasArray.map(async (venda) => {
+            if (typeof venda.cliente === 'number') {
+              try {
+                const resCliente = await axiosInstance.get(`/clientes/${venda.cliente}/`);
+                return { ...venda, cliente: resCliente.data };
+              } catch (err) {
+                console.error(`Erro ao buscar cliente ${venda.cliente}:`, err);
+                return venda; // Retorna venda original se falhar
+              }
             }
-          }
-          return venda; // Cliente já é objeto
-        })
-      );
+            return venda; // Cliente já é objeto
+          })
+        );
 
-      console.log('✅ Vendas com clientes expandidos:', vendasComCliente);
+        console.log('✅ Vendas com clientes expandidos:', vendasComCliente);
 
-      setVendas(vendasComCliente);
-      setOpenReimprimir(true);
+        setVendas(vendasComCliente);
+        setOpenReimprimir(true);
+      } catch (err) {
+        console.error('Erro ao expandir clientes das vendas:', err);
+        setError('Erro ao processar clientes das vendas');
+        setVendas([]);
+      }
     } catch (err) {
       console.error('Erro ao carregar vendas:', err);
       setError('Erro ao carregar vendas');
@@ -4182,6 +4195,18 @@ const VendaRapidaPage = () => {
                               sx={{ fontSize: '0.7rem' }}
                             />
                           )}
+                          {parseFloat(item.desconto_percentual || 0) > 0 && (
+                            <Chip
+                              label={`-${parseFloat(item.desconto_percentual).toFixed(1)}%`}
+                              size="small"
+                              sx={{
+                                backgroundColor: '#4CAF50',
+                                color: 'white',
+                                fontWeight: 'bold',
+                                fontSize: '0.7rem'
+                              }}
+                            />
+                          )}
                         </Box>
                       </TableCell>
                       <TableCell align="right">
@@ -4203,9 +4228,11 @@ const VendaRapidaPage = () => {
                         <IconButton
                           size="small"
                           onClick={() => abrirDescontoItem(item)}
-                          sx={{ color: '#FF9800' }}
+                          disabled={item.travado}
+                          sx={{ color: item.travado ? '#ccc' : '#FF9800' }}
+                          title={item.travado ? "Desconto do cliente travado" : "Editar desconto"}
                         >
-                          <EditIcon />
+                          {item.travado ? <span style={{ fontSize: '1.2rem' }}>🔒</span> : <EditIcon />}
                         </IconButton>
                         <IconButton
                           size="small"

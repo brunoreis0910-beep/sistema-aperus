@@ -1,4 +1,4 @@
-﻿﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -1580,12 +1580,74 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     }, 100);
   };
 
+  const recalcularDescontosClientesItens = async (clienteId, itensAtuais) => {
+    if (!itensAtuais || itensAtuais.length === 0) return;
+    
+    console.log(`[DESCONTO] Recalculando descontos de ${itensAtuais.length} itens para o cliente ID ${clienteId}`);
+    const novosItens = [];
+    
+    for (const item of itensAtuais) {
+      try {
+        const simularDescontoResponse = await axiosInstance.post('/descontos/simular/', {
+          id_cliente: clienteId,
+          id_produto: item.id_produto,
+          valor_tabela: item.valor_unitario
+        });
+
+        const { preco, desconto_aplicado, desconto_percentual, travado: isTravado, motivo, tipo_desconto, cliente_tem_desconto } = simularDescontoResponse.data;
+
+        const descontoPerc = desconto_percentual;
+        const descontoVal = desconto_aplicado * parseFloat(item.quantidade);
+        const valorTotalItem = (parseFloat(item.quantidade) * parseFloat(item.valor_unitario)) - descontoVal;
+        
+        let descontoTipoEdicao = item.desconto_tipo_edicao || 'valor';
+        if (cliente_tem_desconto) {
+          descontoTipoEdicao = tipo_desconto === 'PERCENTUAL' ? 'percentual' : 'valor';
+        }
+
+        novosItens.push({
+          ...item,
+          travado: isTravado,
+          desconto: descontoVal,
+          desconto_valor: descontoVal,
+          desconto_percentual: descontoPerc,
+          desconto_tipo_edicao: descontoTipoEdicao,
+          subtotal: valorTotalItem,
+          descricaoPromocao: motivo ? ` (${motivo})` : ''
+        });
+      } catch (error) {
+        console.error(`[DESCONTO] Erro ao recalcular item ${item.id_produto}:`, error);
+        novosItens.push(item);
+      }
+    }
+
+    setVenda(prev => {
+      const total = novosItens.reduce((acc, it) => {
+        const quantidade = parseFloat(it.quantidade) || 0;
+        const valorUnitario = parseFloat(it.valor_unitario) || 0;
+        const desconto = parseFloat(it.desconto) || 0;
+        return acc + ((quantidade * valorUnitario) - desconto);
+      }, 0);
+
+      const descontoGeral = parseFloat(prev.desconto) || 0;
+      const taxaEntrega = parseFloat(prev.taxa_entrega) || 0;
+      const valorTotal = total - descontoGeral + taxaEntrega;
+
+      return {
+        ...prev,
+        itens: novosItens,
+        valor_total: valorTotal
+      };
+    });
+  };
+
   // Adicionar item
   // Função auxiliar para efetivamente adicionar o item (sem validação)
   const efetivarAdicaoItem = async (itemData, produtoData) => {
     const { quantidade, valor_unitario, desconto, id_produto } = itemData;
-    const tipoDesconto = itemData.tipo_desconto || 'valor';
+    let descontoTipoEdicao = itemData.tipo_desconto || 'valor';
     const produto = produtoData;
+    const promocao = verificarPromocao(id_produto, quantidade);
 
     let descontoPerc = 0;
     let descontoVal = 0;
@@ -1594,67 +1656,40 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
     const valorItem = parseFloat(quantidade) * parseFloat(valor_unitario || produto.valor_venda || produto.preco_venda || produto.preco || 0);
 
-    const promocao = verificarPromocao(id_produto, quantidade);
+    // Chamar endpoint da API para simular desconto
+    try {
+      const simularDescontoResponse = await axiosInstance.post('/descontos/simular/', {
+        id_cliente: venda.id_cliente,
+        id_produto: id_produto,
+        valor_tabela: valor_unitario // Passa o valor unitário como valor de tabela para cálculo
+      });
 
-    // ========== VERIFICAR DESCONTO DO CLIENTE ==========
-    let clienteTemExcecao = false;
-    let clienteDescontoValor = 0;
-    let clienteDescontoAplicado = false;
-    let clientePrioridade = false;
+      const { preco, desconto_aplicado, desconto_percentual, travado: isTravado, motivo, tipo_desconto, cliente_tem_desconto } = simularDescontoResponse.data;
 
-    // Buscar o objeto cliente completo na lista
-    const clienteCompleto = clientes.find(c => String(c.id_cliente || c.id) === String(venda.id_cliente));
+      descontoPerc = desconto_percentual;
+      descontoVal = desconto_aplicado * parseFloat(quantidade);
+      descricaoPromocao = motivo ? ` (${motivo})` : '';
+      travado = isTravado;
 
-    if (clienteCompleto && clienteCompleto.tipo_desconto && parseFloat(clienteCompleto.valor_desconto || 0) > 0) {
-      const grupos_excecao = Array.isArray(clienteCompleto.grupos_excecao) ? clienteCompleto.grupos_excecao : [];
-      const idGrupo = produto.id_grupo || produto.grupo_produto;
-      
-      if (idGrupo && grupos_excecao.some(g => String(g.id_grupo || g) === String(idGrupo))) {
-        clienteTemExcecao = true;
+      if (cliente_tem_desconto) {
+        descontoTipoEdicao = tipo_desconto === 'PERCENTUAL' ? 'percentual' : 'valor';
       }
-      
-      if (!clienteTemExcecao) {
-        if (clienteCompleto.tipo_desconto === 'PERCENTUAL') {
-          clienteDescontoValor = parseFloat(clienteCompleto.valor_desconto);
-        } else { // FIXO
-          const precoUnitario = parseFloat(valor_unitario || produto.valor_venda || 0);
-          clienteDescontoValor = precoUnitario > 0 ? (parseFloat(clienteCompleto.valor_desconto) / precoUnitario) * 100 : 0;
-        }
-        clienteDescontoAplicado = true;
-        clientePrioridade = clienteCompleto.priorizar_desconto_cliente || false;
-      }
-    }
 
-    // Hierarquia: Exceção > Cliente > Promoção > Manual
-    if (clienteTemExcecao) {
-      descontoPerc = 0;
-      descontoVal = 0;
-      descricaoPromocao = 'Exceção de Grupo (Sem Desconto)';
-      travado = clientePrioridade;
-    } else if (clienteDescontoAplicado) {
-      descontoPerc = clienteDescontoValor;
-      descontoVal = (valorItem * descontoPerc) / 100;
-      descricaoPromocao = `Desconto Cliente`;
-      travado = clientePrioridade;
-    } else if (promocao) {
-      if (promocao.tipo_desconto === 'percentual') {
-        descontoPerc = promocao.desconto_percentual;
-        descontoVal = (valorItem * descontoPerc) / 100;
-      } else {
-        descontoVal = promocao.valor_desconto;
-        descontoPerc = valorItem > 0 ? (descontoVal / valorItem) * 100 : 0;
-      }
-      descricaoPromocao = promocao.promocao_nome;
-    } else {
-      // Manual
+      console.log('[DESCONTO-API] Resposta da simulação:', simularDescontoResponse.data);
+
+    } catch (apiError) {
+      console.error('Erro ao simular desconto do cliente via API:', apiError);
+      // Fallback para o desconto original do itemData ou 0
       const desc = parseFloat(desconto || 0);
-      if (tipoDesconto === 'percentual') {
+      if (descontoTipoEdicao === 'percentual') {
         descontoPerc = desc;
         descontoVal = (valorItem * desc) / 100;
       } else {
         descontoVal = desc;
         descontoPerc = valorItem > 0 ? (desc / valorItem) * 100 : 0;
       }
+      descricaoPromocao = ''; // Limpa descrição em caso de erro na API
+      travado = false; // Não trava se a API falhou
     }
 
     const valorTotalItem = valorItem - descontoVal;
@@ -1670,9 +1705,10 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       desconto: descontoVal,
       desconto_valor: descontoVal,
       desconto_percentual: descontoPerc,
+      desconto_tipo_edicao: descontoTipoEdicao,
       subtotal: valorTotalItem,
       tem_promocao: !!promocao,
-      nome_promocao: descricaoPromocao || '',
+      nome_promocao: promocao?.promocao_nome || '',
       cfop: itemData.cfop || (() => {
         const trib = produto.tributacao_detalhada || null;
         return trib?.cfop || '5102';
@@ -3439,7 +3475,10 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
       // Selecionar o cliente recém-criado
       const novoClienteId = response.data.id || response.data.id_cliente;
-      setVenda(prev => ({ ...prev, id_cliente: novoClienteId }));
+      setVenda(prev => {
+        recalcularDescontosClientesItens(novoClienteId, prev.itens);
+        return { ...prev, id_cliente: novoClienteId };
+      });
       setDecisaoCashbackTomada(false);
       buscarLimiteCliente(novoClienteId);
       verificarCashbackCliente(novoClienteId);
@@ -4809,6 +4848,15 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
             </Grid>
           )}
 
+          {/* Mensagem de sucesso visível dentro do modal */}
+          {success && (
+            <Grid item xs={12}>
+              <Alert severity="success" onClose={() => setSuccess('')} sx={{ mb: 1 }}>
+                {success}
+              </Alert>
+            </Grid>
+          )}
+
           {/* Alerta de venda bloqueada */}
           {vendaBloqueadaParaEdicao && (
             <Grid item xs={12}>
@@ -4977,12 +5025,32 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                           disabled={vendaBloqueadaParaEdicao}
                           onChange={(e) => {
                             const clienteId = e.target.value;
-                            setVenda(prev => ({ ...prev, id_cliente: clienteId }));
+                            setVenda(prev => {
+                              const updatedVenda = { ...prev, id_cliente: clienteId };
+                              recalcularDescontosClientesItens(clienteId, prev.itens);
+                              return updatedVenda;
+                            });
                             // Buscar limite de crédito e cashback do cliente
                             if (clienteId) {
                               setDecisaoCashbackTomada(false);
                               buscarLimiteCliente(clienteId);
                               verificarCashbackCliente(clienteId);
+
+                              // 💰 Log e alerta se o cliente tem desconto preferencial
+                              const clienteSelecionado = clientes.find(cli => 
+                                String(cli.id || cli.pk || cli.ID || cli.id_cliente) === String(clienteId)
+                              );
+                              if (clienteSelecionado) {
+                                const temDesconto = parseFloat(clienteSelecionado.valor_desconto || 0) > 0;
+                                if (temDesconto) {
+                                  const valorFormatado = clienteSelecionado.tipo_desconto === 'PERCENTUAL' 
+                                    ? `${clienteSelecionado.valor_desconto}%` 
+                                    : `R$ ${clienteSelecionado.valor_desconto}`;
+                                  console.log(`💰 Cliente ${clienteSelecionado.nome_razao_social} selecionado com desconto configurado de ${valorFormatado}`);
+                                  setSuccess(`O desconto de ${valorFormatado} será aplicado após selecionar os produtos que estão nos grupos definidos, exceto.`);
+                                  setTimeout(() => setSuccess(''), 8000); // Remover alerta após 8 segundos
+                                }
+                              }
                             } else {
                               setShowLimiteInfo(false);
                               setLimiteCliente(null);

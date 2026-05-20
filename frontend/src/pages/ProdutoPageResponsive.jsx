@@ -409,7 +409,7 @@ const ProdutoPageResponsive = () => {
 
   const [categorias, setCategorias] = useState([]);
   const [marcas, setMarcas] = useState([]);
-  const classificacoes = ['', 'REVENDA', 'SERVICO', 'CONSUMO', 'INSUMO', 'IMOBILIZADO', 'MATERIA-PRIMA'];
+  const classificacoes = ['', 'Revenda', 'Servico', 'Consumo', 'Insumo', 'Imobilizado', 'Materia-Prima'];
 
   // Funções auxiliares para mapear valores da API para valores válidos dos selects
   const mapearCategoria = (categoria) => {
@@ -715,7 +715,7 @@ const ProdutoPageResponsive = () => {
       setFormData({
         nome: '',
         categoria: '',
-        grupo: '',
+        grupo: '',  
         marca: '',
         classificacao: '',
         genero: '', // 🏷️ Reset genero
@@ -734,6 +734,7 @@ const ProdutoPageResponsive = () => {
         id_produto_pai: '',
         produtos_complementares: [],
         produtos_similares: [],
+        
         controla_lote: false
       });
     }
@@ -760,7 +761,7 @@ const ProdutoPageResponsive = () => {
             cst_pis_cofins: d.cst_pis_cofins === '000' ? '01' : (d.cst_pis_cofins || '01'),
             cst_ipi:  d.cst_ipi  === '000' ? '99' : (d.cst_ipi  || '99'),
           });
-        })
+    })
         .catch(() => setTributacaoData(defaultTrib));
     } else {
       // Novo produto: pré-preencher com Sugestão de Tributação Padrão do configProduto
@@ -869,11 +870,12 @@ const ProdutoPageResponsive = () => {
       codigo_produto: String(formData.codigo_produto || '').trim() || `AUTO-${Date.now()}`
     };
 
+    
     // Validação adicional de dados obrigatórios
     if (!produtoData.nome_produto) {
       alert('❌ Nome do produto é obrigatório');
       return;
-    }
+    } // Fim validação nome_produto
     if (!produtoData.codigo_produto) {
       alert('❌ Código do produto é obrigatório');
       return;
@@ -883,7 +885,6 @@ const ProdutoPageResponsive = () => {
     if (formData.categoria && String(formData.categoria).trim()) {
       produtoData.categoria = String(formData.categoria).trim();
     }
-
     // Prioridade: se já tem id_grupo no formData (produto editado), usar ele
     if (formData.id_grupo && Number(formData.id_grupo) > 0) {
       console.log('✅ id_grupo já existe no formData:', formData.id_grupo);
@@ -907,19 +908,21 @@ const ProdutoPageResponsive = () => {
       console.log('⚠️ Criando produto sem grupo para evitar erro');
     }
 
+    
     if (formData.marca && String(formData.marca).trim()) {
       produtoData.marca = String(formData.marca).trim();
-    }
+    } // Fim marca
 
     if (formData.unidade_medida && String(formData.unidade_medida).trim()) {
       produtoData.unidade_medida = String(formData.unidade_medida).trim();
-    }
+    } // Fim unidade_medida
 
     produtoData.genero = formData.genero || null;
 
+    
     if (formData.descricao && String(formData.descricao).trim()) {
       produtoData.descricao = String(formData.descricao).trim();
-    }
+    } // Fim descricao
 
     if (formData.ncm && String(formData.ncm).trim()) {
       produtoData.ncm = String(formData.ncm).trim();
@@ -927,13 +930,13 @@ const ProdutoPageResponsive = () => {
 
     if (formData.gtin && String(formData.gtin).trim()) {
       produtoData.gtin = String(formData.gtin).trim();
-    }
+    } // Fim gtin
 
       // 🏷️ SERIALIZAR TRIBUTAÇÃO
       if (formData.tributacao_info) {
         try {
           produtoData.tributacao_info = JSON.stringify(formData.tributacao_info);
-        } catch (e) {
+        } catch (e) { // Fim try
           console.error('❌ Erro ao serializar tributacao_info:', e);
         }
       }
@@ -1015,6 +1018,7 @@ const ProdutoPageResponsive = () => {
     payloadLimpo.genero = produtoData.genero || null;
 
     // Campos de materiais de construção
+    // Campos de materiais de construção (sempre incluir se existirem)
     console.log('🔍 DEBUG - formData.id_produto_pai:', formData.id_produto_pai, 'tipo:', typeof formData.id_produto_pai);
     if (formData.metragem_caixa) payloadLimpo.metragem_caixa = formData.metragem_caixa;
     if (formData.rendimento_m2) payloadLimpo.rendimento_m2 = formData.rendimento_m2;
@@ -1044,7 +1048,7 @@ const ProdutoPageResponsive = () => {
         id_produto: p.id_produto,
         ordem: idx
       }));
-    } else {
+    } else { // Fim produtos_similares
       payloadLimpo.produtos_similares = [];
     }
 
@@ -1462,6 +1466,7 @@ const ProdutoPageResponsive = () => {
       console.error('❌ Erro ao salvar configurações:', err);
       console.error('❌ Detalhes do erro:', err.response?.data);
       alert('Erro ao salvar configurações de depósito. Verifique o console.');
+      alert('Erro ao salvar configurações de depósito. Verifique o console.'); // Fim catch
     }
   };
 
@@ -3094,11 +3099,7 @@ const ProdutoPageResponsive = () => {
                       <InputLabel>Grupo</InputLabel>
                       <Select
                         value={formData.grupo}
-                        onChange={(e) => {
-                          const nomeGrupo = e.target.value;
-                          const grupoSel = gruposAtivos.find(g => g.nome === nomeGrupo);
-                          setFormData({ ...formData, grupo: nomeGrupo, id_grupo: grupoSel ? grupoSel.id : '' });
-                        }}
+                        onChange={(e) => setFormData({ ...formData, grupo: e.target.value })}
                         label="Grupo"
                         required
                         disabled={loadingGrupos}
@@ -3162,7 +3163,7 @@ const ProdutoPageResponsive = () => {
                       <MenuItem value="">Nenhuma</MenuItem>
                       {classificacoes.filter(c => c !== '').map((classif) => (
                         <MenuItem key={classif} value={classif}>
-                          {classif === 'SERVICO' ? 'SERVIÇO' : classif === 'MATERIA-PRIMA' ? 'MATÉRIA-PRIMA' : classif}
+                          {classif === 'Servico' ? 'Serviço' : classif === 'Materia-Prima' ? 'Matéria-Prima' : classif}
                         </MenuItem>
                       ))}
                     </Select>

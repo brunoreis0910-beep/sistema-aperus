@@ -2144,7 +2144,6 @@ class ProdutoViewSetCustom(viewsets.ModelViewSet):
             'peso_saco_argamassa': request.data.get('peso_saco_argamassa', instance.peso_saco_argamassa),
             'tipo_aplicacao_argamassa': request.data.get('tipo_aplicacao_argamassa', instance.tipo_aplicacao_argamassa),
             'controla_lote': request.data.get('controla_lote', instance.controla_lote),
-            'genero': request.data.get('genero', instance.genero),
         }
         
         # Tratar id_grupo separadamente (precisa ser objeto GrupoProduto, não ID)

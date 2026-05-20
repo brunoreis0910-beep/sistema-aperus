@@ -12,8 +12,7 @@ from .views_vendas import (
     CartaCorrecaoNFeView, CartaCorrecaoDownloadXMLView, CartaCorrecaoDeleteView, CartaCorrecaoImprimirView,
     ComplementoICMSNFeView, EmitirComplementoICMSView,
     EntregasView, AtualizarEntregaView,
-    SalvarVendaPDVNFCeView, ListarVendasPDVNFCeView, TransmitirNFCeView,
-    visualizar_certificado
+    SalvarVendaPDVNFCeView, ListarVendasPDVNFCeView
 )
 from .views_faturamento import (
     FaturamentoView, OperacoesFiscaisView,
@@ -148,7 +147,6 @@ from .views_pdf_relatorios import (
     relatorio_cte_pdf,
     relatorio_cte_excel,
     relatorio_cte_json,
-    relatorio_cte_condutores,
     relatorio_vendas_operacao_pdf,
     relatorio_vendas_pdf,
     relatorio_estoque_pdf,
@@ -156,6 +154,12 @@ from .views_pdf_relatorios import (
     relatorio_conferencia_pdf,
 )
 from .views_dre import DREGerarView
+from .views_descontos import (
+    simular_desconto_cliente,
+    validar_desconto_proposto,
+    obter_config_desconto_cliente,
+    listar_clientes_com_desconto
+)
 from .views_mp_point import (
     mp_point_config,
     mp_point_cobrar,
@@ -248,16 +252,6 @@ from .views import (
     SolicitacaoAprovacaoViewSet,
     DepositoViewSet,
     EstoqueViewSet,
-    verificar_limite_cliente,
-    validar_cliente_atraso,
-)
-from .views_descontos import (
-    simular_desconto_cliente,
-    validar_desconto_proposto,
-    obter_config_desconto_cliente,
-    listar_clientes_com_desconto,
-)
-from .views import (
     EstoqueMovimentacaoViewSet,
     PetViewSet,
     TipoServicoViewSet,
@@ -430,7 +424,6 @@ urlpatterns = [
     path('vendas/<int:id_venda>/inutilizar_nfce/', InutilizarNFCeView.as_view(), name='vendas-inutilizar-nfce'),
     path('vendas/<int:id_venda>/limpar_nfce_erro/', LimparNFCeErroView.as_view(), name='vendas-limpar-nfce-erro'),
     path('vendas/<int:id_venda>/imprimir_danfce/', ImprimirDanfceNFCeView.as_view(), name='vendas-imprimir-danfce'),
-    path('vendas/transmitir_nfce/', TransmitirNFCeView.as_view(), name='vendas-transmitir-nfce'),
     path('vendas/download_lote_xml/', BaixarLoteXMLView.as_view(), name='vendas-download-lote-xml'),
     # Controle de Entrega
     path('vendas/entregas/', EntregasView.as_view(), name='vendas-entregas'),
@@ -457,11 +450,6 @@ urlpatterns = [
     path('verificar-senha-supervisor/', verificar_senha_supervisor, name='verificar-senha-supervisor'),
     path('verificar-limite-cliente/', verificar_limite_cliente, name='verificar-limite-cliente'),
     path('validar-cliente-atraso/', validar_cliente_atraso, name='validar-cliente-atraso'),
-    # ===== MÓDULO DE DESCONTOS INTELIGENTES =====
-    path('descontos/simular/', simular_desconto_cliente, name='descontos-simular'),
-    path('descontos/validar/', validar_desconto_proposto, name='descontos-validar'),
-    path('descontos/cliente/<int:cliente_id>/', obter_config_desconto_cliente, name='descontos-config-cliente'),
-    path('descontos/clientes-com-desconto/', listar_clientes_com_desconto, name='descontos-clientes-lista'),
     path('proxy-image/', proxy_image, name='proxy-image'),
     # Cadastro Turbo de Produtos (EAN + IA + Preços Regionais)
     path('produtos/cadastro-turbo/', cadastro_turbo_produto, name='produtos-cadastro-turbo'),
@@ -619,7 +607,6 @@ urlpatterns = [
     path('relatorios/cte/pdf/', relatorio_cte_pdf, name='relatorio-cte-pdf'),
     path('relatorios/cte/dados/', relatorio_cte_json, name='relatorio-cte-json'),
     path('relatorios/cte/excel/', relatorio_cte_excel, name='relatorio-cte-excel'),
-    path('relatorios/cte/condutores/', relatorio_cte_condutores, name='relatorio-cte-condutores'),
     path('relatorios/vendas-operacao/pdf/', relatorio_vendas_operacao_pdf, name='relatorio-vendas-operacao-pdf'),
     path('relatorios/vendas/pdf/', relatorio_vendas_pdf, name='relatorio-vendas-pdf'),
     path('relatorios/estoque/pdf/', relatorio_estoque_pdf, name='relatorio-estoque-pdf'),
@@ -658,11 +645,18 @@ urlpatterns = [
     # SPED Contribuições (EFD PIS/COFINS)
     path('sped-contribuicoes/gerar/', SpedContribuicoesGerarView.as_view(), name='sped-contribuicoes-gerar'),
     path('sped-contribuicoes/salvar-config/', SpedContribuicoesSalvarConfigView.as_view(), name='sped-contribuicoes-salvar-config'),
-    path('sped-contribuicoes/carregar-config/', SpedContribuicoesCarregarConfigView.as_view(), name='sped-contribuicoes-carregar-config'),    path('', include(router.urls)),
+    path('sped-contribuicoes/carregar-config/', SpedContribuicoesCarregarConfigView.as_view(), name='sped-contribuicoes-carregar-config'),
+    
+    # Módulo de Descontos Inteligentes
+    path('descontos/simular/', simular_desconto_cliente, name='simular-desconto-cliente'),
+    path('descontos/validar/', validar_desconto_proposto, name='validar-desconto-proposto'),
+    path('descontos/cliente/<int:cliente_id>/', obter_config_desconto_cliente, name='obter-config-desconto-cliente'),
+    path('descontos/clientes-com-desconto/', listar_clientes_com_desconto, name='listar-clientes-com-desconto'),
+    
+    path('', include(router.urls)),
     # Preferências de Interface do Usuário
     path('user-preferencias/', user_preferencias_view, name='user-preferencias'),
     # Health Check — monitoramento de infraestrutura
     path('health/', HealthCheckView.as_view(), name='health-check'),
     path('health/detail/', HealthCheckDetailView.as_view(), name='health-check-detail'),
-    path('certificado/visualizar/', visualizar_certificado, name='visualizar-certificado'),
 ]

@@ -374,11 +374,13 @@ const MapaPromocaoPage = () => {
   const getClientesFiltrados = () => {
     if (!whatsappData?.clientes) return [];
     if (filtroGeneroWhatsapp === 'todos') return whatsappData.clientes;
-    // Filtrar diretamente pelo sexo cadastrado no cliente
-    const sexoMap = { 'masculino': 'M', 'feminino': 'F' };
-    const sexoFiltro = sexoMap[filtroGeneroWhatsapp];
-    if (!sexoFiltro) return whatsappData.clientes;
-    return whatsappData.clientes.filter(c => c.sexo === sexoFiltro);
+    const nomesGenero = (whatsappData.produtos_promocao || [])
+      .filter(p => p.genero === filtroGeneroWhatsapp)
+      .map(p => p.nome);
+    if (nomesGenero.length === 0) return whatsappData.clientes;
+    return whatsappData.clientes.filter(c =>
+      (c.produtos_comprados || []).some(pc => nomesGenero.includes(pc))
+    );
   };
 
   const limparTelefone = (tel) => {
@@ -1136,21 +1138,23 @@ const MapaPromocaoPage = () => {
                   </ToggleButtonGroup>
                 </Box>
 
-                {/* Filtro por sexo do cliente */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-                  <Typography variant="caption" sx={{ color: '#555', fontWeight: 600 }}>Sexo do Cliente:</Typography>
-                  {['todos', 'masculino', 'feminino'].map(g => (
-                    <Chip
-                      key={g}
-                      label={g === 'todos' ? 'Todos' : g.charAt(0).toUpperCase() + g.slice(1)}
-                      size="small"
-                      color={filtroGeneroWhatsapp === g ? 'primary' : 'default'}
-                      onClick={() => setFiltroGeneroWhatsapp(g)}
-                      variant={filtroGeneroWhatsapp === g ? 'filled' : 'outlined'}
-                      sx={{ cursor: 'pointer' }}
-                    />
-                  ))}
-                </Box>
+                {/* Filtro por gênero (só aparece se algum produto da promoção tem gênero) */}
+                {(whatsappData.produtos_promocao || []).some(p => p.genero) && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                    <Typography variant="caption" sx={{ color: '#555', fontWeight: 600 }}>Gênero:</Typography>
+                    {['todos', 'feminino', 'masculino', 'unissex'].map(g => (
+                      <Chip
+                        key={g}
+                        label={g === 'todos' ? 'Todos' : g.charAt(0).toUpperCase() + g.slice(1)}
+                        size="small"
+                        color={filtroGeneroWhatsapp === g ? 'primary' : 'default'}
+                        onClick={() => setFiltroGeneroWhatsapp(g)}
+                        variant={filtroGeneroWhatsapp === g ? 'filled' : 'outlined'}
+                        sx={{ cursor: 'pointer' }}
+                      />
+                    ))}
+                  </Box>
+                )}
                 {whatsappData.aviso && (
                   <Alert severity="warning" sx={{ mb: 2 }}>{whatsappData.aviso}</Alert>
                 )}
