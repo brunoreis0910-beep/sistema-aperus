@@ -44,26 +44,26 @@ class OperacaoViewSet(viewsets.ModelViewSet):
     pagination_class = None # Desabilitar paginacao para retornar tudo
     
     def list(self, request, *args, **kwargs):
-        print("🔍 LISTAR OPERACOES - REQUEST RECEBIDA")
+        print("LISTAR OPERACOES - REQUEST RECEBIDA")
         return super().list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         print("=" * 60)
-        print("🆕 CRIAR NOVA OPERAÇÃO")
+        print("CRIAR NOVA OPERACAO")
         print("=" * 60)
-        print("📥 Dados recebidos:", request.data)
-        print("💰 cashback_percentual:", request.data.get('cashback_percentual'))
-        print("📅 cashback_validade_dias:", request.data.get('cashback_validade_dias'))
+        print("Dados recebidos:", request.data)
+        print("cashback_percentual:", request.data.get('cashback_percentual'))
+        print("cashback_validade_dias:", request.data.get('cashback_validade_dias'))
         print("=" * 60)
         return super().create(request, *args, **kwargs)
     
     def update(self, request, *args, **kwargs):
         print("=" * 60)
-        print("✏️ ATUALIZAR OPERAÇÃO")
+        print("ATUALIZAR OPERACAO")
         print("=" * 60)
-        print("📥 Dados recebidos:", request.data)
-        print("💰 cashback_percentual:", request.data.get('cashback_percentual'))
-        print("📅 cashback_validade_dias:", request.data.get('cashback_validade_dias'))
+        print("Dados recebidos:", request.data)
+        print("cashback_percentual:", request.data.get('cashback_percentual'))
+        print("cashback_validade_dias:", request.data.get('cashback_validade_dias'))
         print("=" * 60)
         response = super().update(request, *args, **kwargs)
         self._sincronizar_numeracao(request)
@@ -71,11 +71,11 @@ class OperacaoViewSet(viewsets.ModelViewSet):
     
     def partial_update(self, request, *args, **kwargs):
         print("=" * 60)
-        print("📝 PATCH OPERAÇÃO")
+        print("PATCH OPERACAO")
         print("=" * 60)
-        print("📥 Dados recebidos:", request.data)
-        print("💰 cashback_percentual:", request.data.get('cashback_percentual'))
-        print("📅 cashback_validade_dias:", request.data.get('cashback_validade_dias'))
+        print("Dados recebidos:", request.data)
+        print("cashback_percentual:", request.data.get('cashback_percentual'))
+        print("cashback_validade_dias:", request.data.get('cashback_validade_dias'))
         print("=" * 60)
         response = super().partial_update(request, *args, **kwargs)
         self._sincronizar_numeracao(request)
@@ -129,17 +129,17 @@ class ConjuntoOperacaoViewSet(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         print("=" * 60)
-        print("🆕 CRIAR NOVO CONJUNTO DE OPERAÇÕES")
+        print("CRIAR NOVO CONJUNTO DE OPERACOES")
         print("=" * 60)
-        print("📥 Dados recebidos:", request.data)
+        print("Dados recebidos:", request.data)
         print("=" * 60)
         return super().create(request, *args, **kwargs)
     
     def update(self, request, *args, **kwargs):
         print("=" * 60)
-        print("✏️ ATUALIZAR CONJUNTO DE OPERAÇÕES")
+        print("ATUALIZAR CONJUNTO DE OPERACOES")
         print("=" * 60)
-        print("📥 Dados recebidos:", request.data)
+        print("Dados recebidos:", request.data)
         print("=" * 60)
         return super().update(request, *args, **kwargs)
 
