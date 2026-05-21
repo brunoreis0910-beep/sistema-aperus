@@ -640,6 +640,7 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
     gerencial = serializers.BooleanField()
     cliente = serializers.SerializerMethodField()
     data_documento = serializers.DateField(source='data_emissao', read_only=True)
+    id_cliente_fornecedor = serializers.IntegerField(required=False, allow_null=True)
     
     class Meta:
         model = FinanceiroConta
@@ -647,8 +648,11 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
         read_only_fields = ['id_conta', 'data_emissao']
     
     def get_cliente(self, obj):
-        if obj.id_cliente_fornecedor:
-            return obj.id_cliente_fornecedor.nome_razao_social
+        try:
+            if obj.id_cliente_fornecedor:
+                return obj.id_cliente_fornecedor.nome_razao_social
+        except Exception:
+            pass
         return None
 
     def to_representation(self, instance):
@@ -656,7 +660,7 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
         ret['gerencial'] = bool(instance.gerencial)
         
         # Garante que campos de data sejam serializados apenas como data (sem timezone)
-        # Isso evita problemas de convers�o de timezone no frontend
+        # Isso evita problemas de conversão de timezone no frontend
         if instance.data_emissao:
             ret['data_emissao'] = instance.data_emissao.strftime('%Y-%m-%d')
         if instance.data_vencimento:
@@ -666,21 +670,35 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
             
         return ret
 
+    def create(self, validated_data):
+        id_cli_for = validated_data.pop('id_cliente_fornecedor', None)
+        instance = super().create(validated_data)
+        if id_cli_for is not None:
+            instance.id_cliente_fornecedor_id = id_cli_for
+            instance.save()
+        return instance
+
     def update(self, instance, validated_data):
         from decimal import Decimal
 
-        # Verifica se est� mudando para status 'Paga' (baixa)
+        id_cli_for = validated_data.pop('id_cliente_fornecedor', None)
+
+        # Verifica se está mudando para status 'Paga' (baixa)
         old_status = instance.status_conta
         new_status = validated_data.get('status_conta', old_status)
         
-        # Atualiza a conta
+        # Base update
         updated_instance = super().update(instance, validated_data)
         
-        # Se mudou de Pendente para Paga, cria movimento banc�rio
+        if id_cli_for is not None:
+            updated_instance.id_cliente_fornecedor_id = id_cli_for
+            updated_instance.save()
+        
+        # Se mudou de Pendente para Paga, cria movimento bancário
         if old_status != 'Paga' and new_status == 'Paga' and updated_instance.id_conta_baixa:
-            # Determina tipo de movimento (Receber = Cr�dito, Pagar = D�bito)
             tipo_mov = 'C' if updated_instance.tipo_conta == 'Receber' else 'D'
             
+            from .models import FinanceiroBancario
             FinanceiroBancario.objects.create(
                 id_conta_bancaria=updated_instance.id_conta_baixa,
                 tipo_movimento=tipo_mov,
@@ -693,7 +711,7 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
             )
         
         return updated_instance
-        
+
 class EmpresaConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmpresaConfig
