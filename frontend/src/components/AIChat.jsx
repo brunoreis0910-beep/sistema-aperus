@@ -95,6 +95,21 @@ const AIChat = () => {
     console.log('🤖 AIChat montado! Botão deve estar visível no canto inferior direito.');
   }, []);
 
+  // Pré-carrega vozes do SpeechSynthesis
+  useEffect(() => {
+    if (window.speechSynthesis) {
+      // Alguns browsers carregam de forma assíncrona
+      window.speechSynthesis.getVoices();
+      const handleVoicesChanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+      window.speechSynthesis.addEventListener('voiceschanged', handleVoicesChanged);
+      return () => {
+        window.speechSynthesis.removeEventListener('voiceschanged', handleVoicesChanged);
+      };
+    }
+  }, []);
+
   // Verifica status da IA ao abrir
   useEffect(() => {
     if (aberto && aiDisponivel === null) {
@@ -300,6 +315,23 @@ const AIChat = () => {
     setGravando(false);
   };
 
+  // Função para obter a melhor voz pt-BR disponível
+  const obterVozPtBr = () => {
+    if (!window.speechSynthesis) return null;
+    const voices = window.speechSynthesis.getVoices();
+    const ptBrVoices = voices.filter(v => v.lang.includes('pt-BR') || v.lang.includes('pt_BR') || v.lang.startsWith('pt'));
+    if (ptBrVoices.length === 0) return null;
+    
+    // Tenta priorizar vozes do Google ou Microsoft, que geralmente são melhores
+    const googleVoice = ptBrVoices.find(v => v.name.toLowerCase().includes('google'));
+    if (googleVoice) return googleVoice;
+    
+    const microsoftVoice = ptBrVoices.find(v => v.name.toLowerCase().includes('microsoft'));
+    if (microsoftVoice) return microsoftVoice;
+    
+    return ptBrVoices[0];
+  };
+
   // ----- VOZ: Google Cloud TTS Neural2 (pt-BR) -----
   const falarTexto = async (texto) => {
     // Para áudio anterior se estiver tocando
@@ -348,6 +380,13 @@ const AIChat = () => {
         const utterance = new SpeechSynthesisUtterance(textoLimpo);
         utterance.lang = 'pt-BR';
         utterance.rate = 1.05;
+        
+        // Seleciona uma voz em português do Brasil de alta qualidade
+        const vozPtBr = obterVozPtBr();
+        if (vozPtBr) {
+          utterance.voice = vozPtBr;
+        }
+        
         utterance.onend = () => setFalando(false);
         utterance.onerror = () => setFalando(false);
         window.speechSynthesis.speak(utterance);
@@ -373,6 +412,12 @@ const AIChat = () => {
     const texto = mensagemTexto || inputMensagem.trim();
     
     if (!texto) return;
+
+    // Desbloqueia o autoplay de áudio no Firefox sob gesto do usuário
+    if (audioAtivado) {
+      const audioSilencioso = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAAA');
+      audioSilencioso.play().catch(e => console.log("Erro ao desbloquear autoplay de áudio:", e));
+    }
     
     // Adiciona mensagem do usuário
     const novaMensagemUsuario = {

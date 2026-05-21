@@ -27,21 +27,46 @@ from api.views_frontend_agro import agro_index, agro_safras, agro_contratos, agr
 
 def serve_frontend(request, path=''):
     """Serve arquivos do frontend React"""
+    import sys
+    sys.stdout.write(f"--- SERVE_FRONTEND CALLED: path={repr(path)} ---\n")
+    sys.stdout.flush()
     # Tenta frontend/dist primeiro, depois frontend/
     frontend_dist = os.path.join(settings.BASE_DIR, 'frontend', 'dist')
     if not os.path.isdir(frontend_dist):
         frontend_dist = os.path.join(settings.BASE_DIR, 'frontend')
     
-    # Se for um arquivo estático, serve diretamente
-    if path and os.path.isfile(os.path.join(frontend_dist, path)):
+    sys.stdout.write(f"--- SERVE_FRONTEND frontend_dist={repr(frontend_dist)} ---\n")
+    sys.stdout.flush()
+
+    # Se for um arquivo estático e existir, serve diretamente
+    file_exists = path and os.path.isfile(os.path.join(frontend_dist, path))
+    sys.stdout.write(f"--- SERVE_FRONTEND is_file={file_exists} ---\n")
+    sys.stdout.flush()
+
+    if file_exists:
         response = serve(request, path, document_root=frontend_dist)
         # Assets com hash no nome podem ser cacheados por longo tempo
         if '/assets/' in path and any(path.endswith(ext) for ext in ('.js', '.css', '.woff2', '.woff', '.ttf')):
             response['Cache-Control'] = 'public, max-age=31536000, immutable'
         return response
     
+    # Se o arquivo não existir fisicamente mas for claramente um asset ou arquivo de extensão estática,
+    # retorna 404 em vez de cair no index.html. Isso evita que o browser tente interpretar HTML como JS/CSS.
+    if path:
+        lower_path = path.lower()
+        is_static = 'assets/' in lower_path or lower_path.startswith('assets/') or any(lower_path.endswith(ext) for ext in ('.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.json', '.woff', '.woff2', '.ttf', '.map'))
+        sys.stdout.write(f"--- SERVE_FRONTEND is_static={is_static} ---\n")
+        sys.stdout.flush()
+        if is_static:
+            sys.stdout.write(f"--- SERVE_FRONTEND raising Http404 ---\n")
+            sys.stdout.flush()
+            from django.http import Http404
+            raise Http404("Static asset not found")
+            
     # Caso contrário, serve o index.html (SPA routing)
     # NUNCA cachear index.html para garantir que o bundle mais recente seja carregado
+    sys.stdout.write(f"--- SERVE_FRONTEND serving index.html ---\n")
+    sys.stdout.flush()
     response = serve(request, 'index.html', document_root=frontend_dist)
     response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response['Pragma'] = 'no-cache'

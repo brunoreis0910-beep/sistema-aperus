@@ -375,41 +375,47 @@ export default function HotelPMSPage() {
     return `${y}-${m}-${d}`;
   };
 
+  const getBookingDates = (res) => {
+    if (!res) return { startStr: '', endStr: '' };
+    // Início real ou previsto
+    const startStr = (res.data_checkin_real || res.data_entrada_prevista).split('T')[0];
+    
+    // Fim real, previsto ou estendido (caso de check-in ativo sem check-out)
+    let endStr;
+    if (res.status_reserva === 'checkin') {
+      const hojeObj = new Date();
+      const hojeStr = formatDateKey(hojeObj);
+      const previstaStr = res.data_saida_prevista.split('T')[0];
+      
+      // Estende até hoje se a saída prevista já passou e o cliente ainda está hospedado
+      const maxStr = previstaStr > hojeStr ? previstaStr : hojeStr;
+      
+      // Adiciona 1 dia para que dateStr < endStr seja verdadeiro no último dia de hospedagem ativa
+      const maxDate = new Date(maxStr + 'T00:00:00');
+      maxDate.setDate(maxDate.getDate() + 1);
+      endStr = formatDateKey(maxDate);
+    } else if (res.status_reserva === 'finalizada' || res.data_checkout_real) {
+      endStr = (res.data_checkout_real || res.data_saida_prevista).split('T')[0];
+    } else {
+      endStr = res.data_saida_prevista.split('T')[0];
+    }
+
+    // Garante intervalo mínimo de 1 dia se as datas forem iguais
+    if (startStr === endStr) {
+      const nextDay = new Date(startStr + 'T00:00:00');
+      nextDay.setDate(nextDay.getDate() + 1);
+      endStr = formatDateKey(nextDay);
+    }
+
+    return { startStr, endStr };
+  };
+
   const getBookingForRoomAndDay = (roomId, dateStr) => {
     return reservas.find(res => {
       if (res.quarto !== roomId && res.quarto?.id_quarto !== roomId) return false;
       if (res.status_reserva === 'cancelada' || res.status_reserva === 'noshow') return false;
 
-      // Início real ou previsto
-      const startStr = (res.data_checkin_real || res.data_entrada_prevista).split('T')[0];
-      
-      // Fim real, previsto ou estendido (caso de check-in ativo sem check-out)
-      let endStr;
-      if (res.status_reserva === 'checkin') {
-        const hojeObj = new Date();
-        const hojeStr = formatDateKey(hojeObj);
-        const previstaStr = res.data_saida_prevista.split('T')[0];
-        
-        // Estende até hoje se a saída prevista já passou e o cliente ainda está hospedado
-        const maxStr = previstaStr > hojeStr ? previstaStr : hojeStr;
-        
-        // Adiciona 1 dia para que dateStr < endStr seja verdadeiro no último dia de hospedagem ativa
-        const maxDate = new Date(maxStr + 'T00:00:00');
-        maxDate.setDate(maxDate.getDate() + 1);
-        endStr = formatDateKey(maxDate);
-      } else if (res.status_reserva === 'finalizada' || res.data_checkout_real) {
-        endStr = (res.data_checkout_real || res.data_saida_prevista).split('T')[0];
-      } else {
-        endStr = res.data_saida_prevista.split('T')[0];
-      }
-
-      // Garante intervalo mínimo de 1 dia se as datas forem iguais
-      if (startStr === endStr) {
-        const nextDay = new Date(startStr + 'T00:00:00');
-        nextDay.setDate(nextDay.getDate() + 1);
-        endStr = formatDateKey(nextDay);
-      }
-
+      const { startStr, endStr } = getBookingDates(res);
       return dateStr >= startStr && dateStr < endStr;
     });
   };
@@ -1233,8 +1239,7 @@ export default function HotelPMSPage() {
                                 const booking = getBookingForRoomAndDay(room.id_quarto, dateStr);
 
                                 if (booking) {
-                                  const startStr = booking.data_entrada_prevista.split('T')[0];
-                                  const endStr = booking.data_saida_prevista.split('T')[0];
+                                  const { startStr, endStr } = getBookingDates(booking);
 
                                   // Se é a primeira aparição no calendário ou início
                                   const isFirstAppearance = (dateStr === startStr || i === 0);
@@ -1251,6 +1256,8 @@ export default function HotelPMSPage() {
                                         break;
                                       }
                                     }
+
+                                    if (colSpan === 0) colSpan = 1;
 
                                     cells.push(
                                       <TableCell
@@ -2273,7 +2280,7 @@ export default function HotelPMSPage() {
                   }}
                 >
                   {gruposProduto.map(grupo => {
-                    const gid = grupo.id_grupo || group.id;
+                    const gid = grupo.id_grupo || grupo.id;
                     const isChecked = Array.isArray(clienteForm.grupos_excecao) &&
                       clienteForm.grupos_excecao.map(Number).includes(Number(gid));
                     return (

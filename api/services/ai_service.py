@@ -240,6 +240,7 @@ class AIService:
                 'clientes': '/clientes',
                 'estoque': '/produtos',
                 'comandas': '/comandas',
+                'hotel': '/hotel-pms',
             }
             tipo = intencao.get('tipo', 'geral')
             rota = ROTAS_NAVEGACAO.get(tipo)
@@ -287,6 +288,7 @@ class AIService:
             'clientes': 'Ver Clientes',
             'estoque': 'Ver Produtos/Estoque',
             'comandas': 'Ver Comandas',
+            'hotel': 'Ir para Hotel PMS',
         }
         return labels.get(tipo, 'Abrir módulo')
 
@@ -294,7 +296,7 @@ class AIService:
         """Analisa a intenção da pergunta usando IA"""
         
         prompt = f"""Analise a seguinte pergunta sobre um sistema de gestão empresarial e identifique:
-1. Tipo de consulta (vendas, estoque, financeiro, NCM, análise de erro, geração de PDF, etc)
+1. Tipo de consulta (vendas, estoque, financeiro, NCM, análise de erro, geração de PDF, hotel, etc)
 2. Período temporal mencionado (hoje, ontem, esta semana, este mês, último mês, este ano, etc)
 3. Filtros específicos (produto, cliente, vendedor, status, etc)
 4. Tipo de agregação (total, média, contagem, lista, etc)
@@ -302,6 +304,7 @@ class AIService:
 IMPORTANTE para classificação — LEIA COM ATENÇÃO:
 - Use "vendas" para QUALQUER pergunta sobre relatório de vendas, faturamento, quanto vendeu, vendas do dia/mês/ano, receita de vendas, total de vendas, etc.
   → "Relatório de vendas" = tipo "vendas" (inclui TODAS as vendas: fiscal + gerencial).
+- Use "hotel" para qualquer pergunta sobre quartos, reservas de hotel, ocupação do hotel, check-in, check-out, status de limpeza de quarto, consumo de hóspedes, consumo do hotel, etc.
 - Use "fiscal_nfe" SOMENTE se a mensagem mencionar literalmente as palavras: NF-e, NFe, nota fiscal eletrônica, DANFE ou SEFAZ (para NF-e).
 - Use "fiscal_nfce" SOMENTE se a mensagem mencionar literalmente as palavras: NFC-e, NFCe, cupom fiscal eletrônico ou PDV fiscal.
 - NUNCA classifique como "fiscal_nfce" apenas porque o usuário falou "vendas". No sistema, "vendas" é um módulo gerencial que inclui ALL tipos de venda.
@@ -311,12 +314,14 @@ IMPORTANTE para classificação — LEIA COM ATENÇÃO:
   * "faturamento do mês" → tipo: "vendas"
   * "emitir NFC-e" → tipo: "fiscal_nfce"
   * "status das NF-e" → tipo: "fiscal_nfe"
+  * "quantos quartos estão ocupados" → tipo: "hotel"
+  * "qual a taxa de ocupação" → tipo: "hotel"
 
 Pergunta: "{pergunta}"
 
 Retorne APENAS um JSON válido com a estrutura:
 {{
-    "tipo": "vendas|estoque|financeiro|clientes|produtos|comandas|fiscal_cte|fiscal_nfe|fiscal_nfce|fiscal_mdfe|relatorios|ncm_produto|analise_erro|gerar_pdf|geral",
+    "tipo": "vendas|estoque|financeiro|clientes|produtos|comandas|hotel|fiscal_cte|fiscal_nfe|fiscal_nfce|fiscal_mdfe|relatorios|ncm_produto|analise_erro|gerar_pdf|geral",
     "navegar": true/false (true se o usuário quer ir para uma tela, gerar/emitir/criar algo, ou abrir um relatório),
     "periodo": {{
         "tipo": "hoje|ontem|esta_semana|este_mes|ultimo_mes|este_ano|ultimo_ano|customizado",
@@ -388,6 +393,8 @@ Retorne APENAS um JSON válido com a estrutura:
             tipo = 'clientes'
         elif any(word in pergunta_lower for word in ['comanda', 'mesa']):
             tipo = 'comandas'
+        elif any(word in pergunta_lower for word in ['quarto', 'hosped', 'reserva', 'checkin', 'check-in', 'checkout', 'check-out', 'hotel', 'alojamento']):
+            tipo = 'hotel'
         else:
             tipo = 'geral'
         
@@ -484,6 +491,8 @@ Retorne APENAS um JSON válido com a estrutura:
                 return self._buscar_dados_clientes(intencao.get('filtros', {}))
             elif tipo == 'comandas':
                 return self._buscar_dados_comandas(inicio, fim, intencao.get('filtros', {}))
+            elif tipo == 'hotel':
+                return self._buscar_dados_hotel(inicio, fim, intencao.get('filtros', {}))
             elif tipo == 'fiscal_cte':
                 return self._buscar_dados_cte(inicio, fim)
             elif tipo in ('fiscal_nfe', 'fiscal_nfce'):
@@ -641,6 +650,89 @@ Retorne APENAS um JSON válido com a estrutura:
             'comandas_abertas': totais['comandas_abertas'] or 0,
             'periodo': {'inicio': inicio, 'fim': fim}
         }
+    
+    def _buscar_dados_hotel(self, inicio: str, fim: str, filtros: Dict) -> Dict[str, Any]:
+        """Busca dados e métricas do módulo de Hotelaria/PMS"""
+        try:
+            from api.models_hotel import Quarto, Reserva, TipoQuarto, ConsumoQuarto
+            from django.utils import timezone
+            from django.db.models import Avg, Sum, Count, Q
+            
+            hoje = timezone.now().date()
+            
+            # Métricas de quartos
+            quartos_qs = Quarto.objects.all()
+            total_quartos = quartos_qs.count()
+            
+            status_counts = quartos_qs.values('status_atual').annotate(total=Count('id_quarto'))
+            quartos_por_status = {item['status_atual']: item['total'] for item in status_counts}
+            
+            quartos_disponiveis = quartos_por_status.get('disponivel', 0)
+            quartos_ocupados = quartos_por_status.get('ocupado', 0)
+            quartos_sujos = quartos_por_status.get('sujo', 0)
+            quartos_manutencao = quartos_por_status.get('manutencao', 0)
+            
+            taxa_ocupacao = (quartos_ocupados / total_quartos * 100) if total_quartos > 0 else 0.0
+            
+            # Reservas de hoje
+            checkins_hoje = Reserva.objects.filter(data_entrada_prevista__date=hoje).count()
+            checkouts_hoje = Reserva.objects.filter(data_saida_prevista__date=hoje).count()
+            
+            # Reservas ativas e futuras
+            reservas_ativas = Reserva.objects.filter(status_reserva__in=['confirmada', 'checkin']).count()
+            
+            # Detalhes de hóspedes atuais (checkin realizado)
+            hospedes_atuais = []
+            reservas_checkin = Reserva.objects.filter(status_reserva='checkin').select_related('hospede', 'quarto')
+            for r in reservas_checkin[:10]:
+                hospedes_atuais.append({
+                    'id_reserva': r.id_reserva,
+                    'hospede': r.hospede.nome_razao_social,
+                    'quarto': r.quarto.numero_quarto,
+                    'data_entrada': r.data_entrada_prevista.strftime('%Y-%m-%d %H:%M'),
+                    'data_saida': r.data_saida_prevista.strftime('%Y-%m-%d %H:%M'),
+                    'valor_diaria': float(r.valor_diaria_aplicada)
+                })
+                
+            # Detalhes de próximas reservas (confirmadas)
+            proximas_reservas = []
+            reservas_confirmadas = Reserva.objects.filter(status_reserva='confirmada').select_related('hospede', 'quarto').order_by('data_entrada_prevista')
+            for r in reservas_confirmadas[:10]:
+                proximas_reservas.append({
+                    'id_reserva': r.id_reserva,
+                    'hospede': r.hospede.nome_razao_social,
+                    'quarto': r.quarto.numero_quarto,
+                    'data_entrada': r.data_entrada_prevista.strftime('%Y-%m-%d %H:%M'),
+                    'data_saida': r.data_saida_prevista.strftime('%Y-%m-%d %H:%M'),
+                    'valor_diaria': float(r.valor_diaria_aplicada)
+                })
+                
+            # Valor diária média (padrao)
+            media_diaria = TipoQuarto.objects.aggregate(media=Avg('valor_diaria_padrao'))['media']
+            
+            # Consumo acumulado das reservas ativas
+            consumo_total_reservas_ativas = ConsumoQuarto.objects.filter(
+                reserva__status_reserva__in=['checkin', 'confirmada']
+            ).aggregate(total=Sum('valor_total'))['total'] or 0.0
+            
+            return {
+                'total_quartos': total_quartos,
+                'quartos_disponiveis': quartos_disponiveis,
+                'quartos_ocupados': quartos_ocupados,
+                'quartos_sujos': quartos_sujos,
+                'quartos_manutencao': quartos_manutencao,
+                'taxa_ocupacao': round(taxa_ocupacao, 2),
+                'checkins_hoje': checkins_hoje,
+                'checkouts_hoje': checkouts_hoje,
+                'reservas_ativas': reservas_ativas,
+                'hospedes_atuais': hospedes_atuais,
+                'proximas_reservas': proximas_reservas,
+                'media_diaria_padrao': float(media_diaria) if media_diaria else 0.0,
+                'consumo_reservas_ativas': float(consumo_total_reservas_ativas)
+            }
+        except Exception as e:
+            logger.error(f"Erro ao buscar dados de hotel: {e}", exc_info=True)
+            return {'erro': str(e)}
     
     def _buscar_dados_cte(self, inicio: str, fim: str) -> Dict[str, Any]:
         """Busca dados de CT-e (Conhecimento de Transporte)"""
@@ -1135,6 +1227,30 @@ Instruções:
 - **Total de Produtos**: {dados['total_produtos']}
 - **Produtos com Estoque Baixo**: {dados['produtos_baixo_estoque']}
 - **Valor Total em Estoque**: R$ {dados['valor_estoque']:,.2f}"""
+
+        elif tipo == 'hotel' and 'total_quartos' in dados:
+            taxa_ocupacao = dados.get('taxa_ocupacao', 0)
+            total_quartos = dados.get('total_quartos', 0)
+            disponiveis = dados.get('quartos_disponiveis', 0)
+            ocupados = dados.get('quartos_ocupados', 0)
+            sujos = dados.get('quartos_sujos', 0)
+            manutencao = dados.get('quartos_manutencao', 0)
+            checkins = dados.get('checkins_hoje', 0)
+            checkouts = dados.get('checkouts_hoje', 0)
+            
+            return f"""**Resumo da Hotelaria (PMS)**
+
+- **Taxa de Ocupação**: {taxa_ocupacao}%
+- **Total de Quartos**: {total_quartos}
+  - Disponíveis: {disponiveis}
+  - Ocupados: {ocupados}
+  - Sujos: {sujos}
+  - Em Manutenção: {manutencao}
+- **Movimentação de Hoje**:
+  - Check-ins previstos: {checkins}
+  - Check-outs previstos: {checkouts}
+
+Use o botão abaixo para ir até o painel de controle do Hotel PMS."""
 
         elif tipo == 'fiscal_cte':
             total = dados.get('total', 0)
