@@ -58,7 +58,8 @@ import {
   Star,
   Warning,
   AccountBalanceWallet,
-  Settings
+  Settings,
+  Edit
 } from '@mui/icons-material';
 import api from '../services/api';
 import { toast } from 'react-toastify';
@@ -105,6 +106,17 @@ export default function HotelPMSPage() {
   const [openBookingModal, setOpenBookingModal] = useState(false);
   const [openManageModal, setOpenManageModal] = useState(false);
   const [openCheckoutSuccessModal, setOpenCheckoutSuccessModal] = useState(false);
+
+  // Estados para Cadastro e Edição de Quartos
+  const [openRoomModal, setOpenRoomModal] = useState(false);
+  const [roomForm, setRoomForm] = useState({
+    id_quarto: null,
+    numero_quarto: '',
+    tipo: '',
+    status_atual: 'disponivel',
+    capacidade_adultos: 2,
+    capacidade_criancas: 0
+  });
 
   // Seleções para criação/gerenciamento
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -295,6 +307,66 @@ export default function HotelPMSPage() {
       observacoes: ''
     });
     setOpenBookingModal(true);
+  };
+
+  const handleOpenNewRoom = () => {
+    setRoomForm({
+      id_quarto: null,
+      numero_quarto: '',
+      tipo: tiposQuarto[0]?.id_tipo_quarto || '',
+      status_atual: 'disponivel',
+      capacidade_adultos: 2,
+      capacidade_criancas: 0
+    });
+    setOpenRoomModal(true);
+  };
+
+  const handleOpenEditRoom = (room) => {
+    setRoomForm({
+      id_quarto: room.id_quarto,
+      numero_quarto: room.numero_quarto,
+      tipo: room.tipo || room.tipo_id || '',
+      status_atual: room.status_atual,
+      capacidade_adultos: room.capacidade_adultos,
+      capacidade_criancas: room.capacidade_criancas
+    });
+    setOpenRoomModal(true);
+  };
+
+  const handleSaveRoom = async () => {
+    if (!roomForm.numero_quarto || !roomForm.tipo) {
+      toast.warn('Número do quarto e Tipo são obrigatórios.');
+      return;
+    }
+    try {
+      setLoading(true);
+      if (roomForm.id_quarto) {
+        await api.put(`/api/hotel/quartos/${roomForm.id_quarto}/`, {
+          numero_quarto: roomForm.numero_quarto,
+          tipo: roomForm.tipo,
+          status_atual: roomForm.status_atual,
+          capacidade_adultos: parseInt(roomForm.capacidade_adultos),
+          capacidade_criancas: parseInt(roomForm.capacidade_criancas)
+        });
+        toast.success('Quarto atualizado com sucesso!');
+      } else {
+        await api.post('/api/hotel/quartos/', {
+          numero_quarto: roomForm.numero_quarto,
+          tipo: roomForm.tipo,
+          status_atual: roomForm.status_atual,
+          capacidade_adultos: parseInt(roomForm.capacidade_adultos),
+          capacidade_criancas: parseInt(roomForm.capacidade_criancas)
+        });
+        toast.success('Quarto cadastrado com sucesso!');
+      }
+      setOpenRoomModal(false);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar quarto. Verifique se o número já existe.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCreateBooking = async () => {
@@ -769,7 +841,20 @@ export default function HotelPMSPage() {
 
             {/* Aba 1: Quartos e Governança (Cards) */}
             {activeTab === 1 && (
-              <Grid container spacing={3}>
+              <Box>
+                {/* Botão de Cadastro de Quarto */}
+                <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<Add />}
+                    onClick={handleOpenNewRoom}
+                  >
+                    Cadastrar Novo Quarto
+                  </Button>
+                </Box>
+
+                <Grid container spacing={3}>
                 {quartos.map((room) => {
                   let statusColor = '#4caf50'; // disponivel
                   let statusText = 'Disponível';
@@ -799,9 +884,19 @@ export default function HotelPMSPage() {
                       <Card sx={{ borderTop: `6px solid ${statusColor}`, height: '100%', display: 'flex', flexDirection: 'column' }}>
                         <CardContent sx={{ flexGrow: 1 }}>
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                            <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                              Quarto {room.numero_quarto}
-                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                                Quarto {room.numero_quarto}
+                              </Typography>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleOpenEditRoom(room)}
+                                title="Editar Quarto"
+                                sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+                              >
+                                <Edit sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            </Box>
                             <Box sx={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: statusColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               {icon}
                             </Box>
@@ -880,7 +975,8 @@ export default function HotelPMSPage() {
                   );
                 })}
               </Grid>
-            )}
+            </Box>
+          )}
 
             {/* Aba 2: Listagem de Reservas (Tabela) */}
             {activeTab === 2 && (
@@ -1305,6 +1401,81 @@ export default function HotelPMSPage() {
         <DialogActions sx={{ justifyContent: 'center', pb: 3 }}>
           <Button variant="contained" color="primary" onClick={() => setOpenCheckoutSuccessModal(false)}>
             Ok, Voltar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal: Cadastrar / Editar Quarto */}
+      <Dialog open={openRoomModal} onClose={() => setOpenRoomModal(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+          {roomForm.id_quarto ? `Editar Quarto ${roomForm.numero_quarto}` : 'Cadastrar Novo Quarto'}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 2 }}>
+            <TextField
+              fullWidth
+              label="Número do Quarto *"
+              value={roomForm.numero_quarto}
+              onChange={e => setRoomForm(prev => ({ ...prev, numero_quarto: e.target.value }))}
+              placeholder="Ex: 101"
+            />
+
+            <TextField
+              select
+              fullWidth
+              label="Tipo de Acomodação *"
+              value={roomForm.tipo}
+              onChange={e => setRoomForm(prev => ({ ...prev, tipo: e.target.value }))}
+            >
+              <MenuItem value="">Selecione...</MenuItem>
+              {tiposQuarto.map(t => (
+                <MenuItem key={t.id_tipo_quarto} value={t.id_tipo_quarto}>
+                  {t.nome} (R$ {parseFloat(t.valor_diaria_padrao).toFixed(2)})
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
+              select
+              fullWidth
+              label="Status Atual *"
+              value={roomForm.status_atual}
+              onChange={e => setRoomForm(prev => ({ ...prev, status_atual: e.target.value }))}
+            >
+              <MenuItem value="disponivel">Disponível</MenuItem>
+              <MenuItem value="ocupado">Ocupado</MenuItem>
+              <MenuItem value="sujo">Sujo / Faxina</MenuItem>
+              <MenuItem value="manutencao">Manutenção</MenuItem>
+            </TextField>
+
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Lim. Adultos"
+                  value={roomForm.capacidade_adultos}
+                  onChange={e => setRoomForm(prev => ({ ...prev, capacidade_adultos: e.target.value }))}
+                  inputProps={{ min: 1 }}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Lim. Crianças"
+                  value={roomForm.capacidade_criancas}
+                  onChange={e => setRoomForm(prev => ({ ...prev, capacidade_criancas: e.target.value }))}
+                  inputProps={{ min: 0 }}
+                />
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenRoomModal(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleSaveRoom} disabled={loading}>
+            Salvar
           </Button>
         </DialogActions>
       </Dialog>
