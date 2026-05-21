@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -404,7 +404,9 @@ const ProdutoPageResponsive = () => {
     produtos_complementares: [],
     produtos_similares: [],
     controla_lote: false,
-    genero: ''
+    genero: '',
+    referencia: '',
+    localizacao: ''
   });
 
   const [categorias, setCategorias] = useState([]);
@@ -574,6 +576,8 @@ const ProdutoPageResponsive = () => {
           classificacao: produto.classificacao || '', // 🏷️ ADICIONAR CLASSIFICAÇÃO
           unidade_medida: produto.unidade_medida || 'UN', // Garantir valor padrão
           genero: produto.genero || '',
+          referencia: produto.referencia || '',
+          localizacao: produto.localizacao || '',
           imagem_url: localStorage.getItem(`produto_imagem_${produto.codigo_produto || produto.codigo}`) || produto.imagem_url || '',
           preco: parseFloat(produto.valor_venda ?? produto.preco_venda ?? 0),
           estoque: parseFloat(produto.estoque_total ?? produto.estoque ?? 0),
@@ -719,6 +723,8 @@ const ProdutoPageResponsive = () => {
         marca: '',
         classificacao: '',
         genero: '', // 🏷️ Reset genero
+        referencia: '',
+        localizacao: '',
         codigo_produto: '',
         unidade_medida: 'UN',
         ncm: '',
@@ -812,7 +818,9 @@ const ProdutoPageResponsive = () => {
       rendimento_m2: '',
       peso_unitario: '',
       variacao: '',
-      id_produto_pai: ''
+      id_produto_pai: '',
+      referencia: '',
+      localizacao: ''
     });
   };
 
@@ -918,6 +926,8 @@ const ProdutoPageResponsive = () => {
     } // Fim unidade_medida
 
     produtoData.genero = formData.genero || null;
+    produtoData.referencia = formData.referencia || null;
+    produtoData.localizacao = formData.localizacao || null;
 
     
     if (formData.descricao && String(formData.descricao).trim()) {
@@ -1016,6 +1026,8 @@ const ProdutoPageResponsive = () => {
     }
     // genero: enviar sempre (pode ser null para limpar)
     payloadLimpo.genero = produtoData.genero || null;
+    payloadLimpo.referencia = produtoData.referencia || null;
+    payloadLimpo.localizacao = produtoData.localizacao || null;
 
     // Campos de materiais de construção
     // Campos de materiais de construção (sempre incluir se existirem)
@@ -3015,6 +3027,24 @@ const ProdutoPageResponsive = () => {
                       <MenuItem value="unissex">Unissex</MenuItem>
                     </Select>
                   </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Referência"
+                    value={formData.referencia || ''}
+                    onChange={(e) => setFormData({ ...formData, referencia: e.target.value })}
+                    variant="outlined"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Localização"
+                    value={formData.localizacao || ''}
+                    onChange={(e) => setFormData({ ...formData, localizacao: e.target.value })}
+                    variant="outlined"
+                  />
                 </Grid>
               </Grid>
 

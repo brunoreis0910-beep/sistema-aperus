@@ -2229,6 +2229,7 @@ class CompraItem(models.Model):
     id_produto = models.ForeignKey(Produto, models.SET_NULL, db_column='id_produto', blank=True, null=True)
     quantidade = models.DecimalField(max_digits=15, decimal_places=6, default=0.000000, db_column='quantidade')
     quantidade_fracionada = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, db_column='quantidade_fracionada')
+    fracao_aplicada = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, db_column='fracao_aplicada')
     unidade = models.CharField(max_length=10, default='UN', db_column='unidade')
     valor_compra = models.DecimalField(max_digits=15, decimal_places=6, default=0.00, db_column='valor_unitario')
     valor_total = models.DecimalField(max_digits=15, decimal_places=6, default=0.00, db_column='valor_total')

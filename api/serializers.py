@@ -361,6 +361,8 @@ class ProdutoSerializer(serializers.ModelSerializer):
             'produto_pai',  # ForeignKey (envia/recebe ID)
             'controla_lote',  # Exige seleção de lote na venda
             'genero',
+            'referencia',
+            'localizacao',
         ]
         read_only_fields = [
             'id_produto', 'grupo_nome', 

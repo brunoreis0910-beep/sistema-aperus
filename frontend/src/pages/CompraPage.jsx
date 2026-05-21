@@ -205,6 +205,8 @@ function CompraPage() {
     marca: '',
     classificacao: 'Revenda',
     genero: '',
+    referencia: '',
+    localizacao: '',
     controla_lote: false,
     cest: '',
     imagem_url: '',
@@ -236,6 +238,7 @@ function CompraPage() {
     marca: '',
     categoria: '',
     referencia: '',
+    localizacao: '',
     codigo_barras: '',
     classificacao: '',
     ncm: '',
@@ -951,6 +954,8 @@ function CompraPage() {
         categoria: dadosProdutoNovo.categoria || null,
         classificacao: dadosProdutoNovo.classificacao || null,
         genero: dadosProdutoNovo.genero || null,
+        referencia: dadosProdutoNovo.referencia || '',
+        localizacao: dadosProdutoNovo.localizacao || '',
         controla_lote: dadosProdutoNovo.controla_lote || false,
         cest: dadosProdutoNovo.cest || null,
         ncm: dadosProdutoNovo.ncm || null,
@@ -1046,6 +1051,8 @@ function CompraPage() {
         marca: '',
         classificacao: 'Revenda',
         genero: '',
+        referencia: '',
+        localizacao: '',
         controla_lote: false,
         cest: '',
         imagem_url: '',
@@ -1091,6 +1098,8 @@ function CompraPage() {
         categoria: novoProduto.categoria,
         classificacao: novoProduto.classificacao,
         ncm: novoProduto.ncm,
+        referencia: novoProduto.referencia || '',
+        localizacao: novoProduto.localizacao || '',
         gtin: novoProduto.codigo_barras, // Backend usa 'gtin' em vez de 'codigo_barras'
         observacoes: novoProduto.observacoes,
         imagem_url: novoProduto.imagem_url
@@ -1127,7 +1136,8 @@ function CompraPage() {
         id_grupo: '',
         marca: '',
         categoria: '',
-referencia: '',
+        referencia: '',
+        localizacao: '',
         codigo_barras: '',
         classificacao: '',
         ncm: '',
@@ -4165,6 +4175,16 @@ referencia: '',
                   helperText="Código de referência alternativo"
                 />
               </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Localização"
+                  value={novoProduto.localizacao || ''}
+                  onChange={(e) => setNovoProduto({ ...novoProduto, localizacao: e.target.value })}
+                  placeholder="Ex: Prateleira A1"
+                  helperText="Localização física no estoque"
+                />
+              </Grid>
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -5120,6 +5140,26 @@ referencia: '',
                       <MenuItem value="unissex">Unissex</MenuItem>
                     </Select>
                   </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Referência"
+                    value={dadosProdutoNovo.referencia || ''}
+                    onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, referencia: e.target.value })}
+                    placeholder="Ex: REF001"
+                    helperText="Código de referência alternativo"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Localização"
+                    value={dadosProdutoNovo.localizacao || ''}
+                    onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, localizacao: e.target.value })}
+                    placeholder="Ex: Prateleira A1"
+                    helperText="Localização física no estoque"
+                  />
                 </Grid>
               </Grid>
 
