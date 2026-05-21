@@ -619,6 +619,83 @@ export default function HotelPMSPage() {
     );
   }, [reservas, searchQuery]);
 
+  const renderBookingBlock = (booking, room) => {
+    const isCheckin = booking.status_reserva === 'checkin';
+    const isFinalizada = booking.status_reserva === 'finalizada';
+    const blockBgColor = isCheckin 
+      ? '#1976d2' 
+      : isFinalizada 
+        ? '#2e7d32' 
+        : '#f57c00'; // Orange/Warning for confirmada
+        
+    const statusLabel = booking.status_reserva === 'checkin' 
+      ? 'Hospedagem Ativa' 
+      : booking.status_reserva === 'finalizada'
+        ? 'Finalizada'
+        : 'Reserva Confirmada';
+
+    return (
+      <Tooltip 
+        title={
+          <Box sx={{ p: 0.5 }}>
+            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+              {booking.hospede_nome}
+            </Typography>
+            <Typography variant="caption" display="block">
+              Quarto: {room.numero_quarto} | {room.tipo_nome}
+            </Typography>
+            <Typography variant="caption" display="block">
+              Status: {statusLabel}
+            </Typography>
+            <Typography variant="caption" display="block">
+              Período: {new Date(booking.data_entrada_prevista).toLocaleDateString('pt-BR')} a {new Date(booking.data_saida_prevista).toLocaleDateString('pt-BR')}
+            </Typography>
+          </Box>
+        }
+        arrow
+      >
+        <Box
+          onClick={(e) => {
+            e.stopPropagation();
+            const fullBooking = reservas.find(r => r.id_reserva === booking.id_reserva);
+            if (fullBooking) {
+              handleOpenManageBooking(fullBooking);
+            } else {
+              handleOpenManageBooking(booking);
+            }
+          }}
+          sx={{
+            backgroundColor: blockBgColor,
+            color: '#fff',
+            p: 1,
+            mx: 0.5,
+            borderRadius: '6px',
+            cursor: 'pointer',
+            height: '80%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '0.75rem',
+            fontWeight: 'bold',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.12)',
+            transition: 'all 0.2s ease-in-out',
+            borderLeft: '4px solid rgba(255,255,255,0.4)',
+            '&:hover': {
+              opacity: 0.95,
+              transform: 'translateY(-1px)',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
+            }
+          }}
+        >
+          {booking.hospede_nome}
+        </Box>
+      </Tooltip>
+    );
+  };
+
   return (
     <Box sx={{ display: 'flex', position: 'relative', height: '100%', overflow: 'hidden' }}>
       
