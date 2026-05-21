@@ -176,6 +176,8 @@ class Produto(models.Model):
         ('unissex', 'Unissex'),
     ]
     genero = models.CharField(max_length=20, blank=True, null=True, choices=GENERO_CHOICES, help_text='Gênero do produto: feminino, masculino ou unissex')
+    referencia = models.CharField(max_length=100, blank=True, null=True, help_text='Código de referência do produto')
+    localizacao = models.CharField(max_length=100, blank=True, null=True, help_text='Localização física do produto')
 
     class Meta:
         managed = True
