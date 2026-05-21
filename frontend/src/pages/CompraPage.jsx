@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Box,
@@ -36,7 +36,10 @@ import {
   Select,
   Tabs,
   Tab,
-  Autocomplete
+  Autocomplete,
+  Switch,
+  FormControlLabel,
+  Avatar
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -58,6 +61,9 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import CloudSyncIcon from '@mui/icons-material/CloudSync'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
 import DescriptionIcon from '@mui/icons-material/Description'
+import ImageIcon from '@mui/icons-material/Image'
+import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary'
+import WarehouseIcon from '@mui/icons-material/Warehouse'
 import NoteIcon from '@mui/icons-material/Note'
 import FlashOnIcon from '@mui/icons-material/FlashOn'
 import { useAuth } from '../context/AuthContext'
@@ -152,8 +158,10 @@ function CompraPage() {
     id_compra: null,
     valor_total: 0,
     numero_parcelas: 1,
-    data_vencimento: new Date().toISOString().split('T')[0],
-    forma_pagamento: 'Dinheiro'
+    forma_pagamento: 'Dinheiro',
+    id_conta_bancaria: '', // Conta padrão geral
+    obrigatorio: false,
+    parcelas: [] // Array de { numero_parcela, valor, vencimento, id_conta_bancaria }
   })
 
   // Modal de cadastro de fornecedor
@@ -182,6 +190,7 @@ function CompraPage() {
 
   // Estados para Dialog de Cadastro de Produto
   const [openDialogNovoProduto, setOpenDialogNovoProduto] = useState(false)
+  const [abaAtivaDialogProduto, setAbaAtivaDialogProduto] = useState(0)
   const [dadosProdutoNovo, setDadosProdutoNovo] = useState({
     codigo: '',
     nome: '',
@@ -192,7 +201,28 @@ function CompraPage() {
     descricao: '',
     id_grupo: '',
     categoria: '',
-    marca: ''
+    marca: '',
+    classificacao: 'Revenda',
+    genero: '',
+    controla_lote: false,
+    cest: '',
+    imagem_url: '',
+    tributacao: {
+      cfop: '',
+      cst_icms: '',
+      csosn: '',
+      icms_aliquota: '',
+      cst_ipi: '',
+      ipi_aliquota: '',
+      cst_pis_cofins: '',
+      pis_aliquota: '',
+      cofins_aliquota: '',
+      cst_ibs_cbs: '',
+      ibs_aliquota: '',
+      cbs_aliquota: '',
+      classificacao_fiscal: ''
+    },
+    depositos: []
   })
   const [categorias, setCategorias] = useState([])
   const [marcas, setMarcas] = useState([])
@@ -218,6 +248,25 @@ function CompraPage() {
   const [openMarcaDialog, setOpenMarcaDialog] = useState(false)
   const [novaCategoriaInput, setNovaCategoriaInput] = useState('')
   const [novaMarcaInput, setNovaMarcaInput] = useState('')
+
+  // Novo estado de depósitos e contas bancárias
+  const [depositos, setDepositos] = useState([])
+  const [contasBancarias, setContasBancarias] = useState([])
+
+  // Estados do Dialog de Customização Financeira (inline antes de salvar compra)
+  const [openDialogFinanceiroCustomizado, setOpenDialogFinanceiroCustomizado] = useState(false)
+  const [parcelasFinanceiroCustomizado, setParcelasFinanceiroCustomizado] = useState([])
+  const [dadosCompraTemporaria, setDadosCompraTemporaria] = useState(null)
+  const [dadosFinanceiroConfig, setDadosFinanceiroConfig] = useState({
+    numero_parcelas: 1,
+    forma_pagamento: 'Boleto',
+    id_conta_bancaria_padrao: '',
+    data_vencimento_inicial: ''
+  })
+
+  // Submodal de grupo de produto
+  const [openGrupoDialog, setOpenGrupoDialog] = useState(false)
+  const [novoGrupo, setNovoGrupo] = useState({ nome: '', descricao: '' })
 
   // Modal de precificação
   const [modalPrecificacao, setModalPrecificacao] = useState(false)
@@ -372,14 +421,16 @@ function CompraPage() {
   const carregarDados = async () => {
     try {
       setLoading(true)
-      const [fornRes, prodRes, operRes, comprasRes, gruposRes, catRes, marcaRes] = await Promise.all([
+      const [fornRes, prodRes, operRes, comprasRes, gruposRes, catRes, marcaRes, contasBancariasRes, depositosRes] = await Promise.all([
         axiosInstance.get('/fornecedores/'),
         axiosInstance.get('/produtos/'),
         axiosInstance.get('/operacoes/'),
         axiosInstance.get('/compras/'),
         axiosInstance.get('/grupos-produto/'),
         axiosInstance.get('/produtos/categorias/'),
-        axiosInstance.get('/produtos/marcas/')
+        axiosInstance.get('/produtos/marcas/'),
+        axiosInstance.get('/contas-bancarias/'),
+        axiosInstance.get('/depositos/')
       ])
 
       // Garantir que sempre seja um array
@@ -415,6 +466,10 @@ function CompraPage() {
       // Carregar categorias e marcas
       setCategorias(catRes.data || [])
       setMarcas(marcaRes.data || [])
+
+      // Carregar contas bancárias e depósitos
+      setContasBancarias(contasBancariasRes.data?.results || contasBancariasRes.data || [])
+      setDepositos(depositosRes.data?.results || depositosRes.data || [])
 
       console.log('📦 Grupos carregados:', gruposRes.data)
       console.log('📦 Total de grupos:', gruposRes.data?.length || 0)
@@ -874,8 +929,12 @@ function CompraPage() {
   // Salvar novo produto (Dialog do botão +)
   const salvarProdutoDialog = async () => {
     // Validação básica
-    if (!dadosProdutoNovo.nome || !dadosProdutoNovo.id_grupo) {
-      toast.error('❌ Nome do produto e Grupo são obrigatórios!');
+    if (!dadosProdutoNovo.nome) {
+      toast.error('❌ Nome do produto é obrigatório!');
+      return;
+    }
+    if (!dadosProdutoNovo.id_grupo) {
+      toast.error('❌ Grupo do produto é obrigatório!');
       return;
     }
 
@@ -886,16 +945,61 @@ function CompraPage() {
         descricao: dadosProdutoNovo.descricao || '',
         unidade_medida: dadosProdutoNovo.unidade_medida || 'UN',
         valor_custo: parseFloat(dadosProdutoNovo.preco_custo) || 0,
-        id_grupo: dadosProdutoNovo.id_grupo,
+        id_grupo: Number(dadosProdutoNovo.id_grupo),
         marca: dadosProdutoNovo.marca || null,
-        classificacao: dadosProdutoNovo.categoria || null,
+        categoria: dadosProdutoNovo.categoria || null,
+        classificacao: dadosProdutoNovo.classificacao || null,
+        genero: dadosProdutoNovo.genero || null,
+        controla_lote: dadosProdutoNovo.controla_lote || false,
+        cest: dadosProdutoNovo.cest || null,
         ncm: dadosProdutoNovo.ncm || null,
-        gtin: dadosProdutoNovo.gtin || null
+        gtin: dadosProdutoNovo.gtin || null,
+        imagem_url: dadosProdutoNovo.imagem_url || ''
       }
 
+      console.log('📦 Enviando produto básico:', produtoParaEnviar);
       const response = await axiosInstance.post('/produtos/', produtoParaEnviar)
       const produtoCadastrado = response.data
-      
+      const idProduto = produtoCadastrado.id_produto
+
+      console.log('✅ Produto cadastrado com ID:', idProduto);
+
+      // 1. Salvar informações fiscais (tributação) via PATCH /produtos/{id}/tributacao/
+      const tributacaoParaEnviar = {
+        cfop: dadosProdutoNovo.tributacao?.cfop || '',
+        cst_icms: dadosProdutoNovo.tributacao?.cst_icms || '',
+        csosn: dadosProdutoNovo.tributacao?.csosn || '',
+        icms_aliquota: dadosProdutoNovo.tributacao?.icms_aliquota ? parseFloat(dadosProdutoNovo.tributacao.icms_aliquota) : 0,
+        cst_ipi: dadosProdutoNovo.tributacao?.cst_ipi || '',
+        ipi_aliquota: dadosProdutoNovo.tributacao?.ipi_aliquota ? parseFloat(dadosProdutoNovo.tributacao.ipi_aliquota) : 0,
+        cst_pis_cofins: dadosProdutoNovo.tributacao?.cst_pis_cofins || '',
+        pis_aliquota: dadosProdutoNovo.tributacao?.pis_aliquota ? parseFloat(dadosProdutoNovo.tributacao.pis_aliquota) : 0,
+        cofins_aliquota: dadosProdutoNovo.tributacao?.cofins_aliquota ? parseFloat(dadosProdutoNovo.tributacao.cofins_aliquota) : 0,
+        cst_ibs_cbs: dadosProdutoNovo.tributacao?.cst_ibs_cbs || '',
+        ibs_aliquota: dadosProdutoNovo.tributacao?.ibs_aliquota ? parseFloat(dadosProdutoNovo.tributacao.ibs_aliquota) : 0,
+        cbs_aliquota: dadosProdutoNovo.tributacao?.cbs_aliquota ? parseFloat(dadosProdutoNovo.tributacao.cbs_aliquota) : 0,
+        classificacao_fiscal: dadosProdutoNovo.tributacao?.classificacao_fiscal || dadosProdutoNovo.ncm || ''
+      }
+
+      console.log('📡 Salvando tributação:', tributacaoParaEnviar);
+      await axiosInstance.patch(`/produtos/${idProduto}/tributacao/`, tributacaoParaEnviar);
+
+      // 2. Inicializar depósitos via POST /estoque/
+      if (dadosProdutoNovo.depositos && dadosProdutoNovo.depositos.length > 0) {
+        console.log('📦 Inicializando depósitos:', dadosProdutoNovo.depositos);
+        const estoquePromises = dadosProdutoNovo.depositos.map(dep => {
+          const payloadEstoque = {
+            id_produto: idProduto,
+            id_deposito: dep.id_deposito,
+            quantidade_minima: parseFloat(dep.quantidade_minima) || 0,
+            valor_venda: parseFloat(dep.valor_venda) || 0,
+            valor_ultima_compra: parseFloat(dep.valor_custo) || 0
+          }
+          return axiosInstance.post('/estoque/', payloadEstoque);
+        });
+        await Promise.all(estoquePromises);
+      }
+
       await carregarDados()
       
       // Vincular automaticamente ao item da compra
@@ -918,7 +1022,7 @@ function CompraPage() {
           }
         }
         
-        toast.success(`✅ Produto "${produtoCadastrado.nome_produto}" cadastrado e vinculado!`, {
+        toast.success(`✅ Produto "${produtoCadastrado.nome_produto}" cadastrado, tributação salva e estoques configurados!`, {
           autoClose: 3000
         });
       } else {
@@ -938,11 +1042,32 @@ function CompraPage() {
         descricao: '',
         id_grupo: '',
         categoria: '',
-        marca: ''
+        marca: '',
+        classificacao: 'Revenda',
+        genero: '',
+        controla_lote: false,
+        cest: '',
+        imagem_url: '',
+        tributacao: {
+          cfop: '',
+          cst_icms: '',
+          csosn: '',
+          icms_aliquota: '',
+          cst_ipi: '',
+          ipi_aliquota: '',
+          cst_pis_cofins: '',
+          pis_aliquota: '',
+          cofins_aliquota: '',
+          cst_ibs_cbs: '',
+          ibs_aliquota: '',
+          cbs_aliquota: '',
+          classificacao_fiscal: ''
+        },
+        depositos: []
       })
     } catch (error) {
-      console.error('Erro ao salvar produto:', error)
-      toast.error('❌ ' + (error.response?.data?.message || 'Erro ao cadastrar produto'))
+      console.error('Erro ao salvar produto completo:', error)
+      toast.error('❌ ' + (error.response?.data?.message || error.response?.data?.detail || 'Erro ao cadastrar produto'))
     }
   }
 
@@ -1001,7 +1126,7 @@ function CompraPage() {
         id_grupo: '',
         marca: '',
         categoria: '',
-        referencia: '',
+referencia: '',
         codigo_barras: '',
         classificacao: '',
         ncm: '',
@@ -1015,9 +1140,60 @@ function CompraPage() {
     }
   }
 
-  // Salva compra
+  // Recalcular as parcelas financeiras customizadas localmente
+  const recalcularParcelasCustomizadas = (numParcelas, dataIni, contaPadrao, valorTotal) => {
+    const total = parseFloat(valorTotal) || 0;
+    const n = parseInt(numParcelas) || 1;
+    const valorParcelaBase = Math.round((total / n) * 100) / 100;
+    const somaBase = valorParcelaBase * n;
+    const diferenca = parseFloat((total - somaBase).toFixed(2));
+
+    const novasParcelas = [];
+    const baseDate = dataIni ? new Date(dataIni + 'T00:00:00') : new Date();
+
+    for (let i = 0; i < n; i++) {
+      let valor = valorParcelaBase;
+      if (i === n - 1) {
+        valor = parseFloat((valorParcelaBase + diferenca).toFixed(2));
+      }
+
+      // Calcula data de vencimento subsequente de forma consistente (mês a mês)
+      const vencimento = new Date(baseDate);
+      vencimento.setMonth(baseDate.getMonth() + i);
+      const dataStr = vencimento.toISOString().split('T')[0];
+
+      novasParcelas.push({
+        numero_parcela: i + 1,
+        valor_parcela: valor,
+        data_vencimento: dataStr,
+        id_conta_bancaria: contaPadrao || ''
+      });
+    }
+
+    setParcelasFinanceiroCustomizado(novasParcelas);
+  };
+
+  // Ajustar dízimas ou diferenças de arredondamento jogando a diferença na última parcela
+  const ajustarDiferencaUltimaParcela = () => {
+    if (!dadosCompraTemporaria || parcelasFinanceiroCustomizado.length === 0) return;
+    const totalCompra = parseFloat(dadosCompraTemporaria.valor_total) || 0;
+    const somaOutras = parcelasFinanceiroCustomizado
+      .slice(0, -1)
+      .reduce((sum, p) => sum + (parseFloat(p.valor_parcela) || 0), 0);
+    const novoValorUltima = parseFloat((totalCompra - somaOutras).toFixed(2));
+
+    setParcelasFinanceiroCustomizado(prev => {
+      const copy = [...prev];
+      if (copy.length > 0) {
+        copy[copy.length - 1].valor_parcela = novoValorUltima;
+      }
+      return copy;
+    });
+  };
+
+  // Salvar compra
   const salvarCompra = async (e) => {
-    e.preventDefault()
+    if (e) e.preventDefault()
     setErro(null)
     setSucesso(null)
 
@@ -1057,15 +1233,13 @@ function CompraPage() {
           ? parseFloat(item.quantidade_com_fracao)
           : (fracao !== 1 ? qtdNF * fracao : qtdNF)
         const valorUnitNF = parseFloat(item.valor_unitario) || 0
-        // Custo por unidade de estoque: divide pelo fator de fração quando aplicável
-        // Arredonda para 6 casas decimais para respeitar max_digits=15 do backend
+        // Custo por unidade de estoque
         const valorUnitEstoque = parseFloat(
           ((qtdComFracao > qtdNF && fracao > 1)
             ? valorUnitNF / fracao
             : valorUnitNF
           ).toFixed(6)
         )
-        // O total financeiro usa a quantidade e preço da NF (não muda o total da nota)
         const subtotal = qtdNF * valorUnitNF
         total += subtotal
         return { ...item, qtdComFracao, valorUnitEstoque, subtotal }
@@ -1082,96 +1256,74 @@ function CompraPage() {
         valor_total: total.toFixed(6),
         itens: itensCalculados.map(item => ({
           id_produto: parseInt(item.id_produto),
-          quantidade: parseFloat(item.quantidade) || 0, // Sempre envia a quantidade da NF
-          valor_unitario: Math.trunc((parseFloat(item.valor_unitario) || 0) * 1000000) / 1000000, // Trunca para 6 casas
+          quantidade: parseFloat(item.quantidade) || 0,
+          valor_unitario: Math.trunc((parseFloat(item.valor_unitario) || 0) * 1000000) / 1000000,
           valor_total: parseFloat(item.subtotal.toFixed(6)),
           fracao_memorizada: parseFloat(item.fracao_memorizada) || 1,
-          // O backend agora calcula a quantidade_com_fracao, não precisa mais enviar
         }))
       }
 
-      console.log('🔵 ENVIANDO COMPRA:', payload)
-      console.log('🔵 Modo:', editandoId ? 'EDIÇÃO' : 'CRIAÇÃO')
+      console.log('🔵 PREPARANDO COMPRA:', payload)
 
-      // ========== VERIFICAÇÃO DE APROVAÇÃO (APENAS PARA USUÁRIOS NÃO SUPERVISORES) ==========
-      if (!editandoId && !user?.is_staff) {
-        // Regras que exigem aprovação
-        const motivos = []
-        const fornecedorSelecionado = fornecedores.find(f => f.id_fornecedor === parseInt(form.id_fornecedor))
-
-        // REGRA 1: Valor alto (acima de R$ 10.000)
-        if (total > 10000) {
-          motivos.push(`Valor da compra (R$ ${total.toFixed(2)}) acima do limite de R$ 10.000,00`)
-        }
-
-        // REGRA 2: Fornecedor novo (primeira compra)
-        if (fornecedorSelecionado && fornecedorSelecionado.total_compras === 0) {
-          motivos.push('Primeira compra deste fornecedor')
-        }
-
-        // REGRA 3: Compra sem fornecedor cadastrado
-        if (!form.id_fornecedor) {
-          motivos.push('Compra sem fornecedor cadastrado')
-        }
-
-        // Se houver regras violadas, solicitar aprovação
-        if (motivos.length > 0) {
-          setDadosAprovacao({
-            ...payload,
-            fornecedor: fornecedorSelecionado ? {
-              id: fornecedorSelecionado.id_fornecedor,
-              nome: fornecedorSelecionado.nome_razao_social
-            } : null,
-            motivos_aprovacao: motivos.join(' | '),
-            total_itens: itensValidos.length,
-            usuario_solicitante: user.username
-          })
-          setModalAprovacao(true)
-          return // PARA AQUI - não cria a compra ainda
-        }
-      }
-      // ==================================================================================
-
-      // Verifica se operação exige financeiro ANTES de salvar
+      // Se a operação gera financeiro, interceptamos aqui antes de salvar no banco
       const operacaoSelecionada = operacoes.find(o => o.id_operacao === parseInt(form.id_operacao))
       const operacaoExigeFinanceiro = !editandoId && operacaoSelecionada?.gera_financeiro === 1
 
       if (operacaoExigeFinanceiro) {
-        const confirmaFinanceiro = window.confirm(
-          '⚠️ ATENÇÃO: Esta operação exige geração de financeiro!\n\n' +
-          '📊 Após salvar a compra, você DEVE gerar as contas a pagar.\n' +
-          '💰 Valor total: R$ ' + total.toFixed(2) + '\n\n' +
-          'Deseja continuar e gerar o financeiro?'
-        )
+        // Armazenar os dados temporariamente
+        setDadosCompraTemporaria({
+          payload,
+          itensCalculados,
+          valor_total: total,
+          itensValidos,
+          itensInvalidos
+        });
+
+        // Configurar as opções financeiras padrão
+        const contaPadraoId = contasBancarias.length > 0 ? contasBancarias[0].id_conta_bancaria : '';
+        const vencimentoInicial = form.data_entrada || new Date().toISOString().split('T')[0];
         
-        if (!confirmaFinanceiro) {
-          setErro('❌ Compra não salva: operação exige geração de financeiro.')
-          setTimeout(() => setErro(null), 5000)
-          return
-        }
+        setDadosFinanceiroConfig({
+          numero_parcelas: 1,
+          forma_pagamento: 'Boleto',
+          id_conta_bancaria_padrao: contaPadraoId,
+          data_vencimento_inicial: vencimentoInicial
+        });
+
+        // Recalcular as parcelas para a primeira exibição
+        recalcularParcelasCustomizadas(1, vencimentoInicial, contaPadraoId, total);
+
+        // Abrir o diálogo de customização financeira
+        setOpenDialogFinanceiroCustomizado(true);
+        return; // Não executa o POST/PUT ainda!
       }
 
+      // Se não gera financeiro (ou é edição), prosseguimos direto
+      await executarSalvarCompraSemFinanceiro(payload, total, itensCalculados, itensValidos, itensInvalidos);
+
+    } catch (error) {
+      console.error('❌ Erro na validação/preparação da compra:', error)
+      setErro(`❌ Erro ao preparar compra: ${error.message || error}`)
+    }
+  }
+
+  // Executa o salvamento simples (caso não exija financeiro ou seja edição)
+  const executarSalvarCompraSemFinanceiro = async (payload, total, itensCalculados, itensValidos, itensInvalidos) => {
+    try {
       let response
       if (editandoId) {
-        // Atualiza compra existente
-        console.log('🔄 ATUALIZANDO COMPRA ID:', editandoId)
-        console.log('📤 PAYLOAD PARA ATUALIZAÇÃO:', JSON.stringify(payload, null, 2))
         response = await axiosInstance.put(`/compras/${editandoId}/`, payload)
-        console.log('✅ COMPRA ATUALIZADA:', response.data)
       } else {
-        // Cria nova compra
         response = await axiosInstance.post('/compras/', payload)
-        console.log('✅ COMPRA CRIADA:', response.data)
       }
 
-      // Salvar frações por fornecedor+produto (para auto-aplicar na próxima importação XML)
+      // Salvar frações por fornecedor+produto
       const idFornecedor = parseInt(form.id_fornecedor)
       if (idFornecedor) {
         for (const item of itensCalculados) {
           const fracao = parseFloat(item.fracao_memorizada) || 1
           const ean = item._ean || ''
           const idProduto = parseInt(item.id_produto)
-          // Sempre salva a fração (mesmo fracao=1 para resetar), desde que tenha EAN e produto
           if (ean && idProduto && !isNaN(fracao) && fracao > 0) {
             try {
               await axiosInstance.post('/compras/salvar-fracao/', {
@@ -1180,15 +1332,11 @@ function CompraPage() {
                 gtin: ean,
                 fracao: fracao
               })
-            } catch (_) { /* ignora erro de fração, não cancela o save */ }
+            } catch (_) {}
           }
         }
       }
 
-      // Verifica se deve gerar financeiro (apenas para novas compras)
-      const geraFinanceiro = !editandoId && (operacaoSelecionada?.gera_financeiro || response.data?.gerou_financeiro)
-
-      // Mensagem de sucesso
       let mensagemSucesso = editandoId 
         ? `✅ Compra atualizada com sucesso!\n💰 Valor total: R$ ${total.toFixed(2)}\n📦 ${itensValidos.length} produto(s)`
         : `✅ Compra cadastrada com sucesso!\n💰 Valor total: R$ ${total.toFixed(2)}\n📦 ${itensValidos.length} produto(s) salvos`
@@ -1197,109 +1345,92 @@ function CompraPage() {
         mensagemSucesso += `\n⚠️ ${itensInvalidos.length} produto(s) não cadastrados foram ignorados`
       }
 
-      if (geraFinanceiro) {
-        // Abre modal para gerar financeiro
-        setDadosFinanceiro({
-          id_compra: response.data.id_compra,
-          valor_total: total,
-          numero_parcelas: 1,
-          data_vencimento: form.data_entrada,
-          forma_pagamento: 'Dinheiro',
-          obrigatorio: operacaoExigeFinanceiro // Marca se é obrigatório
-        })
-        setModalFinanceiro(true)
-        setSucesso(
-          mensagemSucesso + '\n' + 
-          (operacaoExigeFinanceiro 
-            ? '⚠️ OBRIGATÓRIO: Configure o financeiro agora!' 
-            : '📊 Configure o financeiro.')
-        )
-      } else {
-        setSucesso(mensagemSucesso)
-        limparFormulario()
-        carregarDados()
-      }
-
-      // Só limpa e recarrega se não for gerar financeiro
-      if (!geraFinanceiro) {
-        limparFormulario()
-        carregarDados()
-      }
-
+      setSucesso(mensagemSucesso)
+      limparFormulario()
+      carregarDados()
       setTimeout(() => setSucesso(null), 5000)
     } catch (error) {
       console.error('❌ Erro ao salvar compra:', error)
-      console.error('📋 Resposta do servidor:', error.response?.data)
-      console.error('📊 Status:', error.response?.status)
-      
-      let mensagemErro = 'Verifique os dados e tente novamente.'
-      
-      if (error.response?.data) {
-        const errorData = error.response.data
-        
-        // Trata diferentes formatos de erro
-        if (typeof errorData === 'string') {
-          mensagemErro = errorData
-        } else if (errorData.detail) {
-          mensagemErro = errorData.detail
-        } else if (errorData.error) {
-          mensagemErro = errorData.error
-        } else if (errorData.itens) {
-          // Erros de validação dos itens
-          mensagemErro = 'Erro nos itens: ' + JSON.stringify(errorData.itens)
-        } else {
-          // Mostra todo o objeto de erro
-          mensagemErro = JSON.stringify(errorData)
-        }
-      } else if (error.message) {
-        mensagemErro = error.message
-      }
-      
-      setErro(`❌ Erro ao ${editandoId ? 'atualizar' : 'salvar'} compra: ${mensagemErro}`)
+      setErro(`❌ Erro ao salvar compra: ${error.response?.data?.detail || error.response?.data?.message || JSON.stringify(error.response?.data) || error.message}`)
     }
   }
 
-  // Gera contas a pagar
-  const gerarFinanceiro = async () => {
+  // Executa o salvamento da compra E das contas a pagar customizadas em lote
+  const confirmarESalvarCompraComFinanceiro = async () => {
+    if (!dadosCompraTemporaria) return;
+
     try {
-      const valorParcela = (dadosFinanceiro.valor_total / dadosFinanceiro.numero_parcelas).toFixed(2)
-      const parcelas = []
+      setErro(null);
+      setSucesso(null);
 
-      for (let i = 0; i < dadosFinanceiro.numero_parcelas; i++) {
-        const dataVencimento = new Date(dadosFinanceiro.data_vencimento)
-        dataVencimento.setMonth(dataVencimento.getMonth() + i)
+      // 1. Salvar a Compra no backend para gerar o id_compra
+      const responseCompra = await axiosInstance.post('/compras/', dadosCompraTemporaria.payload);
+      const compraCriada = responseCompra.data;
+      const idCompra = compraCriada.id_compra;
 
-        parcelas.push({
-          id_compra_origem: dadosFinanceiro.id_compra,
-          tipo_conta: 'Pagar',
-          descricao: `Compra #${dadosFinanceiro.id_compra} - Parcela ${i + 1}/${dadosFinanceiro.numero_parcelas}`,
-          valor_parcela: parseFloat(valorParcela),
-          data_vencimento: dataVencimento.toISOString().split('T')[0],
-          data_emissao: new Date().toISOString().split('T')[0],
-          status_conta: 'Pendente',
-          forma_pagamento: dadosFinanceiro.forma_pagamento
-        })
-      }
+      console.log('✅ Compra criada com ID:', idCompra);
 
-      try {
-        for (const parcela of parcelas) {
-          await axiosInstance.post('/contas/', parcela)
+      // 2. Salvar frações de produtos
+      const idFornecedor = parseInt(form.id_fornecedor)
+      if (idFornecedor) {
+        for (const item of dadosCompraTemporaria.itensCalculados) {
+          const fracao = parseFloat(item.fracao_memorizada) || 1
+          const ean = item._ean || ''
+          const idProduto = parseInt(item.id_produto)
+          if (ean && idProduto && !isNaN(fracao) && fracao > 0) {
+            try {
+              await axiosInstance.post('/compras/salvar-fracao/', {
+                id_fornecedor: idFornecedor,
+                id_produto: idProduto,
+                gtin: ean,
+                fracao: fracao
+              })
+            } catch (_) {}
+          }
         }
-        setModalFinanceiro(false)
-        setSucesso(`✅ ${parcelas.length} conta(s) a pagar gerada(s) com sucesso!`)
-        
-        // Limpa formulário e recarrega após gerar financeiro
-        limparFormulario()
-        carregarDados()
-        
-        setTimeout(() => setSucesso(null), 5000)
-      } catch (error) {
-        console.error('Erro detalhado:', error.response?.data)
-        setErro(`❌ Erro: ${JSON.stringify(error.response?.data || 'Erro desconhecido')}`)
       }
+
+      // 3. Salvar cada parcela financeira customizada na API /contas/
+      console.log('📡 Salvando contas a pagar customizadas para compra:', idCompra);
+      const contasPromises = parcelasFinanceiroCustomizado.map((parcela, idx) => {
+        const payloadConta = {
+          tipo_conta: 'Pagar',
+          id_cliente_fornecedor: idFornecedor || null,
+          descricao: `Compra #${idCompra} - Parcela ${parcela.numero_parcela}/${parcelasFinanceiroCustomizado.length}`,
+          valor_parcela: parseFloat(parcela.valor_parcela),
+          data_vencimento: parcela.data_vencimento,
+          status_conta: 'Pendente',
+          forma_pagamento: dadosFinanceiroConfig.forma_pagamento,
+          id_compra_origem: idCompra,
+          id_conta_cobranca: parcela.id_conta_bancaria ? parseInt(parcela.id_conta_bancaria) : null,
+          gerencial: 1 // Garantindo gerencial=1 para o serializer do Django
+        };
+        console.log(`📤 Enviando parcela ${idx + 1}:`, payloadConta);
+        return axiosInstance.post('/contas/', payloadConta);
+      });
+
+      await Promise.all(contasPromises);
+      console.log('✅ Todas as parcelas financeiras salvas com sucesso!');
+
+      // Fechar diálogo e resetar estados
+      setOpenDialogFinanceiroCustomizado(false);
+      setDadosCompraTemporaria(null);
+
+      // Sucesso
+      let mensagemSucesso = `✅ Compra #${idCompra} cadastrada com sucesso!\n💰 Valor total: R$ ${dadosCompraTemporaria.valor_total.toFixed(2)}\n📊 ${parcelasFinanceiroCustomizado.length} parcela(s) financeira(s) gerada(s).`;
+      if (dadosCompraTemporaria.itensInvalidos.length > 0) {
+        mensagemSucesso += `\n⚠️ ${dadosCompraTemporaria.itensInvalidos.length} produto(s) ignorados.`;
+      }
+
+      setSucesso(mensagemSucesso);
+      limparFormulario();
+      carregarDados();
+      setTimeout(() => setSucesso(null), 6000);
+
     } catch (error) {
-      console.error('Erro ao gerar financeiro:', error)
-      setErro('❌ Erro ao gerar contas a pagar.')
+      console.error('❌ Erro no fluxo completo de Compra + Financeiro:', error);
+      const errorDetail = error.response?.data?.detail || error.response?.data?.message || JSON.stringify(error.response?.data) || error.message;
+      setErro(`❌ Erro ao salvar compra e gerar financeiro: ${errorDetail}`);
     }
   }
 
@@ -2219,7 +2350,7 @@ function CompraPage() {
                                       <Tooltip title="Cadastro Normal (Manual)">
                                         <IconButton
                                           onClick={() => {
-                                            // Pegar TODOS os dados do item do XML para preencher automaticamente
+                                                                                        // Pegar TODOS os dados do item do XML para preencher automaticamente
                                             const dadosXML = {
                                               gtin: item._ean || '',
                                               nome: item._descricao || '',
@@ -2230,11 +2361,39 @@ function CompraPage() {
                                               codigo: item._codigo || '',
                                               id_grupo: '',
                                               categoria: '',
-                                              marca: ''
+                                              marca: '',
+                                              classificacao: 'Revenda',
+                                              genero: '',
+                                              controla_lote: false,
+                                              cest: '',
+                                              imagem_url: '',
+                                              tributacao: {
+                                                cfop: item._cfop || '',
+                                                cst_icms: item._cst || '',
+                                                csosn: item._csosn || '',
+                                                icms_aliquota: item._picms || '',
+                                                cst_ipi: '',
+                                                ipi_aliquota: item._vipi ? parseFloat(item._vipi) : '',
+                                                cst_pis_cofins: '',
+                                                pis_aliquota: item._vpis ? parseFloat(item._vpis) : '',
+                                                cofins_aliquota: item._vcofins ? parseFloat(item._vcofins) : '',
+                                                cst_ibs_cbs: '',
+                                                ibs_aliquota: '',
+                                                cbs_aliquota: '',
+                                                classificacao_fiscal: item._ncm || ''
+                                              },
+                                              depositos: depositos.map(dep => ({
+                                                id_deposito: dep.id_deposito,
+                                                nome_deposito: dep.nome_deposito,
+                                                quantidade_minima: 0,
+                                                valor_venda: 0,
+                                                valor_custo: item.valor_unitario || 0
+                                              }))
                                             };
                                             
                                             // Preencher formulário e abrir dialog
                                             setDadosProdutoNovo(dadosXML);
+                                            setAbaAtivaDialogProduto(0);
                                             setItemIndexCadastro(index);
                                             setOpenDialogNovoProduto(true);
                                             
@@ -3312,7 +3471,7 @@ function CompraPage() {
                         />
                       </TableCell>
                       <TableCell sx={{ color: '#000' }}>
-                        {compra.data_documento
+                        {compra.data_documento && typeof compra.data_documento === 'string'
                           ? new Date(compra.data_documento.split('T')[0] + 'T00:00:00').toLocaleDateString('pt-BR', {
                               day: '2-digit',
                               month: '2-digit',
@@ -3321,7 +3480,7 @@ function CompraPage() {
                           : '-'}
                       </TableCell>
                       <TableCell sx={{ color: '#000' }}>
-                        {compra.data_entrada
+                        {compra.data_entrada && typeof compra.data_entrada === 'string'
                           ? new Date(compra.data_entrada.split('T')[0] + 'T00:00:00').toLocaleDateString('pt-BR', {
                               day: '2-digit',
                               month: '2-digit',
@@ -4542,166 +4701,942 @@ function CompraPage() {
           </DialogActions>
         </Dialog>
 
-        {/* Dialog de Cadastro de Novo Produto (Botão +) */}
-        <Dialog 
-          open={openDialogNovoProduto} 
-          onClose={() => setOpenDialogNovoProduto(false)} 
-          maxWidth="md" 
-          fullWidth
-        >
-          <DialogTitle>
-            Novo Produto
-          </DialogTitle>
-          <DialogContent>
-            <Grid container spacing={2} sx={{ pt: 1 }}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Código (Automático)"
-                  value={dadosProdutoNovo.codigo}
-                  onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, codigo: e.target.value })}
-                  margin="normal"
-                  helperText="O código será gerado automaticamente pelo sistema"
-                />
+      {/* Dialog de Customização Financeira (inline antes de salvar compra) */}
+      <Dialog
+        open={openDialogFinanceiroCustomizado}
+        onClose={() => setOpenDialogFinanceiroCustomizado(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: '#1976d2', color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <AttachMoneyIcon />
+          Gerar Financeiro - Compra
+        </DialogTitle>
+        <DialogContent dividers sx={{ mt: 1 }}>
+          {dadosCompraTemporaria && (
+            <Stack spacing={3}>
+              <Alert severity="info">
+                <Typography variant="body2">
+                  <strong>Fornecedor:</strong> {fornecedores.find(f => f.id_fornecedor === parseInt(form.id_fornecedor))?.nome_razao_social || 'Não especificado'}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                  <strong>Valor Total da Compra:</strong> R$ {dadosCompraTemporaria.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Typography>
+              </Alert>
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    label="Número de Parcelas"
+                    type="number"
+                    value={dadosFinanceiroConfig.numero_parcelas}
+                    onChange={(e) => {
+                      const val = Math.max(1, parseInt(e.target.value) || 1);
+                      setDadosFinanceiroConfig(prev => ({ ...prev, numero_parcelas: val }));
+                      recalcularParcelasCustomizadas(
+                        val,
+                        dadosFinanceiroConfig.data_vencimento_inicial,
+                        dadosFinanceiroConfig.id_conta_bancaria_padrao,
+                        dadosCompraTemporaria.valor_total
+                      );
+                    }}
+                    inputProps={{ min: 1 }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Forma de Pagamento"
+                    value={dadosFinanceiroConfig.forma_pagamento}
+                    onChange={(e) => setDadosFinanceiroConfig(prev => ({ ...prev, forma_pagamento: e.target.value }))}
+                  >
+                    <MenuItem value="Boleto">Boleto</MenuItem>
+                    <MenuItem value="Dinheiro">Dinheiro</MenuItem>
+                    <MenuItem value="Cartao_Credito">Cartão de Crédito</MenuItem>
+                    <MenuItem value="Cartao_Debito">Cartão de Débito</MenuItem>
+                    <MenuItem value="Pix">Pix</MenuItem>
+                    <MenuItem value="Cheque">Cheque</MenuItem>
+                    <MenuItem value="Transferencia">Transferência Bancária</MenuItem>
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    type="date"
+                    label="Vencimento 1ª Parcela"
+                    InputLabelProps={{ shrink: true }}
+                    value={dadosFinanceiroConfig.data_vencimento_inicial}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setDadosFinanceiroConfig(prev => ({ ...prev, data_vencimento_inicial: val }));
+                      recalcularParcelasCustomizadas(
+                        dadosFinanceiroConfig.numero_parcelas,
+                        val,
+                        dadosFinanceiroConfig.id_conta_bancaria_padrao,
+                        dadosCompraTemporaria.valor_total
+                      );
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <FormControl fullWidth>
+                    <InputLabel>Conta Bancária Geral</InputLabel>
+                    <Select
+                      value={dadosFinanceiroConfig.id_conta_bancaria_padrao}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDadosFinanceiroConfig(prev => ({ ...prev, id_conta_bancaria_padrao: val }));
+                        // Atualiza a conta de todas as parcelas de uma só vez
+                        setParcelasFinanceiroCustomizado(prev =>
+                          prev.map(p => ({ ...p, id_conta_bancaria: val }))
+                        );
+                      }}
+                      label="Conta Bancária Geral"
+                    >
+                      <MenuItem value=""><em>Selecione...</em></MenuItem>
+                      {contasBancarias.map((c) => (
+                        <MenuItem key={c.id_conta_bancaria} value={c.id_conta_bancaria}>
+                          {c.nome_conta} ({c.nome_banco})
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  required
-                  label="Nome do Produto *"
-                  value={dadosProdutoNovo.nome}
-                  onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, nome: e.target.value })}
-                  margin="normal"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="GTIN / Código de Barras (EAN)"
-                  value={dadosProdutoNovo.gtin}
-                  onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, gtin: e.target.value })}
-                  margin="normal"
-                  helperText="Código de barras EAN-8, EAN-13 ou deixe vazio para SEM GTIN"
-                  inputProps={{ maxLength: 14 }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  select
-                  fullWidth
-                  label="Unidade de Medida"
-                  value={dadosProdutoNovo.unidade_medida}
-                  onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, unidade_medida: e.target.value })}
-                  margin="normal"
-                >
-                  <MenuItem value="UN">Unidade (UN)</MenuItem>
-                  <MenuItem value="KG">Quilograma (KG)</MenuItem>
-                  <MenuItem value="G">Grama (G)</MenuItem>
-                  <MenuItem value="L">Litro (L)</MenuItem>
-                  <MenuItem value="ML">Mililitro (ML)</MenuItem>
-                  <MenuItem value="M">Metro (M)</MenuItem>
-                  <MenuItem value="CM">Centímetro (CM)</MenuItem>
-                  <MenuItem value="M2">Metro² (M2)</MenuItem>
-                  <MenuItem value="M3">Metro³ (M3)</MenuItem>
-                  <MenuItem value="CX">Caixa (CX)</MenuItem>
-                  <MenuItem value="PCT">Pacote (PCT)</MenuItem>
-                  <MenuItem value="FD">Fardo (FD)</MenuItem>
-                  <MenuItem value="PC">Peça (PC)</MenuItem>
-                </TextField>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  select
-                  fullWidth
-                  required
-                  label="Grupo de Produto *"
-                  value={dadosProdutoNovo.id_grupo}
-                  onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, id_grupo: e.target.value })}
-                  margin="normal"
-                  helperText="Selecione o grupo/categoria principal"
-                >
-                  <MenuItem value="">
-                    <em>Selecione...</em>
-                  </MenuItem>
-                  {grupos.map((grupo) => (
-                    <MenuItem key={grupo.id_grupo} value={grupo.id_grupo}>
-                      {grupo.nome_grupo}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Preço de Custo"
-                  type="number"
-                  value={dadosProdutoNovo.preco_custo}
-                  onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, preco_custo: e.target.value })}
-                  margin="normal"
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start">R$</InputAdornment>,
-                  }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="NCM"
-                  value={dadosProdutoNovo.ncm}
-                  onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, ncm: e.target.value })}
-                  margin="normal"
-                  helperText="Nomenclatura Comum do Mercosul (8 dígitos)"
-                  inputProps={{ maxLength: 8 }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Categoria"
-                  value={dadosProdutoNovo.categoria}
-                  onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, categoria: e.target.value })}
-                  margin="normal"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Marca"
-                  value={dadosProdutoNovo.marca}
-                  onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, marca: e.target.value })}
-                  margin="normal"
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  label="Descrição"
-                  value={dadosProdutoNovo.descricao}
-                  onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, descricao: e.target.value })}
-                  margin="normal"
-                />
-              </Grid>
-            </Grid>
-            <Alert severity="info" sx={{ mt: 2 }}>
-              Após salvar o produto, você poderá configurar o preço de custo, preço de venda e estoque mínimo para cada depósito na próxima tela.
-            </Alert>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOpenDialogNovoProduto(false)}>
-              Cancelar
-            </Button>
-            <Button 
-              onClick={salvarProdutoDialog} 
-              variant="contained" 
-              color="primary"
-              startIcon={<SaveIcon />}
+
+              <Divider />
+
+              <Typography variant="subtitle1" fontWeight="bold">Detalhamento das Parcelas</Typography>
+
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead sx={{ bgcolor: 'grey.50' }}>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold', width: '10%' }}>Parcela</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', width: '25%' }}>Valor da Parcela (R$)</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', width: '25%' }}>Data de Vencimento</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', width: '40%' }}>Conta Bancária</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {parcelasFinanceiroCustomizado.map((parcela, idx) => (
+                      <TableRow key={parcela.numero_parcela}>
+                        <TableCell sx={{ py: 1.5 }}>
+                          <Typography variant="body2" fontWeight="bold">{parcela.numero_parcela}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={parcela.valor_parcela}
+                            onChange={(e) => {
+                              const novosValores = [...parcelasFinanceiroCustomizado];
+                              novosValores[idx].valor_parcela = e.target.value;
+                              setParcelasFinanceiroCustomizado(novosValores);
+                            }}
+                            sx={{ width: 140 }}
+                            InputProps={{
+                              startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            type="date"
+                            value={parcela.data_vencimento}
+                            onChange={(e) => {
+                              const novosValores = [...parcelasFinanceiroCustomizado];
+                              novosValores[idx].data_vencimento = e.target.value;
+                              setParcelasFinanceiroCustomizado(novosValores);
+                            }}
+                            sx={{ width: 160 }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <FormControl size="small" fullWidth>
+                            <Select
+                              value={parcela.id_conta_bancaria || ''}
+                              onChange={(e) => {
+                                const novosValores = [...parcelasFinanceiroCustomizado];
+                                novosValores[idx].id_conta_bancaria = e.target.value;
+                                setParcelasFinanceiroCustomizado(novosValores);
+                              }}
+                            >
+                              <MenuItem value=""><em>Selecione...</em></MenuItem>
+                              {contasBancarias.map((c) => (
+                                <MenuItem key={c.id_conta_bancaria} value={c.id_conta_bancaria}>
+                                  {c.nome_conta}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              {/* Comparador de soma */}
+              {(() => {
+                const totalCompra = parseFloat(dadosCompraTemporaria.valor_total) || 0;
+                const somaParcelas = parcelasFinanceiroCustomizado.reduce(
+                  (sum, p) => sum + (parseFloat(p.valor_parcela) || 0),
+                  0
+                );
+                const diferenca = parseFloat((totalCompra - somaParcelas).toFixed(2));
+                const bateu = Math.abs(diferenca) < 0.01;
+
+                return (
+                  <Box sx={{ p: 2, bgcolor: bateu ? 'rgba(76, 175, 80, 0.15)' : 'rgba(244, 67, 54, 0.15)', borderRadius: 1 }}>
+                    <Grid container justifyContent="space-between" alignItems="center">
+                      <Grid item>
+                        <Typography variant="body2" sx={{ color: bateu ? '#2e7d32' : '#c62828', fontWeight: 'bold' }}>
+                          Soma das Parcelas: R$ {somaParcelas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </Typography>
+                        {!bateu && (
+                          <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: '#c62828' }}>
+                            Divergência: R$ {diferenca > 0 ? `Falta R$ ${diferenca.toFixed(2)}` : `Sobra R$ ${Math.abs(diferenca).toFixed(2)}`}
+                          </Typography>
+                        )}
+                      </Grid>
+                      {!bateu && (
+                        <Grid item>
+                          <Button
+                            variant="contained"
+                            color="warning"
+                            size="small"
+                            onClick={ajustarDiferencaUltimaParcela}
+                            sx={{ fontWeight: 'bold' }}
+                          >
+                            Ajustar na Última Parcela
+                          </Button>
+                        </Grid>
+                      )}
+                    </Grid>
+                  </Box>
+                );
+              })()}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button onClick={() => setOpenDialogFinanceiroCustomizado(false)} variant="outlined">
+            Voltar e Editar Compra
+          </Button>
+          {(() => {
+            const totalCompra = parseFloat(dadosCompraTemporaria?.valor_total) || 0;
+            const somaParcelas = parcelasFinanceiroCustomizado.reduce(
+              (sum, p) => sum + (parseFloat(p.valor_parcela) || 0),
+              0
+            );
+            const bateu = Math.abs(totalCompra - somaParcelas) < 0.01;
+
+            return (
+              <Button
+                variant="contained"
+                color="success"
+                onClick={confirmarESalvarCompraComFinanceiro}
+                disabled={!bateu}
+                startIcon={<SaveIcon />}
+                sx={{ bgcolor: '#2e7d32', '&:hover': { bgcolor: '#1b5e20' } }}
+              >
+                Confirmar e Salvar Compra
+              </Button>
+            );
+          })()}
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog de Cadastro de Novo Produto (Botão +) */}
+      <Dialog 
+        open={openDialogNovoProduto} 
+        onClose={() => setOpenDialogNovoProduto(false)} 
+        maxWidth="md" 
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6" fontWeight="bold">Novo Produto</Typography>
+          <IconButton onClick={() => setOpenDialogNovoProduto(false)}>
+            <ClearIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: { xs: 2, sm: 3 } }}>
+          {/* Sistema de Abas */}
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+            <Tabs 
+              value={abaAtivaDialogProduto} 
+              onChange={(e, newValue) => setAbaAtivaDialogProduto(newValue)} 
+              variant="scrollable" 
+              scrollButtons="auto"
             >
-              Salvar
-            </Button>
-          </DialogActions>
-        </Dialog>
+              <Tab label="Dados Básicos" />
+              <Tab label="Classificação" />
+              <Tab label="Tributação" />
+              <Tab label="Preços e Depósitos" icon={<WarehouseIcon />} iconPosition="start" />
+            </Tabs>
+          </Box>
+
+          {/* ABA 0: Dados Básicos */}
+          {abaAtivaDialogProduto === 0 && (
+            <Stack spacing={2.5} sx={{ mt: 1 }}>
+              <TextField
+                fullWidth
+                label="Código (Automático)"
+                value={dadosProdutoNovo.codigo}
+                onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, codigo: e.target.value })}
+                placeholder="Será gerado ao salvar"
+                helperText="O código será gerado automaticamente pelo sistema"
+              />
+
+              <TextField
+                fullWidth
+                required
+                label="Nome do Produto *"
+                value={dadosProdutoNovo.nome}
+                onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, nome: e.target.value })}
+              />
+
+              <TextField
+                fullWidth
+                label="GTIN / Código de Barras (EAN)"
+                value={dadosProdutoNovo.gtin}
+                onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, gtin: e.target.value })}
+                placeholder="Ex: 7891234567890"
+                helperText="Código de barras EAN-8, EAN-13 ou deixe vazio para SEM GTIN"
+                inputProps={{ maxLength: 14 }}
+              />
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <FormControl fullWidth>
+                      <InputLabel>Categoria</InputLabel>
+                      <Select
+                        value={dadosProdutoNovo.categoria || ''}
+                        onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, categoria: e.target.value })}
+                        label="Categoria"
+                      >
+                        <MenuItem value=""><em>Nenhuma</em></MenuItem>
+                        {[...new Set([...categorias, ...(dadosProdutoNovo.categoria ? [dadosProdutoNovo.categoria] : [])])].sort().map((cat) => (
+                          <MenuItem key={cat} value={cat}>{cat}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <Button
+                      variant="outlined"
+                      onClick={() => { setNovaCategoriaInput(''); setOpenCategoriaDialog(true); }}
+                      sx={{ minWidth: 'auto', p: 1.5 }}
+                      title="Criar nova categoria"
+                    >
+                      <AddIcon />
+                    </Button>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Unidade de Medida</InputLabel>
+                    <Select
+                      value={dadosProdutoNovo.unidade_medida}
+                      onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, unidade_medida: e.target.value })}
+                      label="Unidade de Medida"
+                    >
+                      <MenuItem value="UN">Unidade (UN)</MenuItem>
+                      <MenuItem value="KG">Quilograma (KG)</MenuItem>
+                      <MenuItem value="G">Grama (G)</MenuItem>
+                      <MenuItem value="L">Litro (L)</MenuItem>
+                      <MenuItem value="ML">Mililitro (ML)</MenuItem>
+                      <MenuItem value="M">Metro (M)</MenuItem>
+                      <MenuItem value="CM">Centímetro (CM)</MenuItem>
+                      <MenuItem value="M2">Metro² (M2)</MenuItem>
+                      <MenuItem value="M3">Metro³ (M3)</MenuItem>
+                      <MenuItem value="CX">Caixa (CX)</MenuItem>
+                      <MenuItem value="PCT">Pacote (PCT)</MenuItem>
+                      <MenuItem value="FD">Fardo (FD)</MenuItem>
+                      <MenuItem value="PC">Peça (PC)</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Gênero</InputLabel>
+                    <Select
+                      value={dadosProdutoNovo.genero || ''}
+                      onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, genero: e.target.value })}
+                      label="Gênero"
+                    >
+                      <MenuItem value="">Não especificado</MenuItem>
+                      <MenuItem value="feminino">Feminino</MenuItem>
+                      <MenuItem value="masculino">Masculino</MenuItem>
+                      <MenuItem value="unissex">Unissex</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
+
+              <TextField
+                fullWidth
+                label="URL da Imagem"
+                value={dadosProdutoNovo.imagem_url || ''}
+                onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, imagem_url: e.target.value })}
+                placeholder="https://exemplo.com/imagem.jpg"
+                InputProps={{
+                  startAdornment: <ImageIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                }}
+              />
+              {dadosProdutoNovo.imagem_url && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+                  <Avatar
+                    src={dadosProdutoNovo.imagem_url}
+                    sx={{ width: 80, height: 80, bgcolor: 'grey.200' }}
+                    variant="rounded"
+                  >
+                    <ImageIcon />
+                  </Avatar>
+                </Box>
+              )}
+
+              <TextField
+                fullWidth
+                multiline
+                rows={3}
+                label="Descrição"
+                value={dadosProdutoNovo.descricao}
+                onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, descricao: e.target.value })}
+              />
+            </Stack>
+          )}
+
+          {/* ABA 1: Classificação */}
+          {abaAtivaDialogProduto === 1 && (
+            <Stack spacing={2.5} sx={{ mt: 1 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <FormControl fullWidth required>
+                      <InputLabel>Grupo de Produto</InputLabel>
+                      <Select
+                        value={dadosProdutoNovo.id_grupo || ''}
+                        onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, id_grupo: e.target.value })}
+                        label="Grupo de Produto"
+                      >
+                        <MenuItem value=""><em>Selecione...</em></MenuItem>
+                        {grupos.map((grupo) => (
+                          <MenuItem key={grupo.id_grupo} value={grupo.id_grupo}>
+                            {grupo.nome_grupo}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <Button
+                      variant="outlined"
+                      onClick={() => { setNovoGrupo({ nome: '', descricao: '' }); setOpenGrupoDialog(true); }}
+                      sx={{ minWidth: 'auto', p: 1.5 }}
+                      title="Criar novo grupo"
+                    >
+                      <AddIcon />
+                    </Button>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <FormControl fullWidth>
+                      <InputLabel>Marca</InputLabel>
+                      <Select
+                        value={dadosProdutoNovo.marca || ''}
+                        onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, marca: e.target.value })}
+                        label="Marca"
+                      >
+                        <MenuItem value=""><em>Nenhuma</em></MenuItem>
+                        {[...new Set([...marcas, ...(dadosProdutoNovo.marca ? [dadosProdutoNovo.marca] : [])])].sort().map((marca) => (
+                          <MenuItem key={marca} value={marca}>{marca}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <Button
+                      variant="outlined"
+                      onClick={() => { setNovaMarcaInput(''); setOpenMarcaDialog(true); }}
+                      sx={{ minWidth: 'auto', p: 1.5 }}
+                      title="Criar nova marca"
+                    >
+                      <AddIcon />
+                    </Button>
+                  </Box>
+                </Grid>
+              </Grid>
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Classificação</InputLabel>
+                    <Select
+                      value={dadosProdutoNovo.classificacao || ''}
+                      onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, classificacao: e.target.value })}
+                      label="Classificação"
+                    >
+                      <MenuItem value="Revenda">Revenda</MenuItem>
+                      <MenuItem value="Venda">Venda (Fabricação Própria)</MenuItem>
+                      <MenuItem value="Consumo">Consumo Próprio</MenuItem>
+                      <MenuItem value="Ativo">Ativo Imobilizado</MenuItem>
+                      <MenuItem value="Servico">Serviço</MenuItem>
+                      <MenuItem value="Materia-Prima">Matéria-Prima</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="NCM (Código Fiscal)"
+                    value={dadosProdutoNovo.ncm || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 8);
+                      setDadosProdutoNovo({ ...dadosProdutoNovo, ncm: val });
+                    }}
+                    placeholder="Ex: 84713000"
+                    helperText="Nomenclatura Comum do Mercosul — 8 dígitos"
+                    inputProps={{ maxLength: 8 }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="CEST"
+                    value={dadosProdutoNovo.cest || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 7);
+                      setDadosProdutoNovo({ ...dadosProdutoNovo, cest: val });
+                    }}
+                    placeholder="Ex: 1000100"
+                    helperText="Código Especificador da Substituição Tributária — 7 dígitos"
+                    inputProps={{ maxLength: 7 }}
+                  />
+                </Grid>
+              </Grid>
+
+              <Divider />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={!!dadosProdutoNovo.controla_lote}
+                    onChange={(e) => setDadosProdutoNovo({ ...dadosProdutoNovo, controla_lote: e.target.checked })}
+                    color="primary"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2" fontWeight="bold">Controlar Lotes e Validade</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Exige seleção de lote e data de validade ao movimentar este produto
+                    </Typography>
+                  </Box>
+                }
+              />
+            </Stack>
+          )}
+
+          {/* ABA 2: Tributação */}
+          {abaAtivaDialogProduto === 2 && (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Alert severity="warning">
+                Certifique-se de que os dados fiscais estão corretos para evitar erros na emissão de documentos.
+              </Alert>
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="CFOP Padrão"
+                    value={dadosProdutoNovo.tributacao?.cfop || ''}
+                    onChange={(e) => setDadosProdutoNovo({
+                      ...dadosProdutoNovo,
+                      tributacao: { ...dadosProdutoNovo.tributacao, cfop: e.target.value }
+                    })}
+                    placeholder="Ex: 5102"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="CST ICMS"
+                    value={dadosProdutoNovo.tributacao?.cst_icms || ''}
+                    onChange={(e) => setDadosProdutoNovo({
+                      ...dadosProdutoNovo,
+                      tributacao: { ...dadosProdutoNovo.tributacao, cst_icms: e.target.value }
+                    })}
+                    placeholder="Regime Normal. Ex: 00"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="CSOSN"
+                    value={dadosProdutoNovo.tributacao?.csosn || ''}
+                    onChange={(e) => setDadosProdutoNovo({
+                      ...dadosProdutoNovo,
+                      tributacao: { ...dadosProdutoNovo.tributacao, csosn: e.target.value }
+                    })}
+                    placeholder="Simples Nacional. Ex: 102"
+                  />
+                </Grid>
+              </Grid>
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Alíquota ICMS (%)"
+                    type="number"
+                    value={dadosProdutoNovo.tributacao?.icms_aliquota || ''}
+                    onChange={(e) => setDadosProdutoNovo({
+                      ...dadosProdutoNovo,
+                      tributacao: { ...dadosProdutoNovo.tributacao, icms_aliquota: e.target.value }
+                    })}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="CST IPI"
+                    value={dadosProdutoNovo.tributacao?.cst_ipi || ''}
+                    onChange={(e) => setDadosProdutoNovo({
+                      ...dadosProdutoNovo,
+                      tributacao: { ...dadosProdutoNovo.tributacao, cst_ipi: e.target.value }
+                    })}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Alíquota IPI (%)"
+                    type="number"
+                    value={dadosProdutoNovo.tributacao?.ipi_aliquota || ''}
+                    onChange={(e) => setDadosProdutoNovo({
+                      ...dadosProdutoNovo,
+                      tributacao: { ...dadosProdutoNovo.tributacao, ipi_aliquota: e.target.value }
+                    })}
+                  />
+                </Grid>
+              </Grid>
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="CST PIS/COFINS"
+                    value={dadosProdutoNovo.tributacao?.cst_pis_cofins || ''}
+                    onChange={(e) => setDadosProdutoNovo({
+                      ...dadosProdutoNovo,
+                      tributacao: { ...dadosProdutoNovo.tributacao, cst_pis_cofins: e.target.value }
+                    })}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Alíquota PIS (%)"
+                    type="number"
+                    value={dadosProdutoNovo.tributacao?.pis_aliquota || ''}
+                    onChange={(e) => setDadosProdutoNovo({
+                      ...dadosProdutoNovo,
+                      tributacao: { ...dadosProdutoNovo.tributacao, pis_aliquota: e.target.value }
+                    })}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Alíquota COFINS (%)"
+                    type="number"
+                    value={dadosProdutoNovo.tributacao?.cofins_aliquota || ''}
+                    onChange={(e) => setDadosProdutoNovo({
+                      ...dadosProdutoNovo,
+                      tributacao: { ...dadosProdutoNovo.tributacao, cofins_aliquota: e.target.value }
+                    })}
+                  />
+                </Grid>
+              </Grid>
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="CST IBS/CBS"
+                    value={dadosProdutoNovo.tributacao?.cst_ibs_cbs || ''}
+                    onChange={(e) => setDadosProdutoNovo({
+                      ...dadosProdutoNovo,
+                      tributacao: { ...dadosProdutoNovo.tributacao, cst_ibs_cbs: e.target.value }
+                    })}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Alíquota IBS (%)"
+                    type="number"
+                    value={dadosProdutoNovo.tributacao?.ibs_aliquota || ''}
+                    onChange={(e) => setDadosProdutoNovo({
+                      ...dadosProdutoNovo,
+                      tributacao: { ...dadosProdutoNovo.tributacao, ibs_aliquota: e.target.value }
+                    })}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Alíquota CBS (%)"
+                    type="number"
+                    value={dadosProdutoNovo.tributacao?.cbs_aliquota || ''}
+                    onChange={(e) => setDadosProdutoNovo({
+                      ...dadosProdutoNovo,
+                      tributacao: { ...dadosProdutoNovo.tributacao, cbs_aliquota: e.target.value }
+                    })}
+                  />
+                </Grid>
+              </Grid>
+
+              <TextField
+                fullWidth
+                label="Classificação Fiscal (cClassTrib)"
+                value={dadosProdutoNovo.tributacao?.classificacao_fiscal || ''}
+                onChange={(e) => setDadosProdutoNovo({
+                  ...dadosProdutoNovo,
+                  tributacao: { ...dadosProdutoNovo.tributacao, classificacao_fiscal: e.target.value }
+                })}
+              />
+            </Stack>
+          )}
+
+          {/* ABA 3: Preços e Depósitos */}
+          {abaAtivaDialogProduto === 3 && (
+            <Box sx={{ mt: 1 }}>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Defina os preços de venda e custo padrão para cada depósito ativo do sistema.
+              </Alert>
+
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead sx={{ bgcolor: 'grey.50' }}>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Depósito</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Preço de Custo (R$)</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Preço de Venda (R$) *</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Estoque Mínimo</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {dadosProdutoNovo.depositos.map((dep, idx) => (
+                      <TableRow key={dep.id_deposito}>
+                        <TableCell sx={{ py: 1.5 }}>
+                          <Typography variant="body2" fontWeight="bold">{dep.nome_deposito}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={dep.valor_custo}
+                            onChange={(e) => {
+                              const novosDeps = [...dadosProdutoNovo.depositos];
+                              novosDeps[idx].valor_custo = e.target.value;
+                              setDadosProdutoNovo({ ...dadosProdutoNovo, depositos: novosDeps });
+                            }}
+                            sx={{ width: 110 }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            type="number"
+                            required
+                            value={dep.valor_venda}
+                            onChange={(e) => {
+                              const novosDeps = [...dadosProdutoNovo.depositos];
+                              novosDeps[idx].valor_venda = e.target.value;
+                              setDadosProdutoNovo({ ...dadosProdutoNovo, depositos: novosDeps });
+                            }}
+                            sx={{ width: 110 }}
+                            placeholder="Definir"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={dep.quantidade_minima}
+                            onChange={(e) => {
+                              const novosDeps = [...dadosProdutoNovo.depositos];
+                              novosDeps[idx].quantidade_minima = e.target.value;
+                              setDadosProdutoNovo({ ...dadosProdutoNovo, depositos: novosDeps });
+                            }}
+                            sx={{ width: 100 }}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {dadosProdutoNovo.depositos.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
+                          <Typography variant="body2" color="text.secondary">Nenhum depósito cadastrado ou ativo.</Typography>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button onClick={() => setOpenDialogNovoProduto(false)} variant="outlined">
+            Cancelar
+          </Button>
+          <Button 
+            onClick={salvarProdutoDialog} 
+            variant="contained" 
+            color="primary"
+            startIcon={<SaveIcon />}
+          >
+            Salvar Produto
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Subdialog para Criar Nova Categoria */}
+      <Dialog
+        open={openCategoriaDialog}
+        onClose={() => setOpenCategoriaDialog(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Nova Categoria</DialogTitle>
+        <DialogContent dividers>
+          <TextField
+            fullWidth
+            label="Nome da Categoria"
+            value={novaCategoriaInput}
+            onChange={(e) => setNovaCategoriaInput(e.target.value)}
+            placeholder="Ex: Construção, Ferramentas, etc."
+            autoFocus
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenCategoriaDialog(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              const nome = novaCategoriaInput.trim();
+              if (!nome) { alert('Nome da categoria é obrigatório'); return; }
+              if (!categorias.includes(nome)) {
+                setCategorias(prev => [...prev, nome].sort());
+              }
+              setDadosProdutoNovo(prev => ({ ...prev, categoria: nome }));
+              setOpenCategoriaDialog(false);
+            }}
+          >
+            Criar Categoria
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Subdialog para Criar Nova Marca */}
+      <Dialog
+        open={openMarcaDialog}
+        onClose={() => setOpenMarcaDialog(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Nova Marca</DialogTitle>
+        <DialogContent dividers>
+          <TextField
+            fullWidth
+            label="Nome da Marca"
+            value={novaMarcaInput}
+            onChange={(e) => setNovaMarcaInput(e.target.value)}
+            placeholder="Ex: Quartzolit, Portobello, etc."
+            autoFocus
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenMarcaDialog(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              const nome = novaMarcaInput.trim();
+              if (!nome) { alert('Nome da marca é obrigatório'); return; }
+              if (!marcas.includes(nome)) {
+                setMarcas(prev => [...prev, nome].sort());
+              }
+              setDadosProdutoNovo(prev => ({ ...prev, marca: nome }));
+              setOpenMarcaDialog(false);
+            }}
+          >
+            Criar Marca
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Subdialog para Criar Novo Grupo */}
+      <Dialog
+        open={openGrupoDialog}
+        onClose={() => setOpenGrupoDialog(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Novo Grupo de Produto</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              fullWidth
+              required
+              label="Nome do Grupo"
+              value={novoGrupo.nome}
+              onChange={(e) => setNovoGrupo({ ...novoGrupo, nome: e.target.value })}
+              placeholder="Ex: Cerâmicas, Ferramentas Manuais"
+              autoFocus
+            />
+            <TextField
+              fullWidth
+              label="Descrição do Grupo"
+              value={novoGrupo.descricao}
+              onChange={(e) => setNovoGrupo({ ...novoGrupo, descricao: e.target.value })}
+              multiline
+              rows={2}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenGrupoDialog(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={async () => {
+              const nome = novoGrupo.nome.trim();
+              if (!nome) { toast.error('Nome do grupo é obrigatório'); return; }
+              try {
+                const response = await axiosInstance.post('/grupos-produto/', {
+                  nome_grupo: nome,
+                  descricao: novoGrupo.descricao || ''
+                });
+                const responseGrupos = await axiosInstance.get('/grupos-produto/');
+                const gruposData = Array.isArray(responseGrupos.data) ? responseGrupos.data : (responseGrupos.data?.results || []);
+                setGrupos(gruposData);
+                setDadosProdutoNovo(prev => ({ ...prev, id_grupo: response.data.id_grupo }));
+                setOpenGrupoDialog(false);
+                setNovoGrupo({ nome: '', descricao: '' });
+                toast.success('Grupo adicionado com sucesso!');
+              } catch (e) {
+                console.error('Erro ao adicionar grupo:', e);
+                toast.error('Erro ao cadastrar grupo');
+              }
+            }}
+          >
+            Criar Grupo
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       </Box>
     </Box>
