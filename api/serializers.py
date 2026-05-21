@@ -640,7 +640,7 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
     gerencial = serializers.BooleanField()
     cliente = serializers.SerializerMethodField()
     data_documento = serializers.DateField(source='data_emissao', read_only=True)
-    id_cliente_fornecedor = serializers.IntegerField(required=False, allow_null=True)
+    id_cliente_fornecedor = serializers.IntegerField(source='id_cliente_fornecedor_id', required=False, allow_null=True)
     
     class Meta:
         model = FinanceiroConta
@@ -649,8 +649,18 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
     
     def get_cliente(self, obj):
         try:
-            if obj.id_cliente_fornecedor:
-                return obj.id_cliente_fornecedor.nome_razao_social
+            val_id = obj.id_cliente_fornecedor_id
+            if val_id:
+                if obj.tipo_conta == 'Pagar':
+                    from .models import Fornecedor
+                    forn = Fornecedor.objects.filter(id_fornecedor=val_id).first()
+                    if forn:
+                        return forn.nome_razao_social
+                else:
+                    from .models import Cliente
+                    cli = Cliente.objects.filter(id_cliente=val_id).first()
+                    if cli:
+                        return cli.nome_razao_social
         except Exception:
             pass
         return None
@@ -671,7 +681,7 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
         return ret
 
     def create(self, validated_data):
-        id_cli_for = validated_data.pop('id_cliente_fornecedor', None)
+        id_cli_for = validated_data.pop('id_cliente_fornecedor_id', None) or validated_data.pop('id_cliente_fornecedor', None)
         instance = super().create(validated_data)
         if id_cli_for is not None:
             instance.id_cliente_fornecedor_id = id_cli_for
@@ -681,7 +691,7 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         from decimal import Decimal
 
-        id_cli_for = validated_data.pop('id_cliente_fornecedor', None)
+        id_cli_for = validated_data.pop('id_cliente_fornecedor_id', None) or validated_data.pop('id_cliente_fornecedor', None)
 
         # Verifica se está mudando para status 'Paga' (baixa)
         old_status = instance.status_conta
@@ -706,7 +716,7 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
                 valor_movimento=updated_instance.valor_liquidado or Decimal('0.00'),
                 descricao=f'{updated_instance.tipo_conta.upper()} - {updated_instance.descricao}',
                 documento_numero=updated_instance.documento_numero or str(updated_instance.id_conta),
-                id_cliente_fornecedor=updated_instance.id_cliente_fornecedor,
+                id_cliente_fornecedor_id=updated_instance.id_cliente_fornecedor_id,
                 forma_pagamento=updated_instance.forma_pagamento
             )
         
