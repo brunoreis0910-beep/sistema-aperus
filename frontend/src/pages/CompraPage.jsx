@@ -161,6 +161,7 @@ function CompraPage() {
     forma_pagamento: 'Dinheiro',
     id_conta_bancaria: '', // Conta padrão geral
     obrigatorio: false,
+    id_fornecedor: null,
     parcelas: [] // Array de { numero_parcela, valor, vencimento, id_conta_bancaria }
   })
 
@@ -1433,6 +1434,50 @@ referencia: '',
       setErro(`❌ Erro ao salvar compra e gerar financeiro: ${errorDetail}`);
     }
   }
+
+  // Gera contas a pagar
+  const gerarFinanceiro = async () => {
+    try {
+      setErro(null);
+      setSucesso(null);
+
+      const valorParcela = (dadosFinanceiro.valor_total / dadosFinanceiro.numero_parcelas).toFixed(2);
+      const parcelas = [];
+      const idFornecedor = dadosFinanceiro.id_fornecedor || null;
+
+      for (let i = 0; i < dadosFinanceiro.numero_parcelas; i++) {
+        const dataVencimento = new Date(dadosFinanceiro.data_vencimento + 'T00:00:00');
+        dataVencimento.setMonth(dataVencimento.getMonth() + i);
+
+        parcelas.push({
+          id_compra_origem: dadosFinanceiro.id_compra,
+          id_cliente_fornecedor: idFornecedor,
+          tipo_conta: 'Pagar',
+          descricao: `Compra #${dadosFinanceiro.id_compra} - Parcela ${i + 1}/${dadosFinanceiro.numero_parcelas}`,
+          valor_parcela: parseFloat(valorParcela),
+          data_vencimento: dataVencimento.toISOString().split('T')[0],
+          data_emissao: new Date().toISOString().split('T')[0],
+          status_conta: 'Pendente',
+          forma_pagamento: dadosFinanceiro.forma_pagamento,
+          gerencial: 1
+        });
+      }
+
+      for (const parcela of parcelas) {
+        await axiosInstance.post('/contas/', parcela);
+      }
+
+      setModalFinanceiro(false);
+      setSucesso(`✅ ${parcelas.length} conta(s) a pagar gerada(s) com sucesso!`);
+      limparFormulario();
+      carregarDados();
+      setTimeout(() => setSucesso(null), 5000);
+    } catch (error) {
+      console.error('Erro ao gerar financeiro:', error);
+      const errorDetail = error.response?.data?.detail || error.response?.data?.message || JSON.stringify(error.response?.data) || error.message;
+      setErro(`❌ Erro ao gerar financeiro: ${errorDetail}`);
+    }
+  };
 
   // Edita compra
   const editarCompra = async (compra) => {
@@ -3229,6 +3274,7 @@ referencia: '',
                               numero_parcelas: 1,
                               data_vencimento: compraAtual.data_entrada || new Date().toISOString().split('T')[0],
                               forma_pagamento: 'Boleto',
+                              id_fornecedor: compraAtual.id_fornecedor || null,
                               obrigatorio: true
                             });
                             setModalFinanceiro(true);
