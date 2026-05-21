@@ -5252,6 +5252,7 @@ from .models_crm import *
 from .models_rh import *
 from .models_pix import *
 from .models_recorrencia import *
+from .models_hotel import *
 
 
 # ─── Manifestação do Destinatário NF-e ────────────────────────────────────────

@@ -9,6 +9,10 @@ from .models import (
     RegraFiscal,
     TipoTributacao,
     TributacaoUF,
+    TipoQuarto,
+    Quarto,
+    Reserva,
+    ConsumoQuarto,
 )
 
 # Configuração básica dos modelos
@@ -330,3 +334,33 @@ class TipoTributacaoAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
+
+
+# --- Registro do Módulo Hoteleiro (PMS) ---
+
+@admin.register(TipoQuarto)
+class TipoQuartoAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'valor_diaria_padrao', 'limite_adultos', 'limite_criancas')
+    search_fields = ('nome', 'descricao')
+    ordering = ['nome']
+
+@admin.register(Quarto)
+class QuartoAdmin(admin.ModelAdmin):
+    list_display = ('numero_quarto', 'tipo', 'status_atual', 'capacidade_adultos', 'capacidade_criancas')
+    list_filter = ('status_atual', 'tipo')
+    search_fields = ('numero_quarto',)
+    ordering = ['numero_quarto']
+
+@admin.register(Reserva)
+class ReservaAdmin(admin.ModelAdmin):
+    list_display = ('id_reserva', 'quarto', 'hospede', 'status_reserva', 'data_entrada_prevista', 'data_saida_prevista', 'valor_diaria_aplicada')
+    list_filter = ('status_reserva', 'data_entrada_prevista', 'data_saida_prevista')
+    search_fields = ('quarto__numero_quarto', 'hospede__nome_razao_social', 'hospede__cpf_cnpj')
+    ordering = ['-data_entrada_prevista']
+
+@admin.register(ConsumoQuarto)
+class ConsumoQuartoAdmin(admin.ModelAdmin):
+    list_display = ('id_consumo', 'reserva', 'produto', 'quantidade', 'valor_unitario', 'valor_total', 'data_lancamento')
+    list_filter = ('data_lancamento',)
+    search_fields = ('reserva__id_reserva', 'produto__nome_produto')
+    ordering = ['-data_lancamento']

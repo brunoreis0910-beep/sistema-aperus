@@ -78,6 +78,7 @@ import {
   ,CloudDone as CloudDoneIcon
   ,Sync as SyncIcon
   ,WifiOff as WifiOffIcon
+  ,Hotel as HotelIcon
 } from '@mui/icons-material';
 
 import { useAuth } from '../context/AuthContext';
@@ -133,6 +134,7 @@ const DashboardLayoutClean = () => {
 
     { key: 'ordem-servico', label: 'Ordem Serviço', icon: <OrdemServicoIcon />, path: '/ordem-servico', color: '#00BCD4', permission: 'ordens_acessar' },
     { key: 'mesas', label: 'Controle de Mesas', icon: <MesasIcon />, path: '/comandas', color: '#E91E63', permission: 'comandas_acessar' },
+    { key: 'hotel-pms', label: 'Hotel PMS', icon: <HotelIcon />, path: '/hotel-pms', color: '#1976d2', permission: null },
     { key: 'clientes', label: 'Clientes', icon: <ClientesIcon />, path: '/clientes', color: '#4CAF50', permission: 'clientes_acessar' },
     { key: 'produtos', label: 'Produtos', icon: <ProdutosIcon />, path: '/produtos', color: '#F44336', permission: 'produtos_acessar' },
     { key: 'cadastro-turbo', label: 'Cadastro Turbo ⚡', icon: <VendaRapidaIcon />, path: '/cadastro-turbo', color: '#FF6F00', permission: 'produtos_acessar' },
@@ -419,7 +421,7 @@ const DashboardLayoutClean = () => {
     }
 
     // Páginas que são abas diretas
-    if (['clientes', 'produtos', 'cadastro-turbo', 'financeiro', 'vendas', 'venda-rapida', 'entregas', 'ordem-servico', 'mesas', 'compras', 'catalogos', 'devolucoes', 'relatorios', 'graficos', 'fornecedores', 'aprovacoes', 'acesso-mobile', 'configuracoes', 'nfce', 'boletos', 'mapa-carga', 'producao', 'conciliacao', 'cartoes', 'agenda', 'balancas', 'cotacao', 'contas-servicos', 'bancario', 'minhas-solicitacoes', 'whatsapp', 'assistente-ia', 'consultor-negocios', 'dashboard-bi', 'documentos-fiscais'].includes(path)) {
+    if (['clientes', 'produtos', 'cadastro-turbo', 'financeiro', 'vendas', 'venda-rapida', 'entregas', 'ordem-servico', 'mesas', 'hotel-pms', 'compras', 'catalogos', 'devolucoes', 'relatorios', 'graficos', 'fornecedores', 'aprovacoes', 'acesso-mobile', 'configuracoes', 'nfce', 'boletos', 'mapa-carga', 'producao', 'conciliacao', 'cartoes', 'agenda', 'balancas', 'cotacao', 'contas-servicos', 'bancario', 'minhas-solicitacoes', 'whatsapp', 'assistente-ia', 'consultor-negocios', 'dashboard-bi', 'documentos-fiscais'].includes(path)) {
       return path;
     }
 

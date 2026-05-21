@@ -195,6 +195,9 @@ from .views_rh import (
     CategoriaEPIViewSet, EPIViewSet, EntregaEPIViewSet,
     OcorrenciaFuncionarioViewSet,
 )
+from .views_hotel import (
+    TipoQuartoViewSet, QuartoViewSet, ReservaViewSet, ConsumoQuartoViewSet,
+)
 from .views_pix import PixConfigViewSet, CobrancaPixViewSet, WebhookPixView
 from .views_recorrencia import ContratoRecorrenciaViewSet, ParcelaRecorrenciaViewSet
 from .views_churn import ChurnDashboardView, ChurnClientesRiscoView, ChurnRFMView
@@ -375,6 +378,11 @@ router.register(r'rh/categorias-epi', CategoriaEPIViewSet, basename='rh-categori
 router.register(r'rh/epis', EPIViewSet, basename='rh-epi')
 router.register(r'rh/entregas-epi', EntregaEPIViewSet, basename='rh-entrega-epi')
 router.register(r'rh/ocorrencias', OcorrenciaFuncionarioViewSet, basename='rh-ocorrencia')
+# Módulo Hoteleiro (PMS)
+router.register(r'hotel/tipos-quarto', TipoQuartoViewSet, basename='hotel-tipoquarto')
+router.register(r'hotel/quartos', QuartoViewSet, basename='hotel-quarto')
+router.register(r'hotel/reservas', ReservaViewSet, basename='hotel-reserva')
+router.register(r'hotel/consumos', ConsumoQuartoViewSet, basename='hotel-consumo')
 # Pix Dinâmico
 router.register(r'pix/config', PixConfigViewSet, basename='pix-config')
 router.register(r'pix/cobrancas', CobrancaPixViewSet, basename='pix-cobranca')

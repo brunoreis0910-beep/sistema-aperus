@@ -49,6 +49,7 @@ import {
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import { API_ENDPOINT } from '../config/api';
+import { useAuth } from '../context/AuthContext';
 
 const API_BASE_URL = API_ENDPOINT;
 
@@ -65,6 +66,7 @@ const SUGESTOES_RAPIDAS = [
 
 const AIChat = () => {
   const navigate = useNavigate();
+  const { axiosInstance } = useAuth();
   const [aberto, setAberto] = useState(false);
   const [mensagens, setMensagens] = useState([]);
   const [inputMensagem, setInputMensagem] = useState('');
@@ -111,10 +113,7 @@ const AIChat = () => {
 
   const verificarStatusIA = async () => {
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const response = await axios.get(`${API_BASE_URL}/ai/status/`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await axiosInstance.get('/ai/status/');
       setAiDisponivel(response.data.disponivel);
       
       if (!response.data.disponivel) {
@@ -129,12 +128,10 @@ const AIChat = () => {
 
   const baixarPDF = async (tipoPDF, periodo) => {
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const response = await axios.post(
-        `${API_BASE_URL}/ai/gerar-pdf/`,
+      const response = await axiosInstance.post(
+        '/ai/gerar-pdf/',
         { tipo: tipoPDF, periodo: periodo || {} },
         { 
-          headers: { Authorization: `Bearer ${token}` },
           responseType: 'blob'  // Importante para downloads
         }
       );
@@ -150,7 +147,61 @@ const AIChat = () => {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Erro ao baixar PDF:', err);
-      setErro(err.response?.data?.mensagem || 'Erro ao gerar PDF');
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const errorData = JSON.parse(text);
+          setErro(errorData.mensagem || 'Erro ao gerar PDF');
+        } catch {
+          setErro('Erro ao gerar PDF no servidor');
+        }
+      } else {
+        setErro(err.response?.data?.mensagem || 'Erro ao gerar PDF');
+      }
+    }
+  };
+
+  const baixarArquivoExecutora = async (urlRelativa, titulo) => {
+    try {
+      setCarregando(true);
+      setErro(null);
+      // Remove o prefixo "/api" para evitar duplicação com a baseURL do axiosInstance
+      const urlNormalizada = urlRelativa.startsWith('/api') 
+        ? urlRelativa.replace(/^\/api/, '') 
+        : urlRelativa;
+
+      const response = await axiosInstance.get(urlNormalizada, {
+        responseType: 'blob'
+      });
+
+      // Determina o nome do arquivo
+      const nomeArquivo = titulo 
+        ? `${titulo.replace(/\s+/g, '_').toLowerCase()}.pdf` 
+        : `relatorio_${new Date().toISOString().split('T')[0]}.pdf`;
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', nomeArquivo);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Erro ao baixar arquivo da executora:', err);
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const errorData = JSON.parse(text);
+          setErro(errorData.mensagem || 'Erro ao baixar relatório');
+        } catch {
+          setErro('Erro ao baixar relatório do servidor');
+        }
+      } else {
+        setErro(err.response?.data?.mensagem || 'Erro ao conectar com serviço de IA para baixar relatório');
+      }
+    } finally {
+      setCarregando(false);
     }
   };
 
@@ -209,11 +260,10 @@ const AIChat = () => {
         const blob = new Blob(audioChunksRef.current, { type: mimeUsed });
         try {
           setCarregando(true);
-          const token = localStorage.getItem('token') || sessionStorage.getItem('token');
           const formData = new FormData();
           formData.append('audio', blob, 'gravacao.webm');
-          const { data } = await axios.post(`${API_BASE_URL}/ai/transcribe/`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
+          const { data } = await axiosInstance.post('/ai/transcribe/', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
           });
           if (data.sucesso && data.texto) {
             enviarMensagem(data.texto);
@@ -277,11 +327,9 @@ const AIChat = () => {
     setGerandoAudio(true);
     setFalando(true);
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const { data } = await axios.post(
-        `${API_BASE_URL}/ai/tts/`,
-        { texto: textoLimpo },
-        { headers: { Authorization: `Bearer ${token}` } }
+      const { data } = await axiosInstance.post(
+        '/ai/tts/',
+        { texto: textoLimpo }
       );
 
       if (data.sucesso && data.audio_base64) {
@@ -339,11 +387,9 @@ const AIChat = () => {
     setErro(null);
     
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const response = await axios.post(
-        `${API_BASE_URL}/ai/chat/`,
-        { mensagem: texto },
-        { headers: { Authorization: `Bearer ${token}` } }
+      const response = await axiosInstance.post(
+        '/ai/chat/',
+        { mensagem: texto }
       );
       
       if (response.data.sucesso) {
@@ -473,9 +519,7 @@ const AIChat = () => {
                   startIcon={<PdfIcon />}
                   endIcon={<DownloadIcon />}
                   sx={{ mt: 1.5, textTransform: 'none', borderRadius: 2 }}
-                  onClick={() => {
-                    window.open(`${API_BASE_URL}${msg.arquivoUrl}`, '_blank');
-                  }}
+                  onClick={() => baixarArquivoExecutora(msg.arquivoUrl, msg.arquivoTitulo)}
                 >
                   {msg.arquivoTitulo || 'Baixar Relatório PDF'}
                 </Button>
@@ -523,11 +567,9 @@ const AIChat = () => {
     setCarregandoAnalise(true);
     setDrawerAberto(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.post(
-        `${API_BASE_URL}/ai/analise-negocio/`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
+      const response = await axiosInstance.post(
+        '/ai/analise-negocio/',
+        {}
       );
       setAnaliseIA(response.data);
     } catch (err) {

@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
@@ -128,6 +128,7 @@ import ChurnPage from './pages/ChurnPage'
 import PontoPage from './pages/PontoPage'
 import DashboardBI from './pages/DashboardBI'
 import ConsultaEstoquePage from './pages/ConsultaEstoquePage'
+import HotelPMSPage from './pages/HotelPMSPage'
 import { useEffect } from 'react'
 import { useAuth } from './context/AuthContext'
 import { useOfflineSync } from './context/OfflineSyncContext'
@@ -293,6 +294,7 @@ export default function App() {
                     <Route path='churn' element={<ChurnPage />} />
                     <Route path='dashboard-bi' element={<DashboardBI />} />
                     <Route path='consulta-estoque' element={<ConsultaEstoquePage />} />
+                    <Route path='hotel-pms' element={<HotelPMSPage />} />
                   </Route>
 
                   <Route path='*' element={<Navigate to='/' replace />} />
