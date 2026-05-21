@@ -196,7 +196,7 @@ from .views_rh import (
     OcorrenciaFuncionarioViewSet,
 )
 from .views_hotel import (
-    TipoQuartoViewSet, QuartoViewSet, ReservaViewSet, ConsumoQuartoViewSet,
+    TipoQuartoViewSet, QuartoViewSet, ReservaViewSet, ConsumoQuartoViewSet, ComodidadeViewSet,
 )
 from .views_pix import PixConfigViewSet, CobrancaPixViewSet, WebhookPixView
 from .views_recorrencia import ContratoRecorrenciaViewSet, ParcelaRecorrenciaViewSet
@@ -383,6 +383,7 @@ router.register(r'hotel/tipos-quarto', TipoQuartoViewSet, basename='hotel-tipoqu
 router.register(r'hotel/quartos', QuartoViewSet, basename='hotel-quarto')
 router.register(r'hotel/reservas', ReservaViewSet, basename='hotel-reserva')
 router.register(r'hotel/consumos', ConsumoQuartoViewSet, basename='hotel-consumo')
+router.register(r'hotel/comodidades', ComodidadeViewSet, basename='hotel-comodidade')
 # Pix Dinâmico
 router.register(r'pix/config', PixConfigViewSet, basename='pix-config')
 router.register(r'pix/cobrancas', CobrancaPixViewSet, basename='pix-cobranca')

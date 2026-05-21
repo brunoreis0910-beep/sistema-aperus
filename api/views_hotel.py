@@ -9,18 +9,26 @@ from django.utils import timezone
 from decimal import Decimal
 
 from .models import Cliente, Produto, Venda, VendaItem, Operacao
-from .models_hotel import TipoQuarto, Quarto, Reserva, ConsumoQuarto
-from .serializers_hotel import TipoQuartoSerializer, QuartoSerializer, ReservaSerializer, ConsumoQuartoSerializer
+from .models_hotel import TipoQuarto, Quarto, Reserva, ConsumoQuarto, Comodidade
+from .serializers_hotel import TipoQuartoSerializer, QuartoSerializer, ReservaSerializer, ConsumoQuartoSerializer, ComodidadeSerializer
+
+class ComodidadeViewSet(viewsets.ModelViewSet):
+    queryset = Comodidade.objects.all()
+    serializer_class = ComodidadeSerializer
+    permission_classes = []
+    pagination_class = None
 
 class TipoQuartoViewSet(viewsets.ModelViewSet):
     queryset = TipoQuarto.objects.all()
     serializer_class = TipoQuartoSerializer
-    permission_classes = []  # Permissões definidas de acordo com as diretrizes do projeto (ex: IsAuthenticated ou AllowAny para testes)
+    permission_classes = []
+    pagination_class = None
 
 class QuartoViewSet(viewsets.ModelViewSet):
     queryset = Quarto.objects.all()
     serializer_class = QuartoSerializer
     permission_classes = []
+    pagination_class = None
 
     @action(detail=True, methods=['post'])
     def alterar_status(self, request, pk=None):
@@ -28,10 +36,9 @@ class QuartoViewSet(viewsets.ModelViewSet):
         quarto = self.get_object()
         novo_status = request.data.get('status')
         
-        valid_statuses = [choice[0] for choice in Quarto.STATUS_CHOICES]
-        if novo_status not in valid_statuses:
+        if not novo_status or len(novo_status) > 20:
             return Response(
-                {"error": f"Status inválido. Escolha um de: {', '.join(valid_statuses)}"},
+                {"error": "Status inválido. Deve ser uma string não vazia de até 20 caracteres."},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
@@ -43,11 +50,13 @@ class ConsumoQuartoViewSet(viewsets.ModelViewSet):
     queryset = ConsumoQuarto.objects.all()
     serializer_class = ConsumoQuartoSerializer
     permission_classes = []
+    pagination_class = None
 
 class ReservaViewSet(viewsets.ModelViewSet):
     queryset = Reserva.objects.all()
     serializer_class = ReservaSerializer
     permission_classes = []
+    pagination_class = None
 
     @action(detail=True, methods=['post'])
     def checkin(self, request, pk=None):
@@ -227,10 +236,17 @@ class ReservaViewSet(viewsets.ModelViewSet):
             except ValueError:
                 return Response({"error": "Datas em formato inválido. Use AAAA-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
                 
-        # Busca todas as reservas no período
+        from django.db.models import Q
+        # Busca todas as reservas ativas ou planejadas no período
         reservas = Reserva.objects.filter(
-            data_entrada_prevista__date__lte=data_fim,
-            data_saida_prevista__date__gte=data_inicio
+            ~Q(status_reserva='cancelada') & ~Q(status_reserva='noshow')
+        ).filter(
+            # Caso 1: Sobreposição do período previsto
+            Q(data_entrada_prevista__date__lte=data_fim, data_saida_prevista__date__gte=data_inicio) |
+            # Caso 2: Hospedagem ativa (check-in realizado) que começou antes ou durante o período e ainda não foi encerrada
+            Q(status_reserva='checkin', data_entrada_prevista__date__lte=data_fim) |
+            # Caso 3: Hospedagem finalizada cuja data de check-out real foi durante ou depois do início
+            Q(status_reserva='finalizada', data_checkin_real__date__lte=data_fim, data_checkout_real__date__gte=data_inicio)
         )
         
         quartos = Quarto.objects.all()

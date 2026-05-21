@@ -21,6 +21,19 @@ class TipoQuarto(models.Model):
     def __str__(self):
         return self.nome
 
+class Comodidade(models.Model):
+    id_comodidade = models.AutoField(primary_key=True)
+    nome = models.CharField(max_length=100, unique=True, help_text="Ex: Ar Condicionado, Frigobar, Wi-Fi")
+
+    class Meta:
+        db_table = 'hotel_comodidade'
+        ordering = ['nome']
+        verbose_name = 'Comodidade'
+        verbose_name_plural = 'Comodidades'
+
+    def __str__(self):
+        return self.nome
+
 class Quarto(models.Model):
     STATUS_CHOICES = [
         ('disponivel', 'Disponível'),
@@ -35,6 +48,7 @@ class Quarto(models.Model):
     status_atual = models.CharField(max_length=20, choices=STATUS_CHOICES, default='disponivel')
     capacidade_adultos = models.PositiveIntegerField(default=2)
     capacidade_criancas = models.PositiveIntegerField(default=0)
+    comodidades = models.ManyToManyField(Comodidade, blank=True, related_name='quartos', db_table='hotel_quarto_comodidade')
 
     class Meta:
         db_table = 'hotel_quarto'

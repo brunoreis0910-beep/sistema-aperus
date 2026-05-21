@@ -3,6 +3,12 @@ serializers_hotel.py — Serializers para o módulo hoteleiro
 """
 from rest_framework import serializers
 from .models import TipoQuarto, Quarto, Reserva, ConsumoQuarto
+from .models_hotel import Comodidade
+
+class ComodidadeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comodidade
+        fields = '__all__'
 
 class TipoQuartoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -11,10 +17,19 @@ class TipoQuartoSerializer(serializers.ModelSerializer):
 
 class QuartoSerializer(serializers.ModelSerializer):
     tipo_nome = serializers.CharField(source='tipo.nome', read_only=True)
+    status_atual = serializers.CharField(max_length=20, default='disponivel')
+    comodidades_detalhes = ComodidadeSerializer(source='comodidades', many=True, read_only=True)
+    comodidades = serializers.PrimaryKeyRelatedField(
+        queryset=Comodidade.objects.all(), many=True, required=False
+    )
 
     class Meta:
         model = Quarto
-        fields = ['id_quarto', 'numero_quarto', 'tipo', 'tipo_nome', 'status_atual', 'capacidade_adultos', 'capacidade_criancas']
+        fields = [
+            'id_quarto', 'numero_quarto', 'tipo', 'tipo_nome', 
+            'status_atual', 'capacidade_adultos', 'capacidade_criancas', 
+            'comodidades', 'comodidades_detalhes'
+        ]
 
 class ConsumoQuartoSerializer(serializers.ModelSerializer):
     produto_nome = serializers.CharField(source='produto.nome_produto', read_only=True)

@@ -32,7 +32,13 @@ import {
   ListItemText,
   Badge,
   InputAdornment,
-  Fab
+  Fab,
+  Checkbox,
+  FormControlLabel,
+  FormControl,
+  InputLabel,
+  Select,
+  Alert
 } from '@mui/material';
 import {
   Hotel,
@@ -59,10 +65,38 @@ import {
   Warning,
   AccountBalanceWallet,
   Settings,
-  Edit
+  Edit,
+  Business as BusinessIcon,
+  WhatsApp as WhatsAppIcon,
+  Cake as CakeIcon,
+  LocationOn as LocationIcon,
+  CloudDownload as DownloadIcon,
+  Block as BlockIcon,
+  CreditCard as CreditCardIcon,
+  Phone as PhoneIcon,
+  Email as EmailIcon
 } from '@mui/icons-material';
 import api from '../services/api';
 import { toast } from 'react-toastify';
+import {
+  buscarCNPJ,
+  buscarCEP,
+  formatCNPJ,
+  formatCPF,
+  formatTelefone,
+  formatCEP,
+  isValidEmail,
+  isValidCNPJ,
+  isValidCPF,
+  ESTADOS_BRASIL
+} from '../utils/cnpjCepUtils';
+
+const DEFAULT_STATUS_OPTIONS = [
+  { value: 'disponivel', label: 'Disponível', color: '#4caf50' },
+  { value: 'ocupado', label: 'Ocupado', color: '#f44336' },
+  { value: 'sujo', label: 'Sujo / Faxina', color: '#ff9800' },
+  { value: 'manutencao', label: 'Manutenção', color: '#9e9e9e' }
+];
 
 export default function HotelPMSPage() {
   // Dados principais
@@ -71,6 +105,7 @@ export default function HotelPMSPage() {
   const [reservas, setReservas] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [produtos, setProdutos] = useState([]);
+  const [comodidades, setComodidades] = useState([]);
 
   // Estados de controle e navegação
   const [activeTab, setActiveTab] = useState(0);
@@ -115,8 +150,67 @@ export default function HotelPMSPage() {
     tipo: '',
     status_atual: 'disponivel',
     capacidade_adultos: 2,
-    capacidade_criancas: 0
+    capacidade_criancas: 0,
+    comodidades: []
   });
+
+  // Submodais auxiliares para cadastro rápido
+  const [openTipoQuartoModal, setOpenTipoQuartoModal] = useState(false);
+  const [tipoQuartoForm, setTipoQuartoForm] = useState({
+    nome: '',
+    descricao: '',
+    valor_diaria_padrao: '',
+    limite_adultos: 2,
+    limite_criancas: 0
+  });
+
+  const [statusOptions, setStatusOptions] = useState(() => {
+    const saved = localStorage.getItem('hotel_status_options');
+    return saved ? JSON.parse(saved) : DEFAULT_STATUS_OPTIONS;
+  });
+
+  const [gruposProduto, setGruposProduto] = useState([]);
+
+  const [openStatusModal, setOpenStatusModal] = useState(false);
+  const [statusForm, setStatusForm] = useState({
+    label: '',
+    color: '#1a73e8'
+  });
+
+  const [openClienteModal, setOpenClienteModal] = useState(false);
+  const [clienteForm, setClienteForm] = useState({
+    nome: '',
+    razao_social: '',
+    nome_fantasia: '',
+    cnpj: '',
+    inscricao_estadual: '',
+    telefone: '',
+    whatsapp: '',
+    email: '',
+    cep: '',
+    endereco: '',
+    numero: '',
+    complemento: '',
+    bairro: '',
+    cidade: '',
+    estado: 'SP',
+    data_aniversario: '',
+    observacoes: '',
+    limite_credito: 0,
+    tipo_desconto: 'PERCENTUAL',
+    valor_desconto: 0,
+    percentual_arredondamento: 0,
+    priorizar_desconto_cliente: false,
+    grupos_excecao: [],
+    sexo: ''
+  });
+
+  const [loadingCNPJ, setLoadingCNPJ] = useState(false);
+  const [loadingCEP, setLoadingCEP] = useState(false);
+  const [clienteWarning, setClienteWarning] = useState('');
+  const [clienteError, setClienteError] = useState('');
+
+  const [novaComodidadeNome, setNovaComodidadeNome] = useState('');
 
   // Seleções para criação/gerenciamento
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -160,12 +254,17 @@ export default function HotelPMSPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [tiposRes, quartosRes, reservasRes, clientesRes, produtosRes] = await Promise.all([
+      const [tiposRes, quartosRes, reservasRes, clientesRes, produtosRes, comodidadesRes, gruposRes] = await Promise.all([
         api.get('/api/hotel/tipos-quarto/'),
         api.get('/api/hotel/quartos/'),
         api.get('/api/hotel/reservas/'),
-        api.get('/api/clientes/'),
-        api.get('/api/produtos/')
+        api.get('/api/clientes/?page_size=1000'),
+        api.get('/api/produtos/?page_size=1000'),
+        api.get('/api/hotel/comodidades/'),
+        api.get('/api/grupos-produto/').catch(err => {
+          console.warn('Erro ao carregar grupos de produto:', err);
+          return { data: [] };
+        })
       ]);
 
       const normalize = (res) => {
@@ -181,6 +280,8 @@ export default function HotelPMSPage() {
       setReservas(normalize(reservasRes));
       setClientes(normalize(clientesRes));
       setProdutos(normalize(produtosRes));
+      setComodidades(normalize(comodidadesRes));
+      setGruposProduto(normalize(gruposRes));
     } catch (err) {
       console.error('Erro ao carregar dados do PMS:', err);
       toast.error('Erro ao carregar dados do módulo hoteleiro.');
@@ -277,9 +378,38 @@ export default function HotelPMSPage() {
   const getBookingForRoomAndDay = (roomId, dateStr) => {
     return reservas.find(res => {
       if (res.quarto !== roomId && res.quarto?.id_quarto !== roomId) return false;
-      if (res.status_reserva === 'cancelada') return false;
-      const startStr = res.data_entrada_prevista.split('T')[0];
-      const endStr = res.data_saida_prevista.split('T')[0];
+      if (res.status_reserva === 'cancelada' || res.status_reserva === 'noshow') return false;
+
+      // Início real ou previsto
+      const startStr = (res.data_checkin_real || res.data_entrada_prevista).split('T')[0];
+      
+      // Fim real, previsto ou estendido (caso de check-in ativo sem check-out)
+      let endStr;
+      if (res.status_reserva === 'checkin') {
+        const hojeObj = new Date();
+        const hojeStr = formatDateKey(hojeObj);
+        const previstaStr = res.data_saida_prevista.split('T')[0];
+        
+        // Estende até hoje se a saída prevista já passou e o cliente ainda está hospedado
+        const maxStr = previstaStr > hojeStr ? previstaStr : hojeStr;
+        
+        // Adiciona 1 dia para que dateStr < endStr seja verdadeiro no último dia de hospedagem ativa
+        const maxDate = new Date(maxStr + 'T00:00:00');
+        maxDate.setDate(maxDate.getDate() + 1);
+        endStr = formatDateKey(maxDate);
+      } else if (res.status_reserva === 'finalizada' || res.data_checkout_real) {
+        endStr = (res.data_checkout_real || res.data_saida_prevista).split('T')[0];
+      } else {
+        endStr = res.data_saida_prevista.split('T')[0];
+      }
+
+      // Garante intervalo mínimo de 1 dia se as datas forem iguais
+      if (startStr === endStr) {
+        const nextDay = new Date(startStr + 'T00:00:00');
+        nextDay.setDate(nextDay.getDate() + 1);
+        endStr = formatDateKey(nextDay);
+      }
+
       return dateStr >= startStr && dateStr < endStr;
     });
   };
@@ -316,7 +446,8 @@ export default function HotelPMSPage() {
       tipo: tiposQuarto[0]?.id_tipo_quarto || '',
       status_atual: 'disponivel',
       capacidade_adultos: 2,
-      capacidade_criancas: 0
+      capacidade_criancas: 0,
+      comodidades: []
     });
     setOpenRoomModal(true);
   };
@@ -328,7 +459,8 @@ export default function HotelPMSPage() {
       tipo: room.tipo || room.tipo_id || '',
       status_atual: room.status_atual,
       capacidade_adultos: room.capacidade_adultos,
-      capacidade_criancas: room.capacidade_criancas
+      capacidade_criancas: room.capacidade_criancas,
+      comodidades: room.comodidades || []
     });
     setOpenRoomModal(true);
   };
@@ -340,23 +472,19 @@ export default function HotelPMSPage() {
     }
     try {
       setLoading(true);
+      const payload = {
+        numero_quarto: roomForm.numero_quarto,
+        tipo: roomForm.tipo,
+        status_atual: roomForm.status_atual,
+        capacidade_adultos: parseInt(roomForm.capacidade_adultos),
+        capacidade_criancas: parseInt(roomForm.capacidade_criancas),
+        comodidades: roomForm.comodidades
+      };
       if (roomForm.id_quarto) {
-        await api.put(`/api/hotel/quartos/${roomForm.id_quarto}/`, {
-          numero_quarto: roomForm.numero_quarto,
-          tipo: roomForm.tipo,
-          status_atual: roomForm.status_atual,
-          capacidade_adultos: parseInt(roomForm.capacidade_adultos),
-          capacidade_criancas: parseInt(roomForm.capacidade_criancas)
-        });
+        await api.put(`/api/hotel/quartos/${roomForm.id_quarto}/`, payload);
         toast.success('Quarto atualizado com sucesso!');
       } else {
-        await api.post('/api/hotel/quartos/', {
-          numero_quarto: roomForm.numero_quarto,
-          tipo: roomForm.tipo,
-          status_atual: roomForm.status_atual,
-          capacidade_adultos: parseInt(roomForm.capacidade_adultos),
-          capacidade_criancas: parseInt(roomForm.capacidade_criancas)
-        });
+        await api.post('/api/hotel/quartos/', payload);
         toast.success('Quarto cadastrado com sucesso!');
       }
       setOpenRoomModal(false);
@@ -367,6 +495,263 @@ export default function HotelPMSPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCreateComodidade = async () => {
+    if (!novaComodidadeNome.trim()) return;
+    try {
+      setLoading(true);
+      const res = await api.post('/api/hotel/comodidades/', { nome: novaComodidadeNome.trim() });
+      toast.success('Comodidade cadastrada!');
+      setComodidades(prev => [...prev, res.data]);
+      setRoomForm(prev => ({
+        ...prev,
+        comodidades: [...prev.comodidades, res.data.id_comodidade]
+      }));
+      setNovaComodidadeNome('');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao criar comodidade. Talvez ela já exista.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateTipoQuarto = async () => {
+    if (!tipoQuartoForm.nome || !tipoQuartoForm.valor_diaria_padrao) {
+      toast.warn('Nome e valor da diária são obrigatórios.');
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await api.post('/api/hotel/tipos-quarto/', {
+        ...tipoQuartoForm,
+        valor_diaria_padrao: parseFloat(tipoQuartoForm.valor_diaria_padrao),
+        limite_adultos: parseInt(tipoQuartoForm.limite_adultos),
+        limite_criancas: parseInt(tipoQuartoForm.limite_criancas)
+      });
+      toast.success('Tipo de acomodação cadastrado com sucesso!');
+      setTiposQuarto(prev => [...prev, res.data]);
+      setRoomForm(prev => ({ ...prev, tipo: res.data.id_tipo_quarto }));
+      setOpenTipoQuartoModal(false);
+      setTipoQuartoForm({
+        nome: '',
+        descricao: '',
+        valor_diaria_padrao: '',
+        limite_adultos: 2,
+        limite_criancas: 0
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao criar tipo de acomodação.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClienteCnpjChange = (value) => {
+    const numbers = value.replace(/\D/g, '');
+    let formatted = value;
+    if (numbers.length <= 11) {
+      formatted = formatCPF(value);
+    } else {
+      formatted = formatCNPJ(value);
+    }
+    setClienteForm(prev => ({ ...prev, cnpj: formatted }));
+    setClienteWarning('');
+
+    const checkNum = formatted.replace(/\D/g, '');
+    if (checkNum.length === 11) {
+      if (!isValidCPF(formatted)) {
+        setClienteWarning('⚠️ CPF inválido');
+      }
+    } else if (checkNum.length === 14) {
+      if (!isValidCNPJ(formatted)) {
+        setClienteWarning('⚠️ CNPJ inválido');
+      }
+    } else if (checkNum.length > 0 && checkNum.length !== 11 && checkNum.length !== 14) {
+      setClienteWarning('⚠️ CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos');
+    }
+  };
+
+  const handleClienteBuscarCNPJ = async () => {
+    if (!clienteForm.cnpj) {
+      toast.error('Digite um CNPJ para buscar (CPF não possui busca automática)');
+      return;
+    }
+    if (!isValidCNPJ(clienteForm.cnpj)) {
+      setClienteWarning('⚠️ CNPJ inválido. A busca pode não funcionar corretamente.');
+    }
+    try {
+      setLoadingCNPJ(true);
+      setClienteError('');
+      setClienteWarning('');
+      const dados = await buscarCNPJ(clienteForm.cnpj);
+      setClienteForm(prev => ({
+        ...prev,
+        cnpj: formatCNPJ(dados.cnpj),
+        razao_social: dados.razao_social || '',
+        nome_fantasia: dados.nome_fantasia || '',
+        nome: dados.nome_fantasia || dados.razao_social || '',
+        inscricao_estadual: dados.inscricao_estadual || '',
+        email: dados.email || '',
+        telefone: formatTelefone(dados.telefone || ''),
+        cep: formatCEP(dados.cep || ''),
+        endereco: dados.endereco || '',
+        numero: dados.numero || '',
+        complemento: dados.complemento || '',
+        bairro: dados.bairro || '',
+        cidade: dados.cidade || '',
+        estado: dados.estado || 'SP'
+      }));
+      toast.success('Dados do CNPJ carregados com sucesso!');
+    } catch (err) {
+      setClienteError(`Erro ao buscar CNPJ: ${err.message}`);
+      toast.error(`Erro ao buscar CNPJ: ${err.message}`);
+    } finally {
+      setLoadingCNPJ(false);
+    }
+  };
+
+  const handleClienteBuscarCEP = async () => {
+    if (!clienteForm.cep) {
+      toast.error('Digite um CEP para buscar');
+      return;
+    }
+    try {
+      setLoadingCEP(true);
+      setClienteError('');
+      const dados = await buscarCEP(clienteForm.cep);
+      setClienteForm(prev => ({
+        ...prev,
+        cep: formatCEP(dados.cep),
+        endereco: dados.endereco || '',
+        bairro: dados.bairro || '',
+        cidade: dados.cidade || '',
+        estado: dados.estado || 'SP',
+        complemento: dados.complemento || ''
+      }));
+      toast.success('Endereço carregado com sucesso!');
+    } catch (err) {
+      setClienteError(`Erro ao buscar CEP: ${err.message}`);
+      toast.error(`Erro ao buscar CEP: ${err.message}`);
+    } finally {
+      setLoadingCEP(false);
+    }
+  };
+
+  const resetClienteForm = () => {
+    setClienteForm({
+      nome: '',
+      razao_social: '',
+      nome_fantasia: '',
+      cnpj: '',
+      inscricao_estadual: '',
+      telefone: '',
+      whatsapp: '',
+      email: '',
+      cep: '',
+      endereco: '',
+      numero: '',
+      complemento: '',
+      bairro: '',
+      cidade: '',
+      estado: 'SP',
+      data_aniversario: '',
+      observacoes: '',
+      limite_credito: 0,
+      tipo_desconto: 'PERCENTUAL',
+      valor_desconto: 0,
+      percentual_arredondamento: 0,
+      priorizar_desconto_cliente: false,
+      grupos_excecao: [],
+      sexo: ''
+    });
+    setClienteError('');
+    setClienteWarning('');
+  };
+
+  const handleCreateCliente = async () => {
+    if (!clienteForm.nome.trim()) {
+      toast.warn('Nome é obrigatório');
+      return;
+    }
+    try {
+      setLoading(true);
+      setClienteError('');
+      const cleanCpfCnpj = clienteForm.cnpj ? clienteForm.cnpj.replace(/\D/g, '') : '';
+      const dadosParaSalvar = {
+        nome_razao_social: clienteForm.nome || clienteForm.razao_social || '',
+        nome_fantasia: clienteForm.nome_fantasia || '',
+        cpf_cnpj: cleanCpfCnpj,
+        inscricao_estadual: clienteForm.inscricao_estadual || '',
+        telefone: clienteForm.telefone ? clienteForm.telefone.replace(/\D/g, '') : '',
+        whatsapp: clienteForm.whatsapp ? clienteForm.whatsapp.replace(/\D/g, '') : '',
+        email: clienteForm.email || '',
+        cep: clienteForm.cep ? clienteForm.cep.replace(/\D/g, '') : '',
+        endereco: clienteForm.endereco || '',
+        numero: clienteForm.numero || '',
+        complemento: clienteForm.complemento || '',
+        bairro: clienteForm.bairro || '',
+        cidade: clienteForm.cidade || '',
+        estado: clienteForm.estado || 'SP',
+        data_nascimento: clienteForm.data_aniversario || null,
+        observacoes: clienteForm.observacoes || '',
+        limite_credito: parseFloat(clienteForm.limite_credito) || 0,
+        sexo: clienteForm.sexo || null,
+        tipo_desconto: clienteForm.tipo_desconto || 'PERCENTUAL',
+        valor_desconto: parseFloat(clienteForm.valor_desconto) || 0,
+        percentual_arredondamento: parseFloat(clienteForm.percentual_arredondamento) || 0,
+        priorizar_desconto_cliente: Boolean(clienteForm.priorizar_desconto_cliente),
+        grupos_excecao: Array.isArray(clienteForm.grupos_excecao) ? clienteForm.grupos_excecao : []
+      };
+
+      const res = await api.post('/api/clientes/', dadosParaSalvar);
+      toast.success('Cliente cadastrado com sucesso!');
+      
+      const newCliente = res.data;
+      setClientes(prev => [newCliente, ...prev]);
+      setBookingForm(prev => ({ ...prev, hospede: newCliente.id_cliente || newCliente.id || '' }));
+      setOpenClienteModal(false);
+      resetClienteForm();
+    } catch (err) {
+      console.error('Erro ao cadastrar cliente:', err);
+      const errMsg = err.response?.data?.error || err.response?.data?.detail || 'Erro ao cadastrar cliente.';
+      setClienteError(errMsg);
+      toast.error(errMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateStatus = () => {
+    if (!statusForm.label.trim()) {
+      toast.warn('O nome do status é obrigatório.');
+      return;
+    }
+    const value = statusForm.label.trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+      .replace(/[^a-z0-9]/g, '_'); // sub caracteres especiais por _
+      
+    if (statusOptions.some(opt => opt.value === value)) {
+      toast.warn('Um status com este nome já existe.');
+      return;
+    }
+
+    const newStatus = {
+      value,
+      label: statusForm.label.trim(),
+      color: statusForm.color
+    };
+
+    const updatedOptions = [...statusOptions, newStatus];
+    setStatusOptions(updatedOptions);
+    localStorage.setItem('hotel_status_options', JSON.stringify(updatedOptions));
+    
+    setRoomForm(prev => ({ ...prev, status_atual: value }));
+    setOpenStatusModal(false);
+    setStatusForm({ label: '', color: '#1a73e8' });
+    toast.success('Status personalizado cadastrado!');
   };
 
   const handleCreateBooking = async () => {
@@ -933,22 +1318,19 @@ export default function HotelPMSPage() {
 
                 <Grid container spacing={3}>
                 {quartos.map((room) => {
-                  let statusColor = '#4caf50'; // disponivel
-                  let statusText = 'Disponível';
+                  const statusOpt = statusOptions.find(opt => opt.value === room.status_atual);
+                  let statusColor = statusOpt ? statusOpt.color : '#9e9e9e';
+                  let statusText = statusOpt ? statusOpt.label : room.status_atual;
                   let icon = <CheckCircle sx={{ color: '#fff', fontSize: 32 }} />;
                   
                   if (room.status_atual === 'ocupado') {
-                    statusColor = '#f44336';
-                    statusText = 'Ocupado';
                     icon = <Hotel sx={{ color: '#fff', fontSize: 32 }} />;
                   } else if (room.status_atual === 'sujo') {
-                    statusColor = '#ff9800';
-                    statusText = 'Sujo / Faxina';
                     icon = <CleaningServices sx={{ color: '#fff', fontSize: 32 }} />;
                   } else if (room.status_atual === 'manutencao') {
-                    statusColor = '#9e9e9e';
-                    statusText = 'Manutenção';
                     icon = <Build sx={{ color: '#fff', fontSize: 32 }} />;
+                  } else if (statusOpt && statusOpt.value !== 'disponivel') {
+                    icon = <MeetingRoom sx={{ color: '#fff', fontSize: 32 }} />;
                   }
 
                   // Encontra reserva ativa se ocupado
@@ -1194,20 +1576,35 @@ export default function HotelPMSPage() {
         </DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-            <TextField
-              select
-              fullWidth
-              label="Selecione o Hóspede (Cliente) *"
-              value={bookingForm.hospede}
-              onChange={e => setBookingForm(prev => ({ ...prev, hospede: e.target.value }))}
-            >
-              <MenuItem value="">Selecione...</MenuItem>
-              {clientes.map(c => (
-                <MenuItem key={c.id_cliente} value={c.id_cliente}>
-                  {c.nome_razao_social}
-                </MenuItem>
-              ))}
-            </TextField>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', width: '100%' }}>
+              <TextField
+                select
+                fullWidth
+                label="Selecione o Hóspede (Cliente) *"
+                value={bookingForm.hospede}
+                onChange={e => setBookingForm(prev => ({ ...prev, hospede: e.target.value }))}
+              >
+                <MenuItem value="">Selecione...</MenuItem>
+                {clientes.map(c => {
+                  const cid = c.id_cliente || c.id;
+                  return (
+                    <MenuItem key={cid} value={cid}>
+                      {c.nome_razao_social || c.nome}
+                    </MenuItem>
+                  );
+                })}
+              </TextField>
+              <IconButton
+                color="primary"
+                onClick={() => {
+                  resetClienteForm();
+                  setOpenClienteModal(true);
+                }}
+                title="Cadastrar Novo Cliente"
+              >
+                <Add />
+              </IconButton>
+            </Box>
 
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
@@ -1497,33 +1894,57 @@ export default function HotelPMSPage() {
               placeholder="Ex: 101"
             />
 
-            <TextField
-              select
-              fullWidth
-              label="Tipo de Acomodação *"
-              value={roomForm.tipo}
-              onChange={e => setRoomForm(prev => ({ ...prev, tipo: e.target.value }))}
-            >
-              <MenuItem value="">Selecione...</MenuItem>
-              {tiposQuarto.map(t => (
-                <MenuItem key={t.id_tipo_quarto} value={t.id_tipo_quarto}>
-                  {t.nome} (R$ {parseFloat(t.valor_diaria_padrao).toFixed(2)})
-                </MenuItem>
-              ))}
-            </TextField>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', width: '100%' }}>
+              <TextField
+                select
+                fullWidth
+                label="Tipo de Acomodação *"
+                value={roomForm.tipo}
+                onChange={e => setRoomForm(prev => ({ ...prev, tipo: e.target.value }))}
+                sx={{ flexGrow: 1 }}
+              >
+                <MenuItem value="">Selecione...</MenuItem>
+                {tiposQuarto.map(t => (
+                  <MenuItem key={t.id_tipo_quarto} value={t.id_tipo_quarto}>
+                    {t.nome} (R$ {parseFloat(t.valor_diaria_padrao).toFixed(2)})
+                  </MenuItem>
+                ))}
+              </TextField>
+              <IconButton 
+                color="primary" 
+                onClick={() => setOpenTipoQuartoModal(true)}
+                title="Cadastrar Novo Tipo de Acomodação"
+              >
+                <Add />
+              </IconButton>
+            </Box>
 
-            <TextField
-              select
-              fullWidth
-              label="Status Atual *"
-              value={roomForm.status_atual}
-              onChange={e => setRoomForm(prev => ({ ...prev, status_atual: e.target.value }))}
-            >
-              <MenuItem value="disponivel">Disponível</MenuItem>
-              <MenuItem value="ocupado">Ocupado</MenuItem>
-              <MenuItem value="sujo">Sujo / Faxina</MenuItem>
-              <MenuItem value="manutencao">Manutenção</MenuItem>
-            </TextField>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', width: '100%' }}>
+              <TextField
+                select
+                fullWidth
+                label="Status Atual *"
+                value={roomForm.status_atual}
+                onChange={e => setRoomForm(prev => ({ ...prev, status_atual: e.target.value }))}
+                sx={{ flexGrow: 1 }}
+              >
+                {statusOptions.map(opt => (
+                  <MenuItem key={opt.value} value={opt.value}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: opt.color }} />
+                      {opt.label}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </TextField>
+              <IconButton 
+                color="primary" 
+                onClick={() => setOpenStatusModal(true)}
+                title="Cadastrar Novo Status Personalizado"
+              >
+                <Add />
+              </IconButton>
+            </Box>
 
             <Grid container spacing={2}>
               <Grid item xs={6}>
@@ -1552,6 +1973,531 @@ export default function HotelPMSPage() {
         <DialogActions>
           <Button onClick={() => setOpenRoomModal(false)}>Cancelar</Button>
           <Button variant="contained" onClick={handleSaveRoom} disabled={loading}>
+            Salvar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal: Cadastrar Novo Tipo de Quarto */}
+      <Dialog open={openTipoQuartoModal} onClose={() => setOpenTipoQuartoModal(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+          Cadastrar Tipo de Acomodação
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+            <TextField
+              fullWidth
+              label="Nome do Tipo *"
+              value={tipoQuartoForm.nome}
+              onChange={e => setTipoQuartoForm(prev => ({ ...prev, nome: e.target.value }))}
+              placeholder="Ex: Suíte Presidencial"
+            />
+            <TextField
+              fullWidth
+              label="Descrição"
+              value={tipoQuartoForm.descricao}
+              onChange={e => setTipoQuartoForm(prev => ({ ...prev, descricao: e.target.value }))}
+              multiline
+              rows={2}
+              placeholder="Ex: Quarto com cama super king, jacuzzi e vista para o mar"
+            />
+            <TextField
+              fullWidth
+              type="number"
+              label="Valor da Diária Padrão *"
+              value={tipoQuartoForm.valor_diaria_padrao}
+              onChange={e => setTipoQuartoForm(prev => ({ ...prev, valor_diaria_padrao: e.target.value }))}
+              InputProps={{
+                startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+              }}
+              inputProps={{ min: 0, step: 0.01 }}
+            />
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Lim. Adultos"
+                  value={tipoQuartoForm.limite_adultos}
+                  onChange={e => setTipoQuartoForm(prev => ({ ...prev, limite_adultos: e.target.value }))}
+                  inputProps={{ min: 1 }}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Lim. Crianças"
+                  value={tipoQuartoForm.limite_criancas}
+                  onChange={e => setTipoQuartoForm(prev => ({ ...prev, limite_criancas: e.target.value }))}
+                  inputProps={{ min: 0 }}
+                />
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenTipoQuartoModal(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleCreateTipoQuarto} disabled={loading}>
+            Salvar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal: Cadastrar Novo Status */}
+      <Dialog open={openStatusModal} onClose={() => setOpenStatusModal(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+          Cadastrar Status Personalizado
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+            <TextField
+              fullWidth
+              label="Nome do Status *"
+              value={statusForm.label}
+              onChange={e => setStatusForm(prev => ({ ...prev, label: e.target.value }))}
+              placeholder="Ex: Interditado"
+            />
+            <Typography variant="subtitle2" color="text.secondary">
+              Selecione a Cor do Status:
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {['#4caf50', '#f44336', '#ff9800', '#9e9e9e', '#1a73e8', '#9c27b0', '#e91e63', '#00bcd4', '#3f51b5', '#ffeb3b'].map(color => (
+                <IconButton
+                  key={color}
+                  onClick={() => setStatusForm(prev => ({ ...prev, color }))}
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    backgroundColor: color,
+                    border: statusForm.color === color ? '3px solid #000' : 'none',
+                    '&:hover': {
+                      backgroundColor: color,
+                      opacity: 0.8
+                    }
+                  }}
+                />
+              ))}
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenStatusModal(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleCreateStatus} disabled={loading}>
+            Salvar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal: Cadastrar Novo Cliente */}
+      <Dialog open={openClienteModal} onClose={() => setOpenClienteModal(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+          Cadastrar Novo Cliente
+        </DialogTitle>
+        <DialogContent dividers>
+          {clienteError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {clienteError}
+            </Alert>
+          )}
+          {clienteWarning && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {clienteWarning}
+            </Alert>
+          )}
+
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            {/* Seção: CPF/CNPJ */}
+            <Grid item xs={12} sm={8}>
+              <TextField
+                fullWidth
+                label="CPF ou CNPJ"
+                value={clienteForm.cnpj}
+                onChange={e => handleClienteCnpjChange(e.target.value)}
+                placeholder="00.000.000/0000-00 ou 000.000.000-00"
+                inputProps={{ maxLength: 18 }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={handleClienteBuscarCNPJ}
+                disabled={loadingCNPJ}
+                startIcon={loadingCNPJ ? <CircularProgress size={20} /> : <DownloadIcon />}
+                sx={{ height: '56px' }}
+              >
+                Buscar CNPJ
+              </Button>
+            </Grid>
+
+            {/* Seção: Identificação */}
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Razão Social"
+                value={clienteForm.razao_social}
+                onChange={e => setClienteForm(prev => ({ ...prev, razao_social: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Nome Fantasia"
+                value={clienteForm.nome_fantasia}
+                onChange={e => setClienteForm(prev => ({ ...prev, nome_fantasia: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Nome do Hóspede (Cliente) *"
+                value={clienteForm.nome}
+                onChange={e => setClienteForm(prev => ({ ...prev, nome: e.target.value }))}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Inscrição Estadual"
+                value={clienteForm.inscricao_estadual}
+                onChange={e => setClienteForm(prev => ({ ...prev, inscricao_estadual: e.target.value }))}
+              />
+            </Grid>
+
+            {/* Seção: Limite de Crédito */}
+            <Grid item xs={12}>
+              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, fontWeight: 'bold', color: '#1976d2', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CreditCardIcon />
+                Limite de Crédito
+              </Typography>
+              <Divider />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Limite de Crédito"
+                type="number"
+                value={clienteForm.limite_credito}
+                onChange={e => setClienteForm(prev => ({ ...prev, limite_credito: e.target.value }))}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                }}
+                inputProps={{ min: 0, step: 0.01 }}
+                helperText="Valor máximo em aberto para este cliente"
+              />
+            </Grid>
+
+            {/* Seção: Descontos Inteligentes */}
+            <Grid item xs={12}>
+              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, fontWeight: 'bold', color: '#1976d2', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Send />
+                Descontos Inteligentes
+              </Typography>
+              <Divider />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth>
+                <InputLabel>Tipo de Desconto</InputLabel>
+                <Select
+                  value={clienteForm.tipo_desconto}
+                  label="Tipo de Desconto"
+                  onChange={e => setClienteForm(prev => ({ ...prev, tipo_desconto: e.target.value }))}
+                >
+                  <MenuItem value="PERCENTUAL">Percentual (%)</MenuItem>
+                  <MenuItem value="FIXO">Fixo (R$)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                label="Valor do Desconto"
+                type="number"
+                value={clienteForm.valor_desconto}
+                onChange={e => setClienteForm(prev => ({ ...prev, valor_desconto: e.target.value }))}
+                inputProps={{ min: 0, step: 0.01 }}
+                helperText={clienteForm.tipo_desconto === 'PERCENTUAL' ? 'Valor em %' : 'Valor em R$'}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                label="Arredondamento (%)"
+                type="number"
+                value={clienteForm.percentual_arredondamento}
+                onChange={e => setClienteForm(prev => ({ ...prev, percentual_arredondamento: e.target.value }))}
+                inputProps={{ min: 0, step: 0.01 }}
+                helperText="Margem de ajuste permitida"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={Boolean(clienteForm.priorizar_desconto_cliente)}
+                    onChange={e => setClienteForm(prev => ({ ...prev, priorizar_desconto_cliente: e.target.checked }))}
+                  />
+                }
+                label="Priorizar desconto do cliente"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Grupos de Exceção</InputLabel>
+                <Select
+                  multiple
+                  value={clienteForm.grupos_excecao || []}
+                  onChange={e => {
+                    const val = Array.isArray(e.target.value) ? e.target.value : [];
+                    setClienteForm(prev => ({ ...prev, grupos_excecao: val.map(Number) }));
+                  }}
+                  label="Grupos de Exceção"
+                  renderValue={selected => {
+                    const selectedArray = Array.isArray(selected) ? selected : [];
+                    if (selectedArray.length === 0) return <em style={{ color: '#aaa' }}>Nenhum grupo selecionado</em>;
+                    const nomes = gruposProduto
+                      .filter(grupo => {
+                        const gid = grupo.id_grupo || grupo.id;
+                        return selectedArray.map(Number).includes(Number(gid));
+                      })
+                      .map(grupo => grupo.nome_grupo || grupo.nome);
+                    return (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {nomes.map(nome => (
+                          <Chip key={nome} label={nome} size="small" sx={{ backgroundColor: '#1565C0', color: 'white', fontSize: '0.75rem' }} />
+                        ))}
+                      </Box>
+                    );
+                  }}
+                >
+                  {gruposProduto.map(grupo => {
+                    const gid = grupo.id_grupo || group.id;
+                    const isChecked = Array.isArray(clienteForm.grupos_excecao) &&
+                      clienteForm.grupos_excecao.map(Number).includes(Number(gid));
+                    return (
+                      <MenuItem key={gid} value={Number(gid)}>
+                        <Checkbox checked={isChecked} readOnly />
+                        <Typography>{grupo.nome_grupo || grupo.nome}</Typography>
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+              </FormControl>
+              {Array.isArray(clienteForm.grupos_excecao) && clienteForm.grupos_excecao.length > 0 && (
+                <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {clienteForm.grupos_excecao.map(gid => {
+                    const grupo = gruposProduto.find(g => Number(g.id_grupo || g.id) === Number(gid));
+                    const nome = grupo ? (grupo.nome_grupo || grupo.nome) : `Grupo #${gid}`;
+                    return (
+                      <Chip
+                        key={gid}
+                        label={nome}
+                        size="small"
+                        onDelete={() => {
+                          setClienteForm(prev => ({
+                            ...prev,
+                            grupos_excecao: prev.grupos_excecao.filter(id => Number(id) !== Number(gid))
+                          }));
+                        }}
+                        sx={{ backgroundColor: '#E3F2FD', color: '#1565C0', fontWeight: 'bold', border: '1px solid #90CAF9' }}
+                      />
+                    );
+                  })}
+                </Box>
+              )}
+            </Grid>
+
+            {/* Seção: Contato */}
+            <Grid item xs={12}>
+              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, fontWeight: 'bold', color: '#1976d2', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <PhoneIcon />
+                Contato
+              </Typography>
+              <Divider />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Telefone"
+                value={clienteForm.telefone}
+                onChange={e => setClienteForm(prev => ({ ...prev, telefone: formatTelefone(e.target.value) }))}
+                placeholder="(00) 0000-0000"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <PhoneIcon />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="WhatsApp"
+                value={clienteForm.whatsapp}
+                onChange={e => setClienteForm(prev => ({ ...prev, whatsapp: formatTelefone(e.target.value) }))}
+                placeholder="(00) 00000-0000"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <WhatsAppIcon color="success" />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={8}>
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={clienteForm.email}
+                onChange={e => setClienteForm(prev => ({ ...prev, email: e.target.value }))}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <EmailIcon />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                label="Data de Aniversário"
+                type="date"
+                value={clienteForm.data_aniversario}
+                onChange={e => setClienteForm(prev => ({ ...prev, data_aniversario: e.target.value }))}
+                InputLabelProps={{ shrink: true }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <CakeIcon />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth>
+                <InputLabel>Sexo</InputLabel>
+                <Select
+                  value={clienteForm.sexo}
+                  onChange={e => setClienteForm(prev => ({ ...prev, sexo: e.target.value }))}
+                  label="Sexo"
+                >
+                  <MenuItem value="">Não informado</MenuItem>
+                  <MenuItem value="M">Masculino</MenuItem>
+                  <MenuItem value="F">Feminino</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            {/* Seção: Endereço */}
+            <Grid item xs={12}>
+              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, fontWeight: 'bold', color: '#1976d2', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <LocationIcon />
+                Endereço
+              </Typography>
+              <Divider />
+            </Grid>
+            <Grid item xs={12} sm={8}>
+              <TextField
+                fullWidth
+                label="CEP"
+                value={clienteForm.cep}
+                onChange={e => setClienteForm(prev => ({ ...prev, cep: formatCEP(e.target.value) }))}
+                placeholder="00000-000"
+                inputProps={{ maxLength: 9 }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={handleClienteBuscarCEP}
+                disabled={loadingCEP}
+                startIcon={loadingCEP ? <CircularProgress size={20} /> : <DownloadIcon />}
+                sx={{ height: '56px' }}
+              >
+                Buscar CEP
+              </Button>
+            </Grid>
+            <Grid item xs={12} sm={8}>
+              <TextField
+                fullWidth
+                label="Endereço"
+                value={clienteForm.endereco}
+                onChange={e => setClienteForm(prev => ({ ...prev, endereco: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                label="Número"
+                value={clienteForm.numero}
+                onChange={e => setClienteForm(prev => ({ ...prev, numero: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Complemento"
+                value={clienteForm.complemento}
+                onChange={e => setClienteForm(prev => ({ ...prev, complemento: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Bairro"
+                value={clienteForm.bairro}
+                onChange={e => setClienteForm(prev => ({ ...prev, bairro: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={8}>
+              <TextField
+                fullWidth
+                label="Cidade"
+                value={clienteForm.cidade}
+                onChange={e => setClienteForm(prev => ({ ...prev, cidade: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth>
+                <InputLabel>Estado</InputLabel>
+                <Select
+                  value={clienteForm.estado}
+                  label="Estado"
+                  onChange={e => setClienteForm(prev => ({ ...prev, estado: e.target.value }))}
+                >
+                  {ESTADOS_BRASIL.map(estado => (
+                    <MenuItem key={estado.value} value={estado.value}>
+                      {estado.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Observações"
+                multiline
+                rows={3}
+                value={clienteForm.observacoes}
+                onChange={e => setClienteForm(prev => ({ ...prev, observacoes: e.target.value }))}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={() => setOpenClienteModal(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleCreateCliente} disabled={loading}>
             Salvar
           </Button>
         </DialogActions>
