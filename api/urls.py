@@ -13,7 +13,7 @@ from .views_vendas import (
     ComplementoICMSNFeView, EmitirComplementoICMSView,
     EntregasView, AtualizarEntregaView,
     SalvarVendaPDVNFCeView, ListarVendasPDVNFCeView,
-    EmitirNFSeVendaView
+    EmitirNFSeVendaView, VendaAtualizarImpostosItensView
 )
 from .views_faturamento import (
     FaturamentoView, OperacoesFiscaisView,
@@ -435,6 +435,7 @@ urlpatterns = [
     path('vendas/<int:id_venda>/limpar_nfce_erro/', LimparNFCeErroView.as_view(), name='vendas-limpar-nfce-erro'),
     path('vendas/<int:id_venda>/imprimir_danfce/', ImprimirDanfceNFCeView.as_view(), name='vendas-imprimir-danfce'),
     path('vendas/<int:id_venda>/emitir_nfse/', EmitirNFSeVendaView.as_view(), name='vendas-emitir-nfse'),
+    path('vendas/<int:venda_id>/atualizar_impostos_itens/', VendaAtualizarImpostosItensView.as_view(), name='vendas-atualizar-impostos-itens'),
     path('vendas/download_lote_xml/', BaixarLoteXMLView.as_view(), name='vendas-download-lote-xml'),
     # Controle de Entrega
     path('vendas/entregas/', EntregasView.as_view(), name='vendas-entregas'),

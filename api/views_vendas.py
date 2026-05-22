@@ -207,6 +207,88 @@ class NFCeView(APIView):
         else:
             return Response(result, status=400)
 
+
+class VendaAtualizarImpostosItensView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, venda_id):
+        try:
+            venda = Venda.objects.get(pk=venda_id)
+        except Venda.DoesNotExist:
+            return Response({'detail': 'Venda não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        status_upper = (venda.status_nfe or '').upper()
+        if status_upper in ['AUTORIZADO', 'AUTORIZADA', 'APROVADO', 'EMITIDA']:
+            return Response({
+                'detail': 'Não é possível editar impostos de uma venda já emitida.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        itens_payload = request.data.get('itens', [])
+        if not itens_payload:
+            return Response({'detail': 'Nenhum item fornecido para atualização.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        updated_items = []
+        with transaction.atomic():
+            for it in itens_payload:
+                id_item = it.get('id_item') or it.get('id')
+                if not id_item:
+                    return Response({'detail': 'ID do item é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                try:
+                    item = venda.itens.get(pk=id_item)
+                except VendaItem.DoesNotExist:
+                    return Response({'detail': f'Item {id_item} não pertence a esta venda.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                # Atualizar campos fiscais
+                if 'cfop' in it:
+                    item.cfop = it['cfop']
+                if 'icms_cst_csosn' in it:
+                    item.icms_cst_csosn = it['icms_cst_csosn']
+                elif 'cst' in it:
+                    item.icms_cst_csosn = it['cst']
+                
+                if 'pis_cst' in it:
+                    item.pis_cst = it['pis_cst']
+                if 'pis_aliq' in it:
+                    try:
+                        item.pis_aliq = Decimal(str(it['pis_aliq'] or '0'))
+                        # Recalcular valor_pis
+                        bc = item.pis_bc or item.valor_total or Decimal('0.00')
+                        item.valor_pis = (bc * (item.pis_aliq / Decimal('100.00'))).quantize(Decimal('0.01'))
+                    except Exception:
+                        pass
+                
+                if 'cofins_cst' in it:
+                    item.cofins_cst = it['cofins_cst']
+                if 'cofins_aliq' in it:
+                    try:
+                        item.cofins_aliq = Decimal(str(it['cofins_aliq'] or '0'))
+                        # Recalcular valor_cofins
+                        bc = item.cofins_bc or item.valor_total or Decimal('0.00')
+                        item.valor_cofins = (bc * (item.cofins_aliq / Decimal('100.00'))).quantize(Decimal('0.01'))
+                    except Exception:
+                        pass
+                
+                if 'ipi_cst' in it:
+                    item.ipi_cst = it['ipi_cst']
+                if 'ipi_aliq' in it:
+                    try:
+                        item.ipi_aliq = Decimal(str(it['ipi_aliq'] or '0'))
+                        # Recalcular valor_ipi
+                        bc = item.ipi_bc or item.valor_total or Decimal('0.00')
+                        item.valor_ipi = (bc * (item.ipi_aliq / Decimal('100.00'))).quantize(Decimal('0.01'))
+                    except Exception:
+                        pass
+
+                item.save()
+                updated_items.append(item.pk)
+
+        return Response({
+            'detail': 'Impostos dos itens atualizados com sucesso.',
+            'itens_atualizados': updated_items
+        }, status=status.HTTP_200_OK)
+
+
 class CancelarNFCeView(APIView):
     """
     Endpoint para cancelar NFC-e.

@@ -84,6 +84,62 @@ const NFCePage = () => {
     const [loadingDetailId, setLoadingDetailId] = useState(null);
     const [vendaDetailOpen, setVendaDetailOpen] = useState(false);
 
+    // Estados para Edição de Impostos no Cupom
+    const [isEditingTaxes, setIsEditingTaxes] = useState(false);
+    const [editableItens, setEditableItens] = useState([]);
+    const [savingTaxes, setSavingTaxes] = useState(false);
+
+    const isVendaFinalized = (venda) => {
+        if (!venda) return true;
+        const status = (venda.status_nfe || 'PENDENTE').toUpperCase();
+        return ['AUTORIZADA', 'AUTORIZADO', 'APROVADO', 'EMITIDA'].includes(status);
+    };
+
+    const handleStartEditingTaxes = () => {
+        if (!selectedVendaDetail?.itens) return;
+        setEditableItens(selectedVendaDetail.itens.map(item => ({
+            id_item: item.id,
+            nome_produto: item.nome_produto || item.produto,
+            codigo_produto: item.codigo_produto || item.codigo,
+            cfop: item.cfop || '',
+            cst: item.icms_cst_csosn || '',
+            pis_cst: item.pis_cst || '',
+            pis_aliq: item.pis_aliq || 0,
+            cofins_cst: item.cofins_cst || '',
+            cofins_aliq: item.cofins_aliq || 0,
+            ipi_cst: item.ipi_cst || '',
+            ipi_aliq: item.ipi_aliq || 0,
+        })));
+        setIsEditingTaxes(true);
+    };
+
+    const handleCancelEditingTaxes = () => {
+        setIsEditingTaxes(false);
+        setEditableItens([]);
+    };
+
+    const handleSalvarImpostos = async () => {
+        if (!selectedVendaDetail) return;
+        setSavingTaxes(true);
+        try {
+            await axiosInstance.patch(`/vendas/${selectedVendaDetail.id}/atualizar_impostos_itens/`, {
+                itens: editableItens
+            });
+            showToast('✅ Impostos atualizados com sucesso!', 'success');
+            const detailResponse = await axiosInstance.get(`/vendas/${selectedVendaDetail.id}/`);
+            setSelectedVendaDetail(detailResponse.data);
+            setIsEditingTaxes(false);
+            setEditableItens([]);
+            fetchVendas();
+        } catch (err) {
+            console.error("Erro ao salvar impostos:", err);
+            const errorMsg = err.response?.data?.detail || err.response?.data?.message || 'Erro ao salvar impostos.';
+            showToast(errorMsg, 'error');
+        } finally {
+            setSavingTaxes(false);
+        }
+    };
+
     const handleMenuOpen = (event, venda) => {
         setAnchorEl(event.currentTarget);
         setMenuVenda(venda);
@@ -816,7 +872,7 @@ const NFCePage = () => {
             {/* Dialog de Detalhes do Cupom / Expandir Cupom */}
             <Dialog
                 open={vendaDetailOpen}
-                onClose={() => setVendaDetailOpen(false)}
+                onClose={() => { if (!savingTaxes) { handleCancelEditingTaxes(); setVendaDetailOpen(false); } }}
                 maxWidth="lg"
                 fullWidth
                 PaperProps={{
@@ -852,7 +908,8 @@ const NFCePage = () => {
                         {selectedVendaDetail && renderStatus(selectedVendaDetail.status_nfe)}
                         <IconButton
                             aria-label="close"
-                            onClick={() => setVendaDetailOpen(false)}
+                            onClick={() => { if (!savingTaxes) { handleCancelEditingTaxes(); setVendaDetailOpen(false); } }}
+                            disabled={savingTaxes}
                             sx={{
                                 color: 'white',
                                 '&:hover': {
@@ -1013,6 +1070,19 @@ const NFCePage = () => {
                                             const sub = parseFloat(item.subtotal || item.valor_total || (vUnit * qty));
                                             const totalItem = parseFloat(item.valor_total || (vUnit * qty));
                                             
+                                            const editableItem = isEditingTaxes 
+                                                ? editableItens.find(it => it.id_item === item.id) 
+                                                : null;
+
+                                            const handleChangeItemField = (field, val) => {
+                                                setEditableItens(prev => prev.map(it => {
+                                                    if (it.id_item === item.id) {
+                                                        return { ...it, [field]: val };
+                                                    }
+                                                    return it;
+                                                }));
+                                            };
+                                            
                                             return (
                                                 <TableRow key={item.id || index} hover>
                                                     <TableCell>
@@ -1031,39 +1101,129 @@ const NFCePage = () => {
                                                         {sub.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                                     </TableCell>
                                                     <TableCell align="center">
-                                                        {item.cfop ? (
+                                                        {isEditingTaxes && editableItem ? (
+                                                            <TextField
+                                                                value={editableItem.cfop || ''}
+                                                                onChange={(e) => handleChangeItemField('cfop', e.target.value)}
+                                                                size="small"
+                                                                variant="standard"
+                                                                inputProps={{ style: { textAlign: 'center', fontSize: '0.85rem' } }}
+                                                                sx={{ width: 60 }}
+                                                            />
+                                                        ) : item.cfop ? (
                                                             <Chip label={item.cfop} size="small" variant="outlined" color="primary" sx={{ height: 20, fontSize: '0.75rem' }} />
                                                         ) : (
                                                             '-'
                                                         )}
                                                     </TableCell>
                                                     <TableCell align="center">
-                                                        {item.icms_cst_csosn ? (
+                                                        {isEditingTaxes && editableItem ? (
+                                                            <TextField
+                                                                value={editableItem.cst || ''}
+                                                                onChange={(e) => handleChangeItemField('cst', e.target.value)}
+                                                                size="small"
+                                                                variant="standard"
+                                                                inputProps={{ style: { textAlign: 'center', fontSize: '0.85rem' } }}
+                                                                sx={{ width: 60 }}
+                                                            />
+                                                        ) : item.icms_cst_csosn ? (
                                                             <Chip label={item.icms_cst_csosn} size="small" variant="outlined" color="secondary" sx={{ height: 20, fontSize: '0.75rem' }} />
                                                         ) : (
                                                             '-'
                                                         )}
                                                     </TableCell>
                                                     <TableCell align="center">
-                                                        <Box sx={{ fontSize: '0.75rem', lineHeight: 1.1 }}>
-                                                            <div>CST: {item.ipi_cst || '-'}</div>
-                                                            {parseFloat(item.ipi_aliq || 0) > 0 && <div>{parseFloat(item.ipi_aliq).toFixed(2)}%</div>}
-                                                            {parseFloat(item.valor_ipi || 0) > 0 && <div style={{color: '#2e7d32'}}>R$ {parseFloat(item.valor_ipi).toFixed(2)}</div>}
-                                                        </Box>
+                                                        {isEditingTaxes && editableItem ? (
+                                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'center' }}>
+                                                                <TextField
+                                                                    label="CST"
+                                                                    value={editableItem.ipi_cst || ''}
+                                                                    onChange={(e) => handleChangeItemField('ipi_cst', e.target.value)}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    inputProps={{ style: { textAlign: 'center', fontSize: '0.75rem' } }}
+                                                                    sx={{ width: 45 }}
+                                                                />
+                                                                <TextField
+                                                                    label="Aliq%"
+                                                                    type="number"
+                                                                    value={editableItem.ipi_aliq}
+                                                                    onChange={(e) => handleChangeItemField('ipi_aliq', e.target.value)}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    inputProps={{ style: { textAlign: 'center', fontSize: '0.75rem' }, step: "0.01" }}
+                                                                    sx={{ width: 55 }}
+                                                                />
+                                                            </Box>
+                                                        ) : (
+                                                            <Box sx={{ fontSize: '0.75rem', lineHeight: 1.1 }}>
+                                                                <div>CST: {item.ipi_cst || '-'}</div>
+                                                                {parseFloat(item.ipi_aliq || 0) > 0 && <div>{parseFloat(item.ipi_aliq).toFixed(2)}%</div>}
+                                                                {parseFloat(item.valor_ipi || 0) > 0 && <div style={{color: '#2e7d32'}}>R$ {parseFloat(item.valor_ipi).toFixed(2)}</div>}
+                                                            </Box>
+                                                        )}
                                                     </TableCell>
                                                     <TableCell align="center">
-                                                        <Box sx={{ fontSize: '0.75rem', lineHeight: 1.1 }}>
-                                                            <div>CST: {item.pis_cst || '-'}</div>
-                                                            {parseFloat(item.pis_aliq || 0) > 0 && <div>{parseFloat(item.pis_aliq).toFixed(2)}%</div>}
-                                                            {parseFloat(item.valor_pis || 0) > 0 && <div style={{color: '#2e7d32'}}>R$ {parseFloat(item.valor_pis).toFixed(2)}</div>}
-                                                        </Box>
+                                                        {isEditingTaxes && editableItem ? (
+                                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'center' }}>
+                                                                <TextField
+                                                                    label="CST"
+                                                                    value={editableItem.pis_cst || ''}
+                                                                    onChange={(e) => handleChangeItemField('pis_cst', e.target.value)}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    inputProps={{ style: { textAlign: 'center', fontSize: '0.75rem' } }}
+                                                                    sx={{ width: 45 }}
+                                                                />
+                                                                <TextField
+                                                                    label="Aliq%"
+                                                                    type="number"
+                                                                    value={editableItem.pis_aliq}
+                                                                    onChange={(e) => handleChangeItemField('pis_aliq', e.target.value)}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    inputProps={{ style: { textAlign: 'center', fontSize: '0.75rem' }, step: "0.01" }}
+                                                                    sx={{ width: 55 }}
+                                                                />
+                                                            </Box>
+                                                        ) : (
+                                                            <Box sx={{ fontSize: '0.75rem', lineHeight: 1.1 }}>
+                                                                <div>CST: {item.pis_cst || '-'}</div>
+                                                                {parseFloat(item.pis_aliq || 0) > 0 && <div>{parseFloat(item.pis_aliq).toFixed(2)}%</div>}
+                                                                {parseFloat(item.valor_pis || 0) > 0 && <div style={{color: '#2e7d32'}}>R$ {parseFloat(item.valor_pis).toFixed(2)}</div>}
+                                                            </Box>
+                                                        )}
                                                     </TableCell>
                                                     <TableCell align="center">
-                                                        <Box sx={{ fontSize: '0.75rem', lineHeight: 1.1 }}>
-                                                            <div>CST: {item.cofins_cst || '-'}</div>
-                                                            {parseFloat(item.cofins_aliq || 0) > 0 && <div>{parseFloat(item.cofins_aliq).toFixed(2)}%</div>}
-                                                            {parseFloat(item.valor_cofins || 0) > 0 && <div style={{color: '#2e7d32'}}>R$ {parseFloat(item.valor_cofins).toFixed(2)}</div>}
-                                                        </Box>
+                                                        {isEditingTaxes && editableItem ? (
+                                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'center' }}>
+                                                                <TextField
+                                                                    label="CST"
+                                                                    value={editableItem.cofins_cst || ''}
+                                                                    onChange={(e) => handleChangeItemField('cofins_cst', e.target.value)}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    inputProps={{ style: { textAlign: 'center', fontSize: '0.75rem' } }}
+                                                                    sx={{ width: 45 }}
+                                                                />
+                                                                <TextField
+                                                                    label="Aliq%"
+                                                                    type="number"
+                                                                    value={editableItem.cofins_aliq}
+                                                                    onChange={(e) => handleChangeItemField('cofins_aliq', e.target.value)}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    inputProps={{ style: { textAlign: 'center', fontSize: '0.75rem' }, step: "0.01" }}
+                                                                    sx={{ width: 55 }}
+                                                                />
+                                                            </Box>
+                                                        ) : (
+                                                            <Box sx={{ fontSize: '0.75rem', lineHeight: 1.1 }}>
+                                                                <div>CST: {item.cofins_cst || '-'}</div>
+                                                                {parseFloat(item.cofins_aliq || 0) > 0 && <div>{parseFloat(item.cofins_aliq).toFixed(2)}%</div>}
+                                                                {parseFloat(item.valor_cofins || 0) > 0 && <div style={{color: '#2e7d32'}}>R$ {parseFloat(item.valor_cofins).toFixed(2)}</div>}
+                                                            </Box>
+                                                        )}
                                                     </TableCell>
                                                     <TableCell align="right" sx={{ fontWeight: 600 }}>
                                                         {totalItem.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
@@ -1187,36 +1347,74 @@ const NFCePage = () => {
 
                 <DialogActions sx={{ p: 2.5, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between' }}>
                     <Box sx={{ display: 'flex', gap: 1 }}>
-                        {(selectedVendaDetail?.status_nfe === 'EMITIDA' || selectedVendaDetail?.status_nfe === 'CONTINGENCIA') && (
-                            <Button
-                                variant="contained"
-                                color="success"
-                                startIcon={<PrintIcon />}
-                                onClick={() => handleImprimirNFCe(selectedVendaDetail.id)}
-                            >
-                                Imprimir Cupom
-                            </Button>
-                        )}
-                        {selectedVendaDetail && (
-                            <WhatsAppQuickSend
-                                telefone={selectedVendaDetail.whatsapp_cliente || selectedVendaDetail.telefone_cliente || selectedVendaDetail.telefone_celular || selectedVendaDetail.telefone || selectedVendaDetail.cliente_detalhes?.whatsapp || selectedVendaDetail.cliente_detalhes?.telefone}
-                                nome={selectedVendaDetail.cliente || selectedVendaDetail.nome_cliente}
-                                mensagemPadrao={templates.nfce_emitida(
-                                    selectedVendaDetail.cliente || selectedVendaDetail.nome_cliente || 'Cliente',
-                                    selectedVendaDetail.numero_nfe || selectedVendaDetail.numero_documento,
-                                    parseFloat(selectedVendaDetail.valor_total || 0).toFixed(2),
-                                    selectedVendaDetail.chave_nfe || ''
+                        {isEditingTaxes ? (
+                            <>
+                                <Button
+                                    variant="contained"
+                                    color="success"
+                                    onClick={handleSalvarImpostos}
+                                    disabled={savingTaxes}
+                                >
+                                    {savingTaxes ? <CircularProgress size={20} color="inherit" /> : 'Salvar'}
+                                </Button>
+                                <Button
+                                    variant="outlined"
+                                    color="secondary"
+                                    onClick={handleCancelEditingTaxes}
+                                    disabled={savingTaxes}
+                                >
+                                    Cancelar
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                {!isVendaFinalized(selectedVendaDetail) && (
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={handleStartEditingTaxes}
+                                    >
+                                        Editar Impostos
+                                    </Button>
                                 )}
-                                tipoEnvio="nfce"
-                                idRelacionado={selectedVendaDetail.id}
-                                onSuccess={() => console.log('WhatsApp NFC-e enviado de dentro dos detalhes!')}
-                            />
+                                {(selectedVendaDetail?.status_nfe === 'EMITIDA' || selectedVendaDetail?.status_nfe === 'CONTINGENCIA') && (
+                                    <Button
+                                        variant="contained"
+                                        color="success"
+                                        startIcon={<PrintIcon />}
+                                        onClick={() => handleImprimirNFCe(selectedVendaDetail.id)}
+                                    >
+                                        Imprimir Cupom
+                                    </Button>
+                                )}
+                                {selectedVendaDetail && (
+                                    <WhatsAppQuickSend
+                                        telefone={selectedVendaDetail.whatsapp_cliente || selectedVendaDetail.telefone_cliente || selectedVendaDetail.telefone_celular || selectedVendaDetail.telefone || selectedVendaDetail.cliente_detalhes?.whatsapp || selectedVendaDetail.cliente_detalhes?.telefone}
+                                        nome={selectedVendaDetail.cliente || selectedVendaDetail.nome_cliente}
+                                        mensagemPadrao={templates.nfce_emitida(
+                                            selectedVendaDetail.cliente || selectedVendaDetail.nome_cliente || 'Cliente',
+                                            selectedVendaDetail.numero_nfe || selectedVendaDetail.numero_documento,
+                                            parseFloat(selectedVendaDetail.valor_total || 0).toFixed(2),
+                                            selectedVendaDetail.chave_nfe || ''
+                                        )}
+                                        tipoEnvio="nfce"
+                                        idRelacionado={selectedVendaDetail.id}
+                                        onSuccess={() => console.log('WhatsApp NFC-e enviado de dentro dos detalhes!')}
+                                    />
+                                )}
+                            </>
                         )}
                     </Box>
                     <Button 
-                        onClick={() => setVendaDetailOpen(false)}
+                        onClick={() => {
+                            if (isEditingTaxes) {
+                                handleCancelEditingTaxes();
+                            }
+                            setVendaDetailOpen(false);
+                        }}
                         variant="outlined"
                         color="primary"
+                        disabled={savingTaxes}
                     >
                         Fechar
                     </Button>
