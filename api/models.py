@@ -1757,6 +1757,18 @@ class Venda(models.Model):
     qrcode_nfe = models.TextField(blank=True, null=True, db_column='qrcode_nfe')
     mensagem_nfe = models.TextField(blank=True, null=True, db_column='mensagem_nfe', help_text="Ultima mensagem de erro ou status da NFe/NFCe")
 
+    # Campos NFS-e
+    numero_nfse = models.CharField(max_length=50, blank=True, null=True, db_column='numero_nfse')
+    chave_nfse = models.CharField(max_length=100, blank=True, null=True, db_column='chave_nfse')
+    status_nfse = models.CharField(max_length=20, blank=True, null=True, db_column='status_nfse')
+    data_emissao_nfse = models.DateTimeField(blank=True, null=True, db_column='data_emissao_nfse')
+    xml_url = models.TextField(blank=True, null=True, db_column='xml_url_nfse')
+    
+    # Campos DPS (Controle Interno/Provisório)
+    numero_dps = models.IntegerField(blank=True, null=True, db_column='numero_dps')
+    serie_dps = models.CharField(max_length=5, blank=True, null=True, db_column='serie_dps')
+    tipo_emissao_dps = models.CharField(max_length=20, default='normal', blank=True, null=True, db_column='tipo_emissao_dps')
+
     # Campos NFe (Modelo 55) - Adicionados
     tipo_frete = models.IntegerField(default=9, help_text="0=Rem, 1=Dest, 9=Sem Frete") 
     transportadora = models.ForeignKey(Cliente, models.SET_NULL, db_column='id_transportadora', blank=True, null=True, related_name='vendas_transportadas')

@@ -77,7 +77,7 @@ const AIChat = () => {
   const recognitionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
-  const audioRef = useRef(null); // Referência ao Audio() atual (Google TTS)
+  const audioRef = useRef(null); // Referência ao Audio() persistente
 
   // Estados de voz
   const [gravando, setGravando] = useState(false);
@@ -89,6 +89,17 @@ const AIChat = () => {
   const [drawerAberto, setDrawerAberto] = useState(false);
   const [analiseIA, setAnaliseIA] = useState(null);
   const [carregandoAnalise, setCarregandoAnalise] = useState(false);
+
+  // Inicializa o elemento de Audio persistente para contornar o bloqueio de autoplay do Firefox/Safari
+  useEffect(() => {
+    audioRef.current = new Audio();
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
 
   // Debug: Log quando componente renderiza
   useEffect(() => {
@@ -337,7 +348,8 @@ const AIChat = () => {
     // Para áudio anterior se estiver tocando
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current = null;
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
     }
     window.speechSynthesis?.cancel();
 
@@ -365,11 +377,23 @@ const AIChat = () => {
       );
 
       if (data.sucesso && data.audio_base64) {
-        const audio = new Audio(`data:audio/mp3;base64,${data.audio_base64}`);
-        audioRef.current = audio;
-        audio.onended = () => { setFalando(false); audioRef.current = null; };
-        audio.onerror = () => { setFalando(false); audioRef.current = null; };
-        await audio.play();
+        if (audioRef.current) {
+          // Usa o MIME type correto (audio/mpeg) compatível universalmente
+          audioRef.current.src = `data:audio/mpeg;base64,${data.audio_base64}`;
+          audioRef.current.onended = () => { setFalando(false); };
+          audioRef.current.onerror = (e) => { 
+            console.error("Erro no player do áudio persistente:", e); 
+            setFalando(false); 
+          };
+          await audioRef.current.play();
+        } else {
+          // Fallback se o ref não estiver instanciado
+          const audio = new Audio(`data:audio/mpeg;base64,${data.audio_base64}`);
+          audioRef.current = audio;
+          audio.onended = () => { setFalando(false); audioRef.current = null; };
+          audio.onerror = () => { setFalando(false); audioRef.current = null; };
+          await audio.play();
+        }
       } else {
         setFalando(false);
       }
@@ -402,7 +426,8 @@ const AIChat = () => {
   const pararFala = () => {
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current = null;
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
     }
     window.speechSynthesis?.cancel();
     setFalando(false);
@@ -414,10 +439,10 @@ const AIChat = () => {
     
     if (!texto) return;
 
-    // Desbloqueia o autoplay de áudio no Firefox sob gesto do usuário
-    if (audioAtivado) {
-      const audioSilencioso = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAAA');
-      audioSilencioso.play().catch(e => console.log("Erro ao desbloquear autoplay de áudio:", e));
+    // Desbloqueia o autoplay de áudio no Firefox sob gesto do usuário usando o elemento persistente
+    if (audioAtivado && audioRef.current) {
+      audioRef.current.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAAA';
+      audioRef.current.play().catch(e => console.log("Erro ao desbloquear autoplay de áudio:", e));
     }
     
     // Adiciona mensagem do usuário
@@ -586,7 +611,14 @@ const AIChat = () => {
                 <span>
                   <IconButton
                     size="small"
-                    onClick={() => falarTexto(msg.conteudo)}
+                    onClick={() => {
+                      // Pré-desbloqueia o elemento de áudio persistente no evento de clique
+                      if (audioRef.current) {
+                        audioRef.current.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAAA';
+                        audioRef.current.play().catch(e => console.log("Erro ao desbloquear no clique:", e));
+                      }
+                      falarTexto(msg.conteudo);
+                    }}
                     disabled={gerandoAudio}
                     sx={{ p: 0.3 }}
                   >

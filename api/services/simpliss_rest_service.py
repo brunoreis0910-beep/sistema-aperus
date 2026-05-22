@@ -536,3 +536,249 @@ class SimplISSRestService:
             cfg.save(update_fields=['ultimo_numero_dps'])
             self.config.ultimo_numero_dps = proximo
         return proximo
+
+    def emitir_nfse_venda(self, venda) -> dict:
+        """Emite NFS-e para a Venda informada."""
+        try:
+            numero_dps = self._proximo_numero_dps_venda(venda)
+            # Persistir numero_dps e serie_dps antes de enviar (garante rastreabilidade)
+            serie_cfg = re.sub(r'\D', '', getattr(self.config, 'serie_dps', '') or '') or SERIE_DPS
+            venda.numero_dps = numero_dps
+            venda.serie_dps = serie_cfg.zfill(5)
+            venda.save(update_fields=['numero_dps', 'serie_dps'])
+
+            xml_dps = self._construir_xml_dps_venda(venda, numero_dps)
+            xml_assinado = self._assinar_xml(xml_dps)
+            xml_gz_b64 = self._gzip_b64(xml_assinado)
+
+            payload = {"xmlDPS": xml_gz_b64}
+            endpoint = f"{self.base_url}/nfse"
+
+            logger.info(f"[SimplISS] Emitindo NFS-e Venda#{venda.id_venda} → {endpoint}")
+            response = self._post(endpoint, payload)
+
+            if response.status_code in (200, 201):
+                return self._processar_sucesso_venda(response, venda)
+            else:
+                return self._processar_erro(response)
+
+        except Exception as e:
+            logger.error(f"[SimplISS] Erro ao emitir NFS-e Venda: {e}", exc_info=True)
+            return {'sucesso': False, 'mensagem': str(e)}
+        finally:
+            self._limpar_cert_files()
+
+    def _proximo_numero_dps_venda(self, venda) -> int:
+        """
+        Retorna o número DPS da Venda.
+        Se já possui numero_dps (re-emissão), reutiliza o mesmo número.
+        Caso contrário, incrementa atomicamente o contador no EmpresaConfig.
+        """
+        if venda.numero_dps:
+            return int(venda.numero_dps)
+        with transaction.atomic():
+            cfg = EmpresaConfig.objects.select_for_update().get(pk=self.config.pk)
+            proximo = (cfg.ultimo_numero_dps or 0) + 1
+            cfg.ultimo_numero_dps = proximo
+            cfg.save(update_fields=['ultimo_numero_dps'])
+            self.config.ultimo_numero_dps = proximo
+        return proximo
+
+    def _construir_xml_dps_venda(self, venda, numero_dps: int) -> bytes:
+        """
+        Constrói o XML da DPS para Venda conforme leiaute SEFIN Nacional v1.01.
+        """
+        cfg = self.config
+        cnpj = re.sub(r'\D', '', cfg.cpf_cnpj or '')
+        im = re.sub(r'\D', '', cfg.inscricao_municipal or '')
+        cep_empresa = re.sub(r'\D', '', cfg.cep or '')
+        cod_mun = re.sub(r'\D', '', getattr(cfg, 'codigo_municipio_ibge', '3148103') or '3148103')
+
+        # Tipo de inscrição: 2=CNPJ, 1=CPF
+        tipo_insc = '2' if len(cnpj) == 14 else '1'
+        insc_padded = cnpj.zfill(14)
+
+        serie_cfg = re.sub(r'\D', '', getattr(self.config, 'serie_dps', '') or '') or SERIE_DPS
+        serie_padded = serie_cfg.zfill(5)
+        ndps_padded = str(numero_dps).zfill(15)
+
+        dps_id = f"DPS{cod_mun}{tipo_insc}{insc_padded}{serie_padded}{ndps_padded}"
+
+        agora = datetime.now(tz=timezone(timedelta(hours=-3)))
+        dh_emi = agora.strftime('%Y-%m-%dT%H:%M:%S-03:00')
+        d_compet = agora.strftime('%Y-%m-%d')
+        tp_amb = self.ambiente
+
+        cliente = venda.id_cliente
+        cnpj_cpf_cli = re.sub(r'\D', '', cliente.cpf_cnpj or '') if cliente else ''
+        cod_mun_cli = re.sub(r'\D', '', getattr(cliente, 'codigo_municipio_ibge', '') or '') or cod_mun if cliente else cod_mun
+        cep_cli = re.sub(r'\D', '', cliente.cep or '') or '00000000' if cliente else '00000000'
+
+        itens = venda.itens.all()
+        desc_servico = "; ".join(
+            str(item.id_produto.nome_produto or '') for item in itens if item.id_produto
+        ) or "Serviço de Hospedagem"
+        desc_servico = desc_servico[:150]
+
+        valor_servico = float(venda.valor_total or 0)
+        aliquota_iss = 2.00
+
+        # Código de tribut. nacional para hospedagem: 090101 (Hotéis, pensões, hospedarias...)
+        ctrib_nac = '090101'
+        # NBS para hospedagem: 109011200
+        cnbs = '109011200'
+
+        nsmap = {None: NFSE_NS}
+        DPS = etree.Element('DPS', nsmap=nsmap)
+        DPS.set('versao', DPS_VERSAO)
+
+        infDPS = etree.SubElement(DPS, 'infDPS')
+        infDPS.set('Id', dps_id)
+
+        self._el(infDPS, 'tpAmb', tp_amb)
+        self._el(infDPS, 'dhEmi', dh_emi)
+        self._el(infDPS, 'verAplic', VER_APLIC)
+        self._el(infDPS, 'serie', serie_padded)
+        self._el(infDPS, 'nDPS', ndps_padded)
+        self._el(infDPS, 'dCompet', d_compet)
+        self._el(infDPS, 'tpEmit', '1')
+        self._el(infDPS, 'cLocEmi', cod_mun)
+
+        # Prestador
+        prest = etree.SubElement(infDPS, 'prest')
+        self._el(prest, 'CNPJ', cnpj)
+        if im:
+            self._el(prest, 'IM', im)
+        if cfg.telefone:
+            fone = re.sub(r'\D', '', cfg.telefone)[:11]
+            self._el(prest, 'fone', fone)
+        if cfg.email:
+            self._el(prest, 'email', cfg.email[:80])
+
+        # Regime tributário do prestador
+        regime = getattr(cfg, 'regime_tributario', 'SIMPLES') or 'SIMPLES'
+        op_simp_nac = '1'
+        if regime == 'SIMPLES':
+            op_simp_nac = '3'
+        elif regime == 'MEI':
+            op_simp_nac = '2'
+        regTrib = etree.SubElement(prest, 'regTrib')
+        self._el(regTrib, 'opSimpNac', op_simp_nac)
+        self._el(regTrib, 'regEspTrib', '0')
+
+        # Tomador
+        toma = etree.SubElement(infDPS, 'toma')
+        if cliente:
+            if len(cnpj_cpf_cli) == 14:
+                self._el(toma, 'CNPJ', cnpj_cpf_cli)
+            elif len(cnpj_cpf_cli) == 11:
+                self._el(toma, 'CPF', cnpj_cpf_cli)
+            self._el(toma, 'xNome', (cliente.nome_razao_social or 'CONSUMIDOR')[:150])
+
+            end_toma = etree.SubElement(toma, 'end')
+            endNac = etree.SubElement(end_toma, 'endNac')
+            self._el(endNac, 'cMun', cod_mun_cli)
+            self._el(endNac, 'CEP', cep_cli.zfill(8))
+            self._el(end_toma, 'xLgr', (cliente.endereco or 'Não informado')[:255])
+            self._el(end_toma, 'nro', (cliente.numero or 'S/N')[:60])
+            if cliente.bairro:
+                self._el(end_toma, 'xBairro', cliente.bairro[:60])
+            if cliente.email:
+                self._el(toma, 'email', cliente.email[:80])
+        else:
+            self._el(toma, 'xNome', 'CONSUMIDOR')
+
+        # Serviço
+        serv = etree.SubElement(infDPS, 'serv')
+        locPrest = etree.SubElement(serv, 'locPrest')
+        self._el(locPrest, 'cLocPrestacao', cod_mun)
+
+        cServ = etree.SubElement(serv, 'cServ')
+        self._el(cServ, 'cTribNac', ctrib_nac)
+        self._el(cServ, 'cTribMun', '000')
+        self._el(cServ, 'xDescServ', desc_servico)
+        self._el(cServ, 'cNBS', cnbs)
+
+        # Valores
+        valores = etree.SubElement(infDPS, 'valores')
+        vServPrest = etree.SubElement(valores, 'vServPrest')
+        self._el(vServPrest, 'vServ', f'{valor_servico:.2f}')
+
+        trib = etree.SubElement(valores, 'trib')
+        tribMun = etree.SubElement(trib, 'tribMun')
+        self._el(tribMun, 'tribISSQN', '1')
+        self._el(tribMun, 'tpRetISSQN', '1')
+        self._el(tribMun, 'pAliq', f'{aliquota_iss:.2f}')
+
+        totTrib = etree.SubElement(trib, 'totTrib')
+        self._el(totTrib, 'indTotTrib', '0')
+
+        # IBS/CBS
+        IBSCBS = etree.SubElement(infDPS, 'IBSCBS')
+        self._el(IBSCBS, 'finNFSe', '0')
+        self._el(IBSCBS, 'indFinal', '0')
+        self._el(IBSCBS, 'cIndOp', '100501')
+        self._el(IBSCBS, 'indDest', '0')
+
+        valores_ibs = etree.SubElement(IBSCBS, 'valores')
+        trib_ibs = etree.SubElement(valores_ibs, 'trib')
+        gIBSCBS = etree.SubElement(trib_ibs, 'gIBSCBS')
+        self._el(gIBSCBS, 'CST', '000')
+        self._el(gIBSCBS, 'cClassTrib', '000001')
+
+        return etree.tostring(DPS, encoding='unicode', xml_declaration=False).encode('utf-8')
+
+    def _processar_sucesso_venda(self, response, venda) -> dict:
+        """Processa resposta 200/201 da API para Vendas."""
+        try:
+            data = response.json()
+            xml_nfse_b64 = (
+                data.get('xmlNFSe') or data.get('xmlNfse')
+                or data.get('arquivo') or data.get('xml') or ''
+            )
+            numero_nfse = str(data.get('numero') or data.get('numeroNFSe') or data.get('numeroNfse') or '')
+            chave_nfse = str(data.get('chaveAcesso') or data.get('chave') or data.get('codigoVerificacao') or '')
+
+            if xml_nfse_b64 and (not numero_nfse or not chave_nfse):
+                try:
+                    xml_bytes = gzip.decompress(base64.b64decode(xml_nfse_b64))
+                    root = etree.fromstring(xml_bytes)
+                    if not numero_nfse:
+                        el = root.find('.//{%s}nNFSe' % NFSE_NS) or root.find('.//{%s}numero' % NFSE_NS)
+                        if el is not None:
+                            numero_nfse = el.text or ''
+                    if not chave_nfse:
+                        el = root.find('.//{%s}chNFSe' % NFSE_NS) or root.find('.//{%s}chaveAcesso' % NFSE_NS)
+                        if el is not None:
+                            chave_nfse = el.text or ''
+                except Exception as ex:
+                    logger.warning(f"[SimplISS] Não foi possível parsear XML retornado: {ex}")
+
+            if numero_nfse or chave_nfse:
+                venda.numero_nfse = numero_nfse
+                venda.chave_nfse = chave_nfse
+                venda.status_nfse = 'Autorizada'
+                venda.data_emissao_nfse = datetime.now()
+                venda.save(update_fields=['numero_nfse', 'chave_nfse', 'status_nfse', 'data_emissao_nfse'])
+                logger.info(f"[SimplISS] NFS-e emitida para Venda: número={numero_nfse}, chave={chave_nfse}")
+                return {
+                    'sucesso': True,
+                    'numero_nfse': numero_nfse,
+                    'chave_nfse': chave_nfse,
+                    'mensagem': 'NFS-e emitida com sucesso',
+                    'dados_completos': data,
+                }
+
+            logger.warning(f"[SimplISS] Resposta OK mas sem número NFS-e para Venda: {data}")
+            venda.status_nfse = 'Processando'
+            venda.save(update_fields=['status_nfse'])
+            return {
+                'sucesso': True,
+                'mensagem': 'NFS-e em processamento — aguardar confirmação',
+                'dados_completos': data,
+            }
+
+        except Exception as e:
+            logger.error(f"[SimplISS] Erro ao processar resposta de sucesso para Venda: {e}")
+            return {'sucesso': False, 'mensagem': f'Erro ao processar resposta: {e}'}
+

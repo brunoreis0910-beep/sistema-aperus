@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from django.db import transaction
 from django.utils import timezone
 from decimal import Decimal
+from django.http import HttpResponse
 
 from .models import Cliente, Produto, Venda, VendaItem, Operacao
 from .models_hotel import TipoQuarto, Quarto, Reserva, ConsumoQuarto, Comodidade
@@ -57,6 +58,318 @@ class ReservaViewSet(viewsets.ModelViewSet):
     serializer_class = ReservaSerializer
     permission_classes = []
     pagination_class = None
+
+    @action(detail=True, methods=['get'])
+    def imprimir_comprovante(self, request, pk=None):
+        """Retorna uma página HTML formatada para impressão do comprovante de hospedagem."""
+        from django.utils import timezone
+        
+        reserva = self.get_object()
+        
+        # Calcular diárias
+        entrada_dt = reserva.data_checkin_real or reserva.data_entrada_prevista
+        saida_dt = reserva.data_checkout_real or reserva.data_saida_prevista
+        
+        entrada_local = timezone.localtime(entrada_dt)
+        saida_local = timezone.localtime(saida_dt)
+        
+        # Garantir pelo menos 1 diária se as datas forem no mesmo dia
+        dias = max((saida_dt.date() - entrada_dt.date()).days, 1)
+        
+        hospede = reserva.hospede
+        quarto = reserva.quarto
+        
+        # Montar a lista de consumos
+        consumos_html = ""
+        total_consumo = Decimal('0.00')
+        for item in reserva.consumos.all():
+            total_consumo += item.valor_total
+            consumos_html += f"""
+            <tr>
+                <td>{item.produto.nome_produto}</td>
+                <td style="text-align: center;">{item.quantidade}</td>
+                <td style="text-align: right;">R$ {item.valor_unitario:.2f}</td>
+                <td style="text-align: right;">R$ {item.valor_total:.2f}</td>
+            </tr>
+            """
+            
+        if not consumos_html:
+            consumos_html = """
+            <tr>
+                <td colspan="4" style="text-align: center; color: #777; font-style: italic;">Nenhum consumo registrado</td>
+            </tr>
+            """
+            
+        total_diarias = reserva.valor_diaria_aplicada * dias
+        total_consumo_dec = Decimal(str(total_consumo))
+        total_diarias_dec = Decimal(str(total_diarias))
+        total_geral = total_diarias_dec + total_consumo_dec
+        
+        status_colors = {
+            'confirmada': '#f57c00',
+            'checkin': '#0288d1',
+            'finalizada': '#388e3c',
+            'cancelada': '#d32f2f'
+        }
+        status_color = status_colors.get(reserva.status_reserva, '#757575')
+        
+        status_labels = {
+            'confirmada': 'Confirmada',
+            'checkin': 'Hospedagem Ativa (Check-in)',
+            'finalizada': 'Finalizada (Check-out)',
+            'cancelada': 'Cancelada'
+        }
+        status_label = status_labels.get(reserva.status_reserva, reserva.status_reserva.upper())
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="UTF-8">
+            <title>Comprovante de Hospedagem - Reserva #{reserva.id_reserva}</title>
+            <style>
+                body {{
+                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                    color: #333;
+                    margin: 0;
+                    padding: 20px;
+                    background-color: #fafafa;
+                }}
+                .container {{
+                    max-width: 800px;
+                    margin: 0 auto;
+                    background: #fff;
+                    padding: 30px;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+                    border: 1px solid #e0e0e0;
+                }}
+                .header {{
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    border-bottom: 2px solid #1976d2;
+                    padding-bottom: 20px;
+                    margin-bottom: 25px;
+                }}
+                .header-title h1 {{
+                    margin: 0;
+                    font-size: 24px;
+                    color: #1976d2;
+                }}
+                .header-title p {{
+                    margin: 5px 0 0 0;
+                    color: #666;
+                    font-size: 14px;
+                }}
+                .voucher-info {{
+                    text-align: right;
+                }}
+                .voucher-info h2 {{
+                    margin: 0;
+                    font-size: 20px;
+                    color: #333;
+                }}
+                .voucher-info p {{
+                    margin: 5px 0 0 0;
+                    font-size: 13px;
+                    color: #888;
+                }}
+                .section {{
+                    margin-bottom: 25px;
+                }}
+                .section-title {{
+                    font-size: 16px;
+                    font-weight: bold;
+                    color: #1976d2;
+                    margin-bottom: 12px;
+                    border-bottom: 1px solid #eee;
+                    padding-bottom: 5px;
+                }}
+                .grid-2 {{
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 15px;
+                }}
+                .info-item {{
+                    font-size: 14px;
+                    line-height: 1.5;
+                }}
+                .info-item strong {{
+                    color: #555;
+                }}
+                .badge {{
+                    display: inline-block;
+                    padding: 3px 8px;
+                    border-radius: 4px;
+                    color: #fff;
+                    font-weight: bold;
+                    font-size: 12px;
+                    text-transform: uppercase;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 10px;
+                }}
+                th {{
+                    background-color: #f5f5f5;
+                    color: #555;
+                    font-weight: bold;
+                    text-align: left;
+                    padding: 10px;
+                    font-size: 13px;
+                    border-bottom: 1px solid #ddd;
+                }}
+                td {{
+                    padding: 10px;
+                    font-size: 13px;
+                    border-bottom: 1px solid #eee;
+                }}
+                .totals-box {{
+                    margin-top: 20px;
+                    background: #f9f9f9;
+                    padding: 15px;
+                    border-radius: 6px;
+                    border: 1px solid #eee;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: flex-end;
+                    gap: 5px;
+                }}
+                .totals-line {{
+                    font-size: 14px;
+                    color: #555;
+                }}
+                .totals-line.grand-total {{
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #2e7d32;
+                    margin-top: 5px;
+                    border-top: 1px solid #ddd;
+                    padding-top: 5px;
+                    width: 250px;
+                    text-align: right;
+                }}
+                .no-print-btn-container {{
+                    text-align: center;
+                    margin-bottom: 20px;
+                }}
+                .btn {{
+                    background-color: #1976d2;
+                    color: #fff;
+                    border: none;
+                    padding: 10px 20px;
+                    font-size: 14px;
+                    font-weight: bold;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    transition: background-color 0.2s;
+                }}
+                .btn:hover {{
+                    background-color: #115293;
+                }}
+                @media print {{
+                    body {{
+                        background-color: #fff;
+                        padding: 0;
+                    }}
+                    .container {{
+                        box-shadow: none;
+                        border: none;
+                        padding: 0;
+                        max-width: 100%;
+                    }}
+                    .no-print-btn-container {{
+                        display: none;
+                    }}
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="no-print-btn-container">
+                <button class="btn" onclick="window.print()">Imprimir Comprovante</button>
+            </div>
+            <div class="container">
+                <div class="header">
+                    <div class="header-title">
+                        <h1>MÓDULO HOTELEIRO (PMS)</h1>
+                        <p>Hotel Aperus ERP Integrado</p>
+                    </div>
+                    <div class="voucher-info">
+                        <h2>Comprovante de Hospedagem</h2>
+                        <p>Reserva: <strong>#{reserva.id_reserva}</strong></p>
+                        <p>Data de Emissão: {timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M')}</p>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Dados do Hóspede</div>
+                    <div class="grid-2">
+                        <div class="info-item">
+                            <strong>Nome/Razão Social:</strong> {hospede.nome_razao_social}<br>
+                            <strong>CPF/CNPJ:</strong> {hospede.cpf_cnpj or 'Não informado'}<br>
+                            <strong>Telefone:</strong> {hospede.telefone or 'Não informado'}
+                        </div>
+                        <div class="info-item">
+                            <strong>E-mail:</strong> {hospede.email or 'Não informado'}<br>
+                            <strong>Endereço:</strong> {f"{hospede.endereco or ''}, {hospede.numero or ''} - {hospede.bairro or ''}" if hospede.endereco else 'Não informado'}<br>
+                            <strong>Cidade/UF:</strong> {f"{hospede.cidade or ''}/{hospede.estado or ''}" if hospede.cidade else 'Não informado'}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Detalhes da Estada</div>
+                    <div class="grid-2">
+                        <div class="info-item">
+                            <strong>Acomodação:</strong> Quarto {quarto.numero_quarto} ({quarto.tipo.nome})<br>
+                            <strong>Status da Reserva:</strong> <span class="badge" style="background-color: {status_color};">{status_label}</span><br>
+                            <strong>Valor da Diária:</strong> R$ {reserva.valor_diaria_aplicada:.2f}
+                        </div>
+                        <div class="info-item">
+                            <strong>Check-in (Entrada):</strong> {entrada_local.strftime('%d/%m/%Y %H:%M')}<br>
+                            <strong>Check-out (Saída):</strong> {saida_local.strftime('%d/%m/%Y %H:%M')}<br>
+                            <strong>Total de Diárias:</strong> {dias} noite(s)
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Consumo de Produtos / Serviços</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Item / Descrição</th>
+                                <th style="text-align: center; width: 100px;">Qtd</th>
+                                <th style="text-align: right; width: 120px;">Unitário</th>
+                                <th style="text-align: right; width: 120px;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {consumos_html}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="totals-box">
+                    <div class="totals-line">Total Diárias ({dias}x R$ {reserva.valor_diaria_aplicada:.2f}): <strong>R$ {total_diarias:.2f}</strong></div>
+                    <div class="totals-line">Total Consumo: <strong>R$ {total_consumo:.2f}</strong></div>
+                    <div class="totals-line grand-total">Total Geral: R$ {total_geral:.2f}</div>
+                </div>
+            </div>
+            <script>
+                window.onload = function() {{
+                    setTimeout(function() {{
+                        window.print();
+                    }}, 300);
+                }};
+            </script>
+        </body>
+        </html>
+        """
+        return HttpResponse(html_content, content_type='text/html')
 
     @action(detail=True, methods=['post'])
     def checkin(self, request, pk=None):

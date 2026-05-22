@@ -38,7 +38,8 @@ import {
   FormControl,
   InputLabel,
   Select,
-  Alert
+  Alert,
+  Menu
 } from '@mui/material';
 import {
   Hotel,
@@ -74,10 +75,13 @@ import {
   Block as BlockIcon,
   CreditCard as CreditCardIcon,
   Phone as PhoneIcon,
-  Email as EmailIcon
+  Email as EmailIcon,
+  Print,
+  MoreVert
 } from '@mui/icons-material';
 import api from '../services/api';
 import { toast } from 'react-toastify';
+import useImpressaoVenda from '../hooks/useImpressaoVenda';
 import {
   buscarCNPJ,
   buscarCEP,
@@ -99,6 +103,8 @@ const DEFAULT_STATUS_OPTIONS = [
 ];
 
 export default function HotelPMSPage() {
+  const { imprimirDireto } = useImpressaoVenda(api);
+
   // Dados principais
   const [tiposQuarto, setTiposQuarto] = useState([]);
   const [quartos, setQuartos] = useState([]);
@@ -217,6 +223,10 @@ export default function HotelPMSPage() {
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [checkoutResult, setCheckoutResult] = useState(null);
+
+  // Estados para Impressão / Faturamento
+  const [printAnchorEl, setPrintAnchorEl] = useState(null);
+  const [printSelectedRow, setPrintSelectedRow] = useState(null);
 
   // Estados para Faturamento Financeiro no Checkout
   const [formasPagamento, setFormasPagamento] = useState([]);
@@ -931,6 +941,75 @@ export default function HotelPMSPage() {
     }
   };
 
+  const handlePrintMenuOpen = (event, row) => {
+    setPrintAnchorEl(event.currentTarget);
+    setPrintSelectedRow(row);
+  };
+
+  const handlePrintMenuClose = () => {
+    setPrintAnchorEl(null);
+    setPrintSelectedRow(null);
+  };
+
+  const handlePrintComprovante = (reservaId) => {
+    if (!reservaId) return;
+    const url = `${api.defaults.baseURL || ''}/api/hotel/reservas/${reservaId}/imprimir_comprovante/`;
+    window.open(url, '_blank');
+    handlePrintMenuClose();
+  };
+
+  const handlePrintCupomVenda = async (vendaId) => {
+    if (!vendaId) return;
+    try {
+      setLoading(true);
+      const res = await api.get(`/api/vendas/${vendaId}/`);
+      await imprimirDireto(res.data);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao buscar dados da venda para impressão.');
+    } finally {
+      setLoading(false);
+      handlePrintMenuClose();
+    }
+  };
+
+  const handleEmitFiscal = async (vendaId, type) => {
+    if (!vendaId) return;
+    try {
+      setLoading(true);
+      let endpoint = '';
+      if (type === 'nfce') {
+        endpoint = `/api/vendas/${vendaId}/emitir_nfce/`;
+      } else if (type === 'nfe') {
+        endpoint = `/api/vendas/${vendaId}/emitir_nfe/`;
+      } else if (type === 'nfse') {
+        endpoint = `/api/vendas/${vendaId}/emitir_nfse/`;
+      }
+
+      const res = await api.post(endpoint);
+      
+      if (type === 'nfse') {
+        if (res.data?.sucesso) {
+          toast.success(res.data.mensagem || 'NFS-e emitida com sucesso!');
+        } else {
+          toast.error(res.data?.error || res.data?.mensagem || 'Erro na emissão da NFS-e.');
+        }
+      } else {
+        toast.success(`${type.toUpperCase()} emitida com sucesso!`);
+        const printUrl = type === 'nfce'
+          ? `${api.defaults.baseURL || ''}/api/vendas/${vendaId}/imprimir_danfce/`
+          : `${api.defaults.baseURL || ''}/api/vendas/${vendaId}/imprimir_danfe/`;
+        window.open(printUrl, '_blank');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || err.response?.data?.mensagem || err.response?.data?.message || `Erro ao emitir ${type.toUpperCase()}.`);
+    } finally {
+      setLoading(false);
+      handlePrintMenuClose();
+    }
+  };
+
   // Alterar status de limpeza do quarto
   const handleUpdateRoomStatus = async (roomId, status) => {
     try {
@@ -1561,13 +1640,23 @@ export default function HotelPMSPage() {
                           <TableCell align="right">R$ {parseFloat(row.valor_diaria_aplicada).toFixed(2)}</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 'bold' }}>R$ {parseFloat(row.total_geral).toFixed(2)}</TableCell>
                           <TableCell align="center">
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={() => handleOpenManageBooking(row)}
-                            >
-                              Ver Detalhes
-                            </Button>
+                            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => handleOpenManageBooking(row)}
+                              >
+                                Ver Detalhes
+                              </Button>
+                              <IconButton
+                                color="primary"
+                                size="small"
+                                onClick={(e) => handlePrintMenuOpen(e, row)}
+                                title="Opções de Impressão / Faturamento"
+                              >
+                                <Print />
+                              </IconButton>
+                            </Box>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -2083,7 +2172,7 @@ export default function HotelPMSPage() {
             A hospedagem foi finalizada e o faturamento enviado ao Aperus ERP.
           </Typography>
           
-          <Paper elevation={0} sx={{ p: 2, bgColor: '#f5f5f5', my: 2, border: '1px solid #e0e0e0', borderRadius: '8px' }}>
+          <Paper elevation={0} sx={{ p: 2, backgroundColor: '#f5f5f5', my: 2, border: '1px solid #e0e0e0', borderRadius: '8px' }}>
             <Typography variant="body2" color="text.secondary">Valor Total Faturado:</Typography>
             <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#2e7d32', my: 0.5 }}>
               R$ {parseFloat(checkoutResult?.faturamento_total || 0).toFixed(2)}
@@ -2093,13 +2182,71 @@ export default function HotelPMSPage() {
             </Typography>
           </Paper>
 
-          <Typography variant="caption" color="text.secondary">
+          {checkoutResult?.venda_id && (
+            <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5, textAlign: 'left' }}>
+                Opções de Impressão / Emissão:
+              </Typography>
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<Print />}
+                onClick={() => handlePrintComprovante(checkoutBooking?.id_reserva)}
+                sx={{ textTransform: 'none' }}
+              >
+                Comprovante de Hospedagem
+              </Button>
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<Print />}
+                onClick={() => handlePrintCupomVenda(checkoutResult.venda_id)}
+                sx={{ textTransform: 'none' }}
+              >
+                Imprimir Cupom/Venda
+              </Button>
+              <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  color="success"
+                  onClick={() => handleEmitFiscal(checkoutResult.venda_id, 'nfce')}
+                  size="small"
+                  sx={{ textTransform: 'none' }}
+                >
+                  NFC-e
+                </Button>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  color="primary"
+                  onClick={() => handleEmitFiscal(checkoutResult.venda_id, 'nfe')}
+                  size="small"
+                  sx={{ textTransform: 'none' }}
+                >
+                  NF-e
+                </Button>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  color="warning"
+                  onClick={() => handleEmitFiscal(checkoutResult.venda_id, 'nfse')}
+                  size="small"
+                  sx={{ textTransform: 'none' }}
+                >
+                  NFS-e
+                </Button>
+              </Box>
+            </Box>
+          )}
+
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
             O quarto foi marcado como "Sujo" e adicionado à fila da governança.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'center', pb: 3 }}>
-          <Button variant="contained" color="primary" onClick={() => setOpenCheckoutSuccessModal(false)}>
-            Ok, Voltar
+          <Button variant="contained" color="inherit" onClick={() => setOpenCheckoutSuccessModal(false)}>
+            Fechar
           </Button>
         </DialogActions>
       </Dialog>
@@ -2727,6 +2874,40 @@ export default function HotelPMSPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Menu
+        anchorEl={printAnchorEl}
+        open={Boolean(printAnchorEl)}
+        onClose={handlePrintMenuClose}
+      >
+        <MenuItem onClick={() => handlePrintComprovante(printSelectedRow?.id_reserva)}>
+          Imprimir Comprovante de Hospedagem
+        </MenuItem>
+        <MenuItem 
+          onClick={() => handlePrintCupomVenda(printSelectedRow?.venda)}
+          disabled={!printSelectedRow?.venda}
+        >
+          Imprimir Cupom/Venda
+        </MenuItem>
+        <MenuItem 
+          onClick={() => handleEmitFiscal(printSelectedRow?.venda, 'nfce')}
+          disabled={!printSelectedRow?.venda}
+        >
+          Emitir/Imprimir NFC-e
+        </MenuItem>
+        <MenuItem 
+          onClick={() => handleEmitFiscal(printSelectedRow?.venda, 'nfe')}
+          disabled={!printSelectedRow?.venda}
+        >
+          Emitir/Imprimir NF-e
+        </MenuItem>
+        <MenuItem 
+          onClick={() => handleEmitFiscal(printSelectedRow?.venda, 'nfse')}
+          disabled={!printSelectedRow?.venda}
+        >
+          Emitir/Imprimir NFS-e
+        </MenuItem>
+      </Menu>
 
     </Box>
   );

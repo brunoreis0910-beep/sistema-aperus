@@ -1,4 +1,4 @@
-﻿from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, date, timedelta
 import logging
 
@@ -3041,4 +3041,30 @@ class AtualizarEntregaView(APIView):
 
     def put(self, request, id_venda):
         return self.patch(request, id_venda)
+
+
+class EmitirNFSeVendaView(APIView):
+    """
+    Emite NFS-e para uma Venda específica (Módulo Hoteleiro / Checkout).
+    URL: /api/vendas/<id_venda>/emitir_nfse/
+    """
+    permission_classes = []
+
+    def post(self, request, id_venda):
+        try:
+            venda = get_object_or_404(Venda, pk=id_venda)
+            
+            # Verificar se a venda tem itens
+            if not venda.itens.exists():
+                return Response({'error': 'Venda não possui itens para emitir NFS-e.'}, status=status.HTTP_400_BAD_REQUEST)
+                
+            from api.services.simpliss_rest_service import SimplISSRestService
+            service = SimplISSRestService()
+            resultado = service.emitir_nfse_venda(venda)
+            
+            return Response(resultado)
+        except Exception as e:
+            logger.error(f"Erro na emissão NFS-e Venda {id_venda}: {e}", exc_info=True)
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
