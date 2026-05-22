@@ -1378,11 +1378,32 @@ class VendaView(APIView):
                         'nome_operacao': venda.id_operacao.nome_operacao,
                         'modelo_documento': venda.id_operacao.modelo_documento if hasattr(venda.id_operacao, 'modelo_documento') else None,
                         'gera_financeiro': venda.id_operacao.gera_financeiro if hasattr(venda.id_operacao, 'gera_financeiro') else 0,
-                        'empresa': empresa_data,  # Dados completos da empresa (pode ser None)
+                    'empresa': empresa_data,  # Dados completos da empresa (pode ser None)
+                }
+
+                cliente_data = None
+                if venda.id_cliente:
+                    cliente = venda.id_cliente
+                    cliente_data = {
+                        'id_cliente': cliente.pk,
+                        'nome_razao_social': cliente.nome_razao_social,
+                        'nome_fantasia': cliente.nome_fantasia,
+                        'cpf_cnpj': cliente.cpf_cnpj,
+                        'inscricao_estadual': cliente.inscricao_estadual,
+                        'endereco': cliente.endereco,
+                        'numero': cliente.numero,
+                        'bairro': cliente.bairro,
+                        'cidade': cliente.cidade,
+                        'estado': cliente.estado,
+                        'cep': cliente.cep,
+                        'telefone': cliente.telefone,
+                        'email': cliente.email,
+                        'whatsapp': cliente.whatsapp,
                     }
                 
                 response_data = {
                     'id': venda.pk,
+                    'cliente_detalhes': cliente_data,
                     'numero_documento': venda.numero_documento or str(venda.pk),
                     'data': venda.data_documento.isoformat() if venda.data_documento else None,
                     'data_venda': venda.data_documento.isoformat() if venda.data_documento else None,

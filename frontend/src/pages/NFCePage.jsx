@@ -24,7 +24,8 @@ import {
   DialogActions,
   Menu,
   MenuItem,
-  ListItemIcon
+  ListItemIcon,
+  Grid
 } from '@mui/material';
 import { 
   Receipt as ReceiptIcon, 
@@ -44,7 +45,8 @@ import {
   WhatsApp as WhatsAppIcon,
   Article as ArticleIcon,
   ShoppingCart as ShoppingCartIcon,
-  ViewList as ViewListIcon
+  ViewList as ViewListIcon,
+  Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
@@ -77,6 +79,11 @@ const NFCePage = () => {
     const [anchorEl, setAnchorEl] = useState(null);
     const [menuVenda, setMenuVenda] = useState(null);
 
+    // Estados para DIALOG de Expandir Cupom / Detalhes
+    const [selectedVendaDetail, setSelectedVendaDetail] = useState(null);
+    const [loadingDetailId, setLoadingDetailId] = useState(null);
+    const [vendaDetailOpen, setVendaDetailOpen] = useState(false);
+
     const handleMenuOpen = (event, venda) => {
         setAnchorEl(event.currentTarget);
         setMenuVenda(venda);
@@ -85,6 +92,23 @@ const NFCePage = () => {
     const handleMenuClose = () => {
         setAnchorEl(null);
         setMenuVenda(null);
+    };
+
+    const handleExpandirCupom = async (vendaId) => {
+        if (!vendaId) return;
+        setLoadingDetailId(vendaId);
+        handleMenuClose();
+        try {
+            const response = await axiosInstance.get(`/vendas/${vendaId}/`);
+            setSelectedVendaDetail(response.data);
+            setVendaDetailOpen(true);
+        } catch (err) {
+            console.error("Erro ao carregar detalhes da venda:", err);
+            const errorMsg = err.response?.data?.details || err.response?.data?.error || err.response?.data?.message || 'Erro ao buscar detalhes da venda.';
+            showToast(errorMsg, 'error');
+        } finally {
+            setLoadingDetailId(null);
+        }
     };
 
     // Função principal de busca
@@ -587,6 +611,23 @@ const NFCePage = () => {
                                         </TableCell>
                                         <TableCell align="center">
                                             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0.5 }}>
+                                                <Tooltip title="Expandir Cupom / Detalhes">
+                                                    <span>
+                                                        <IconButton 
+                                                            color="primary" 
+                                                            size="small" 
+                                                            onClick={() => handleExpandirCupom(venda.id)}
+                                                            disabled={loadingDetailId !== null || !!processingId}
+                                                            sx={{ mr: 0.5 }}
+                                                        >
+                                                            {loadingDetailId === venda.id ? (
+                                                                <CircularProgress size={20} color="inherit" />
+                                                            ) : (
+                                                                <VisibilityIcon />
+                                                            )}
+                                                        </IconButton>
+                                                    </span>
+                                                </Tooltip>
                                                 {/* Botão Principal */}
                                                 <Button 
                                                     variant="contained" 
@@ -643,6 +684,16 @@ const NFCePage = () => {
                 open={Boolean(anchorEl)}
                 onClose={handleMenuClose}
             >
+                <MenuItem onClick={() => handleExpandirCupom(menuVenda?.id)} disabled={!menuVenda || loadingDetailId !== null}>
+                    <ListItemIcon>
+                        {loadingDetailId === menuVenda?.id ? (
+                            <CircularProgress size={20} color="inherit" />
+                        ) : (
+                            <VisibilityIcon fontSize="small" />
+                        )}
+                    </ListItemIcon>
+                    Expandir Cupom
+                </MenuItem>
                 <MenuItem onClick={() => handleDownloadXML(menuVenda)} disabled={!menuVenda?.tem_xml && !menuVenda?.chave_nfe}>
                     <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
                     Baixar XML
@@ -758,6 +809,416 @@ const NFCePage = () => {
                         disabled={justificativa.length < 15}
                     >
                         Confirmar
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Dialog de Detalhes do Cupom / Expandir Cupom */}
+            <Dialog
+                open={vendaDetailOpen}
+                onClose={() => setVendaDetailOpen(false)}
+                maxWidth="lg"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        borderRadius: 3,
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+                    }
+                }}
+            >
+                <DialogTitle 
+                    sx={{ 
+                        m: 0, 
+                        p: 3, 
+                        bgcolor: '#1a237e', 
+                        color: 'white', 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center' 
+                    }}
+                >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <ReceiptIcon sx={{ fontSize: 28 }} />
+                        <Box>
+                            <Typography variant="h6" component="div" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+                                Detalhes do Cupom (Venda #{selectedVendaDetail?.id})
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', display: 'block' }}>
+                                Operação: {selectedVendaDetail?.operacao?.nome_operacao || 'N/A'} | Doc: {selectedVendaDetail?.numero_documento || 'N/A'}
+                            </Typography>
+                        </Box>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {selectedVendaDetail && renderStatus(selectedVendaDetail.status_nfe)}
+                        <IconButton
+                            aria-label="close"
+                            onClick={() => setVendaDetailOpen(false)}
+                            sx={{
+                                color: 'white',
+                                '&:hover': {
+                                    bgcolor: 'rgba(255, 255, 255, 0.1)',
+                                },
+                            }}
+                        >
+                            <CancelIcon />
+                        </IconButton>
+                    </Box>
+                </DialogTitle>
+
+                <DialogContent dividers sx={{ p: 3, bgcolor: '#fbfcfd' }}>
+                    {/* Seção 1: Dados do Cliente */}
+                    <Paper elevation={0} variant="outlined" sx={{ p: 2.5, mb: 3, borderRadius: 2, bgcolor: '#fff' }}>
+                        <Typography variant="subtitle1" sx={{ color: '#1a237e', fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <InfoIcon fontSize="small" />
+                            Dados do Cliente
+                        </Typography>
+                        
+                        {selectedVendaDetail?.cliente_detalhes ? (
+                            <Grid container spacing={2}>
+                                <Grid item xs={12} sm={6} md={4}>
+                                    <Typography variant="caption" color="text.secondary" display="block">Nome / Razão Social</Typography>
+                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                        {selectedVendaDetail.cliente_detalhes.nome_razao_social || 'Consumidor Final'}
+                                    </Typography>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4}>
+                                    <Typography variant="caption" color="text.secondary" display="block">CPF / CNPJ</Typography>
+                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                        {selectedVendaDetail.cliente_detalhes.cpf_cnpj || 'Não Informado'}
+                                    </Typography>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4}>
+                                    <Typography variant="caption" color="text.secondary" display="block">Inscrição Estadual</Typography>
+                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                        {selectedVendaDetail.cliente_detalhes.inscricao_estadual || 'Isento / Não Informado'}
+                                    </Typography>
+                                </Grid>
+                                
+                                <Grid item xs={12} sm={6} md={4}>
+                                    <Typography variant="caption" color="text.secondary" display="block">Endereço</Typography>
+                                    <Typography variant="body2">
+                                        {selectedVendaDetail.cliente_detalhes.endereco 
+                                            ? `${selectedVendaDetail.cliente_detalhes.endereco}${selectedVendaDetail.cliente_detalhes.numero ? `, ${selectedVendaDetail.cliente_detalhes.numero}` : ''}`
+                                            : 'Não cadastrado'}
+                                    </Typography>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4}>
+                                    <Typography variant="caption" color="text.secondary" display="block">Bairro / CEP</Typography>
+                                    <Typography variant="body2">
+                                        {selectedVendaDetail.cliente_detalhes.bairro || 'N/A'} {selectedVendaDetail.cliente_detalhes.cep ? ` | CEP: ${selectedVendaDetail.cliente_detalhes.cep}` : ''}
+                                    </Typography>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4}>
+                                    <Typography variant="caption" color="text.secondary" display="block">Cidade / UF</Typography>
+                                    <Typography variant="body2">
+                                        {selectedVendaDetail.cliente_detalhes.cidade ? `${selectedVendaDetail.cliente_detalhes.cidade} - ${selectedVendaDetail.cliente_detalhes.estado || ''}` : 'N/A'}
+                                    </Typography>
+                                </Grid>
+
+                                <Grid item xs={12} sm={6} md={4}>
+                                    <Typography variant="caption" color="text.secondary" display="block">Telefone / Celular</Typography>
+                                    <Typography variant="body2">
+                                        {selectedVendaDetail.cliente_detalhes.telefone || 'Não Informado'}
+                                    </Typography>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4}>
+                                    <Typography variant="caption" color="text.secondary" display="block">Email</Typography>
+                                    <Typography variant="body2">
+                                        {selectedVendaDetail.cliente_detalhes.email || 'Não Informado'}
+                                    </Typography>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4}>
+                                    <Typography variant="caption" color="text.secondary" display="block">WhatsApp</Typography>
+                                    {selectedVendaDetail.cliente_detalhes.whatsapp ? (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 500, color: '#25d366' }}>
+                                                {selectedVendaDetail.cliente_detalhes.whatsapp}
+                                            </Typography>
+                                            <Tooltip title="Conversar no WhatsApp">
+                                                <IconButton 
+                                                    size="small" 
+                                                    color="success"
+                                                    onClick={() => window.open(`https://wa.me/55${selectedVendaDetail.cliente_detalhes.whatsapp.replace(/\D/g, '')}`, '_blank')}
+                                                >
+                                                    <WhatsAppIcon fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </Box>
+                                    ) : (
+                                        <Typography variant="body2">Não Informado</Typography>
+                                    )}
+                                </Grid>
+                            </Grid>
+                        ) : (
+                            selectedVendaDetail?.cliente ? (
+                                <Grid container spacing={2}>
+                                    <Grid item xs={12} sm={6} md={4}>
+                                        <Typography variant="caption" color="text.secondary" display="block">Nome / Razão Social</Typography>
+                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                            {selectedVendaDetail.cliente || 'Consumidor Final'}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid item xs={12} sm={6} md={4}>
+                                        <Typography variant="caption" color="text.secondary" display="block">CPF / CNPJ</Typography>
+                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                            {selectedVendaDetail.cpf_cnpj || 'Não Informado'}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid item xs={12} sm={6} md={4}>
+                                        <Typography variant="caption" color="text.secondary" display="block">Endereço / Contatos</Typography>
+                                        <Typography variant="body2">
+                                            {selectedVendaDetail.telefone_cliente ? `Tel: ${selectedVendaDetail.telefone_cliente}` : ''} 
+                                            {selectedVendaDetail.email_cliente ? ` | Email: ${selectedVendaDetail.email_cliente}` : ''}
+                                        </Typography>
+                                    </Grid>
+                                </Grid>
+                            ) : (
+                                <Typography variant="body2" color="text.secondary">
+                                    Consumidor Final (Sem cadastro associado)
+                                </Typography>
+                            )
+                        )}
+                    </Paper>
+
+                    {/* Seção 2: Produtos e Tributação */}
+                    <Paper elevation={0} variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', mb: 3 }}>
+                        <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <ShoppingCartIcon sx={{ color: '#1a237e' }} />
+                            <Typography variant="subtitle1" sx={{ color: '#1a237e', fontWeight: 600 }}>
+                                Itens do Cupom & Tributação
+                            </Typography>
+                        </Box>
+                        
+                        <TableContainer sx={{ maxHeight: 400 }}>
+                            <Table stickyHeader size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 'bold', bgcolor: '#fff', zIndex: 1 }}>Cod / Produto</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#fff', zIndex: 1 }}>Qtd</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: '#fff', zIndex: 1 }}>Vl. Unit</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: '#fff', zIndex: 1 }}>Subtotal</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#fff', zIndex: 1 }}>CFOP</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#fff', zIndex: 1 }}>CSOSN/CST</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#fff', zIndex: 1 }}>IPI</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#fff', zIndex: 1 }}>PIS</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 'bold', bgcolor: '#fff', zIndex: 1 }}>COFINS</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: '#fff', zIndex: 1 }}>Total</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {selectedVendaDetail?.itens && selectedVendaDetail.itens.length > 0 ? (
+                                        selectedVendaDetail.itens.map((item, index) => {
+                                            const vUnit = parseFloat(item.valor_unitario || 0);
+                                            const qty = parseFloat(item.quantidade || 0);
+                                            const sub = parseFloat(item.subtotal || item.valor_total || (vUnit * qty));
+                                            const totalItem = parseFloat(item.valor_total || (vUnit * qty));
+                                            
+                                            return (
+                                                <TableRow key={item.id || index} hover>
+                                                    <TableCell>
+                                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                                            {item.nome_produto || item.produto}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Cód: {item.codigo_produto || item.codigo || 'N/A'} {item.ncm_codigo ? `| NCM: ${item.ncm_codigo}` : ''}
+                                                        </Typography>
+                                                    </TableCell>
+                                                    <TableCell align="center">{qty.toLocaleString('pt-BR')}</TableCell>
+                                                    <TableCell align="right">
+                                                        {vUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                                    </TableCell>
+                                                    <TableCell align="right">
+                                                        {sub.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                                    </TableCell>
+                                                    <TableCell align="center">
+                                                        {item.cfop ? (
+                                                            <Chip label={item.cfop} size="small" variant="outlined" color="primary" sx={{ height: 20, fontSize: '0.75rem' }} />
+                                                        ) : (
+                                                            '-'
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell align="center">
+                                                        {item.icms_cst_csosn ? (
+                                                            <Chip label={item.icms_cst_csosn} size="small" variant="outlined" color="secondary" sx={{ height: 20, fontSize: '0.75rem' }} />
+                                                        ) : (
+                                                            '-'
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell align="center">
+                                                        <Box sx={{ fontSize: '0.75rem', lineHeight: 1.1 }}>
+                                                            <div>CST: {item.ipi_cst || '-'}</div>
+                                                            {parseFloat(item.ipi_aliq || 0) > 0 && <div>{parseFloat(item.ipi_aliq).toFixed(2)}%</div>}
+                                                            {parseFloat(item.valor_ipi || 0) > 0 && <div style={{color: '#2e7d32'}}>R$ {parseFloat(item.valor_ipi).toFixed(2)}</div>}
+                                                        </Box>
+                                                    </TableCell>
+                                                    <TableCell align="center">
+                                                        <Box sx={{ fontSize: '0.75rem', lineHeight: 1.1 }}>
+                                                            <div>CST: {item.pis_cst || '-'}</div>
+                                                            {parseFloat(item.pis_aliq || 0) > 0 && <div>{parseFloat(item.pis_aliq).toFixed(2)}%</div>}
+                                                            {parseFloat(item.valor_pis || 0) > 0 && <div style={{color: '#2e7d32'}}>R$ {parseFloat(item.valor_pis).toFixed(2)}</div>}
+                                                        </Box>
+                                                    </TableCell>
+                                                    <TableCell align="center">
+                                                        <Box sx={{ fontSize: '0.75rem', lineHeight: 1.1 }}>
+                                                            <div>CST: {item.cofins_cst || '-'}</div>
+                                                            {parseFloat(item.cofins_aliq || 0) > 0 && <div>{parseFloat(item.cofins_aliq).toFixed(2)}%</div>}
+                                                            {parseFloat(item.valor_cofins || 0) > 0 && <div style={{color: '#2e7d32'}}>R$ {parseFloat(item.valor_cofins).toFixed(2)}</div>}
+                                                        </Box>
+                                                    </TableCell>
+                                                    <TableCell align="right" sx={{ fontWeight: 600 }}>
+                                                        {totalItem.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={10} align="center" sx={{ py: 3 }}>
+                                                Nenhum produto cadastrado nesta venda.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </Paper>
+
+                    {/* Seção 3: Resumo Financeiro & Pagamentos */}
+                    <Grid container spacing={3}>
+                        {/* Formas de Pagamento */}
+                        <Grid item xs={12} md={6}>
+                            <Paper elevation={0} variant="outlined" sx={{ p: 2.5, borderRadius: 2, bgcolor: '#fff', height: '100%' }}>
+                                <Typography variant="subtitle1" sx={{ color: '#1a237e', fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <ViewListIcon fontSize="small" />
+                                    Formas de Pagamento
+                                </Typography>
+                                
+                                {selectedVendaDetail?.pagamentos && selectedVendaDetail.pagamentos.length > 0 ? (
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                                        {selectedVendaDetail.pagamentos.map((pag, idx) => (
+                                            <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1, borderBottom: '1px dashed #e0e0e0' }}>
+                                                <Typography variant="body2" sx={{ fontWeight: 500, color: '#455a64' }}>
+                                                    {pag.nome_forma_pagamento || pag.forma_pagamento || 'Outro'}
+                                                </Typography>
+                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#2e7d32' }}>
+                                                    {parseFloat(pag.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                                </Typography>
+                                            </Box>
+                                        ))}
+                                    </Box>
+                                ) : (
+                                    selectedVendaDetail?.forma_pagamento ? (
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1, borderBottom: '1px dashed #e0e0e0' }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 500, color: '#455a64' }}>
+                                                {selectedVendaDetail.forma_pagamento}
+                                            </Typography>
+                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#2e7d32' }}>
+                                                {parseFloat(selectedVendaDetail.valor_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                            </Typography>
+                                        </Box>
+                                    ) : (
+                                        <Typography variant="body2" color="text.secondary">
+                                            Nenhum registro de pagamento encontrado.
+                                        </Typography>
+                                    )
+                                )}
+                            </Paper>
+                        </Grid>
+
+                        {/* Totais do Documento */}
+                        <Grid item xs={12} md={6}>
+                            <Paper elevation={0} variant="outlined" sx={{ p: 2.5, borderRadius: 2, bgcolor: '#fff', height: '100%' }}>
+                                <Typography variant="subtitle1" sx={{ color: '#1a237e', fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <ShoppingCartIcon fontSize="small" />
+                                    Resumo de Valores
+                                </Typography>
+                                
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                                    {/* Total de Itens */}
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Typography variant="body2" color="text.secondary">Subtotal dos Produtos</Typography>
+                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                            {selectedVendaDetail?.itens
+                                                ? selectedVendaDetail.itens.reduce((acc, it) => acc + parseFloat(it.valor_unitario || 0) * parseFloat(it.quantidade || 0), 0)
+                                                    .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                                : parseFloat(selectedVendaDetail?.valor_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                            }
+                                        </Typography>
+                                    </Box>
+                                    
+                                    {/* Desconto */}
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Typography variant="body2" color="text.secondary">Descontos</Typography>
+                                        <Typography variant="body2" sx={{ fontWeight: 500, color: 'error.main' }}>
+                                            {selectedVendaDetail?.itens
+                                                ? selectedVendaDetail.itens.reduce((acc, it) => acc + parseFloat(it.desconto_valor || it.desconto || 0), 0)
+                                                    .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                                : 'R$ 0,00'
+                                            }
+                                        </Typography>
+                                    </Box>
+
+                                    {/* Tributos */}
+                                    {selectedVendaDetail?.itens && (
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <Typography variant="body2" color="text.secondary">Total Tributos (Aprox.)</Typography>
+                                            <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.secondary' }}>
+                                                {selectedVendaDetail.itens.reduce((acc, it) => acc + parseFloat(it.valor_total_tributos || 0), 0)
+                                                    .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                                }
+                                            </Typography>
+                                        </Box>
+                                    )}
+                                    
+                                    <Box sx={{ borderTop: '1px solid #e0e0e0', my: 1 }} />
+                                    
+                                    {/* Total Geral */}
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#1a237e' }}>Valor Total</Typography>
+                                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
+                                            {parseFloat(selectedVendaDetail?.valor_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </Typography>
+                                    </Box>
+                                </Box>
+                            </Paper>
+                        </Grid>
+                    </Grid>
+                </DialogContent>
+
+                <DialogActions sx={{ p: 2.5, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between' }}>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                        {(selectedVendaDetail?.status_nfe === 'EMITIDA' || selectedVendaDetail?.status_nfe === 'CONTINGENCIA') && (
+                            <Button
+                                variant="contained"
+                                color="success"
+                                startIcon={<PrintIcon />}
+                                onClick={() => handleImprimirNFCe(selectedVendaDetail.id)}
+                            >
+                                Imprimir Cupom
+                            </Button>
+                        )}
+                        {selectedVendaDetail && (
+                            <WhatsAppQuickSend
+                                telefone={selectedVendaDetail.whatsapp_cliente || selectedVendaDetail.telefone_cliente || selectedVendaDetail.telefone_celular || selectedVendaDetail.telefone || selectedVendaDetail.cliente_detalhes?.whatsapp || selectedVendaDetail.cliente_detalhes?.telefone}
+                                nome={selectedVendaDetail.cliente || selectedVendaDetail.nome_cliente}
+                                mensagemPadrao={templates.nfce_emitida(
+                                    selectedVendaDetail.cliente || selectedVendaDetail.nome_cliente || 'Cliente',
+                                    selectedVendaDetail.numero_nfe || selectedVendaDetail.numero_documento,
+                                    parseFloat(selectedVendaDetail.valor_total || 0).toFixed(2),
+                                    selectedVendaDetail.chave_nfe || ''
+                                )}
+                                tipoEnvio="nfce"
+                                idRelacionado={selectedVendaDetail.id}
+                                onSuccess={() => console.log('WhatsApp NFC-e enviado de dentro dos detalhes!')}
+                            />
+                        )}
+                    </Box>
+                    <Button 
+                        onClick={() => setVendaDetailOpen(false)}
+                        variant="outlined"
+                        color="primary"
+                    >
+                        Fechar
                     </Button>
                 </DialogActions>
             </Dialog>
