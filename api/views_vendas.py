@@ -187,7 +187,7 @@ class NFCeView(APIView):
     URL: /api/vendas/<id>/emitir_nfce/
     """
     def post(self, request, id_venda):
-        venda = get_object_or_400(Venda, pk=id_venda)
+        venda = get_object_or_404(Venda, pk=id_venda)
         
         service = NFCeService()
         
