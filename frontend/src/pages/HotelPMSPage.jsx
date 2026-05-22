@@ -39,8 +39,10 @@ import {
   InputLabel,
   Select,
   Alert,
-  Menu
+  Menu,
+  Autocomplete
 } from '@mui/material';
+
 import {
   Hotel,
   MeetingRoom,
@@ -259,6 +261,8 @@ export default function HotelPMSPage() {
     valor_unitario: '',
     observacao: ''
   });
+  const [produtoSearch, setProdutoSearch] = useState(null); // produto selecionado no Autocomplete
+
 
   // Chat do Assistente IA (Gemini Mock)
   const [chatOpen, setChatOpen] = useState(false);
@@ -840,7 +844,9 @@ export default function HotelPMSPage() {
       valor_unitario: '',
       observacao: ''
     });
+    setProdutoSearch(null);
     setOpenManageModal(true);
+
   };
 
   // Operações de Hospedagem (Check-in, Lançar Consumo, Checkout)
@@ -883,6 +889,8 @@ export default function HotelPMSPage() {
         valor_unitario: '',
         observacao: ''
       });
+      setProdutoSearch(null);
+
       await loadData();
     } catch (err) {
       console.error(err);
@@ -1042,14 +1050,17 @@ export default function HotelPMSPage() {
     }
   };
 
-  const handleSelectProduct = (prodId) => {
-    const prod = produtos.find(p => p.id_produto === prodId);
+  const handleSelectProduct = (prod) => {
     if (prod) {
+      setProdutoSearch(prod);
       setConsumoForm(prev => ({
         ...prev,
-        produto_id: prodId,
+        produto_id: prod.id_produto,
         valor_unitario: prod.preco_web || prod.preco_venda || '0.00'
       }));
+    } else {
+      setProdutoSearch(null);
+      setConsumoForm(prev => ({ ...prev, produto_id: '', valor_unitario: '' }));
     }
   };
 
@@ -1933,21 +1944,52 @@ export default function HotelPMSPage() {
                 <Box sx={{ mb: 3 }}>
                   <Grid container spacing={2}>
                     <Grid item xs={12}>
-                      <TextField
-                        select
+                      <Autocomplete
+                        options={produtos}
+                        value={produtoSearch}
+                        onChange={(_, newValue) => handleSelectProduct(newValue)}
+                        getOptionLabel={(option) =>
+                          option ? `${option.codigo_produto} - ${option.nome_produto}` : ''
+                        }
+                        isOptionEqualToValue={(option, value) =>
+                          option.id_produto === value?.id_produto
+                        }
+                        filterOptions={(options, { inputValue }) => {
+                          const term = inputValue.toLowerCase();
+                          return options.filter(
+                            (p) =>
+                              p.nome_produto?.toLowerCase().includes(term) ||
+                              p.codigo_produto?.toLowerCase().includes(term)
+                          );
+                        }}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Buscar Produto *"
+                            size="small"
+                            placeholder="Digite o nome ou código do produto..."
+                            InputProps={{
+                              ...params.InputProps,
+                            }}
+                          />
+                        )}
+                        renderOption={(props, option) => (
+                          <li {...props} key={option.id_produto}>
+                            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                {option.nome_produto}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Cód: {option.codigo_produto} &nbsp;|
+                                R$ {parseFloat(option.preco_web || option.preco_venda || 0).toFixed(2)}
+                              </Typography>
+                            </Box>
+                          </li>
+                        )}
+                        noOptionsText="Nenhum produto encontrado"
+                        clearOnEscape
                         fullWidth
-                        label="Selecione o Produto *"
-                        value={consumoForm.produto_id}
-                        onChange={e => handleSelectProduct(e.target.value)}
-                        size="small"
-                      >
-                        <MenuItem value="">Selecione...</MenuItem>
-                        {produtos.map(p => (
-                          <MenuItem key={p.id_produto} value={p.id_produto}>
-                            {p.codigo_produto} - {p.nome_produto}
-                          </MenuItem>
-                        ))}
-                      </TextField>
+                      />
                     </Grid>
                     <Grid item xs={4}>
                       <TextField
