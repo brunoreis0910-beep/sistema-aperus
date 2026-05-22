@@ -640,3 +640,153 @@ class ReservaViewSet(viewsets.ModelViewSet):
             "quartos": quartos_data,
             "reservas": reservas_list
         })
+
+    @action(detail=True, methods=['post'])
+    def gerar_nfce(self, request, pk=None):
+        """
+        Gera e emite a NFC-e (Cupom Fiscal) para os produtos da reserva.
+        Verifica os parâmetros do usuário logado (Configurações > Usuário > NFCe).
+        Exclui o valor da diária (DIARIA_HOTEL) e ajusta o financeiro proporcionalmente.
+        """
+        reserva = self.get_object()
+        original_venda = reserva.venda
+        
+        if not original_venda:
+            return Response(
+                {"error": "Não há venda de faturamento gerada para esta reserva. Por favor, realize o check-out primeiro."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # 1. Verificar se já existe uma NFC-e gerada a partir desta venda
+        venda_nfce_existente = Venda.objects.filter(venda_futura_origem=original_venda).first()
+        if venda_nfce_existente:
+            # Tentar emitir novamente
+            from api.services.nfce_service import NFCeService
+            service = NFCeService()
+            result = service.emitir_nfce(venda_nfce_existente)
+            if 'mensagem' in result:
+                result['message'] = result['mensagem']
+            result['id_venda'] = venda_nfce_existente.id_venda
+            status_code = status.HTTP_200_OK if result.get('sucesso') else status.HTTP_400_BAD_REQUEST
+            return Response(result, status=status_code)
+            
+        # 2. Obter parâmetros do usuário
+        from api.models import UserParametros
+        user_params = UserParametros.objects.filter(id_user=request.user).first()
+        if not user_params or not user_params.id_operacao_nfce:
+            return Response(
+                {"error": "Nenhuma operação de NFC-e configurada para o seu usuário. Acesse Configurações > Usuário > aba NFCe."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        operacao_nfce = user_params.id_operacao_nfce
+        vendedor_nfce = user_params.id_vendedor_nfce or original_venda.id_vendedor1
+        cliente_nfce = user_params.id_cliente_nfce or original_venda.id_cliente
+        
+        # 3. Filtrar produtos (excluir diárias)
+        items_original = VendaItem.objects.filter(id_venda=original_venda)
+        items_produtos = [item for item in items_original if item.id_produto.codigo_produto != 'DIARIA_HOTEL']
+        
+        if not items_produtos:
+            return Response(
+                {"error": "Não há produtos de consumo nesta hospedagem para gerar NFC-e (diárias são consideradas serviço e foram desconsideradas)."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        total_produtos = sum(Decimal(str(item.valor_total)) for item in items_produtos)
+        total_geral = Decimal(str(original_venda.valor_total))
+        
+        if total_geral > 0:
+            ratio = (total_produtos / total_geral).quantize(Decimal('0.000001'))
+        else:
+            ratio = Decimal('1.000000')
+            
+        # 4. Criar NFC-e e ajustar financeiro
+        from api.models import FinanceiroConta
+        
+        try:
+            with transaction.atomic():
+                venda_nfce = Venda.objects.create(
+                    id_operacao=operacao_nfce,
+                    id_cliente=cliente_nfce,
+                    id_vendedor1=vendedor_nfce,
+                    valor_total=total_produtos,
+                    data_documento=timezone.now().date(),
+                    origem='HOTEL_PMS',
+                    status_pagamento=original_venda.status_pagamento,
+                    venda_futura_origem=original_venda
+                )
+                
+                # Duplicar itens de produto para a nova venda
+                for item in items_produtos:
+                    VendaItem.objects.create(
+                        id_venda=venda_nfce,
+                        id_produto=item.id_produto,
+                        quantidade=item.quantidade,
+                        valor_unitario=item.valor_unitario,
+                        valor_total=item.valor_total
+                    )
+                    
+                # Ajustar financeiro proporcionalmente
+                financeiro_records = FinanceiroConta.objects.filter(id_venda_origem=original_venda.id_venda)
+                
+                for record in financeiro_records:
+                    valor_parcela_original = Decimal(str(record.valor_parcela))
+                    valor_liquidado_original = Decimal(str(record.valor_liquidado or 0.00))
+                    
+                    valor_nfce_val = (valor_parcela_original * ratio).quantize(Decimal('0.01'))
+                    valor_diaria = valor_parcela_original - valor_nfce_val
+                    
+                    valor_liquidado_nfce = (valor_liquidado_original * ratio).quantize(Decimal('0.01'))
+                    valor_liquidado_diaria = valor_liquidado_original - valor_liquidado_nfce
+                    
+                    if valor_nfce_val > 0:
+                        FinanceiroConta.objects.create(
+                            tipo_conta=record.tipo_conta,
+                            id_cliente_fornecedor=cliente_nfce,
+                            descricao=f"NFCe {venda_nfce.id_venda} - " + record.descricao,
+                            valor_parcela=valor_nfce_val,
+                            valor_liquidado=valor_liquidado_nfce,
+                            valor_juros=record.valor_juros,
+                            valor_multa=record.valor_multa,
+                            valor_desconto=record.valor_desconto,
+                            data_emissao=record.data_emissao,
+                            data_vencimento=record.data_vencimento,
+                            data_pagamento=record.data_pagamento,
+                            status_conta=record.status_conta,
+                            forma_pagamento=record.forma_pagamento,
+                            id_venda_origem=venda_nfce.id_venda,
+                            id_operacao=operacao_nfce,
+                            id_departamento=record.id_departamento,
+                            id_centro_custo=record.id_centro_custo,
+                            id_conta_cobranca=record.id_conta_cobranca,
+                            id_conta_baixa=record.id_conta_baixa,
+                            documento_numero=record.documento_numero,
+                            parcela_numero=record.parcela_numero,
+                            parcela_total=record.parcela_total,
+                            id_aluguel_origem=record.id_aluguel_origem,
+                            gerencial=record.gerencial
+                        )
+                        
+                    if valor_diaria > 0:
+                        record.valor_parcela = valor_diaria
+                        record.valor_liquidado = valor_liquidado_diaria
+                        record.save()
+                    else:
+                        record.delete()
+        except Exception as e:
+            return Response(
+                {"error": f"Erro interno ao processar a divisão financeira: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
+        # 5. Transmitir / Emitir NFC-e
+        from api.services.nfce_service import NFCeService
+        service = NFCeService()
+        result = service.emitir_nfce(venda_nfce)
+        if 'mensagem' in result:
+            result['message'] = result['mensagem']
+        result['id_venda'] = venda_nfce.id_venda
+            
+        status_code = status.HTTP_200_OK if result.get('sucesso') else status.HTTP_400_BAD_REQUEST
+        return Response(result, status=status_code)

@@ -998,17 +998,17 @@ export default function HotelPMSPage() {
   };
 
 
-  const handleEmitFiscal = async (vendaId, type) => {
-    if (!vendaId) return;
+  const handleEmitFiscal = async (id, type) => {
+    if (!id) return;
     try {
       setLoading(true);
       let endpoint = '';
       if (type === 'nfce') {
-        endpoint = `/api/vendas/${vendaId}/emitir_nfce/`;
+        endpoint = `/api/hotel/reservas/${id}/gerar_nfce/`;
       } else if (type === 'nfe') {
-        endpoint = `/api/vendas/${vendaId}/emitir_nfe/`;
+        endpoint = `/api/vendas/${id}/emitir_nfe/`;
       } else if (type === 'nfse') {
-        endpoint = `/api/vendas/${vendaId}/emitir_nfse/`;
+        endpoint = `/api/vendas/${id}/emitir_nfse/`;
       }
 
       const res = await api.post(endpoint);
@@ -1021,10 +1021,13 @@ export default function HotelPMSPage() {
         }
       } else {
         toast.success(`${type.toUpperCase()} emitida com sucesso!`);
-        const printUrl = type === 'nfce'
-          ? `${api.defaults.baseURL || ''}/api/vendas/${vendaId}/imprimir_danfce/`
-          : `${api.defaults.baseURL || ''}/api/vendas/${vendaId}/imprimir_danfe/`;
-        window.open(printUrl, '_blank');
+        const finalVendaId = type === 'nfce' ? res.data?.id_venda : id;
+        if (finalVendaId) {
+          const printUrl = type === 'nfce'
+            ? `${api.defaults.baseURL || ''}/api/vendas/${finalVendaId}/imprimir_danfce/`
+            : `${api.defaults.baseURL || ''}/api/vendas/${finalVendaId}/imprimir_danfe/`;
+          window.open(printUrl, '_blank');
+        }
       }
     } catch (err) {
       console.error(err);
@@ -2269,7 +2272,7 @@ export default function HotelPMSPage() {
                   fullWidth
                   variant="contained"
                   color="success"
-                  onClick={() => handleEmitFiscal(checkoutResult.venda_id, 'nfce')}
+                  onClick={() => handleEmitFiscal(checkoutBooking?.id_reserva, 'nfce')}
                   size="small"
                   sx={{ textTransform: 'none' }}
                 >
@@ -2949,7 +2952,7 @@ export default function HotelPMSPage() {
           Imprimir Cupom/Venda
         </MenuItem>
         <MenuItem 
-          onClick={() => handleEmitFiscal(printSelectedRow?.venda, 'nfce')}
+          onClick={() => handleEmitFiscal(printSelectedRow?.id_reserva, 'nfce')}
           disabled={!printSelectedRow?.venda}
         >
           Emitir/Imprimir NFC-e

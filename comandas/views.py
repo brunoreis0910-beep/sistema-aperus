@@ -225,7 +225,7 @@ class ComandaViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def fechar(self, request, pk=None):
         """Fecha a comanda"""
-        from api.models import FinanceiroConta, ParametrosUsuario
+        from api.models import FinanceiroConta, UserParametros
         from datetime import date
         from .models import PagamentoComanda
 
@@ -237,7 +237,7 @@ class ComandaViewSet(viewsets.ModelViewSet):
         # 🎯 BUSCAR VENDEDOR DOS PARÂMETROS DO USUÁRIO (id_vendedor_nfce)
         vendedor_nfce = None
         try:
-            user_params = ParametrosUsuario.objects.filter(usuario=request.user).first()
+            user_params = UserParametros.objects.filter(id_user=request.user).first()
             if user_params and user_params.id_vendedor_nfce:
                 vendedor_nfce = user_params.id_vendedor_nfce
                 logger.info(f"✅ Vendedor NFCe encontrado: {vendedor_nfce.nome}")
@@ -383,13 +383,13 @@ class ComandaViewSet(viewsets.ModelViewSet):
                 
                 # 🎯 BUSCAR PARÂMETROS DO USUÁRIO (VENDEDOR E OPERAÇÃO)
                 try:
-                    from api.models import ParametrosUsuario
-                    user_params = ParametrosUsuario.objects.filter(usuario=request.user).first()
+                    from api.models import UserParametros
+                    user_params = UserParametros.objects.filter(id_user=request.user).first()
                     if user_params:
                         # Buscar vendedor NFC-e (SEMPRE)
                         if user_params.id_vendedor_nfce:
                             vendedor_nfce = user_params.id_vendedor_nfce
-                            logger.info(f"✅ Vendedor NFC-e do usuário: {vendedor_nfce.nome_vendedor}")
+                            logger.info(f"✅ Vendedor NFC-e do usuário: {vendedor_nfce.nome}")
                 except Exception as e:
                     logger.warning(f"Erro ao buscar parâmetros do usuário: {e}")
                 
@@ -403,8 +403,8 @@ class ComandaViewSet(viewsets.ModelViewSet):
                 # Prioridade 2: Operação NFC-e do usuário com modelo 65
                 if not operacao:
                     try:
-                        from api.models import ParametrosUsuario
-                        user_params = ParametrosUsuario.objects.filter(usuario=request.user).first()
+                        from api.models import UserParametros
+                        user_params = UserParametros.objects.filter(id_user=request.user).first()
                         if user_params:
                             # Buscar operação NFC-e
                             if user_params.id_operacao_nfce:
