@@ -2355,10 +2355,12 @@ class VendaView(APIView):
                                 id_produto=item.id_produto,
                                 id_deposito_id=deposito_id
                             )
+                            prod_ident = getattr(item.id_produto, 'nome_produto', None) or str(item.id_produto.pk)
+                            quantidade_antes = estoque_obj.quantidade or Decimal('0')
                             # Devolver quantidade ao estoque
-                            estoque_obj.quantidade = (estoque_obj.quantidade or Decimal('0')) + item.quantidade
+                            estoque_obj.quantidade = quantidade_antes + item.quantidade
                             estoque_obj.save()
-                            print(f'[ESTOQUE] Baixa no deposito: Produto {prod_ident}, Qtd Antes: {quantidade_antes}, Qtd Apos: {estoque_obj.quantidade}')
+                            print(f"[ESTOQUE] Baixa no deposito: Produto {prod_ident}, Qtd Antes: {quantidade_antes}, Qtd Apos: {estoque_obj.quantidade}")
                         except Estoque.DoesNotExist:
                             # Se n�o existir registro, criar com a quantidade devolvida
                             estoque_obj = Estoque.objects.create(
