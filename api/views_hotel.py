@@ -92,18 +92,52 @@ class ReservaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        # Pega a operação padrão de faturamento (ou cria/busca uma padrão de Venda)
-        operacao = Operacao.objects.filter(transacao='Venda').first()
-        if not operacao:
-            # Caso não exista nenhuma operação, cria uma simples de teste
-            operacao, _ = Operacao.objects.get_or_create(
-                nome_operacao='Venda Balcão Hotel',
-                defaults={
-                    'transacao': 'Venda',
-                    'empresa': 'Hotel Aperus',
-                    'gera_financeiro': 1
-                }
-            )
+        # Parâmetros opcionais para faturamento financeiro
+        id_operacao = request.data.get('id_operacao')
+        id_forma_pagamento = request.data.get('id_forma_pagamento')
+        id_conta_cobranca = request.data.get('id_conta_cobranca')
+        data_vencimento_str = request.data.get('data_vencimento')
+        gerar_financeiro = request.data.get('gerar_financeiro', True)
+        if isinstance(gerar_financeiro, str):
+            gerar_financeiro = gerar_financeiro.lower() in ('true', '1', 'yes')
+
+        # Buscar Operacao de faturamento
+        if id_operacao:
+            try:
+                operacao = Operacao.objects.get(pk=id_operacao)
+            except Operacao.DoesNotExist:
+                return Response({"error": "Operação de faturamento não encontrada."}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            # Pega a operação padrão de faturamento (ou cria/busca uma padrão de Venda)
+            operacao = Operacao.objects.filter(transacao='Saida', gera_financeiro=1).first() or \
+                       Operacao.objects.filter(transacao='Venda').first()
+            if not operacao:
+                # Caso não exista nenhuma operação, cria uma simples de teste
+                operacao, _ = Operacao.objects.get_or_create(
+                    nome_operacao='Venda Balcão Hotel',
+                    defaults={
+                        'transacao': 'Venda',
+                        'empresa': 'Hotel Aperus',
+                        'gera_financeiro': 1
+                    }
+                )
+
+        # Definir data de vencimento e se será baixa automática
+        today = timezone.now().date()
+        if data_vencimento_str:
+            from django.utils.dateparse import parse_date
+            data_venc = parse_date(data_vencimento_str[:10])
+            if not data_venc:
+                try:
+                    from datetime import datetime
+                    data_venc = datetime.fromisoformat(data_vencimento_str[:10]).date()
+                except Exception:
+                    data_venc = today
+        else:
+            data_venc = today
+
+        # Se data de vencimento é hoje, força a baixa automática
+        baixa_automatica = (data_venc == today)
 
         # Garante o produto da Diária
         produto_diaria, _ = Produto.objects.get_or_create(
@@ -162,7 +196,26 @@ class ReservaViewSet(viewsets.ModelViewSet):
             reserva.venda = venda
             reserva.save()
             
-            # 6. Atualiza o status do quarto para sujo (governança)
+            # 6. Gera lançamento financeiro (se habilitado)
+            financeiro_criado = False
+            financeiro_id = None
+            if gerar_financeiro:
+                from .services.venda_financeiro import ensure_financeiro_for_venda
+                payload_fin = {
+                    'id_forma_pagamento': id_forma_pagamento,
+                    'vencimento': data_venc.isoformat(),
+                    'id_conta_cobranca': id_conta_cobranca,
+                    'criar_financeiro': True,
+                    'baixa_automatica': baixa_automatica
+                }
+                created, fin_pk, err = ensure_financeiro_for_venda(venda, payload=payload_fin, force=True)
+                if err:
+                    raise Exception(f"Erro ao gerar lançamento financeiro: {err}")
+                else:
+                    financeiro_criado = created
+                    financeiro_id = fin_pk
+            
+            # 7. Atualiza o status do quarto para sujo (governança)
             quarto = reserva.quarto
             quarto.status_atual = 'sujo'
             quarto.save()
@@ -171,7 +224,9 @@ class ReservaViewSet(viewsets.ModelViewSet):
             "message": "Checkout finalizado com sucesso!",
             "reserva": self.get_serializer(reserva).data,
             "venda_id": venda.id_venda,
-            "faturamento_total": total_geral
+            "faturamento_total": total_geral,
+            "financeiro_criado": financeiro_criado,
+            "financeiro_id": financeiro_id
         })
 
     @action(detail=True, methods=['post'])

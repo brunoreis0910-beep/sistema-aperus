@@ -1,0 +1,61 @@
+<Dialog
+        open={openCondicoesPagamento}
+        onClose={() => { setOpenCondicoesPagamento(false); setUsarMercadoPago(false); }}
+        maxWidth="md"
+        fullWidth
+      >
+        {openCondicoesPagamento && console.log('🎬 RENDERIZANDO MODAL DE CONDIÇÕES:', {
+          'valorCondicaoAtual': valorCondicaoAtual,
+          'valorTotal': valorTotal,
+          'valorRestante': valorRestante
+        })}
+        <DialogTitle sx={{ backgroundColor: '#4CAF50', color: 'white', fontWeight: 'bold' }}>
+          <MoneyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Condições de Pagamento
+        </DialogTitle>
+        <DialogContent sx={{ mt: 3 }}>
+          {/* Resumo da Venda */}
+          <Paper sx={{ p: 2, mb: 3, backgroundColor: '#E3F2FD' }}>
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Total da Venda:
+                </Typography>
+                <Typography variant="h5" fontWeight="bold" color="primary">
+                  R$ {valorTotal.toFixed(2)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Valor Restante:
+                </Typography>
+                <Typography
+                  variant="h5"
+                  fontWeight="bold"
+                  color={valorRestante > 0 ? 'error' : 'success.main'}
+                >
+                  R$ {valorRestante.toFixed(2)}
+                </Typography>
+              </Grid>
+            </Grid>
+            
+            {/* Campos de Valor Pago e Troco */}
+            <Divider sx={{ my: 2 }} />
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Valor Pago:
+                </Typography>
+                <TextField
+                  fullWidth
+                  type="number"
+                  value={valorPago || ''}
+                  onChange={(e) => {
+                    const pago = parseFloat(e.target.value) || 0;
+                    setValorPago(pago);
+                    const calculoTroco = pago - valorTotal;
+                    setTroco(calculoTroco > 0 ? calculoTroco : 0);
+                  }}
+                  inputProps={{ min: 0, step: 0.01 }}
+                  InputProps={{
+                    startAdornment: <In

@@ -379,7 +379,8 @@ const AIChat = () => {
       if (window.speechSynthesis && textoLimpo) {
         const utterance = new SpeechSynthesisUtterance(textoLimpo);
         utterance.lang = 'pt-BR';
-        utterance.rate = 1.05;
+        utterance.rate = 1.0; // Forçar velocidade normal para evitar tom robótico
+        utterance.pitch = 1.0; // Forçar pitch padrão de forma explícita
         
         // Seleciona uma voz em português do Brasil de alta qualidade
         const vozPtBr = obterVozPtBr();

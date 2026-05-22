@@ -1,0 +1,136 @@
+=== NFeView ===
+class NFeView(APIView):
+    """
+    Endpoint para emiss�o de NFe (Modelo 55) via ACBrMonitor.
+    URL: /api/vendas/<id>/emitir_nfe/
+    """
+    def post(self, request, id_venda):
+        venda = get_object_or_404(Venda, pk=id_venda)
+        
+        service = NFeService()
+        
+        result = service.emitir_nfe(venda)
+        
+        if not result:
+            return Response({"sucesso": False, "mensagem": "Certificado Digital não configurado.", "message": "Certificado Digital não configurado."}, status=400)
+
+        # Compatibilidade com Frontend (message vs mensagem)
+        if 'mensagem' in result:
+             result['message'] = result['mensagem']
+
+        if result.get('sucesso'):
+            return Response(result)
+        else:
+            return Response(result, status=400)
+
+class CancelarNFeView(APIView):
+    """
+    Endpoint para cancelar NFe (Modelo 55).
+    URL: /api/vendas/<id>/cancelar_nfe/
+    """
+    def post(self, request, id_venda):
+        venda = get_object_or_404(Venda, pk=id_venda)
+        justificativa = request.data.get('justificativa', '').strip()
+        
+        if len(justificativa) < 15:
+            return Response({"sucesso": False, "mensagem": "Justificativa deve ter no minimo 15 caracteres.", "message": "Justificativa deve ter no minimo 15 caracteres."}, status=400)
+            
+        service = NFeService()
+        result = service.cancelar_nfe(venda, justificativa)
+        
+        if 'mensagem' in result: result['message'] = result['mensagem']
+
+        status_code = 200 if result.get('sucesso') else 400
+        return Response(result, status=status_code)
+
+class InutilizarNFeView(APIView):
+    """
+    Endpoint para inutilizar numera��o de NFe (Modelo 55).
+    URL: /api/vendas/<id>/inutilizar_nfe/
+    """
+    def post(self, request, id_venda):
+        venda = get_object_or_404(Venda, pk=id_venda)
+        justificativa = request.data.get('justificativa', '').strip()
+        
+        if len(justificativa) < 15:
+            return Response({"sucesso": False, "mensagem": "Justificativa deve ter no minimo 15 caracteres.", "message": "Justificativa deve ter no minimo 15 caracteres."}, status=400)
+            
+        service = NFeService()
+        result = service.inutilizar_numeracao(venda, justificativa)
+        
+        if 'mensagem' in result: result['message'] = result['mensagem']
+
+        status_code = 200 if result.get('sucesso') else 400
+        return Response(result, status=status_code)
+
+class ImprimirDanfeNFeVi
+
+=== NFCeView ===
+class NFCeView(APIView):
+    """
+    Endpoint para emiss�o de NFC-e via ACBrMonitor.
+    URL: /api/vendas/<id>/emitir_nfce/
+    """
+    def post(self, request, id_venda):
+        venda = get_object_or_400(Venda, pk=id_venda)
+        
+        service = NFCeService()
+        
+        # OTIMIZA��O: N�o configurar ACBr antes de tentar nativo. O m�todo emitir_nfce gerencia isso.
+        # service.configurar_da_empresa()
+        
+        # Emitir
+        # O Service j� busca a configura��o da empresa se n�o passada
+        result = service.emitir_nfce(venda)
+
+        # Compatibilidade com Frontend (message vs mensagem)
+        if 'mensagem' in result:
+             result['message'] = result['mensagem']
+        
+        if result.get('sucesso'):
+            return Response(result)
+        else:
+            return Response(result, status=400)
+
+class CancelarNFCeView(APIView):
+    """
+    Endpoint para cancelar NFC-e.
+    URL: /api/vendas/<id>/cancelar_nfce/
+    Payload: { "justificativa": "..." }
+    """
+    def post(self, request, id_venda):
+        venda = get_object_or_404(Venda, pk=id_venda)
+        justificativa = request.data.get('justificativa', '').strip()
+        
+        # Validar Prazo de 30 Minutos
+        if venda.data_documento:
+            limite = timedelta(minutes=30)
+            tempo_decorrido = timezone.now() - venda.data_documento
+            
+            if tempo_decorrido > limite:
+                 msg = f"Prazo de cancelamento excedido (30 minutos). Tempo decorrido: {int(tempo_decorrido.total_seconds()/60)} min."
+                 return Response({
+                     "sucesso": False, 
+                     "mensagem": msg,
+                     "message": msg
+                 }, status=400)
+        
+        if len(justificativa) < 15:
+            return Response({"sucesso": False, "mensagem": "Justificativa deve ter no minimo 15 caracteres.", "message": "Justificativa deve ter no minimo 15 caracteres."}, status=400)
+            
+        service = NFCeService()
+        result = service.cancelar_nfce(venda, justificativa)
+        
+        if 'mensagem' in result: result['message'] = result['mensagem']
+
+        status_code = 200 if result.get('sucesso') else 400
+        return Response(result, status=status_code)
+
+class InutilizarNFCeView(APIView):
+    """
+    Endpoint para inutilizar numera��o de NFC-e.
+    URL: /api/vendas/<id>/inutilizar_nfce/
+    Payload: { "justificativa": "..." }
+    """
+    def post(self, request, id_venda):
+        ven

@@ -218,6 +218,20 @@ export default function HotelPMSPage() {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [checkoutResult, setCheckoutResult] = useState(null);
 
+  // Estados para Faturamento Financeiro no Checkout
+  const [formasPagamento, setFormasPagamento] = useState([]);
+  const [contasBancarias, setContasBancarias] = useState([]);
+  const [operacoes, setOperacoes] = useState([]);
+  const [openCheckoutDialog, setOpenCheckoutDialog] = useState(false);
+  const [checkoutBooking, setCheckoutBooking] = useState(null);
+  const [checkoutForm, setCheckoutForm] = useState({
+    id_operacao: '',
+    id_forma_pagamento: '',
+    id_conta_cobranca: '',
+    data_vencimento: new Date().toISOString().split('T')[0],
+    gerar_financeiro: true
+  });
+
   // Formulário de Reserva
   const [bookingForm, setBookingForm] = useState({
     hospede: '',
@@ -254,7 +268,18 @@ export default function HotelPMSPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [tiposRes, quartosRes, reservasRes, clientesRes, produtosRes, comodidadesRes, gruposRes] = await Promise.all([
+      const [
+        tiposRes,
+        quartosRes,
+        reservasRes,
+        clientesRes,
+        produtosRes,
+        comodidadesRes,
+        gruposRes,
+        formasRes,
+        contasRes,
+        operacoesRes
+      ] = await Promise.all([
         api.get('/api/hotel/tipos-quarto/'),
         api.get('/api/hotel/quartos/'),
         api.get('/api/hotel/reservas/'),
@@ -263,6 +288,18 @@ export default function HotelPMSPage() {
         api.get('/api/hotel/comodidades/'),
         api.get('/api/grupos-produto/').catch(err => {
           console.warn('Erro ao carregar grupos de produto:', err);
+          return { data: [] };
+        }),
+        api.get('/api/formas-pagamento/').catch(err => {
+          console.warn('Erro ao carregar formas de pagamento:', err);
+          return { data: [] };
+        }),
+        api.get('/api/contas-bancarias/?page_size=1000').catch(err => {
+          console.warn('Erro ao carregar contas bancárias:', err);
+          return { data: [] };
+        }),
+        api.get('/api/operacoes/').catch(err => {
+          console.warn('Erro ao carregar operações:', err);
           return { data: [] };
         })
       ]);
@@ -282,6 +319,9 @@ export default function HotelPMSPage() {
       setProdutos(normalize(produtosRes));
       setComodidades(normalize(comodidadesRes));
       setGruposProduto(normalize(gruposRes));
+      setFormasPagamento(normalize(formasRes));
+      setContasBancarias(normalize(contasRes));
+      setOperacoes(normalize(operacoesRes));
     } catch (err) {
       console.error('Erro ao carregar dados do PMS:', err);
       toast.error('Erro ao carregar dados do módulo hoteleiro.');
@@ -842,12 +882,44 @@ export default function HotelPMSPage() {
     }
   };
 
-  const handleCheckout = async (bookingId) => {
-    if (!window.confirm('Confirma a saída do hóspede? Isso gerará a fatura de venda e finanças no ERP Aperus.')) return;
+  const handleOpenCheckout = (booking) => {
+    // Tenta encontrar uma operação de venda padrão que gera financeiro
+    const defaultOperacao = operacoes.find(o => o.transacao === 'Saida' && o.gera_financeiro) || 
+                            operacoes.find(o => o.transacao === 'Venda') || 
+                            operacoes[0] || '';
+    
+    // Tenta encontrar a forma de pagamento padrão (ex: DINHEIRO)
+    const defaultForma = formasPagamento.find(f => f.nome_forma.toUpperCase().includes('DINHEIRO')) || 
+                         formasPagamento[0] || '';
+                         
+    // Tenta encontrar a conta bancária padrão (ex: CAIXA)
+    const defaultConta = contasBancarias.find(c => c.nome_conta.toUpperCase().includes('CAIXA')) || 
+                         contasBancarias[0] || '';
+
+    setCheckoutBooking(booking);
+    setCheckoutForm({
+      id_operacao: defaultOperacao ? defaultOperacao.id_operacao : '',
+      id_forma_pagamento: defaultForma ? defaultForma.id_forma_pagamento : '',
+      id_conta_cobranca: defaultConta ? defaultConta.id_conta_bancaria : '',
+      data_vencimento: new Date().toISOString().split('T')[0],
+      gerar_financeiro: true
+    });
+    setOpenCheckoutDialog(true);
+  };
+
+  const handleCheckout = async () => {
+    if (!checkoutBooking) return;
     try {
       setLoading(true);
-      const res = await api.post(`/api/hotel/reservas/${bookingId}/checkout/`);
+      const res = await api.post(`/api/hotel/reservas/${checkoutBooking.id_reserva}/checkout/`, {
+        id_operacao: checkoutForm.id_operacao || undefined,
+        id_forma_pagamento: checkoutForm.id_forma_pagamento || undefined,
+        id_conta_cobranca: checkoutForm.id_conta_cobranca || undefined,
+        data_vencimento: checkoutForm.data_vencimento,
+        gerar_financeiro: checkoutForm.gerar_financeiro
+      });
       setCheckoutResult(res.data);
+      setOpenCheckoutDialog(false);
       setOpenManageModal(false);
       setOpenCheckoutSuccessModal(true);
       await loadData();
@@ -1730,7 +1802,7 @@ export default function HotelPMSPage() {
                     variant="contained"
                     color="error"
                     startIcon={<PointOfSale />}
-                    onClick={() => handleCheckout(selectedBooking.id_reserva)}
+                    onClick={() => handleOpenCheckout(selectedBooking)}
                     fullWidth
                   >
                     Realizar Check-out (Faturar)
@@ -1851,6 +1923,152 @@ export default function HotelPMSPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenManageModal(false)}>Fechar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal: Faturamento & Confirmação de Checkout */}
+      <Dialog open={openCheckoutDialog} onClose={() => setOpenCheckoutDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1.5, color: '#2e7d32' }}>
+          <PointOfSale sx={{ fontSize: 28 }} />
+          <span>Faturamento de Checkout</span>
+        </DialogTitle>
+        <DialogContent dividers>
+          {/* Extrato Simplificado */}
+          <Paper elevation={0} sx={{ p: 2.5, backgroundColor: '#f9f9f9', border: '1px solid #e0e0e0', borderRadius: '8px', mb: 3 }}>
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1 }}>
+              Resumo da Hospedagem
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 1.5 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body1" color="text.secondary">Hóspede:</Typography>
+                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{checkoutBooking?.hospede_nome}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body1" color="text.secondary">Quarto:</Typography>
+                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Quarto {checkoutBooking?.quarto_numero}</Typography>
+              </Box>
+              <Divider sx={{ my: 0.5 }} />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="text.secondary">Total Diárias:</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                  R$ {parseFloat(checkoutBooking?.total_diarias || 0).toFixed(2)}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="text.secondary">Total Consumos:</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                  R$ {parseFloat(checkoutBooking?.total_consumo || 0).toFixed(2)}
+                </Typography>
+              </Box>
+              <Divider sx={{ my: 1 }} />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1b5e20' }}>Valor Geral:</Typography>
+                <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1b5e20' }}>
+                  R$ {parseFloat(checkoutBooking?.total_geral || 0).toFixed(2)}
+                </Typography>
+              </Box>
+            </Box>
+          </Paper>
+
+          {/* Opções Financeiras */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={checkoutForm.gerar_financeiro}
+                  onChange={(e) => setCheckoutForm(prev => ({ ...prev, gerar_financeiro: e.target.checked }))}
+                  color="success"
+                />
+              }
+              label={<strong>Gerar lançamento financeiro (Contas a Receber) no ERP?</strong>}
+            />
+
+            {checkoutForm.gerar_financeiro && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pl: 2, borderLeft: '3px solid #2e7d32', mt: 1 }}>
+                <TextField
+                  select
+                  fullWidth
+                  label="Operação *"
+                  value={checkoutForm.id_operacao}
+                  onChange={(e) => setCheckoutForm(prev => ({ ...prev, id_operacao: e.target.value }))}
+                >
+                  <MenuItem value="">Selecione...</MenuItem>
+                  {operacoes.map(op => (
+                    <MenuItem key={op.id_operacao} value={op.id_operacao}>
+                      {op.nome_operacao} ({op.transacao})
+                    </MenuItem>
+                  ))}
+                </TextField>
+
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      select
+                      fullWidth
+                      label="Forma de Pagamento *"
+                      value={checkoutForm.id_forma_pagamento}
+                      onChange={(e) => setCheckoutForm(prev => ({ ...prev, id_forma_pagamento: e.target.value }))}
+                    >
+                      <MenuItem value="">Selecione...</MenuItem>
+                      {formasPagamento.map(f => (
+                        <MenuItem key={f.id_forma_pagamento} value={f.id_forma_pagamento}>
+                          {f.nome_forma}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      select
+                      fullWidth
+                      label="Conta Bancária (Cobrança) *"
+                      value={checkoutForm.id_conta_cobranca}
+                      onChange={(e) => setCheckoutForm(prev => ({ ...prev, id_conta_cobranca: e.target.value }))}
+                    >
+                      <MenuItem value="">Selecione...</MenuItem>
+                      {contasBancarias.map(c => (
+                        <MenuItem key={c.id_conta_bancaria} value={c.id_conta_bancaria}>
+                          {c.nome_conta}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                </Grid>
+
+                <TextField
+                  fullWidth
+                  type="date"
+                  label="Data de Vencimento *"
+                  value={checkoutForm.data_vencimento}
+                  onChange={(e) => setCheckoutForm(prev => ({ ...prev, data_vencimento: e.target.value }))}
+                  InputLabelProps={{ shrink: true }}
+                />
+
+                {checkoutForm.data_vencimento === new Date().toISOString().split('T')[0] ? (
+                  <Alert severity="info" variant="outlined" sx={{ mt: 1 }}>
+                    <strong>Baixa Automática Ativada:</strong> Como o vencimento é hoje, esta conta será lançada diretamente como <strong>Paga</strong>.
+                  </Alert>
+                ) : (
+                  <Alert severity="warning" variant="outlined" sx={{ mt: 1 }}>
+                    <strong>Conta Pendente:</strong> Como o vencimento é futuro, a conta será registrada como <strong>Pendente</strong> no Contas a Receber.
+                  </Alert>
+                )}
+              </Box>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5 }}>
+          <Button onClick={() => setOpenCheckoutDialog(false)} color="inherit">Cancelar</Button>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={handleCheckout}
+            disabled={loading}
+            startIcon={<CheckCircle />}
+          >
+            Finalizar Checkout
+          </Button>
         </DialogActions>
       </Dialog>
 

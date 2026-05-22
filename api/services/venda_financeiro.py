@@ -172,6 +172,8 @@ def ensure_financeiro_for_venda(venda, payload=None, force=False):
         # Verificar baixa automática
         data_emissao = timezone.now().date()
         baixa_automatica = getattr(operacao, 'baixa_automatica', False) if operacao else False
+        if 'baixa_automatica' in payload:
+            baixa_automatica = _parse_bool_flag(payload.get('baixa_automatica'))
         
         # Lógica de baixa automática:
         # - Se baixa_automatica = True E data_emissao = data_vencimento → Status "Paga"
@@ -191,7 +193,13 @@ def ensure_financeiro_for_venda(venda, payload=None, force=False):
         operacao_obj = getattr(venda, 'id_operacao', None)
         id_departamento = getattr(venda, 'id_departamento', None) or getattr(operacao_obj, 'id_departamento', None)
         id_centro_custo = getattr(venda, 'id_centro_custo', None) or getattr(operacao_obj, 'id_centro_custo', None)
-        id_conta_cobranca = getattr(venda, 'id_conta', None) or getattr(operacao_obj, 'id_conta', None)
+        id_conta_cobranca = payload.get('id_conta_cobranca') or getattr(venda, 'id_conta', None) or getattr(operacao_obj, 'id_conta', None)
+        if id_conta_cobranca and not hasattr(id_conta_cobranca, '_meta'):
+            from ..models import ContaBancaria
+            try:
+                id_conta_cobranca = ContaBancaria.objects.get(pk=id_conta_cobranca)
+            except Exception:
+                id_conta_cobranca = None
         
         # Extrair o ID do fornecedor/cliente (se for objeto FK, pegar apenas o ID)
         if id_fornecedor:

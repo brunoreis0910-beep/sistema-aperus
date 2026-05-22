@@ -1,0 +1,165 @@
+MATCH 1 at index 4915:
+toque, setItemPendenteEstoque] = useState(null);
+  const [estoqueAutorizado, setEstoqueAutorizado] = useState(false);
+  const [condicoesSelecionadas, setCondicoesSelecionadas] = useState([]);
+  const [formaPagamentoAtual, setFormaPagamentoAtual] = useState(null);
+  const [valorCondicaoAtual, setValorCondicaoAtual] = useState('');
+  const [valorRestante, setValorRestante] = useState(0);
+  const [valorTotal, setValorTotal] = useState(0);
+  const [valorPago, setValorPago] = useState(0);
+  const [tr
+==================================================
+
+MATCH 2 at index 11388:
+);
+          if (estadoSalvo.tabelaSelecionada) setTabelaSelecionada(estadoSalvo.tabelaSelecionada);
+          if (estadoSalvo.condicoesSelecionadas) setCondicoesSelecionadas(estadoSalvo.condicoesSelecionadas);
+          if (estadoSalvo.numeroDocumento) setNumeroDocumento(estadoSalvo.numeroDocumento);
+          if (estadoSalvo.tabelasComerciais) setTabelasComerciais(estadoSalvo.tabelasComerciais);
+          if (estadoSalvo.formasPagamento) setFormasPagamento(estadoSalvo.formasPagamento);
+       
+==================================================
+
+MATCH 3 at index 92233:
+s)': condicoesSelecionadas,
+        'novasCondicoes (depois)': novasCondicoes,
+        'novasCondicoes.length': novasCondicoes.length
+      });
+      setCondicoesSelecionadas(novasCondicoes);
+
+      const novoRestante = valorTotal - novasCondicoes.reduce((acc, c) => acc + c.valor, 0);
+      setValorRestante(novoRestante);
+      console.log('✅ CONDIÇÃO ADICIONADA - Estado atualizado:', {
+        'valorRestante': novoRestante,
+        'condicoesSelecionadas.length': novasCondicoes.length
+      });
+==================================================
+
+MATCH 4 at index 93013:
+o: ${error.message}`);
+    }
+  };
+
+  const removerCondicao = (id) => {
+    const novasCondicoes = condicoesSelecionadas.filter(c => c.id !== id);
+    setCondicoesSelecionadas(novasCondicoes);
+
+    const novoRestante = valorTotal - novasCondicoes.reduce((acc, c) => acc + c.valor, 0);
+    setValorRestante(novoRestante);
+  };
+
+  // ── Mercado Pago Point Tap ──────────────────────────────────────────────────
+
+  const isMercadoPagoSelecionado = () => {
+    // Verifica se a forma selecionada tem tipo_
+==================================================
+
+MATCH 5 at index 105157:
+       setSuccess('✅ Venda salva localmente! Será sincronizada automaticamente quando o servidor estiver disponível.');
+        setItens([]);
+        setCondicoesSelecionadas([]);
+        setDescontoGeral(0);
+        setCodigoProduto('');
+        setNomeProduto('');
+        setQuantidade(1);
+        setValorUnitario(0);
+        setIdProdutoSelecionado(null);
+        setOpenFinalizar(false);
+        setOpenCondicoesPagamento(false);
+        
+        // Limpar estado salvo do IndexedDB
+        try
+==================================================
+
+MATCH 6 at index 113597:
+      }
+
+          setSuccess('✅ Servidor indisponível — venda salva offline! Será sincronizada automaticamente.');
+          setItens([]);
+          setCondicoesSelecionadas([]);
+          setDescontoGeral(0);
+          setCodigoProduto('');
+          setNomeProduto('');
+          setQuantidade(1);
+          setValorUnitario(0);
+          setIdProdutoSelecionado(null);
+          setOpenFinalizar(false);
+          setOpenCondicoesPagamento(false);
+          
+          // Limpar estado salvo do I
+==================================================
+
+MATCH 7 at index 115348:
+};
+
+  const limparVenda = async () => {
+    setItens([]);
+    setDescontoGeral(0);
+    setNumeroDocumento(String(parseInt(numeroDocumento) + 1));
+    setCondicoesSelecionadas([]);
+    setSuccess('');
+    setDadosVendaCompleta(null);
+    setOpenImpressao(false);
+    setCodigoProduto('');
+    setIdProdutoSelecionado(null);
+    setGrupoProdutoSelecionado(null);
+    setNomeProduto('');
+    setQuantidade(1);
+    setValorUnitario(0);
+    setDescontoItem(0);
+    setIdProdutoSelecionado(null);
+    setGr
+==================================================
+
+MATCH 8 at index 154329:
+s.length > 0 && window.confirm('Cancelar a venda atual?')) {
+                  setItens([]);
+                  setDescontoGeral(0);
+                  setCondicoesSelecionadas([]);
+                  setCodigoProduto('');
+                  setNomeProduto('');
+                  setQuantidade(1);
+                  setValorUnitario(0);
+                  setIdProdutoSelecionado(null);
+                }
+              }}
+              disabled={itens.length === 0}
+              sx={{ height: 52, borderC
+==================================================
+
+MATCH 9 at index 165151:
+dow.confirm('Deseja cancelar a venda atual?')) {
+                      setItens([]);
+                      setDescontoGeral(0);
+                      setCondicoesSelecionadas([]);
+                      setCodigoProduto('');
+                      setNomeProduto('');
+                      setQuantidade(1);
+                      setValorUnitario(0);
+                      setIdProdutoSelecionado(null);
+                    }
+                  }}
+                  disabled={itens.length === 0}
+       
+==================================================
+
+MATCH 10 at index 206817:
+t>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => {
+              setOpenCondicoesPagamento(false);
+              setCondicoesSelecionadas([]);
+              setFormaPagamentoAtual(null);
+              setValorCondicaoAtual(0);
+            }}
+            variant="outlined"
+            size="large"
+            sx={{ minWidth: 120 }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => {
+              // Se há condiçã
+==================================================
