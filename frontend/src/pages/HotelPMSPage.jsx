@@ -963,7 +963,23 @@ export default function HotelPMSPage() {
     try {
       setLoading(true);
       const res = await api.get(`/api/vendas/${vendaId}/`);
-      await imprimirDireto(res.data);
+      const dadosVenda = res.data;
+
+      // Para vendas de hospedagem (origem HOTEL_PMS), filtrar o item de diária.
+      // A hospedagem é faturada no financeiro mas não deve constar no cupom/nota fiscal.
+      const CODIGOS_NAO_FISCAIS = ['DIARIA_HOTEL'];
+      const itensFiscais = (dadosVenda.itens || []).filter(
+        (item) => !CODIGOS_NAO_FISCAIS.includes(item.codigo_produto || item.id_produto?.codigo_produto)
+      );
+      const totalFiscal = itensFiscais.reduce((acc, item) => acc + parseFloat(item.valor_total || 0), 0);
+
+      const dadosParaImprimir = {
+        ...dadosVenda,
+        itens: itensFiscais,
+        valor_total: totalFiscal,
+      };
+
+      await imprimirDireto(dadosParaImprimir);
     } catch (err) {
       console.error(err);
       toast.error('Erro ao buscar dados da venda para impressão.');
@@ -972,6 +988,7 @@ export default function HotelPMSPage() {
       handlePrintMenuClose();
     }
   };
+
 
   const handleEmitFiscal = async (vendaId, type) => {
     if (!vendaId) return;

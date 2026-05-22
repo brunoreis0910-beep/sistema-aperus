@@ -614,13 +614,17 @@ class SimplISSRestService:
         cod_mun_cli = re.sub(r'\D', '', getattr(cliente, 'codigo_municipio_ibge', '') or '') or cod_mun if cliente else cod_mun
         cep_cli = re.sub(r'\D', '', cliente.cep or '') or '00000000' if cliente else '00000000'
 
-        itens = venda.itens.all()
+        CODIGOS_NAO_FISCAIS = {'DIARIA_HOTEL'}
+        itens = [
+            item for item in venda.itens.all()
+            if not (item.id_produto and item.id_produto.codigo_produto in CODIGOS_NAO_FISCAIS)
+        ]
         desc_servico = "; ".join(
             str(item.id_produto.nome_produto or '') for item in itens if item.id_produto
         ) or "Serviço de Hospedagem"
         desc_servico = desc_servico[:150]
 
-        valor_servico = float(venda.valor_total or 0)
+        valor_servico = sum(float(item.valor_total or 0) for item in itens)
         aliquota_iss = 2.00
 
         # Código de tribut. nacional para hospedagem: 090101 (Hotéis, pensões, hospedarias...)

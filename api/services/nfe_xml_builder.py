@@ -493,8 +493,19 @@ class NfeXmlBuilder:
         total_vibs_mun = 0.0
 
         # --- det (Itens) ---
+        # Para vendas de origem HOTEL_PMS, ignorar o item de diária na emissão fiscal.
+        # A hospedagem é faturada no financeiro, mas não deve constar no XML da NFC-e/NF-e/NFS-e.
+        CODIGOS_NAO_FISCAIS = {'DIARIA_HOTEL'}
+        itens_fiscais = [
+            item for item in self.venda.itens.all()
+            if not (item.id_produto and item.id_produto.codigo_produto in CODIGOS_NAO_FISCAIS)
+        ]
+
+        # Recalcula o total fiscal (apenas produtos, sem a diária)
+        total_fiscal = sum(float(item.valor_total) for item in itens_fiscais)
+
         i = 1
-        for item in self.venda.itens.all():
+        for item in itens_fiscais:
             det = ET.SubElement(infNFe, f"{{{self.ns}}}det", attrib={"nItem": str(i)})
             prod = ET.SubElement(det, f"{{{self.ns}}}prod")
             ET.SubElement(prod, f"{{{self.ns}}}cProd").text = self._limpar_texto(str(item.id_produto.codigo_produto if item.id_produto else item.id_item), 60)
@@ -1147,7 +1158,7 @@ class NfeXmlBuilder:
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vST").text = "0.00"
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vFCPST").text = "0.00"
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vFCPSTRet").text = "0.00"
-        ET.SubElement(ICMSTot, f"{{{self.ns}}}vProd").text = "{:.2f}".format(self.venda.valor_total)
+        ET.SubElement(ICMSTot, f"{{{self.ns}}}vProd").text = "{:.2f}".format(total_fiscal)
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vFrete").text = "0.00"
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vSeg").text = "0.00"
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vDesc").text = "0.00"
@@ -1157,11 +1168,11 @@ class NfeXmlBuilder:
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vPIS").text = "{:.2f}".format(total_vpis)
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vCOFINS").text = "{:.2f}".format(total_vcofins)
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vOutro").text = "0.00"
-        ET.SubElement(ICMSTot, f"{{{self.ns}}}vNF").text = "{:.2f}".format(self.venda.valor_total)
+        ET.SubElement(ICMSTot, f"{{{self.ns}}}vNF").text = "{:.2f}".format(total_fiscal)
 
         # --- REFORMA TRIBUTÁRIA TOTAIS ---
         # NT 2025.002 - IBSCBSTot gerado para TODOS os modelos (55 e 65)
-        v_nf_tot_val = float(self.venda.valor_total) # Inicializa com vNF legado
+        v_nf_tot_val = total_fiscal  # Total fiscal (sem diária de hospedagem)
         
         if True:  # IBSCBSTot para NF-e (55) e NFC-e (65)
             # Tag Principal: IBSCBSTot
@@ -1239,7 +1250,7 @@ class NfeXmlBuilder:
         ET.SubElement(detPag, f"{{{self.ns}}}indPag").text = "0" 
 
         ET.SubElement(detPag, f"{{{self.ns}}}tPag").text = t_pag
-        ET.SubElement(detPag, f"{{{self.ns}}}vPag").text = "{:.2f}".format(self.venda.valor_total)
+        ET.SubElement(detPag, f"{{{self.ns}}}vPag").text = "{:.2f}".format(total_fiscal)
         
         # Pagamento cartao exige tag card no subgrupo se integrado, mas se nao integrado (POS)
         # a tag card é opcional/recomendada. Vamos manter simples.
@@ -1281,7 +1292,7 @@ class NfeXmlBuilder:
 
                 if any(c in csosns_config for c in csosns_venda):
                     # Substitui variáveis na mensagem
-                    valor_total = float(self.venda.valor_total or 0)
+                    valor_total = total_fiscal  # Total fiscal (sem diária de hospedagem)
                     aliquota_fmt = "{:.4f}".format(float(aliquota_config)).rstrip('0').rstrip('.')
                     valor_icms = valor_total * float(aliquota_config) / 100
 
