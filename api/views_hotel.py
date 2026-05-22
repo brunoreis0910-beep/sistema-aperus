@@ -9,7 +9,7 @@ from django.utils import timezone
 from decimal import Decimal
 from django.http import HttpResponse
 
-from .models import Cliente, Produto, Venda, VendaItem, Operacao
+from .models import Cliente, Produto, Venda, VendaItem, Operacao, Estoque
 from .models_hotel import TipoQuarto, Quarto, Reserva, ConsumoQuarto, Comodidade
 from .serializers_hotel import TipoQuartoSerializer, QuartoSerializer, ReservaSerializer, ConsumoQuartoSerializer, ComodidadeSerializer
 
@@ -566,8 +566,12 @@ class ReservaViewSet(viewsets.ModelViewSet):
         # Caso o produto não possua preco_venda direto, pegamos um default de 0.00 ou do payload
         valor_unitario = request.data.get('valor_unitario')
         if not valor_unitario:
-            # Tenta pegar preco_web ou similar
-            valor_unitario = produto.preco_web or Decimal('0.00')
+            # Tenta pegar o valor de venda da tabela estoque (Estoque)
+            estoque_rec = Estoque.objects.filter(id_produto=produto, valor_venda__gt=0).order_by('-valor_venda').first()
+            if estoque_rec:
+                valor_unitario = estoque_rec.valor_venda
+            else:
+                valor_unitario = produto.preco_web or Decimal('0.00')
         else:
             valor_unitario = Decimal(str(valor_unitario))
             

@@ -1059,7 +1059,7 @@ export default function HotelPMSPage() {
       setConsumoForm(prev => ({
         ...prev,
         produto_id: prod.id_produto,
-        valor_unitario: prod.preco_web || prod.preco_venda || '0.00'
+        valor_unitario: prod.valor_venda || prod.preco_web || '0.00'
       }));
     } else {
       setProdutoSearch(null);
@@ -1984,7 +1984,7 @@ export default function HotelPMSPage() {
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
                                 Cód: {option.codigo_produto} &nbsp;|
-                                R$ {parseFloat(option.preco_web || option.preco_venda || 0).toFixed(2)}
+                                R$ {parseFloat(option.valor_venda || option.preco_web || 0).toFixed(2)}
                               </Typography>
                             </Box>
                           </li>
