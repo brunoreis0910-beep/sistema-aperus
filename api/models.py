@@ -1721,6 +1721,7 @@ class Venda(models.Model):
     data_documento = models.DateTimeField(auto_now_add=True)
     valor_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     taxa_entrega = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, blank=True, null=True)
+    valor_desconto = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, db_column='valor_desconto', blank=True, null=True)
     criado_por = models.ForeignKey(User, models.SET_NULL, db_column='criado_por', blank=True, null=True)
     gerou_financeiro = models.IntegerField(blank=True, null=True, default=0)
     vista = models.IntegerField(blank=True, null=True, default=0)  # 1 = é  vista, 0 = a prazo

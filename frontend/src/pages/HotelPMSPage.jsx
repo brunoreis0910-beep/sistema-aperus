@@ -79,7 +79,8 @@ import {
   Phone as PhoneIcon,
   Email as EmailIcon,
   Print,
-  MoreVert
+  MoreVert,
+  LocalOffer
 } from '@mui/icons-material';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -243,7 +244,9 @@ export default function HotelPMSPage() {
     id_forma_pagamento: '',
     id_conta_cobranca: '',
     data_vencimento: new Date().toISOString().split('T')[0],
-    gerar_financeiro: true
+    gerar_financeiro: true,
+    tipo_desconto: 'VALOR',
+    valor_desconto: 0
   });
 
   // Formulário de Reserva
@@ -927,7 +930,9 @@ export default function HotelPMSPage() {
       id_forma_pagamento: defaultForma ? defaultForma.id_forma_pagamento : '',
       id_conta_cobranca: defaultConta ? defaultConta.id_conta_bancaria : '',
       data_vencimento: new Date().toISOString().split('T')[0],
-      gerar_financeiro: true
+      gerar_financeiro: true,
+      tipo_desconto: 'VALOR',
+      valor_desconto: 0
     });
     setOpenCheckoutDialog(true);
   };
@@ -941,7 +946,9 @@ export default function HotelPMSPage() {
         id_forma_pagamento: checkoutForm.id_forma_pagamento || undefined,
         id_conta_cobranca: checkoutForm.id_conta_cobranca || undefined,
         data_vencimento: checkoutForm.data_vencimento,
-        gerar_financeiro: checkoutForm.gerar_financeiro
+        gerar_financeiro: checkoutForm.gerar_financeiro,
+        tipo_desconto: checkoutForm.tipo_desconto,
+        valor_desconto: parseFloat(checkoutForm.valor_desconto || 0)
       });
       setCheckoutResult(res.data);
       setOpenCheckoutDialog(false);
@@ -2127,6 +2134,69 @@ export default function HotelPMSPage() {
               </Box>
             </Box>
           </Paper>
+
+          {(() => {
+            const originalTotal = parseFloat(checkoutBooking?.total_geral || 0);
+            const discountValue = parseFloat(checkoutForm.valor_desconto || 0);
+            const computedDiscount = checkoutForm.tipo_desconto === 'PERCENTUAL'
+              ? (originalTotal * discountValue) / 100
+              : discountValue;
+            const finalTotal = Math.max(0, originalTotal - computedDiscount);
+
+            return (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1.5, display: 'flex', alignItems: 'center', gap: 1, color: '#1b5e20' }}>
+                  <LocalOffer sx={{ fontSize: 20 }} />
+                  Desconto sobre o Faturamento
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      select
+                      fullWidth
+                      label="Tipo de Desconto"
+                      value={checkoutForm.tipo_desconto}
+                      onChange={(e) => setCheckoutForm(prev => ({ ...prev, tipo_desconto: e.target.value, valor_desconto: 0 }))}
+                    >
+                      <MenuItem value="VALOR">Valor Fixo (R$)</MenuItem>
+                      <MenuItem value="PERCENTUAL">Porcentagem (%)</MenuItem>
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Valor do Desconto"
+                      value={checkoutForm.valor_desconto || ''}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setCheckoutForm(prev => ({ ...prev, valor_desconto: isNaN(val) ? 0 : val }));
+                      }}
+                      inputProps={{ min: 0, step: checkoutForm.tipo_desconto === 'PERCENTUAL' ? 1 : 0.01 }}
+                      helperText={checkoutForm.tipo_desconto === 'PERCENTUAL' ? 'Desconto em %' : 'Desconto em R$'}
+                    />
+                  </Grid>
+                </Grid>
+
+                {computedDiscount > 0 && (
+                  <Paper variant="outlined" sx={{ p: 2, mt: 2, backgroundColor: '#f1f8e9', borderColor: '#c5e1a5', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">Desconto Calculado:</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#c62828' }}>
+                        - R$ {computedDiscount.toFixed(2)}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>Valor Faturado Final:</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
+                        R$ {finalTotal.toFixed(2)}
+                      </Typography>
+                    </Box>
+                  </Paper>
+                )}
+              </Box>
+            );
+          })()}
 
           {/* Opções Financeiras */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>

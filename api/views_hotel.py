@@ -405,7 +405,7 @@ class ReservaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        # Parâmetros opcionais para faturamento financeiro
+        # Parâmetros opcionais para faturamento financeiro e descontos
         id_operacao = request.data.get('id_operacao')
         id_forma_pagamento = request.data.get('id_forma_pagamento')
         id_conta_cobranca = request.data.get('id_conta_cobranca')
@@ -413,6 +413,13 @@ class ReservaViewSet(viewsets.ModelViewSet):
         gerar_financeiro = request.data.get('gerar_financeiro', True)
         if isinstance(gerar_financeiro, str):
             gerar_financeiro = gerar_financeiro.lower() in ('true', '1', 'yes')
+
+        tipo_desconto = request.data.get('tipo_desconto', 'VALOR')
+        valor_desconto_input = request.data.get('valor_desconto', 0)
+        try:
+            valor_desconto_input = Decimal(str(valor_desconto_input or 0))
+        except Exception:
+            valor_desconto_input = Decimal('0.00')
 
         # Buscar Operacao de faturamento
         if id_operacao:
@@ -476,11 +483,28 @@ class ReservaViewSet(viewsets.ModelViewSet):
             total_consumo = reserva.total_consumo
             total_geral = reserva.total_geral
             
+            # Calcula o desconto aplicado
+            discount_amount = Decimal('0.00')
+            if valor_desconto_input > 0:
+                if tipo_desconto == 'PERCENTUAL':
+                    discount_amount = (total_geral * valor_desconto_input) / Decimal('100.00')
+                else:  # VALOR
+                    discount_amount = valor_desconto_input
+                
+                # Garante que o desconto não exceda o valor total geral
+                if discount_amount > total_geral:
+                    discount_amount = total_geral
+
+            # Arredonda para 2 casas decimais
+            discount_amount = discount_amount.quantize(Decimal('0.01'))
+            total_faturado = (total_geral - discount_amount).quantize(Decimal('0.01'))
+            
             # 2. Cria a Venda no Aperus
             venda = Venda.objects.create(
                 id_operacao=operacao,
                 id_cliente=reserva.hospede,
-                valor_total=total_geral,
+                valor_total=total_faturado,
+                valor_desconto=discount_amount,
                 data_documento=timezone.now().date(),
                 origem='HOTEL_PMS',
                 status_pagamento='PENDENTE'
@@ -542,7 +566,7 @@ class ReservaViewSet(viewsets.ModelViewSet):
             "message": "Checkout finalizado com sucesso!",
             "reserva": self.get_serializer(reserva).data,
             "venda_id": venda.id_venda,
-            "faturamento_total": total_geral,
+            "faturamento_total": total_faturado,
             "financeiro_criado": financeiro_criado,
             "financeiro_id": financeiro_id
         })
