@@ -400,10 +400,30 @@ const AIChat = () => {
         { texto: textoLimpo }
       );
 
-      if (data.sucesso && data.audio_base64) {
+      if (data.sucesso && (data.audio_url || data.audio_base64)) {
+        // Resolve a URL final do áudio
+        let src = '';
+        if (data.audio_url) {
+          src = data.audio_url;
+          if (src.startsWith('/')) {
+            const baseUrl = axiosInstance.defaults.baseURL || '';
+            if (baseUrl) {
+              try {
+                const urlObj = new URL(baseUrl);
+                src = `${urlObj.origin}${data.audio_url}`;
+              } catch (e) {
+                src = `${window.location.origin}${data.audio_url}`;
+              }
+            } else {
+              src = `${window.location.origin}${data.audio_url}`;
+            }
+          }
+        } else {
+          src = `data:audio/mpeg;base64,${data.audio_base64}`;
+        }
+
         if (audioRef.current) {
-          // Usa o MIME type correto (audio/mpeg) compatível universalmente
-          audioRef.current.src = `data:audio/mpeg;base64,${data.audio_base64}`;
+          audioRef.current.src = src;
           audioRef.current.onended = () => { setFalando(false); };
           audioRef.current.onerror = (e) => { 
             console.error("Erro no player do áudio persistente:", e); 
@@ -411,8 +431,7 @@ const AIChat = () => {
           };
           await audioRef.current.play();
         } else {
-          // Fallback se o ref não estiver instanciado
-          const audio = new Audio(`data:audio/mpeg;base64,${data.audio_base64}`);
+          const audio = new Audio(src);
           audioRef.current = audio;
           audio.onended = () => { setFalando(false); audioRef.current = null; };
           audio.onerror = () => { setFalando(false); audioRef.current = null; };

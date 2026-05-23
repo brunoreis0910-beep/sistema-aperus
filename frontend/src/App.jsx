@@ -114,6 +114,7 @@ import RelatorioDREPage from './pages/RelatorioDREPage'
 import RelatorioInventarioPage from './pages/RelatorioInventarioPage'
 import RelatorioCTePage from './pages/RelatorioCTePage'
 import RelatorioMDFePage from './pages/RelatorioMDFePage'
+import RelatorioHotelariaPage from './pages/RelatorioHotelariaPage'
 import CotacaoRespostaPublica from './pages/CotacaoRespostaPublica'
 import ProducaoPage from './pages/ProducaoPage'
 import BoletosPage from './pages/BoletosPage'
@@ -280,6 +281,7 @@ export default function App() {
                     <Route path='relatorios/inventario' element={<RelatorioInventarioPage />} />
                     <Route path='relatorios/cte' element={<RelatorioCTePage />} />
                     <Route path='relatorios/mdfe' element={<RelatorioMDFePage />} />
+                    <Route path='relatorios/hotelaria' element={<RelatorioHotelariaPage />} />
                     <Route path='producao' element={<ProducaoPage />} />
                     <Route path='boletos' element={<BoletosPage />} />
                     <Route path='mapa-carga' element={<MapaCargaPage />} />

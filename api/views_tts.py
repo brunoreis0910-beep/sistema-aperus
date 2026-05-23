@@ -318,17 +318,23 @@ def download_audio_tts(request, filename):
     """
     GET /api/tts/audio/<filename>
     
-    Baixa o arquivo de áudio gerado
+    Baixa o arquivo de áudio gerado (checa a pasta persistente e fallback na temporária)
     
     Nota: Endpoint público (sem autenticação) para facilitar reprodução
     """
     try:
         import tempfile
         from pathlib import Path
+        from django.conf import settings
         
-        # Diretório temporário do TTS
-        temp_dir = Path(tempfile.gettempdir()) / 'sistema_gerencial_tts'
-        audio_path = temp_dir / filename
+        # 1) Tenta diretório persistente
+        persistent_dir = Path(settings.BASE_DIR) / 'media' / 'tts_cache'
+        audio_path = persistent_dir / filename
+        
+        # 2) Fallback para diretório temporário se não existir no persistente
+        if not audio_path.exists():
+            temp_dir = Path(tempfile.gettempdir()) / 'sistema_gerencial_tts'
+            audio_path = temp_dir / filename
         
         if not audio_path.exists():
             return Response(
@@ -351,6 +357,7 @@ def download_audio_tts(request, filename):
             {'erro': f'Erro ao baixar áudio: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
 
 
 @api_view(['POST'])

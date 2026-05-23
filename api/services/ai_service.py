@@ -56,6 +56,58 @@ class AIService:
     def is_available(self) -> bool:
         """Verifica se o serviço está disponível"""
         return self.client is not None
+
+    def _parse_datas_datetime(self, inicio_str: Optional[str], fim_str: Optional[str]):
+        """Converte strings YYYY-MM-DD para datetimes cientes do fuso horário"""
+        from datetime import datetime, time, date
+        from django.utils import timezone
+        
+        hoje = timezone.localtime(timezone.now()).date()
+        
+        if inicio_str:
+            try:
+                if isinstance(inicio_str, (date, datetime)):
+                    inicio_date = inicio_str
+                else:
+                    inicio_date = datetime.strptime(str(inicio_str), '%Y-%m-%d').date()
+            except ValueError:
+                inicio_date = hoje
+        else:
+            inicio_date = hoje
+            
+        if fim_str:
+            try:
+                if isinstance(fim_str, (date, datetime)):
+                    fim_date = fim_str
+                else:
+                    fim_date = datetime.strptime(str(fim_str), '%Y-%m-%d').date()
+            except ValueError:
+                fim_date = hoje
+        else:
+            fim_date = hoje
+            
+        start_dt = timezone.make_aware(datetime.combine(inicio_date, time.min))
+        end_dt = timezone.make_aware(datetime.combine(fim_date, time.max))
+        return start_dt, end_dt
+
+    def _dia_range(self, dia):
+        """Converte uma data/string de data em datetimes cientes do início e fim do dia"""
+        from datetime import datetime, time, date
+        from django.utils import timezone
+        
+        if isinstance(dia, str):
+            try:
+                dia = datetime.strptime(dia, '%Y-%m-%d').date()
+            except ValueError:
+                dia = timezone.localtime(timezone.now()).date()
+        elif isinstance(dia, datetime):
+            dia = dia.date()
+        elif not isinstance(dia, date):
+            dia = timezone.localtime(timezone.now()).date()
+            
+        start_dt = timezone.make_aware(datetime.combine(dia, time.min))
+        end_dt = timezone.make_aware(datetime.combine(dia, time.max))
+        return start_dt, end_dt
     
     # Modelos em ordem de preferência para fallback
     MODELOS_FALLBACK = [
@@ -519,7 +571,8 @@ Retorne APENAS um JSON válido com a estrutura:
         query = Venda.objects.exclude(status_nfe='CANCELADA')
         
         if inicio and fim:
-            query = query.filter(data_documento__date__range=[inicio, fim])
+            start_dt, end_dt = self._parse_datas_datetime(inicio, fim)
+            query = query.filter(data_documento__range=(start_dt, end_dt))
         
         # Totais
         totais = query.aggregate(
@@ -635,7 +688,8 @@ Retorne APENAS um JSON válido com a estrutura:
         query = Comanda.objects.all()
         
         if inicio and fim:
-            query = query.filter(data_abertura__date__range=[inicio, fim])
+            start_dt, end_dt = self._parse_datas_datetime(inicio, fim)
+            query = query.filter(data_abertura__range=(start_dt, end_dt))
         
         # Totais
         totais = query.aggregate(
@@ -675,8 +729,9 @@ Retorne APENAS um JSON válido com a estrutura:
             taxa_ocupacao = (quartos_ocupados / total_quartos * 100) if total_quartos > 0 else 0.0
             
             # Reservas de hoje
-            checkins_hoje = Reserva.objects.filter(data_entrada_prevista__date=hoje).count()
-            checkouts_hoje = Reserva.objects.filter(data_saida_prevista__date=hoje).count()
+            start_hoje, end_hoje = self._dia_range(hoje)
+            checkins_hoje = Reserva.objects.filter(data_entrada_prevista__range=(start_hoje, end_hoje)).count()
+            checkouts_hoje = Reserva.objects.filter(data_saida_prevista__range=(start_hoje, end_hoje)).count()
             
             # Reservas ativas e futuras
             reservas_ativas = Reserva.objects.filter(status_reserva__in=['confirmada', 'checkin']).count()
@@ -740,7 +795,8 @@ Retorne APENAS um JSON válido com a estrutura:
             from cte.models import ConhecimentoTransporte
             query = ConhecimentoTransporte.objects.all()
             if inicio and fim:
-                query = query.filter(data_emissao__date__range=[inicio, fim])
+                start_dt, end_dt = self._parse_datas_datetime(inicio, fim)
+                query = query.filter(data_emissao__range=(start_dt, end_dt))
             totais = query.aggregate(
                 total=Count('id_cte'),
                 valor_total=Sum('valor_total_servico'),
@@ -770,7 +826,8 @@ Retorne APENAS um JSON válido com a estrutura:
             from api.models import Venda
             query = Venda.objects.exclude(status_nfe__isnull=True)
             if inicio and fim:
-                query = query.filter(data_documento__date__range=[inicio, fim])
+                start_dt, end_dt = self._parse_datas_datetime(inicio, fim)
+                query = query.filter(data_documento__range=(start_dt, end_dt))
             totais = query.aggregate(
                 total=Count('id_venda'),
                 valor_total=Sum('valor_total'),
@@ -1554,8 +1611,8 @@ Relatórios disponíveis para exportação em PDF:
 
         # ── Vendas ────────────────────────────────────────────────────────────
         from django.utils import timezone
-        hoje = timezone.now().date()
-        vendas_qs = Venda.objects.filter(data_documento__date=hoje).exclude(status_nfe='CANCELADA')
+        start_hoje, end_hoje = self._dia_range(hoje)
+        vendas_qs = Venda.objects.filter(data_documento__range=(start_hoje, end_hoje)).exclude(status_nfe='CANCELADA')
         totais_venda = vendas_qs.aggregate(
             faturamento=Sum('valor_total'),
             qtd=Count('id_venda'),

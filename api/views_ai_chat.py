@@ -329,6 +329,11 @@ class AITtsView(APIView):
     def post(self, request):
         import requests as http_requests
         from decouple import config as decouple_config
+        import hashlib
+        import os
+        from django.conf import settings
+        from api.models import TTSAudioCache
+        from pathlib import Path
 
         texto_bruto = request.data.get('texto', '').strip()
         if not texto_bruto:
@@ -340,37 +345,173 @@ class AITtsView(APIView):
         texto = self._limpar_markdown(texto_bruto)[:4500]
         voz_solicitada = request.data.get('voz', '')
 
-        # 1) Tenta Google Cloud TTS se a chave estiver configurada
+        # Determina o provider e a voz a ser utilizada antes para calcular o hash correto
         api_key = decouple_config('GOOGLE_CLOUD_TTS_API_KEY', default='').strip()
-        if api_key:
-            voz_google = voz_solicitada if voz_solicitada in {
+        provider = 'google' if api_key else 'edge'
+        
+        if provider == 'google':
+            voz = voz_solicitada if voz_solicitada in {
                 'pt-BR-Neural2-A', 'pt-BR-Neural2-B', 'pt-BR-Neural2-C',
                 'pt-BR-Wavenet-A', 'pt-BR-Wavenet-B', 'pt-BR-Wavenet-C',
                 'pt-BR-Standard-A', 'pt-BR-Standard-B', 'pt-BR-Standard-C',
             } else 'pt-BR-Neural2-A'
+        else:
+            vozes_edge_ptbr = {
+                'pt-BR-FranciscaNeural', 'pt-BR-AntonioNeural', 'pt-BR-BrendaNeural',
+                'pt-BR-DonatoNeural', 'pt-BR-ElzaNeural', 'pt-BR-FabioNeural',
+                'pt-BR-GiovannaNeural', 'pt-BR-HumbertoNeural', 'pt-BR-JulioNeural',
+                'pt-BR-LeilaNeural', 'pt-BR-LeticiaNeural', 'pt-BR-ManuelaNeural',
+                'pt-BR-NicolauNeural', 'pt-BR-ThalitaNeural', 'pt-BR-ValerioNeural',
+                'pt-BR-YaraNeural',
+            }
+            voz = voz_solicitada if voz_solicitada in vozes_edge_ptbr else 'pt-BR-AntonioNeural'
+
+        # Calcula o hash de cache
+        # Observação: Velocidade padrão do endpoint de chat é 1.0 (ou 1.05 no google payload)
+        # Vamos usar 1.00 para fins de consistência no cache
+        payload = f"{provider}:{voz}:1.00:{texto}"
+        text_hash = hashlib.md5(payload.encode('utf-8')).hexdigest()
+        nome_arquivo_cache = f"tts_{provider}_{text_hash}.mp3"
+        
+        persistent_dir = Path(settings.BASE_DIR) / 'media' / 'tts_cache'
+        persistent_dir.mkdir(parents=True, exist_ok=True)
+        audio_path_persist = persistent_dir / nome_arquivo_cache
+
+        # 1) Tenta carregar do cache do banco de dados/disco
+        try:
+            cache_entry = TTSAudioCache.objects.filter(text_hash=text_hash).first()
+            if cache_entry:
+                if os.path.exists(cache_entry.audio_file_path):
+                    logger.info(f"[AITtsView Cache] Hit no cache DB/disco para {text_hash}")
+                    with open(cache_entry.audio_file_path, 'rb') as f:
+                        audio_content = f.read()
+                    
+                    audio_b64 = base64.b64encode(audio_content).decode('utf-8')
+                    return Response({
+                        'sucesso': True,
+                        'audio_base64': audio_b64,
+                        'formato': 'mp3',
+                        'provider': cache_entry.provider,
+                        'audio_url': cache_entry.audio_url
+                    })
+                else:
+                    logger.warning(f"[AITtsView Cache] Entrada no DB existe para {text_hash}, mas o arquivo físico {cache_entry.audio_file_path} está ausente. Invalidando.")
+                    cache_entry.delete()
+        except Exception as e:
+            logger.error(f"[AITtsView Cache] Erro ao buscar cache: {e}", exc_info=True)
+
+        # Se não houver cache, prossegue com a geração
+        audio_bytes = None
+
+        if provider == 'google':
             try:
                 url = 'https://texttospeech.googleapis.com/v1/text:synthesize'
-                payload = {
+                payload_google = {
                     'input': {'text': texto},
-                    'voice': {'languageCode': 'pt-BR', 'name': voz_google},
+                    'voice': {'languageCode': 'pt-BR', 'name': voz},
                     'audioConfig': {'audioEncoding': 'MP3', 'speakingRate': 1.05, 'pitch': 0.0},
                 }
-                resp = http_requests.post(url, json=payload, params={'key': api_key}, timeout=15)
+                resp = http_requests.post(url, json=payload_google, params={'key': api_key}, timeout=15)
                 if resp.status_code == 200:
                     audio_b64 = resp.json().get('audioContent', '')
-                    return Response({'sucesso': True, 'audio_base64': audio_b64, 'formato': 'mp3', 'provider': 'google'})
-                logger.warning(f'Google TTS falhou ({resp.status_code}), usando Edge TTS como fallback.')
+                    audio_bytes = base64.b64decode(audio_b64)
+                else:
+                    logger.warning(f'Google TTS falhou ({resp.status_code}), usando Edge TTS como fallback.')
             except Exception as e:
                 logger.warning(f'Google TTS erro: {e}. Usando Edge TTS como fallback.')
 
-        # 2) Edge TTS (Microsoft) — gratuito, neural, sem API key
+        # Se não gerou via Google (ou se o provider preferido for Edge), gera via Edge TTS
+        if audio_bytes is None:
+            # Fallback para Edge TTS
+            provider = 'edge'
+            # Garante voz correta para Edge TTS
+            vozes_edge_ptbr = {
+                'pt-BR-FranciscaNeural', 'pt-BR-AntonioNeural', 'pt-BR-BrendaNeural',
+                'pt-BR-DonatoNeural', 'pt-BR-ElzaNeural', 'pt-BR-FabioNeural',
+                'pt-BR-GiovannaNeural', 'pt-BR-HumbertoNeural', 'pt-BR-JulioNeural',
+                'pt-BR-LeilaNeural', 'pt-BR-LeticiaNeural', 'pt-BR-ManuelaNeural',
+                'pt-BR-NicolauNeural', 'pt-BR-ThalitaNeural', 'pt-BR-ValerioNeural',
+                'pt-BR-YaraNeural',
+            }
+            voz_edge = voz if voz in vozes_edge_ptbr else 'pt-BR-AntonioNeural'
+            try:
+                # Gera áudio via Edge TTS
+                import asyncio
+                import tempfile
+                import edge_tts
+                from concurrent.futures import ThreadPoolExecutor
+
+                async def _sintetizar():
+                    communicate = edge_tts.Communicate(texto, voz_edge, rate='+5%', pitch='+0Hz')
+                    # Escreve direto na pasta persistente!
+                    await communicate.save(str(audio_path_persist))
+                    with open(audio_path_persist, 'rb') as f:
+                        return f.read()
+
+                def _rodar_em_thread():
+                    loop = asyncio.new_event_loop()
+                    try:
+                        return loop.run_until_complete(_sintetizar())
+                    finally:
+                        loop.close()
+
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    audio_bytes = executor.submit(_rodar_em_thread).result(timeout=30)
+                
+                # Atualiza a voz usada de fato
+                voz = voz_edge
+
+            except Exception as e:
+                logger.error(f'Edge TTS erro: {e}', exc_info=True)
+                return Response(
+                    {'sucesso': False, 'mensagem': f"Falha na síntese de voz: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+        else:
+            # Salvamos os bytes do Google na pasta persistente
+            try:
+                with open(audio_path_persist, 'wb') as f:
+                    f.write(audio_bytes)
+            except Exception as e:
+                logger.error(f"[AITtsView] Erro ao salvar arquivo físico do Google TTS: {e}", exc_info=True)
+
+        # Salva o registro no banco de dados e retorna a resposta de sucesso
+        audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
+        audio_url = f"/api/tts/audio/{nome_arquivo_cache}"
+
         try:
-            voz_edge = voz_solicitada if voz_solicitada else 'pt-BR-AntonioNeural'
-            audio_b64 = self._gerar_edge_tts(texto, voz=voz_edge)
-            return Response({'sucesso': True, 'audio_base64': audio_b64, 'formato': 'mp3', 'provider': 'edge'})
-        except Exception as e:
-            logger.error(f'Edge TTS erro: {e}', exc_info=True)
-            return Response(
-                {'sucesso': False, 'mensagem': str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            # Recalcula o hash se o provider mudou de Google para Edge durante o fallback
+            payload_final = f"{provider}:{voz}:1.00:{texto}"
+            text_hash_final = hashlib.md5(payload_final.encode('utf-8')).hexdigest()
+            nome_arquivo_final = f"tts_{provider}_{text_hash_final}.mp3"
+            audio_path_final = persistent_dir / nome_arquivo_final
+
+            # Se o nome mudou, movemos o arquivo
+            if nome_arquivo_cache != nome_arquivo_final:
+                if os.path.exists(audio_path_persist):
+                    os.rename(audio_path_persist, audio_path_final)
+                audio_path_persist = audio_path_final
+                nome_arquivo_cache = nome_arquivo_final
+                audio_url = f"/api/tts/audio/{nome_arquivo_final}"
+
+            TTSAudioCache.objects.create(
+                text_hash=text_hash_final,
+                text=texto,
+                audio_file_path=str(audio_path_persist),
+                audio_url=audio_url,
+                provider=provider,
+                voice=voz,
+                velocidade=1.00
             )
+            logger.info(f"[AITtsView Cache] Novo áudio cacheado no DB/disco para {text_hash_final}")
+        except Exception as e:
+            logger.error(f"[AITtsView Cache] Erro ao gravar cache: {e}", exc_info=True)
+
+        return Response({
+            'sucesso': True,
+            'audio_base64': audio_b64,
+            'formato': 'mp3',
+            'provider': provider,
+            'audio_url': audio_url
+        })
+

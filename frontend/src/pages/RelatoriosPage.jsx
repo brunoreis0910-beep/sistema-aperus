@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
     Box,
@@ -42,7 +42,8 @@ import {
     Close as CloseIcon,
     MonetizationOn as ComissaoIcon,
     ShoppingCart,
-    Description as DescriptionIcon
+    Description as DescriptionIcon,
+    Hotel as HotelIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
@@ -308,6 +309,16 @@ function RelatoriosPage() {
             cor: '#1a237e',
             disponivel: true,
             filtrosDisponiveis: ['dataInicio', 'dataFim'],
+            categoria: 'financeiro'
+        },
+        {
+            id: 'hotelaria',
+            titulo: 'Relatório de Hotelaria',
+            descricao: 'Análise de reservas, diárias, consumos, taxa de ocupação e ADR',
+            icone: <HotelIcon sx={{ fontSize: 40 }} />,
+            cor: '#00796b',
+            disponivel: true,
+            redirect: '/relatorios/hotelaria',
             categoria: 'financeiro'
         }
     ];

@@ -8,9 +8,13 @@ Data: 13/03/2026
 
 import os
 import tempfile
+import hashlib
+import base64
 from typing import Literal, Optional
 from pathlib import Path
 import logging
+from django.conf import settings
+from api.models import TTSAudioCache
 
 logger = logging.getLogger(__name__)
 
@@ -20,16 +24,19 @@ class TTSService:
     Serviço unificado de Text-to-Speech com múltiplos providers
     """
     
-    def __init__(self, provider: Literal['google', 'elevenlabs', 'azure'] = 'google'):
+    def __init__(self, provider: Literal['google', 'elevenlabs', 'azure', 'edge'] = 'google'):
         """
         Inicializa o serviço de TTS
         
         Args:
-            provider: Provider de TTS ('google', 'elevenlabs', 'azure')
+            provider: Provider de TTS ('google', 'elevenlabs', 'azure', 'edge')
         """
         self.provider = provider
         self.temp_dir = Path(tempfile.gettempdir()) / 'sistema_gerencial_tts'
         self.temp_dir.mkdir(exist_ok=True)
+        self.persistent_dir = Path(settings.BASE_DIR) / 'media' / 'tts_cache'
+        self.persistent_dir.mkdir(parents=True, exist_ok=True)
+
         
     def gerar_audio(
         self, 
@@ -40,26 +47,84 @@ class TTSService:
         nome_arquivo: Optional[str] = None
     ) -> dict:
         """
-        Gera áudio a partir de texto usando o provider configurado
-        
-        Args:
-            texto: Texto para converter em áudio
-            voz: Nome da voz (específico de cada provider)
-            velocidade: Velocidade da fala (0.25 a 4.0)
-            salvar_arquivo: Se True, salva o arquivo em disco
-            nome_arquivo: Nome customizado para o arquivo (opcional)
-            
-        Returns:
-            dict com 'audio_path', 'audio_base64', 'provider', 'voz_usada'
+        Gera áudio a partir de texto usando o provider configurado com suporte a cache.
         """
+        # Resolve voz default de cada provider para o hash ser consistente
+        voz_usada = voz
+        if not voz_usada:
+            if self.provider == 'google':
+                voz_usada = 'pt-BR-Neural2-B'
+            elif self.provider == 'elevenlabs':
+                voz_usada = 'Daniel'
+            elif self.provider == 'azure':
+                voz_usada = 'pt-BR-AntonioNeural'
+            elif self.provider == 'edge':
+                voz_usada = 'pt-BR-AntonioNeural'
+            else:
+                voz_usada = 'default'
+
+        # Chave de cache baseada nos parâmetros de geração
+        payload = f"{self.provider}:{voz_usada}:{velocidade:.2f}:{texto}"
+        text_hash = hashlib.md5(payload.encode('utf-8')).hexdigest()
+        nome_arquivo_cache = f"tts_{self.provider}_{text_hash}.mp3"
+
+        # Tenta buscar no cache do banco de dados
+        try:
+            cache_entry = TTSAudioCache.objects.filter(text_hash=text_hash).first()
+            if cache_entry:
+                if os.path.exists(cache_entry.audio_file_path):
+                    logger.info(f"[TTS Cache] Hit no cache DB/disco para {text_hash}")
+                    with open(cache_entry.audio_file_path, 'rb') as f:
+                        audio_content = f.read()
+                    
+                    return {
+                        'sucesso': True,
+                        'audio_path': cache_entry.audio_file_path,
+                        'audio_base64': base64.b64encode(audio_content).decode('utf-8'),
+                        'provider': cache_entry.provider,
+                        'voz_usada': cache_entry.voice,
+                        'tamanho_bytes': len(audio_content),
+                        'formato': 'mp3',
+                        'audio_url': cache_entry.audio_url
+                    }
+                else:
+                    logger.warning(f"[TTS Cache] Entrada no DB existe para {text_hash}, mas o arquivo físico {cache_entry.audio_file_path} sumiu. Invalidando.")
+                    cache_entry.delete()
+        except Exception as e:
+            logger.error(f"[TTS Cache] Erro ao buscar/atualizar cache no banco: {e}", exc_info=True)
+
+        # Se não houver cache, gera o áudio (sempre salvando o arquivo e com o nome de cache)
         if self.provider == 'google':
-            return self._gerar_google(texto, voz, velocidade, salvar_arquivo, nome_arquivo)
+            resultado = self._gerar_google(texto, voz, velocidade, salvar_arquivo=True, nome_arquivo=nome_arquivo_cache)
         elif self.provider == 'elevenlabs':
-            return self._gerar_elevenlabs(texto, voz, velocidade, salvar_arquivo, nome_arquivo)
+            resultado = self._gerar_elevenlabs(texto, voz, velocidade, salvar_arquivo=True, nome_arquivo=nome_arquivo_cache)
         elif self.provider == 'azure':
-            return self._gerar_azure(texto, voz, velocidade, salvar_arquivo, nome_arquivo)
+            resultado = self._gerar_azure(texto, voz, velocidade, salvar_arquivo=True, nome_arquivo=nome_arquivo_cache)
+        elif self.provider == 'edge':
+            resultado = self._gerar_edge(texto, voz, velocidade, salvar_arquivo=True, nome_arquivo=nome_arquivo_cache)
         else:
             raise ValueError(f"Provider '{self.provider}' não suportado")
+
+        if resultado and resultado.get('sucesso'):
+            # Cria a entrada no cache do banco de dados
+            try:
+                audio_url = f"/api/tts/audio/{nome_arquivo_cache}"
+                TTSAudioCache.objects.create(
+                    text_hash=text_hash,
+                    text=texto,
+                    audio_file_path=resultado['audio_path'],
+                    audio_url=audio_url,
+                    provider=self.provider,
+                    voice=voz_usada,
+                    velocidade=velocidade
+                )
+                resultado['audio_url'] = audio_url
+                logger.info(f"[TTS Cache] Novo áudio gerado e salvo em cache para {text_hash}")
+            except Exception as e:
+                logger.error(f"[TTS Cache] Erro ao salvar novo áudio no DB cache: {e}", exc_info=True)
+        
+        return resultado
+
     
     def _gerar_google(
         self, 
@@ -113,9 +178,11 @@ class TTSService:
                 audio_config=audio_config
             )
             
-            # Salva em arquivo temporário
-            arquivo_nome = nome_arquivo or f"tts_google_{hash(texto)}.mp3"
-            audio_path = self.temp_dir / arquivo_nome
+            # Salva em arquivo
+            h = hashlib.md5(texto.encode('utf-8')).hexdigest()
+            arquivo_nome = nome_arquivo or f"tts_google_{h}.mp3"
+            audio_path = self.persistent_dir / arquivo_nome
+
             
             with open(audio_path, 'wb') as out:
                 out.write(response.audio_content)
@@ -198,8 +265,10 @@ class TTSService:
             )
             
             # Salva em arquivo
-            arquivo_nome = nome_arquivo or f"tts_elevenlabs_{hash(texto)}.mp3"
-            audio_path = self.temp_dir / arquivo_nome
+            h = hashlib.md5(texto.encode('utf-8')).hexdigest()
+            arquivo_nome = nome_arquivo or f"tts_elevenlabs_{h}.mp3"
+            audio_path = self.persistent_dir / arquivo_nome
+
             
             with open(audio_path, 'wb') as out:
                 out.write(audio_bytes)
@@ -276,8 +345,10 @@ class TTSService:
             )
             
             # Arquivo de saída
-            arquivo_nome = nome_arquivo or f"tts_azure_{hash(texto)}.mp3"
-            audio_path = self.temp_dir / arquivo_nome
+            h = hashlib.md5(texto.encode('utf-8')).hexdigest()
+            arquivo_nome = nome_arquivo or f"tts_azure_{h}.mp3"
+            audio_path = self.persistent_dir / arquivo_nome
+
             
             audio_config = speechsdk.audio.AudioOutputConfig(filename=str(audio_path))
             
@@ -440,6 +511,77 @@ class TTSService:
         except Exception as e:
             logger.error(f"Erro ao listar vozes Azure: {e}")
             return {'sucesso': False, 'erro': str(e)}
+
+    def _gerar_edge(
+        self, 
+        texto: str, 
+        voz: Optional[str] = None, 
+        velocidade: float = 1.0,
+        salvar_arquivo: bool = False,
+        nome_arquivo: Optional[str] = None
+    ) -> dict:
+        """Gera áudio via Microsoft Edge TTS (gratuito, sem API key, voz neural)."""
+        import asyncio
+        import base64
+        import edge_tts
+        from concurrent.futures import ThreadPoolExecutor
+
+        vozes_edge_ptbr = {
+            'pt-BR-FranciscaNeural', 'pt-BR-AntonioNeural', 'pt-BR-BrendaNeural',
+            'pt-BR-DonatoNeural', 'pt-BR-ElzaNeural', 'pt-BR-FabioNeural',
+            'pt-BR-GiovannaNeural', 'pt-BR-HumbertoNeural', 'pt-BR-JulioNeural',
+            'pt-BR-LeilaNeural', 'pt-BR-LeticiaNeural', 'pt-BR-ManuelaNeural',
+            'pt-BR-NicolauNeural', 'pt-BR-ThalitaNeural', 'pt-BR-ValerioNeural',
+            'pt-BR-YaraNeural',
+        }
+        voz_id = voz if voz in vozes_edge_ptbr else 'pt-BR-AntonioNeural'
+        
+        # Converte velocidade (ex: 1.0 -> '+0%', 1.1 -> '+10%', 0.9 -> '-10%')
+        rate_percent = int((velocidade - 1.0) * 100)
+        rate_str = f"{rate_percent:+}%" if rate_percent != 0 else "+0%"
+
+        # Arquivo de saída
+        h = hashlib.md5(texto.encode('utf-8')).hexdigest()
+        arquivo_nome = nome_arquivo or f"tts_edge_{h}.mp3"
+        audio_path = self.persistent_dir / arquivo_nome
+
+        async def _sintetizar():
+            communicate = edge_tts.Communicate(texto, voz_id, rate=rate_str, pitch='+0Hz')
+            await communicate.save(str(audio_path))
+            with open(audio_path, 'rb') as f:
+                return f.read()
+
+        def _rodar_em_thread():
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(_sintetizar())
+            finally:
+                loop.close()
+
+        try:
+            logger.info(f"[Edge TTS] Gerando áudio: '{texto[:50]}...' com voz {voz_id}")
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                audio_bytes = executor.submit(_rodar_em_thread).result(timeout=30)
+
+            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+            
+            resultado = {
+                'sucesso': True,
+                'audio_path': str(audio_path),
+                'audio_base64': audio_base64,
+                'provider': 'edge',
+                'voz_usada': voz_id,
+                'tamanho_bytes': len(audio_bytes),
+                'formato': 'mp3'
+            }
+            return resultado
+        except Exception as e:
+            logger.error(f"[Edge TTS] Erro ao gerar áudio: {e}", exc_info=True)
+            return {
+                'sucesso': False,
+                'erro': str(e),
+                'provider': 'edge'
+            }
 
 
 # Atalhos para uso rápido

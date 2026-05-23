@@ -826,3 +826,133 @@ class ReservaViewSet(viewsets.ModelViewSet):
             
         status_code = status.HTTP_200_OK if result.get('sucesso') else status.HTTP_400_BAD_REQUEST
         return Response(result, status=status_code)
+
+    @action(detail=False, methods=['get'])
+    def relatorio(self, request):
+        """
+        Retorna os dados consolidados do relatório de hotelaria/hospedagem:
+        KPIs: Receita de diárias, receita de consumos, total de noites vendidas, ADR, Taxa de Ocupação, Hóspedes Ativos.
+        Lista de reservas filtradas com detalhes completos.
+        """
+        from django.db import models
+        from django.db.models import Q
+        import calendar
+        from datetime import datetime, date
+
+        data_inicio_str = request.query_params.get('data_inicio')
+        data_fim_str = request.query_params.get('data_fim')
+        quarto_id = request.query_params.get('quarto_id')
+        status_reserva = request.query_params.get('status')
+
+        hoje = timezone.localtime(timezone.now()).date()
+
+        # Parse ou definição de datas padrões (mês atual)
+        if data_inicio_str:
+            try:
+                data_inicio = datetime.strptime(data_inicio_str[:10], '%Y-%m-%d').date()
+            except ValueError:
+                data_inicio = hoje.replace(day=1)
+        else:
+            data_inicio = hoje.replace(day=1)
+
+        if data_fim_str:
+            try:
+                data_fim = datetime.strptime(data_fim_str[:10], '%Y-%m-%d').date()
+            except ValueError:
+                data_fim = hoje
+        else:
+            data_fim = hoje
+
+        # 1. Filtrar as reservas no período
+        reservas_filtradas = Reserva.objects.all()
+
+        # Aplicamos filtros de data (entrada ou checkin no período)
+        reservas_filtradas = reservas_filtradas.filter(
+            Q(data_checkin_real__date__range=(data_inicio, data_fim)) |
+            Q(data_checkin_real__isnull=True, data_entrada_prevista__date__range=(data_inicio, data_fim))
+        )
+
+        if quarto_id:
+            reservas_filtradas = reservas_filtradas.filter(quarto_id=quarto_id)
+
+        if status_reserva and status_reserva != 'todos':
+            reservas_filtradas = reservas_filtradas.filter(status_reserva=status_reserva)
+
+        # 2. Calcular KPIs
+        total_diarias_rev = Decimal('0.00')
+        total_consumos_rev = Decimal('0.00')
+        total_reservas_count = 0
+        total_noites_sold = 0
+
+        for r in reservas_filtradas:
+            total_diarias_rev += r.total_diarias
+            total_consumos_rev += r.total_consumo
+            total_reservas_count += 1
+            
+            # Calcular noites totais dessa reserva
+            entrada = r.data_checkin_real or r.data_entrada_prevista
+            saida = r.data_checkout_real or r.data_saida_prevista
+            if entrada and saida:
+                dias = max((saida.date() - entrada.date()).days, 1)
+                total_noites_sold += dias
+
+        total_geral_rev = total_diarias_rev + total_consumos_rev
+        adr = (total_diarias_rev / Decimal(total_noites_sold)) if total_noites_sold > 0 else Decimal('0.00')
+        adr = adr.quantize(Decimal('0.01'))
+
+        # 3. Taxa de Ocupação
+        total_rooms = Quarto.objects.count()
+        num_dias = max((data_fim - data_inicio).days + 1, 1)
+        total_room_nights_available = total_rooms * num_dias
+
+        # Calcular noites ocupadas dentro do período selecionado
+        reservas_ocupacao = Reserva.objects.filter(
+            status_reserva__in=['checkin', 'finalizada']
+        ).filter(
+            Q(data_checkin_real__date__lte=data_fim) &
+            (Q(data_checkout_real__date__gte=data_inicio) | Q(data_checkout_real__isnull=True))
+        )
+
+        total_occupied_nights_in_period = 0
+        for r in reservas_ocupacao:
+            stay_start = (r.data_checkin_real or r.data_entrada_prevista).date()
+            stay_end = (r.data_checkout_real or r.data_saida_prevista).date()
+            
+            overlap_start = max(data_inicio, stay_start)
+            overlap_end = min(data_fim, stay_end)
+            
+            if overlap_end > overlap_start:
+                total_occupied_nights_in_period += (overlap_end - overlap_start).days
+            elif overlap_end == overlap_start:
+                total_occupied_nights_in_period += 1
+
+        if total_room_nights_available > 0:
+            ocupacao_rate = (total_occupied_nights_in_period / total_room_nights_available) * 100
+            ocupacao_rate = min(ocupacao_rate, 100.0)
+        else:
+            ocupacao_rate = 0.0
+
+        # Hóspedes Ativos
+        hospedes_ativos = Reserva.objects.filter(status_reserva='checkin').count()
+
+        # 4. Serializar reservas filtradas
+        reservas_serializadas = ReservaSerializer(reservas_filtradas, many=True).data
+
+        return Response({
+            "kpis": {
+                "total_diarias": total_diarias_rev,
+                "total_consumo": total_consumos_rev,
+                "total_geral": total_geral_rev,
+                "total_reservas": total_reservas_count,
+                "total_noites_sold": total_noites_sold,
+                "adr": adr,
+                "taxa_ocupacao": round(ocupacao_rate, 2),
+                "hospedes_ativos": hospedes_ativos
+            },
+            "reservas": reservas_serializadas,
+            "periodo": {
+                "data_inicio": data_inicio.isoformat(),
+                "data_fim": data_fim.isoformat()
+            }
+        })
+

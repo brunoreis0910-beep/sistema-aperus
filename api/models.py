@@ -5690,3 +5690,24 @@ class TributacaoUF(models.Model):
     def __str__(self):
         return f'{self.tipo_tributacao.nome} → {self.uf_destino} | ICMS {self.icms_aliq}%'
 
+
+class TTSAudioCache(models.Model):
+    id_cache = models.AutoField(primary_key=True)
+    text_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    text = models.TextField()
+    audio_file_path = models.CharField(max_length=500)
+    audio_url = models.CharField(max_length=500)
+    provider = models.CharField(max_length=50, default='google')
+    voice = models.CharField(max_length=100, blank=True, null=True)
+    velocidade = models.DecimalField(max_digits=3, decimal_places=2, default=1.00)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = 'tts_audio_cache'
+        verbose_name = 'TTS Audio Cache'
+        verbose_name_plural = 'TTS Audio Caches'
+
+    def __str__(self):
+        return f"{self.provider} - {self.voice} - {self.text_hash}"
+
