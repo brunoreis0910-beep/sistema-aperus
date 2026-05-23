@@ -53,13 +53,13 @@ class TTSService:
         voz_usada = voz
         if not voz_usada:
             if self.provider == 'google':
-                voz_usada = 'pt-BR-Neural2-B'
+                voz_usada = 'pt-BR-Neural2-A'
             elif self.provider == 'elevenlabs':
                 voz_usada = 'Daniel'
             elif self.provider == 'azure':
-                voz_usada = 'pt-BR-AntonioNeural'
+                voz_usada = 'pt-BR-FranciscaNeural'
             elif self.provider == 'edge':
-                voz_usada = 'pt-BR-AntonioNeural'
+                voz_usada = 'pt-BR-FranciscaNeural'
             else:
                 voz_usada = 'default'
 

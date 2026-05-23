@@ -343,19 +343,43 @@ class AITtsView(APIView):
             )
 
         texto = self._limpar_markdown(texto_bruto)[:4500]
-        voz_solicitada = request.data.get('voz', '')
-
-        # Determina o provider e a voz a ser utilizada antes para calcular o hash correto
-        api_key = decouple_config('GOOGLE_CLOUD_TTS_API_KEY', default='').strip()
-        provider = 'google' if api_key else 'edge'
         
+        # Lê configurações do arquivo .env
+        env_provider = decouple_config('TTS_PROVIDER', default='').strip().lower()
+        env_voice = decouple_config('TTS_VOICE', default='').strip()
+        
+        google_api_key = decouple_config('GOOGLE_CLOUD_TTS_API_KEY', default='').strip()
+        elevenlabs_api_key = decouple_config('ELEVENLABS_API_KEY', default='').strip()
+
+        voz_solicitada = request.data.get('voz', '') or env_voice
+
+        # 1) Determina o provider a ser utilizado
+        if env_provider:
+            provider = env_provider
+        else:
+            if google_api_key:
+                provider = 'google'
+            elif elevenlabs_api_key:
+                provider = 'elevenlabs'
+            else:
+                provider = 'edge'
+
+        # 2) Determina a voz a ser utilizada baseada no provider
         if provider == 'google':
             voz = voz_solicitada if voz_solicitada in {
                 'pt-BR-Neural2-A', 'pt-BR-Neural2-B', 'pt-BR-Neural2-C',
+                'pt-BR-Neural2-D', 'pt-BR-Neural2-F',
                 'pt-BR-Wavenet-A', 'pt-BR-Wavenet-B', 'pt-BR-Wavenet-C',
+                'pt-BR-Wavenet-D', 'pt-BR-Wavenet-E', 'pt-BR-Wavenet-F',
                 'pt-BR-Standard-A', 'pt-BR-Standard-B', 'pt-BR-Standard-C',
-            } else 'pt-BR-Neural2-A'
+                'pt-BR-Standard-D', 'pt-BR-Standard-E',
+            } else 'pt-BR-Neural2-A' # Default para Google: Neural2 Feminina de alta qualidade
+        elif provider == 'elevenlabs':
+            # ElevenLabs usa IDs de voz (ex: Daniel, Rachel, etc. ou voice_id do ElevenLabs)
+            voz = voz_solicitada if voz_solicitada else 'Daniel'
         else:
+            # Fallback para Edge TTS
+            provider = 'edge'
             vozes_edge_ptbr = {
                 'pt-BR-FranciscaNeural', 'pt-BR-AntonioNeural', 'pt-BR-BrendaNeural',
                 'pt-BR-DonatoNeural', 'pt-BR-ElzaNeural', 'pt-BR-FabioNeural',
@@ -364,11 +388,9 @@ class AITtsView(APIView):
                 'pt-BR-NicolauNeural', 'pt-BR-ThalitaNeural', 'pt-BR-ValerioNeural',
                 'pt-BR-YaraNeural',
             }
-            voz = voz_solicitada if voz_solicitada in vozes_edge_ptbr else 'pt-BR-AntonioNeural'
+            voz = voz_solicitada if voz_solicitada in vozes_edge_ptbr else 'pt-BR-FranciscaNeural' # Default: Francisca (Feminina)
 
-        # Calcula o hash de cache
-        # Observação: Velocidade padrão do endpoint de chat é 1.0 (ou 1.05 no google payload)
-        # Vamos usar 1.00 para fins de consistência no cache
+        # 3) Calcula o hash de cache
         payload = f"{provider}:{voz}:1.00:{texto}"
         text_hash = hashlib.md5(payload.encode('utf-8')).hexdigest()
         nome_arquivo_cache = f"tts_{provider}_{text_hash}.mp3"
@@ -377,7 +399,7 @@ class AITtsView(APIView):
         persistent_dir.mkdir(parents=True, exist_ok=True)
         audio_path_persist = persistent_dir / nome_arquivo_cache
 
-        # 1) Tenta carregar do cache do banco de dados/disco
+        # Tenta carregar do cache do banco de dados/disco
         try:
             cache_entry = TTSAudioCache.objects.filter(text_hash=text_hash).first()
             if cache_entry:
@@ -400,9 +422,9 @@ class AITtsView(APIView):
         except Exception as e:
             logger.error(f"[AITtsView Cache] Erro ao buscar cache: {e}", exc_info=True)
 
-        # Se não houver cache, prossegue com a geração
         audio_bytes = None
 
+        # 4) Geração do áudio pelo provider selecionado
         if provider == 'google':
             try:
                 url = 'https://texttospeech.googleapis.com/v1/text:synthesize'
@@ -411,7 +433,7 @@ class AITtsView(APIView):
                     'voice': {'languageCode': 'pt-BR', 'name': voz},
                     'audioConfig': {'audioEncoding': 'MP3', 'speakingRate': 1.05, 'pitch': 0.0},
                 }
-                resp = http_requests.post(url, json=payload_google, params={'key': api_key}, timeout=15)
+                resp = http_requests.post(url, json=payload_google, params={'key': google_api_key}, timeout=15)
                 if resp.status_code == 200:
                     audio_b64 = resp.json().get('audioContent', '')
                     audio_bytes = base64.b64decode(audio_b64)
@@ -420,11 +442,29 @@ class AITtsView(APIView):
             except Exception as e:
                 logger.warning(f'Google TTS erro: {e}. Usando Edge TTS como fallback.')
 
-        # Se não gerou via Google (ou se o provider preferido for Edge), gera via Edge TTS
+        elif provider == 'elevenlabs':
+            try:
+                from elevenlabs import generate, Voice
+                audio_bytes = generate(
+                    text=texto,
+                    voice=Voice(
+                        voice_id=voz,
+                        settings={
+                            'stability': 0.5,
+                            'similarity_boost': 0.75,
+                            'style': 0.0,
+                            'use_speaker_boost': True
+                        }
+                    ),
+                    model='eleven_multilingual_v2',
+                    api_key=elevenlabs_api_key
+                )
+            except Exception as e:
+                logger.warning(f'ElevenLabs TTS falhou ({e}), usando Edge TTS como fallback.')
+
+        # Fallback global para Edge TTS se falhou nos outros ou se Edge foi selecionado
         if audio_bytes is None:
-            # Fallback para Edge TTS
             provider = 'edge'
-            # Garante voz correta para Edge TTS
             vozes_edge_ptbr = {
                 'pt-BR-FranciscaNeural', 'pt-BR-AntonioNeural', 'pt-BR-BrendaNeural',
                 'pt-BR-DonatoNeural', 'pt-BR-ElzaNeural', 'pt-BR-FabioNeural',
@@ -433,17 +473,14 @@ class AITtsView(APIView):
                 'pt-BR-NicolauNeural', 'pt-BR-ThalitaNeural', 'pt-BR-ValerioNeural',
                 'pt-BR-YaraNeural',
             }
-            voz_edge = voz if voz in vozes_edge_ptbr else 'pt-BR-AntonioNeural'
+            voz_edge = voz if voz in vozes_edge_ptbr else 'pt-BR-FranciscaNeural'
             try:
-                # Gera áudio via Edge TTS
                 import asyncio
-                import tempfile
                 import edge_tts
                 from concurrent.futures import ThreadPoolExecutor
 
                 async def _sintetizar():
                     communicate = edge_tts.Communicate(texto, voz_edge, rate='+5%', pitch='+0Hz')
-                    # Escreve direto na pasta persistente!
                     await communicate.save(str(audio_path_persist))
                     with open(audio_path_persist, 'rb') as f:
                         return f.read()
@@ -458,7 +495,6 @@ class AITtsView(APIView):
                 with ThreadPoolExecutor(max_workers=1) as executor:
                     audio_bytes = executor.submit(_rodar_em_thread).result(timeout=30)
                 
-                # Atualiza a voz usada de fato
                 voz = voz_edge
 
             except Exception as e:
@@ -468,25 +504,24 @@ class AITtsView(APIView):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
         else:
-            # Salvamos os bytes do Google na pasta persistente
+            # Salvamos os bytes gerados no disco para persistência
             try:
                 with open(audio_path_persist, 'wb') as f:
                     f.write(audio_bytes)
             except Exception as e:
-                logger.error(f"[AITtsView] Erro ao salvar arquivo físico do Google TTS: {e}", exc_info=True)
+                logger.error(f"[AITtsView] Erro ao salvar arquivo físico: {e}", exc_info=True)
 
-        # Salva o registro no banco de dados e retorna a resposta de sucesso
+        # 5) Salva o registro no banco de dados e retorna a resposta
         audio_b64 = base64.b64encode(audio_bytes).decode('utf-8')
         audio_url = f"/api/tts/audio/{nome_arquivo_cache}"
 
         try:
-            # Recalcula o hash se o provider mudou de Google para Edge durante o fallback
+            # Recalcula o hash se o provider mudou durante o fallback
             payload_final = f"{provider}:{voz}:1.00:{texto}"
             text_hash_final = hashlib.md5(payload_final.encode('utf-8')).hexdigest()
             nome_arquivo_final = f"tts_{provider}_{text_hash_final}.mp3"
             audio_path_final = persistent_dir / nome_arquivo_final
 
-            # Se o nome mudou, movemos o arquivo
             if nome_arquivo_cache != nome_arquivo_final:
                 if os.path.exists(audio_path_persist):
                     os.rename(audio_path_persist, audio_path_final)
