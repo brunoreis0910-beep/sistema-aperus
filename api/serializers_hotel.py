@@ -2,7 +2,7 @@
 serializers_hotel.py — Serializers para o módulo hoteleiro
 """
 from rest_framework import serializers
-from .models import TipoQuarto, Quarto, Reserva, ConsumoQuarto
+from .models import TipoQuarto, Quarto, Reserva, ConsumoQuarto, Venda
 from .models_hotel import Comodidade
 
 class ComodidadeSerializer(serializers.ModelSerializer):
@@ -49,12 +49,36 @@ class ReservaSerializer(serializers.ModelSerializer):
     total_consumo = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     total_geral = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
 
+    nfce_emitida = serializers.SerializerMethodField()
+    nfe_emitida = serializers.SerializerMethodField()
+    nfse_emitida = serializers.SerializerMethodField()
+    documento_fiscal_emitido = serializers.SerializerMethodField()
+
     class Meta:
         model = Reserva
         fields = [
             'id_reserva', 'hospede', 'hospede_nome', 'quarto', 'quarto_numero', 'tipo_quarto_nome',
             'data_entrada_prevista', 'data_saida_prevista', 'data_checkin_real', 'data_checkout_real',
             'status_reserva', 'valor_diaria_aplicada', 'observacoes', 'venda', 'data_criacao', 'data_atualizacao',
-            'consumos', 'total_diarias', 'total_consumo', 'total_geral'
+            'consumos', 'total_diarias', 'total_consumo', 'total_geral',
+            'nfce_emitida', 'nfe_emitida', 'nfse_emitida', 'documento_fiscal_emitido'
         ]
         read_only_fields = ['data_criacao', 'data_atualizacao', 'venda']
+
+    def get_nfce_emitida(self, obj):
+        if not obj.venda:
+            return False
+        return Venda.objects.filter(venda_futura_origem=obj.venda).exclude(status_nfe='CANCELADA').exists()
+
+    def get_nfe_emitida(self, obj):
+        if not obj.venda:
+            return False
+        return obj.venda.status_nfe in ['AUTORIZADA', 'EMITIDA'] or bool(obj.venda.numero_nfe)
+
+    def get_nfse_emitida(self, obj):
+        if not obj.venda:
+            return False
+        return obj.venda.status_nfse in ['AUTORIZADA', 'EMITIDA'] or bool(obj.venda.numero_nfse) or bool(obj.venda.chave_nfse)
+
+    def get_documento_fiscal_emitido(self, obj):
+        return self.get_nfce_emitida(obj) or self.get_nfe_emitida(obj)

@@ -1030,11 +1030,35 @@ export default function HotelPMSPage() {
       if (type === 'nfse') {
         if (res.data?.sucesso) {
           toast.success(res.data.mensagem || 'NFS-e emitida com sucesso!');
+          setCheckoutResult(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              reserva: {
+                ...prev.reserva,
+                nfse_emitida: true
+              }
+            };
+          });
+          await loadData();
         } else {
           toast.error(res.data?.error || res.data?.mensagem || 'Erro na emissão da NFS-e.');
         }
       } else {
         toast.success(`${type.toUpperCase()} emitida com sucesso!`);
+        setCheckoutResult(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            reserva: {
+              ...prev.reserva,
+              documento_fiscal_emitido: true,
+              nfce_emitida: type === 'nfce',
+              nfe_emitida: type === 'nfe'
+            }
+          };
+        });
+        await loadData();
         const finalVendaId = type === 'nfce' ? res.data?.id_venda : id;
         if (finalVendaId) {
           const printUrl = type === 'nfce'
@@ -2354,6 +2378,7 @@ export default function HotelPMSPage() {
                   onClick={() => handleEmitFiscal(checkoutBooking?.id_reserva, 'nfce')}
                   size="small"
                   sx={{ textTransform: 'none' }}
+                  disabled={Boolean(checkoutResult?.reserva?.documento_fiscal_emitido)}
                 >
                   NFC-e
                 </Button>
@@ -2364,6 +2389,7 @@ export default function HotelPMSPage() {
                   onClick={() => handleEmitFiscal(checkoutResult.venda_id, 'nfe')}
                   size="small"
                   sx={{ textTransform: 'none' }}
+                  disabled={Boolean(checkoutResult?.reserva?.documento_fiscal_emitido)}
                 >
                   NF-e
                 </Button>
@@ -2374,6 +2400,7 @@ export default function HotelPMSPage() {
                   onClick={() => handleEmitFiscal(checkoutResult.venda_id, 'nfse')}
                   size="small"
                   sx={{ textTransform: 'none' }}
+                  disabled={Boolean(checkoutResult?.reserva?.nfse_emitida)}
                 >
                   NFS-e
                 </Button>
@@ -3032,19 +3059,19 @@ export default function HotelPMSPage() {
         </MenuItem>
         <MenuItem 
           onClick={() => handleEmitFiscal(printSelectedRow?.id_reserva, 'nfce')}
-          disabled={!printSelectedRow?.venda}
+          disabled={!printSelectedRow?.venda || Boolean(printSelectedRow?.documento_fiscal_emitido)}
         >
           Emitir/Imprimir NFC-e
         </MenuItem>
         <MenuItem 
           onClick={() => handleEmitFiscal(printSelectedRow?.venda, 'nfe')}
-          disabled={!printSelectedRow?.venda}
+          disabled={!printSelectedRow?.venda || Boolean(printSelectedRow?.documento_fiscal_emitido)}
         >
           Emitir/Imprimir NF-e
         </MenuItem>
         <MenuItem 
           onClick={() => handleEmitFiscal(printSelectedRow?.venda, 'nfse')}
-          disabled={!printSelectedRow?.venda}
+          disabled={!printSelectedRow?.venda || Boolean(printSelectedRow?.nfse_emitida)}
         >
           Emitir/Imprimir NFS-e
         </MenuItem>
