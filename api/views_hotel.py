@@ -863,13 +863,17 @@ class ReservaViewSet(viewsets.ModelViewSet):
         else:
             data_fim = hoje
 
+        # Converte para datetime aware para compatibilidade com SQLite/MySQL e suporte a timezone
+        dt_inicio = timezone.make_aware(datetime.combine(data_inicio, datetime.min.time()))
+        dt_fim = timezone.make_aware(datetime.combine(data_fim, datetime.max.time()))
+
         # 1. Filtrar as reservas no período
         reservas_filtradas = Reserva.objects.all()
 
-        # Aplicamos filtros de data (entrada ou checkin no período)
+        # Aplicamos filtros de data (entrada ou checkin no período) usando range no datetime
         reservas_filtradas = reservas_filtradas.filter(
-            Q(data_checkin_real__date__range=(data_inicio, data_fim)) |
-            Q(data_checkin_real__isnull=True, data_entrada_prevista__date__range=(data_inicio, data_fim))
+            Q(data_checkin_real__range=(dt_inicio, dt_fim)) |
+            Q(data_checkin_real__isnull=True, data_entrada_prevista__range=(dt_inicio, dt_fim))
         )
 
         if quarto_id:
@@ -909,8 +913,8 @@ class ReservaViewSet(viewsets.ModelViewSet):
         reservas_ocupacao = Reserva.objects.filter(
             status_reserva__in=['checkin', 'finalizada']
         ).filter(
-            Q(data_checkin_real__date__lte=data_fim) &
-            (Q(data_checkout_real__date__gte=data_inicio) | Q(data_checkout_real__isnull=True))
+            Q(data_checkin_real__lte=dt_fim) &
+            (Q(data_checkout_real__gte=dt_inicio) | Q(data_checkout_real__isnull=True))
         )
 
         total_occupied_nights_in_period = 0
