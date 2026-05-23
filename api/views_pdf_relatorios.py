@@ -477,13 +477,29 @@ def relatorio_vendas_pdf(request):
 @permission_classes([IsAuthenticated])
 def relatorio_estoque_pdf(request):
     """
-    Gera PDF do relatório de estoque (placeholder - implementar conforme necessidade)
+    Gera PDF do relatório de estoque
     
     GET /api/relatorios/estoque/pdf/
     """
-    return Response({
-        'mensagem': 'Relatório de estoque ainda não implementado.'
-    }, status=status.HTTP_501_NOT_IMPLEMENTED)
+    try:
+        logger.info(f"Gerando relatório de estoque (usuário: {request.user.username})")
+        
+        # Gera o PDF
+        pdf_buffer = PDFGerencialService.gerar_pdf_estoque()
+        
+        # Prepara resposta
+        response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+        filename = f'Relatorio_Estoque_{datetime.date.today().strftime("%Y%m%d")}.pdf'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        logger.info(f"Relatório de estoque gerado com sucesso: {filename}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Erro ao gerar relatório de estoque: {e}", exc_info=True)
+        return Response({
+            'erro': f'Erro ao gerar relatório: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 from api.services_pdf_gerencial import PDFGerencialService

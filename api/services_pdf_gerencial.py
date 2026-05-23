@@ -171,3 +171,63 @@ class PDFGerencialService:
         doc.build(elements)
         buffer.seek(0)
         return buffer
+
+    @staticmethod
+    def gerar_pdf_estoque() -> BytesIO:
+        from api.models import Estoque
+        from django.db.models import Sum, F
+        import datetime
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1.5*cm, leftMargin=1.5*cm, topMargin=1.5*cm, bottomMargin=1.5*cm)
+        elements = []
+        styles = getSampleStyleSheet()
+
+        hoje_str = datetime.date.today().strftime('%d/%m/%Y')
+        PDFFiscalService._criar_cabecalho(elements, 'RELATÓRIO DE ESTOQUE ATUAL', hoje_str)
+
+        # Query estoque
+        estoque_qs = Estoque.objects.select_related('id_produto', 'id_deposito').all().order_by('id_produto__nome_produto')
+
+        total_produtos = estoque_qs.values('id_produto').distinct().count()
+        total_itens = estoque_qs.aggregate(total=Sum('quantidade'))['total'] or 0
+        valor_total_estoque = estoque_qs.aggregate(total=Sum(F('quantidade') * F('valor_venda')))['total'] or 0
+        baixo_estoque = estoque_qs.filter(quantidade__lte=F('quantidade_minima')).count()
+
+        # Tabela de Resumo
+        PDFGerencialService._criar_tabela_resumo(elements, 'Resumo do Estoque', [
+            ['Total de Produtos Distintos', f"{total_produtos}"],
+            ['Total de Itens em Estoque', f"{total_itens:,.0f}"],
+            ['Valor Total em Estoque (Venda)', f"R$ {valor_total_estoque:,.2f}"],
+            ['Itens com Estoque Baixo', f"{baixo_estoque}"],
+        ])
+        elements.append(Spacer(1, 0.8*cm))
+
+        # Tabela Detalhada
+        data_estoque = [['Código', 'Produto', 'Depósito', 'Qtd', 'Mín', 'Valor Venda', 'Total Venda']]
+        for est in estoque_qs[:300]: # Limita a 300 itens para não gerar arquivos gigantescos
+            valor_venda = est.valor_venda or 0
+            qtd = est.quantidade or 0
+            total_item = qtd * valor_venda
+            
+            data_estoque.append([
+                est.id_produto.codigo_produto or '',
+                est.id_produto.nome_produto[:30] if est.id_produto else '',
+                est.id_deposito.nome_deposito[:15] if est.id_deposito else '',
+                f"{qtd:,.0f}",
+                f"{est.quantidade_minima or 0:,.0f}",
+                f"R$ {valor_venda:,.2f}",
+                f"R$ {total_item:,.2f}"
+            ])
+
+        PDFGerencialService._criar_tabela_detalhada(
+            elements, 
+            'Detalhes do Estoque', 
+            data_estoque, 
+            [2.5*cm, 5*cm, 2.5*cm, 1.5*cm, 1.5*cm, 2.5*cm, 2.5*cm]
+        )
+
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer
+

@@ -7,10 +7,13 @@ Data: 17/03/2026
 """
 import re
 import datetime
+import logging
 from django.urls import reverse
 from django.utils import timezone
 from typing import Dict, Any, Optional, Tuple
 from api.models import CentroCusto, ContaBancaria, FormaPagamento
+
+logger = logging.getLogger(__name__)
 
 
 class AIDispatcher:
@@ -52,6 +55,13 @@ class AIDispatcher:
                 'formato': str (se tipo='file')
             }
         """
+        # 0. Identifica comando de hotelaria
+        palavras_hotel = ['quarto', 'reserva', 'limpeza', 'manutenção', 'manutencao', 'limpar', 'sujo']
+        if any(w in self.query for w in palavras_hotel):
+            resultado_hotel = self._resolver_comando_hotel()
+            if resultado_hotel:
+                return resultado_hotel
+
         # Extrai datas do comando
         data_inicio, data_fim = self._extrair_periodo()
         
@@ -367,3 +377,239 @@ class AIDispatcher:
                     logger.error(f"Erro ao buscar filtro financeiro '{valor_str}': {e}")
         
         return filtros
+
+    def _resolver_comando_hotel(self) -> Optional[Dict[str, Any]]:
+        """Resolve comandos de hotelaria usando a IA do Gemini ou fallback Regex"""
+        try:
+            from api.services.ai_service import ai_service
+            if not ai_service.is_available():
+                return self._resolver_comando_hotel_regex()
+                
+            prompt = f"""Você é o analisador de intenções de hotelaria/PMS do APERUS.
+Sua tarefa é extrair comandos estruturados em JSON a partir da pergunta do usuário.
+
+Ações possíveis:
+1. "manutencao_quarto": Colocar um quarto em manutenção.
+   Args: {{"quarto": "301"}}
+2. "limpeza_quarto": Mudar status de limpeza/limpeza pendente do quarto.
+   Args: {{"quarto": "102", "status": "sujo" (se precisa de limpeza) ou "disponivel" (se foi limpo e está liberado)}}
+   Nota: Se o usuário diz "limpeza no quarto X" ou "limpar quarto X", assuma "status": "sujo" (colocar na fila de limpeza). Se diz "quarto X limpo" ou "limpeza feita", use "status": "disponivel".
+3. "reserva_quarto": Abrir/criar uma reserva.
+   Args: {{"quarto": "103", "horas": 2 (se mencionado), "data_inicio": "YYYY-MM-DD HH:MM:SS" (ou null), "data_fim": "YYYY-MM-DD HH:MM:SS" (ou null), "hospede": "Nome" (ou null)}}
+
+Data/Hora de referência atual do sistema: {timezone.now().strftime('%Y-%m-%d %H:%M:%S')} (dia da semana: {timezone.now().strftime('%A')})
+
+Regras para datas da reserva:
+- Se não for especificada data_inicio, use a data/hora atual.
+- Se for especificado um período (ex: "hoje às 14:00 até amanhã às 12:00"), calcule os datetimes no formato YYYY-MM-DD HH:MM:SS.
+- Se for especificado "reserva de X horas" e nenhuma data/hora fim for dada, calcule data_fim = data_inicio + X horas.
+- Se nenhuma data/hora for mencionada, use data_inicio = agora, data_fim = agora + 24 horas.
+
+Pergunta: "{self.query}"
+
+Retorne APENAS um JSON válido no formato:
+{{
+    "identificado": true/false,
+    "acao": "manutencao_quarto|limpeza_quarto|reserva_quarto|null",
+    "args": {{ ... }}
+}}"""
+            
+            # Chama a API do Gemini
+            texto_resposta = ai_service._chamar_gemini_com_retry(prompt, max_tentativas=2, delay_inicial=1.5)
+            
+            # Limpa o markdown usando regex robusto
+            texto_resposta = texto_resposta.strip()
+            match_json = re.search(r'```json\s*(\{.*?\})\s*```', texto_resposta, re.DOTALL)
+            if match_json:
+                texto_resposta = match_json.group(1)
+            else:
+                match_any_code = re.search(r'```\s*(\{.*?\})\s*```', texto_resposta, re.DOTALL)
+                if match_any_code:
+                    texto_resposta = match_any_code.group(1)
+            texto_resposta = texto_resposta.strip()
+            
+            import json
+            dados = json.loads(texto_resposta)
+            
+            if dados.get('identificado') and dados.get('acao'):
+                res_exec = self._executar_acao_hotel(dados['acao'], dados.get('args', {}))
+                return {
+                    'tipo': 'text',
+                    'acao': 'comando_hotel_executado',
+                    'conteudo': res_exec['msg'],
+                    'titulo': 'Hospedagem / PMS'
+                }
+                
+        except Exception as e:
+            logger.error(f"Erro ao resolver comando de hotelaria via IA: {e}")
+            
+        # Fallback para Regex
+        return self._resolver_comando_hotel_regex()
+
+    def _resolver_comando_hotel_regex(self) -> Optional[Dict[str, Any]]:
+        """Fallback para parsing simples de hotelaria usando Regex"""
+        import re
+        query_lower = self.query
+        
+        # 1. Manutenção
+        match_maint = re.search(r'(?:manutenção|manutencao).*?quarto\s+(\d+)|quarto\s+(\d+).*?(?:manutenção|manutencao)', query_lower)
+        if match_maint:
+            quarto = match_maint.group(1) or match_maint.group(2)
+            res_exec = self._executar_acao_hotel('manutencao_quarto', {'quarto': quarto})
+            return {
+                'tipo': 'text',
+                'acao': 'comando_hotel_executado',
+                'conteudo': res_exec['msg'],
+                'titulo': 'Hospedagem / PMS'
+            }
+            
+        # 2. Limpeza
+        match_clean = re.search(r'(?:limpeza|limpar).*?quarto\s+(\d+)|quarto\s+(\d+).*?(?:limpeza|limpar)', query_lower)
+        if match_clean:
+            quarto = match_clean.group(1) or match_clean.group(2)
+            status = 'disponivel' if any(w in query_lower for w in ['limpo', 'concluido', 'feita', 'pronto']) else 'sujo'
+            res_exec = self._executar_acao_hotel('limpeza_quarto', {'quarto': quarto, 'status': status})
+            return {
+                'tipo': 'text',
+                'acao': 'comando_hotel_executado',
+                'conteudo': res_exec['msg'],
+                'titulo': 'Hospedagem / PMS'
+            }
+            
+        # 3. Reserva
+        match_res = re.search(r'(?:reserva|reservar).*?quarto\s+(\d+)|quarto\s+(\d+).*?(?:reserva|reservar)', query_lower)
+        if match_res:
+            quarto = match_res.group(1) or match_res.group(2)
+            res_exec = self._executar_acao_hotel('reserva_quarto', {'quarto': quarto})
+            return {
+                'tipo': 'text',
+                'acao': 'comando_hotel_executado',
+                'conteudo': res_exec['msg'],
+                'titulo': 'Hospedagem / PMS'
+            }
+            
+        return None
+
+    def _executar_acao_hotel(self, acao: str, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Executa a ação correspondente no banco de dados"""
+        from api.models_hotel import Quarto, Reserva, TipoQuarto
+        from api.models import Cliente
+        from django.utils import timezone
+        import datetime
+        from decimal import Decimal
+
+        if acao == 'manutencao_quarto':
+            quarto_num = args.get('quarto')
+            if not quarto_num:
+                return {'sucesso': False, 'msg': 'Número do quarto não especificado.'}
+            
+            quarto = Quarto.objects.filter(numero_quarto=quarto_num).first()
+            if not quarto:
+                return {'sucesso': False, 'msg': f'Quarto {quarto_num} não encontrado no sistema.'}
+            
+            quarto.status_atual = 'manutencao'
+            quarto.save()
+            return {
+                'sucesso': True,
+                'msg': f'🔧 **Quarto {quarto_num}** foi colocado em **Manutenção** com sucesso.'
+            }
+
+        elif acao == 'limpeza_quarto':
+            quarto_num = args.get('quarto')
+            status_limpeza = args.get('status', 'sujo')
+            if not quarto_num:
+                return {'sucesso': False, 'msg': 'Número do quarto não especificado.'}
+            
+            quarto = Quarto.objects.filter(numero_quarto=quarto_num).first()
+            if not quarto:
+                return {'sucesso': False, 'msg': f'Quarto {quarto_num} não encontrado no sistema.'}
+            
+            status_map = {
+                'sujo': 'sujo',
+                'disponivel': 'disponivel',
+                'limpo': 'disponivel'
+            }
+            quarto.status_atual = status_map.get(status_limpeza, 'sujo')
+            quarto.save()
+            
+            status_label = 'Sujo / Aguardando Limpeza' if quarto.status_atual == 'sujo' else 'Disponível / Limpo'
+            return {
+                'sucesso': True,
+                'msg': f'🧹 Status do **Quarto {quarto_num}** alterado para **{status_label}**.'
+            }
+
+        elif acao == 'reserva_quarto':
+            quarto_num = args.get('quarto')
+            if not quarto_num:
+                return {'sucesso': False, 'msg': 'Número do quarto não especificado para a reserva.'}
+            
+            quarto = Quarto.objects.filter(numero_quarto=quarto_num).first()
+            if not quarto:
+                return {'sucesso': False, 'msg': f'Quarto {quarto_num} não encontrado no sistema.'}
+            
+            # Parsing das datas
+            ahora = timezone.now()
+            start_str = args.get('data_inicio')
+            end_str = args.get('data_fim')
+            horas = args.get('horas')
+            
+            try:
+                if start_str:
+                    # Tenta converter string YYYY-MM-DD HH:MM:SS para datetime com fuso horário
+                    dt_naive = datetime.datetime.strptime(start_str, '%Y-%m-%d %H:%M:%S')
+                    start_dt = timezone.make_aware(dt_naive)
+                else:
+                    start_dt = ahora
+                
+                if end_str:
+                    dt_naive = datetime.datetime.strptime(end_str, '%Y-%m-%d %H:%M:%S')
+                    end_dt = timezone.make_aware(dt_naive)
+                elif horas:
+                    end_dt = start_dt + datetime.timedelta(hours=int(horas))
+                else:
+                    end_dt = start_dt + datetime.timedelta(days=1)
+            except Exception as dt_err:
+                logger.error(f"Erro ao converter datas da reserva: {dt_err}")
+                start_dt = ahora
+                end_dt = ahora + datetime.timedelta(days=1)
+                
+            # Seleção do hóspede
+            hospede_nome = args.get('hospede')
+            cliente = None
+            if hospede_nome:
+                cliente = Cliente.objects.filter(nome_razao_social__icontains=hospede_nome).first()
+            
+            if not cliente:
+                # Busca cliente padrão CONSUMIDOR
+                cliente = Cliente.objects.filter(nome_razao_social='CONSUMIDOR').first()
+                if not cliente:
+                    cliente = Cliente.objects.filter(nome_razao_social__icontains='hospede').first()
+                if not cliente:
+                    cliente = Cliente.objects.first()
+                    
+            if not cliente:
+                return {'sucesso': False, 'msg': 'Não foi possível encontrar um cliente/hóspede cadastrado para a reserva.'}
+                
+            # Criação da reserva
+            reserva = Reserva.objects.create(
+                hospede=cliente,
+                quarto=quarto,
+                data_entrada_prevista=start_dt,
+                data_saida_prevista=end_dt,
+                status_reserva='confirmada',
+                valor_diaria_aplicada=quarto.tipo.valor_diaria_padrao,
+                observacoes="Reserva criada via comando de voz/chat da IA."
+            )
+            
+            periodo_formatado = f"de **{start_dt.strftime('%d/%m/%Y %H:%M')}** até **{end_dt.strftime('%d/%m/%Y %H:%M')}**"
+            return {
+                'sucesso': True,
+                'msg': f'🔑 **Reserva nº {reserva.id_reserva}** criada com sucesso!\n'
+                       f'- **Quarto**: {quarto.numero_quarto} ({quarto.tipo.nome})\n'
+                       f'- **Hóspede**: {cliente.nome_razao_social}\n'
+                       f'- **Período**: {periodo_formatado}\n'
+                       f'- **Diária Aplicada**: R$ {reserva.valor_diaria_aplicada:,.2f}'
+            }
+            
+        return {'sucesso': False, 'msg': 'Ação de hotelaria não identificada.'}
+

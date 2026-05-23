@@ -326,21 +326,45 @@ const AIChat = () => {
     setGravando(false);
   };
 
-  // Função para obter a melhor voz pt-BR disponível
+  // Função para obter a melhor voz pt-BR disponível de forma extremamente robusta
   const obterVozPtBr = () => {
     if (!window.speechSynthesis) return null;
     const voices = window.speechSynthesis.getVoices();
-    const ptBrVoices = voices.filter(v => v.lang.includes('pt-BR') || v.lang.includes('pt_BR') || v.lang.startsWith('pt'));
-    if (ptBrVoices.length === 0) return null;
+    if (!voices || voices.length === 0) return null;
     
-    // Tenta priorizar vozes do Google ou Microsoft, que geralmente são melhores
-    const googleVoice = ptBrVoices.find(v => v.name.toLowerCase().includes('google'));
-    if (googleVoice) return googleVoice;
+    // Filtra todas as vozes em português (caso insensível)
+    const ptVoices = voices.filter(v => {
+      const lang = v.lang.toLowerCase();
+      return lang.includes('pt') || lang.startsWith('pt');
+    });
     
-    const microsoftVoice = ptBrVoices.find(v => v.name.toLowerCase().includes('microsoft'));
-    if (microsoftVoice) return microsoftVoice;
+    if (ptVoices.length === 0) return null;
     
-    return ptBrVoices[0];
+    // Prioriza pt-BR (Brasil)
+    const ptBrVoices = ptVoices.filter(v => {
+      const lang = v.lang.toLowerCase();
+      return lang.includes('br') || lang.includes('pt-br') || lang.includes('pt_br');
+    });
+    
+    const vozesParaEscolher = ptBrVoices.length > 0 ? ptBrVoices : ptVoices;
+    
+    // Prioriza vozes neurais / naturais (Edge, Google, Microsoft, Watson, etc.)
+    const vozesNaturais = vozesParaEscolher.filter(v => {
+      const name = v.name.toLowerCase();
+      return name.includes('google') || name.includes('microsoft') || name.includes('natural') || name.includes('neural');
+    });
+    
+    if (vozesNaturais.length > 0) {
+      // Prioriza vozes femininas que costumam ser mais suaves e de alta qualidade no Windows
+      const feminina = vozesNaturais.find(v => {
+        const name = v.name.toLowerCase();
+        return name.includes('maria') || name.includes('francisca') || name.includes('giovanna') || name.includes('heloisa') || name.includes('helen') || name.includes('zira');
+      });
+      if (feminina) return feminina;
+      return vozesNaturais[0];
+    }
+    
+    return vozesParaEscolher[0];
   };
 
   // ----- VOZ: Google Cloud TTS Neural2 (pt-BR) -----
