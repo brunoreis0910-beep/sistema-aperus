@@ -53,6 +53,8 @@ class ReservaSerializer(serializers.ModelSerializer):
     nfe_emitida = serializers.SerializerMethodField()
     nfse_emitida = serializers.SerializerMethodField()
     documento_fiscal_emitido = serializers.SerializerMethodField()
+    nfce_venda_id = serializers.SerializerMethodField()
+    nfe_venda_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Reserva
@@ -61,19 +63,26 @@ class ReservaSerializer(serializers.ModelSerializer):
             'data_entrada_prevista', 'data_saida_prevista', 'data_checkin_real', 'data_checkout_real',
             'status_reserva', 'valor_diaria_aplicada', 'observacoes', 'venda', 'data_criacao', 'data_atualizacao',
             'consumos', 'total_diarias', 'total_consumo', 'total_geral',
-            'nfce_emitida', 'nfe_emitida', 'nfse_emitida', 'documento_fiscal_emitido'
+            'nfce_emitida', 'nfe_emitida', 'nfse_emitida', 'documento_fiscal_emitido',
+            'nfce_venda_id', 'nfe_venda_id'
         ]
         read_only_fields = ['data_criacao', 'data_atualizacao', 'venda']
 
     def get_nfce_emitida(self, obj):
         if not obj.venda:
             return False
-        return Venda.objects.filter(venda_futura_origem=obj.venda).exclude(status_nfe='CANCELADA').exists()
+        if obj.venda.id_operacao and obj.venda.id_operacao.modelo_documento == '65' and obj.venda.status_nfe in ['AUTORIZADA', 'EMITIDA']:
+            return True
+        return Venda.objects.filter(venda_futura_origem=obj.venda, id_operacao__modelo_documento='65').exclude(status_nfe='CANCELADA').exists()
 
     def get_nfe_emitida(self, obj):
         if not obj.venda:
             return False
-        return obj.venda.status_nfe in ['AUTORIZADA', 'EMITIDA'] or bool(obj.venda.numero_nfe)
+        if obj.venda.status_nfe in ['AUTORIZADA', 'EMITIDA'] or bool(obj.venda.numero_nfe):
+            # Se a venda original foi emitida como NFe
+            if not obj.venda.id_operacao or obj.venda.id_operacao.modelo_documento != '65':
+                return True
+        return Venda.objects.filter(venda_futura_origem=obj.venda, id_operacao__modelo_documento='55').exclude(status_nfe='CANCELADA').exists()
 
     def get_nfse_emitida(self, obj):
         if not obj.venda:
@@ -82,3 +91,30 @@ class ReservaSerializer(serializers.ModelSerializer):
 
     def get_documento_fiscal_emitido(self, obj):
         return self.get_nfce_emitida(obj) or self.get_nfe_emitida(obj)
+
+    def get_nfce_venda_id(self, obj):
+        if not obj.venda:
+            return None
+        venda_nfce = Venda.objects.filter(venda_futura_origem=obj.venda, id_operacao__modelo_documento='65').exclude(status_nfe='CANCELADA').first()
+        if venda_nfce:
+            return venda_nfce.id_venda
+        if obj.venda.id_operacao and obj.venda.id_operacao.modelo_documento == '65':
+            return obj.venda.id_venda
+        return None
+
+    def get_nfe_venda_id(self, obj):
+        if not obj.venda:
+            return None
+        # Procura venda filha com modelo 55 (NFe)
+        venda_nfe = Venda.objects.filter(venda_futura_origem=obj.venda, id_operacao__modelo_documento='55').exclude(status_nfe='CANCELADA').first()
+        if venda_nfe:
+            return venda_nfe.id_venda
+        # Procura qualquer venda filha que não seja modelo 65 (NFCe)
+        venda_nfe_fallback = Venda.objects.filter(venda_futura_origem=obj.venda).exclude(id_operacao__modelo_documento='65').exclude(status_nfe='CANCELADA').first()
+        if venda_nfe_fallback:
+            return venda_nfe_fallback.id_venda
+        # Se a própria venda original foi emitida
+        if obj.venda.status_nfe in ['AUTORIZADA', 'EMITIDA'] or bool(obj.venda.numero_nfe):
+            if not obj.venda.id_operacao or obj.venda.id_operacao.modelo_documento != '65':
+                return obj.venda.id_venda
+        return None

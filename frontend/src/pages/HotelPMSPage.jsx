@@ -1020,7 +1020,7 @@ export default function HotelPMSPage() {
       if (type === 'nfce') {
         endpoint = `/api/hotel/reservas/${id}/gerar_nfce/`;
       } else if (type === 'nfe') {
-        endpoint = `/api/vendas/${id}/emitir_nfe/`;
+        endpoint = `/api/hotel/reservas/${id}/gerar_nfe/`;
       } else if (type === 'nfse') {
         endpoint = `/api/vendas/${id}/emitir_nfse/`;
       }
@@ -1048,18 +1048,21 @@ export default function HotelPMSPage() {
         toast.success(`${type.toUpperCase()} emitida com sucesso!`);
         setCheckoutResult(prev => {
           if (!prev) return prev;
+          const oldReserva = prev.reserva || {};
           return {
             ...prev,
             reserva: {
-              ...prev.reserva,
+              ...oldReserva,
               documento_fiscal_emitido: true,
-              nfce_emitida: type === 'nfce',
-              nfe_emitida: type === 'nfe'
+              nfce_emitida: type === 'nfce' ? true : oldReserva.nfce_emitida,
+              nfe_emitida: type === 'nfe' ? true : oldReserva.nfe_emitida,
+              nfce_venda_id: type === 'nfce' ? res.data?.id_venda : oldReserva.nfce_venda_id,
+              nfe_venda_id: type === 'nfe' ? res.data?.id_venda : oldReserva.nfe_venda_id,
             }
           };
         });
         await loadData();
-        const finalVendaId = type === 'nfce' ? res.data?.id_venda : id;
+        const finalVendaId = (type === 'nfce' || type === 'nfe') ? res.data?.id_venda : id;
         if (finalVendaId) {
           const printUrl = type === 'nfce'
             ? `${api.defaults.baseURL || ''}/api/vendas/${finalVendaId}/imprimir_danfce/`
@@ -2371,28 +2374,70 @@ export default function HotelPMSPage() {
                 Imprimir Cupom/Venda
               </Button>
               <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-                <Button
-                  fullWidth
-                  variant="contained"
-                  color="success"
-                  onClick={() => handleEmitFiscal(checkoutBooking?.id_reserva, 'nfce')}
-                  size="small"
-                  sx={{ textTransform: 'none' }}
-                  disabled={Boolean(checkoutResult?.reserva?.documento_fiscal_emitido)}
-                >
-                  NFC-e
-                </Button>
-                <Button
-                  fullWidth
-                  variant="contained"
-                  color="primary"
-                  onClick={() => handleEmitFiscal(checkoutResult.venda_id, 'nfe')}
-                  size="small"
-                  sx={{ textTransform: 'none' }}
-                  disabled={Boolean(checkoutResult?.reserva?.documento_fiscal_emitido)}
-                >
-                  NF-e
-                </Button>
+                {checkoutResult?.reserva?.nfce_emitida ? (
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    color="success"
+                    onClick={() => {
+                      if (checkoutResult.reserva.nfce_venda_id) {
+                        const printUrl = `${api.defaults.baseURL || ''}/api/vendas/${checkoutResult.reserva.nfce_venda_id}/imprimir_danfce/`;
+                        window.open(printUrl, '_blank');
+                      } else {
+                        toast.error("ID da venda NFC-e não encontrado.");
+                      }
+                    }}
+                    size="small"
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Reimprimir NFC-e
+                  </Button>
+                ) : (
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    color="success"
+                    onClick={() => handleEmitFiscal(checkoutBooking?.id_reserva, 'nfce')}
+                    size="small"
+                    sx={{ textTransform: 'none' }}
+                    disabled={Boolean(checkoutResult?.reserva?.documento_fiscal_emitido)}
+                  >
+                    NFC-e
+                  </Button>
+                )}
+
+                {checkoutResult?.reserva?.nfe_emitida ? (
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    color="primary"
+                    onClick={() => {
+                      if (checkoutResult.reserva.nfe_venda_id) {
+                        const printUrl = `${api.defaults.baseURL || ''}/api/vendas/${checkoutResult.reserva.nfe_venda_id}/imprimir_danfe/`;
+                        window.open(printUrl, '_blank');
+                      } else {
+                        toast.error("ID da venda NF-e não encontrado.");
+                      }
+                    }}
+                    size="small"
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Reimprimir NF-e
+                  </Button>
+                ) : (
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    color="primary"
+                    onClick={() => handleEmitFiscal(checkoutBooking?.id_reserva, 'nfe')}
+                    size="small"
+                    sx={{ textTransform: 'none' }}
+                    disabled={Boolean(checkoutResult?.reserva?.documento_fiscal_emitido)}
+                  >
+                    NF-e
+                  </Button>
+                )}
+
                 <Button
                   fullWidth
                   variant="contained"
@@ -3057,18 +3102,53 @@ export default function HotelPMSPage() {
         >
           Imprimir Cupom/Venda
         </MenuItem>
-        <MenuItem 
-          onClick={() => handleEmitFiscal(printSelectedRow?.id_reserva, 'nfce')}
-          disabled={!printSelectedRow?.venda || Boolean(printSelectedRow?.documento_fiscal_emitido)}
-        >
-          Emitir/Imprimir NFC-e
-        </MenuItem>
-        <MenuItem 
-          onClick={() => handleEmitFiscal(printSelectedRow?.venda, 'nfe')}
-          disabled={!printSelectedRow?.venda || Boolean(printSelectedRow?.documento_fiscal_emitido)}
-        >
-          Emitir/Imprimir NF-e
-        </MenuItem>
+
+        {printSelectedRow?.nfce_emitida ? (
+          <MenuItem 
+            onClick={() => {
+              if (printSelectedRow.nfce_venda_id) {
+                const printUrl = `${api.defaults.baseURL || ''}/api/vendas/${printSelectedRow.nfce_venda_id}/imprimir_danfce/`;
+                window.open(printUrl, '_blank');
+              } else {
+                toast.error("ID da venda NFC-e não encontrado.");
+              }
+              handlePrintMenuClose();
+            }}
+          >
+            Reimprimir NFC-e (Cupom)
+          </MenuItem>
+        ) : (
+          <MenuItem 
+            onClick={() => handleEmitFiscal(printSelectedRow?.id_reserva, 'nfce')}
+            disabled={!printSelectedRow?.venda || Boolean(printSelectedRow?.documento_fiscal_emitido)}
+          >
+            Emitir NFC-e (Cupom)
+          </MenuItem>
+        )}
+
+        {printSelectedRow?.nfe_emitida ? (
+          <MenuItem 
+            onClick={() => {
+              if (printSelectedRow.nfe_venda_id) {
+                const printUrl = `${api.defaults.baseURL || ''}/api/vendas/${printSelectedRow.nfe_venda_id}/imprimir_danfe/`;
+                window.open(printUrl, '_blank');
+              } else {
+                toast.error("ID da venda NF-e não encontrado.");
+              }
+              handlePrintMenuClose();
+            }}
+          >
+            Reimprimir NF-e (Nota Fiscal)
+          </MenuItem>
+        ) : (
+          <MenuItem 
+            onClick={() => handleEmitFiscal(printSelectedRow?.id_reserva, 'nfe')}
+            disabled={!printSelectedRow?.venda || Boolean(printSelectedRow?.documento_fiscal_emitido)}
+          >
+            Emitir NF-e (Nota Fiscal)
+          </MenuItem>
+        )}
+
         <MenuItem 
           onClick={() => handleEmitFiscal(printSelectedRow?.venda, 'nfse')}
           disabled={!printSelectedRow?.venda || Boolean(printSelectedRow?.nfse_emitida)}

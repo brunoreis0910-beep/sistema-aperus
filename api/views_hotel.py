@@ -827,6 +827,164 @@ class ReservaViewSet(viewsets.ModelViewSet):
         status_code = status.HTTP_200_OK if result.get('sucesso') else status.HTTP_400_BAD_REQUEST
         return Response(result, status=status_code)
 
+    @action(detail=True, methods=['post'])
+    def gerar_nfe(self, request, pk=None):
+        """
+        Gera e emite a NF-e (Nota Fiscal) para os produtos da reserva.
+        Verifica os parâmetros do usuário logado (Configurações > Usuário > Hotelaria > Operação Padrão Hospedagem).
+        Exclui o valor da diária (DIARIA_HOTEL) e ajusta o financeiro proporcionalmente.
+        """
+        from api.models import UserParametros, Venda, VendaItem, FinanceiroConta
+        from django.db import transaction
+        from decimal import Decimal
+        
+        reserva = self.get_object()
+        original_venda = reserva.venda
+        
+        if not original_venda:
+            return Response(
+                {"error": "Não há venda de faturamento gerada para esta reserva. Por favor, realize o check-out primeiro."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # 1. Obter parâmetros do usuário
+        user_params = UserParametros.objects.filter(id_user=request.user).first()
+        operacao_nfe = None
+        if user_params:
+            operacao_nfe = user_params.id_operacao_hotel
+            
+        if not operacao_nfe:
+            return Response(
+                {"error": "Nenhuma operação de NF-e de Hotelaria (Operação Padrão Hospedagem) configurada para o seu usuário. Acesse Configurações > Usuário > aba Hotelaria."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # 2. Verificar se já existe uma NF-e gerada a partir desta venda
+        venda_nfe_existente = Venda.objects.filter(venda_futura_origem=original_venda, id_operacao=operacao_nfe).first()
+        if venda_nfe_existente:
+            # Tentar emitir novamente
+            from api.services.nfe_service import NFeService
+            service = NFeService()
+            result = service.emitir_nfe(venda_nfe_existente)
+            if result is None:
+                return Response({"error": "Certificado Digital não configurado."}, status=status.HTTP_400_BAD_REQUEST)
+            if 'mensagem' in result:
+                result['message'] = result['mensagem']
+            result['id_venda'] = venda_nfe_existente.id_venda
+            status_code = status.HTTP_200_OK if result.get('sucesso') else status.HTTP_400_BAD_REQUEST
+            return Response(result, status=status_code)
+            
+        vendedor_nfe = user_params.id_vendedor_nfce or original_venda.id_vendedor1
+        cliente_nfe = user_params.id_cliente_nfce or original_venda.id_cliente
+        
+        # 3. Filtrar produtos (excluir diárias)
+        items_original = VendaItem.objects.filter(id_venda=original_venda)
+        items_produtos = [item for item in items_original if item.id_produto.codigo_produto != 'DIARIA_HOTEL']
+        
+        if not items_produtos:
+            return Response(
+                {"error": "Não há produtos de consumo nesta hospedagem para gerar NF-e (diárias são consideradas serviço e foram desconsideradas)."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        total_produtos = sum(Decimal(str(item.valor_total)) for item in items_produtos)
+        total_geral = Decimal(str(original_venda.valor_total))
+        
+        if total_geral > 0:
+            ratio = (total_produtos / total_geral).quantize(Decimal('0.000001'))
+        else:
+            ratio = Decimal('1.000000')
+            
+        # 4. Criar NF-e e ajustar financeiro
+        try:
+            with transaction.atomic():
+                venda_nfe = Venda.objects.create(
+                    id_operacao=operacao_nfe,
+                    id_cliente=cliente_nfe,
+                    id_vendedor1=vendedor_nfe,
+                    valor_total=total_produtos,
+                    data_documento=timezone.now().date(),
+                    origem='HOTEL_PMS',
+                    status_pagamento=original_venda.status_pagamento,
+                    venda_futura_origem=original_venda
+                )
+                
+                # Duplicar itens de produto para a nova venda
+                for item in items_produtos:
+                    VendaItem.objects.create(
+                        id_venda=venda_nfe,
+                        id_produto=item.id_produto,
+                        quantidade=item.quantidade,
+                        valor_unitario=item.valor_unitario,
+                        valor_total=item.valor_total
+                    )
+                    
+                # Ajustar financeiro proporcionalmente
+                financeiro_records = FinanceiroConta.objects.filter(id_venda_origem=original_venda.id_venda)
+                
+                for record in financeiro_records:
+                    valor_parcela_original = Decimal(str(record.valor_parcela))
+                    valor_liquidado_original = Decimal(str(record.valor_liquidado or 0.00))
+                    
+                    valor_nfe_val = (valor_parcela_original * ratio).quantize(Decimal('0.01'))
+                    valor_diaria = valor_parcela_original - valor_nfe_val
+                    
+                    valor_liquidado_nfe = (valor_liquidado_original * ratio).quantize(Decimal('0.01'))
+                    valor_liquidado_diaria = valor_liquidado_original - valor_liquidado_nfe
+                    
+                    if valor_nfe_val > 0:
+                        FinanceiroConta.objects.create(
+                            tipo_conta=record.tipo_conta,
+                            id_cliente_fornecedor=cliente_nfe,
+                            descricao=f"NFe {venda_nfe.id_venda} - " + record.descricao,
+                            valor_parcela=valor_nfe_val,
+                            valor_liquidado=valor_liquidado_nfe,
+                            valor_juros=record.valor_juros,
+                            valor_multa=record.valor_multa,
+                            valor_desconto=record.valor_desconto,
+                            data_emissao=record.data_emissao,
+                            data_vencimento=record.data_vencimento,
+                            data_pagamento=record.data_pagamento,
+                            status_conta=record.status_conta,
+                            forma_pagamento=record.forma_pagamento,
+                            id_venda_origem=venda_nfe.id_venda,
+                            id_operacao=operacao_nfe,
+                            id_departamento=record.id_departamento,
+                            id_centro_custo=record.id_centro_custo,
+                            id_conta_cobranca=record.id_conta_cobranca,
+                            id_conta_baixa=record.id_conta_baixa,
+                            documento_numero=record.documento_numero,
+                            parcela_numero=record.parcela_numero,
+                            parcela_total=record.parcela_total,
+                            id_aluguel_origem=record.id_aluguel_origem,
+                            gerencial=record.gerencial
+                        )
+                        
+                    if valor_diaria > 0:
+                        record.valor_parcela = valor_diaria
+                        record.valor_liquidado = valor_liquidado_diaria
+                        record.save()
+                    else:
+                        record.delete()
+        except Exception as e:
+            return Response(
+                {"error": f"Erro interno ao processar a divisão financeira: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
+        # 5. Transmitir / Emitir NF-e
+        from api.services.nfe_service import NFeService
+        service = NFeService()
+        result = service.emitir_nfe(venda_nfe)
+        if not result:
+            return Response({"error": "Certificado Digital não configurado."}, status=status.HTTP_400_BAD_REQUEST)
+        if 'mensagem' in result:
+            result['message'] = result['mensagem']
+        result['id_venda'] = venda_nfe.id_venda
+            
+        status_code = status.HTTP_200_OK if result.get('sucesso') else status.HTTP_400_BAD_REQUEST
+        return Response(result, status=status_code)
+
     @action(detail=False, methods=['get'])
     def relatorio(self, request):
         """
