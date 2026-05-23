@@ -210,7 +210,6 @@ class TTSService:
             return resultado
             
         except Exception as e:
-            logger.error(f"[Google TTS] Erro ao gerar áudio: {e}", exc_info=True)
             return {
                 'sucesso': False,
                 'erro': str(e),
@@ -226,54 +225,60 @@ class TTSService:
         nome_arquivo: Optional[str] = None
     ) -> dict:
         """
-        Gera áudio usando ElevenLabs (vozes ultra-realistas)
-        
-        Vozes recomendadas:
-        - Daniel (Masculina, brasileira)
-        - Giovanna (Feminina, brasileira)
-        - Adam (Masculina, inglês com sotaque neutro)
-        - Rachel (Feminina, inglês com sotaque americano)
+        Gera áudio usando ElevenLabs (vozes ultra-realistas) via API REST direta
         """
         try:
-            from elevenlabs import generate, Voice
+            import requests as http_requests
             import base64
-            
-            # Voz padrão: Daniel (brasileiro)
-            voz_id = voz or 'Daniel'
             
             # API Key da ElevenLabs (pegar do .env)
             api_key = os.getenv('ELEVENLABS_API_KEY')
             if not api_key:
                 raise ValueError("ELEVENLABS_API_KEY não configurada no .env")
             
-            logger.info(f"[ElevenLabs] Gerando áudio: '{texto[:50]}...' com voz {voz_id}")
+            voz_solicitada = voz or 'Daniel'
+            vozes_mapeadas = {
+                'daniel': 'pNInz6obpgq5paNsJcfw',
+                'rachel': '2zHWNXFssux17DGN4zXV',
+                'giovanna': 'EXAVITQu4vr4xnSDxMaL',
+                'antonio': 'ErXwobaYiN019PkySvjV',
+            }
+            voz_id = vozes_mapeadas.get(voz_solicitada.lower(), voz_solicitada)
+
+            logger.info(f"[ElevenLabs REST] Gerando áudio: '{texto[:50]}...' com voz {voz_id}")
             
-            # Gera o áudio
-            audio_bytes = generate(
-                text=texto,
-                voice=Voice(
-                    voice_id=voz_id,
-                    settings={
-                        'stability': 0.5,  # Estabilidade (0.0 a 1.0)
-                        'similarity_boost': 0.75,  # Similaridade com voz original
-                        'style': 0.0,  # Estilo/exageração (0.0 = neutro)
-                        'use_speaker_boost': True
-                    }
-                ),
-                model='eleven_multilingual_v2',  # Suporta pt-BR
-                api_key=api_key
-            )
+            url = f"https://api.elevenlabs.io/v1/text-to-speech/{voz_id}"
+            headers = {
+                "Accept": "audio/mpeg",
+                "Content-Type": "application/json",
+                "xi-api-key": api_key
+            }
+            payload_eleven = {
+                "text": texto,
+                "model_id": "eleven_multilingual_v2",
+                "voice_settings": {
+                    "stability": 0.5,
+                    "similarity_boost": 0.75,
+                    "style": 0.0,
+                    "use_speaker_boost": True
+                }
+            }
+            
+            resp = http_requests.post(url, json=payload_eleven, headers=headers, timeout=30)
+            if resp.status_code != 200:
+                raise Exception(f"Erro na API do ElevenLabs (Status {resp.status_code}): {resp.text}")
+                
+            audio_bytes = resp.content
             
             # Salva em arquivo
             h = hashlib.md5(texto.encode('utf-8')).hexdigest()
             arquivo_nome = nome_arquivo or f"tts_elevenlabs_{h}.mp3"
             audio_path = self.persistent_dir / arquivo_nome
 
-            
             with open(audio_path, 'wb') as out:
                 out.write(audio_bytes)
             
-            logger.info(f"[ElevenLabs] Áudio gerado: {audio_path}")
+            logger.info(f"[ElevenLabs REST] Áudio gerado: {audio_path}")
             
             # Converte para base64
             audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
@@ -283,7 +288,7 @@ class TTSService:
                 'audio_path': str(audio_path),
                 'audio_base64': audio_base64,
                 'provider': 'elevenlabs',
-                'voz_usada': voz_id,
+                'voz_usada': voz_solicitada,
                 'tamanho_bytes': len(audio_bytes),
                 'formato': 'mp3'
             }
@@ -294,7 +299,7 @@ class TTSService:
             return resultado
             
         except Exception as e:
-            logger.error(f"[ElevenLabs] Erro ao gerar áudio: {e}", exc_info=True)
+            logger.error(f"[ElevenLabs REST] Erro ao gerar áudio: {e}", exc_info=True)
             return {
                 'sucesso': False,
                 'erro': str(e),
