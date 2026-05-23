@@ -284,6 +284,243 @@ class AITtsView(APIView):
             texto = re.sub(padrao, sub, texto)
         return texto.strip()
 
+    def _formatar_moeda(self, valor):
+        try:
+            return f"R$ {float(valor):.2f}".replace('.', ',')
+        except (ValueError, TypeError):
+            return str(valor)
+
+    def _formatar_numero(self, val):
+        try:
+            if float(val).is_integer():
+                return str(int(val))
+            return f"{float(val):.2f}".replace('.', ',')
+        except (ValueError, TypeError):
+            return str(val)
+
+    def _humanizar_dados_produtos(self, dados_json):
+        """Transforma dados de produtos/vendas/etc em texto natural em português."""
+        if not isinstance(dados_json, (dict, list)):
+            return ""
+        
+        # Se for uma lista de produtos/itens
+        if isinstance(dados_json, list):
+            if not dados_json:
+                return "Nenhum item listado."
+            
+            itens_frases = []
+            for item in dados_json:
+                if not isinstance(item, dict):
+                    continue
+                # Procura chaves comuns de nome
+                nome = item.get('id_produto__nome_produto') or item.get('nome_produto') or item.get('produto') or item.get('nome') or ''
+                nome = str(nome).strip().title()
+                
+                # Procura chaves de quantidade
+                qtd = item.get('quantidade_total') or item.get('quantidade') or item.get('qtd') or 0
+                qtd_str = self._formatar_numero(qtd)
+                
+                # Procura chaves de valor/total
+                valor = item.get('valor_total') or item.get('valor') or item.get('total') or item.get('valor_total_servico') or 0
+                
+                if nome:
+                    frase = f"{qtd_str} unidades de {nome}"
+                    if valor:
+                        frase += f" no valor total de {self._formatar_moeda(valor)}"
+                    itens_frases.append(frase)
+            
+            if itens_frases:
+                if len(itens_frases) == 1:
+                    return itens_frases[0] + "."
+                return ", ".join(itens_frases[:-1]) + " e " + itens_frases[-1] + "."
+            return ""
+            
+        # Se for um dicionário (com chaves como top_produtos, produtos, etc.)
+        elif isinstance(dados_json, dict):
+            # Verifica se tem listas internas que representam listas de itens
+            for chave in ['top_produtos', 'produtos', 'itens', 'relatorios_disponiveis']:
+                if chave in dados_json and isinstance(dados_json[chave], list):
+                    return self._humanizar_dados_produtos(dados_json[chave])
+            
+            # Humaniza chaves gerais do dicionário
+            partes = []
+            for k, v in dados_json.items():
+                # Pula chaves estruturais de período ou IDs complexos
+                if k in ['periodo', 'filtros', 'sucesso', 'tipo', 'modo', 'id'] or k.endswith('_id'):
+                    continue
+                
+                # Formata chave para linguagem falada
+                k_falado = k.replace('_', ' ').replace('total ', 'total de ').strip()
+                
+                # Formata valor
+                if isinstance(v, (int, float)):
+                    if 'valor' in k or 'ticket' in k or 'total' in k or 'receber' in k or 'pagar' in k:
+                        v_formatado = self._formatar_moeda(v)
+                    else:
+                        v_formatado = self._formatar_numero(v)
+                    partes.append(f"{k_falado}: {v_formatado}")
+                elif isinstance(v, str) and not v.startswith(('http', '/api')):
+                    partes.append(f"{k_falado}: {v}")
+                    
+            if partes:
+                return ". ".join(partes) + "."
+                
+        return ""
+
+    def _processar_tabela(self, linhas):
+        """Converte linhas de uma tabela markdown em frase falada."""
+        import re
+        rows = []
+        for linha in linhas:
+            # Separa por '|' e limpa células
+            celulas = [c.strip() for c in linha.split('|')[1:-1]]
+            rows.append(celulas)
+            
+        if len(rows) < 2:
+            return ""
+            
+        # O cabeçalho é a primeira linha
+        headers = rows[0]
+        
+        # A segunda linha geralmente é o separador |---|---| (ignora)
+        inicio_dados = 1
+        if len(rows) > 1 and all(re.match(r'^[\s\-:\+]*$', c) for c in rows[1]):
+            inicio_dados = 2
+            
+        # Se não houver dados, retorna vazio
+        if inicio_dados >= len(rows):
+            return ""
+            
+        frases_linhas = []
+        for r in rows[inicio_dados:]:
+            # Associa cada célula com seu cabeçalho
+            pares = []
+            for h, c in zip(headers, r):
+                if c and h:
+                    # Normaliza cabeçalho
+                    h_clean = h.lower().replace('.', '').strip()
+                    if h_clean in ['qtd', 'quant', 'quantidade']:
+                        h_clean = 'quantidade'
+                    elif h_clean in ['val', 'valor', 'total', 'val total', 'valor total']:
+                        h_clean = 'valor'
+                    elif h_clean in ['prod', 'produto', 'nome']:
+                        h_clean = 'produto'
+                    
+                    if h_clean == 'produto':
+                        pares.append(c.title())
+                    elif h_clean == 'valor':
+                        pares.append(f"{h_clean} {self._formatar_moeda(c)}")
+                    elif h_clean == 'quantidade':
+                        pares.append(f"{h_clean} {self._formatar_numero(c)}")
+                    else:
+                        pares.append(f"{h_clean} {c}")
+            if pares:
+                frases_linhas.append(", ".join(pares))
+                
+        if frases_linhas:
+            if len(frases_linhas) == 1:
+                return "O item na tabela é: " + frases_linhas[0] + "."
+            return "Os itens na tabela são: " + "; ".join(frases_linhas[:-1]) + " e " + frases_linhas[-1] + "."
+        return ""
+
+    def _humanizar_tabelas_markdown(self, texto):
+        """Detecta tabelas markdown no texto e as converte em frases legíveis por humanos."""
+        linhas = texto.split('\n')
+        novas_linhas = []
+        i = 0
+        n = len(linhas)
+        
+        while i < n:
+            linha = linhas[i].strip()
+            # Se a linha atual e a próxima forem de tabela (contém '|')
+            if linha.startswith('|') and i + 1 < n and '|' in linhas[i+1]:
+                # Encontramos uma tabela! Vamos agrupá-la
+                linhas_tabela = []
+                while i < n and '|' in linhas[i]:
+                    linhas_tabela.append(linhas[i].strip())
+                    i += 1
+                
+                # Agora parseia e humaniza a tabela agrupada
+                tabela_humanizada = self._processar_tabela(linhas_tabela)
+                novas_linhas.append(tabela_humanizada)
+            else:
+                novas_linhas.append(linhas[i])
+                i += 1
+                
+        return '\n'.join(novas_linhas)
+
+    def _limpar_caracteres_codigo(self, texto):
+        """Remove caracteres especiais de JSON/dicionário para evitar que o TTS os soletre."""
+        import re
+        # Remove chaves, colchetes, aspas duplas, aspas simples
+        texto = re.sub(r'[\{\}\[\]\"\'\`]', ' ', texto)
+        # Substitui dois pontos que parecem ser de pares de chaves por espaço
+        # (mas mantém dois pontos que indicam horas, ex: 14:30)
+        texto = re.sub(r'(?<!\d):(?! \d)', ' ', texto)
+        # Substitui sublinhados duplicados ou isolados por espaço
+        texto = re.sub(r'_', ' ', texto)
+        return texto
+
+    def _limpar_e_humanizar_texto(self, texto):
+        """Detecta JSONs/dicionários/tabelas no texto e os converte em linguagem natural para TTS."""
+        import re
+        import json
+        if not texto:
+            return ""
+        
+        # 0. Converte tabelas markdown primeiro
+        texto = self._humanizar_tabelas_markdown(texto)
+        
+        # 1. Primeiro limpa markdown de blocos de código
+        # Padrão: ```json ... ``` ou ``` ... ```
+        padrao_bloco = r'```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```'
+        
+        def substituir_bloco(match):
+            conteudo = match.group(1).strip()
+            try:
+                dados = json.loads(conteudo)
+                humanizado = self._humanizar_dados_produtos(dados)
+                if humanizado:
+                    return f" {humanizado} "
+            except Exception:
+                pass
+            # Fallback se não conseguir parsear: remove chaves/aspas/etc
+            return " " + self._limpar_caracteres_codigo(conteudo) + " "
+            
+        texto = re.sub(padrao_bloco, substituir_bloco, texto, flags=re.DOTALL)
+        
+        # 2. Procura por JSONs soltos no texto que começam com { ou [
+        padrao_json_solto = r'(\{.*?\}|\[\s*\{.*?\}\s*\])'
+        
+        def substituir_json_solto(match):
+            conteudo = match.group(1).strip()
+            # Verifica se parece JSON (contém aspas e dois pontos)
+            if '"' in conteudo and ':' in conteudo:
+                try:
+                    dados = json.loads(conteudo)
+                    humanizado = self._humanizar_dados_produtos(dados)
+                    if humanizado:
+                        return f" {humanizado} "
+                except Exception:
+                    pass
+                return " " + self._limpar_caracteres_codigo(conteudo) + " "
+            return conteudo
+            
+        texto = re.sub(padrao_json_solto, substituir_json_solto, texto, flags=re.DOTALL)
+        
+        # 3. Limpa markdown padrão (negrito, itálico, cabeçalhos, etc.)
+        texto = self._limpar_markdown(texto)
+        
+        # 4. Limpa caracteres de código residuais
+        texto = self._limpar_caracteres_codigo(texto)
+        
+        # 5. Remove espaços extras e pontuações repetidas
+        texto = re.sub(r'\s+', ' ', texto)
+        texto = re.sub(r'\.+', '.', texto)
+        texto = re.sub(r'\s+\.', '.', texto)
+        
+        return texto.strip()
+
     def _gerar_edge_tts(self, texto, voz='pt-BR-AntonioNeural'):
         """Gera áudio via Microsoft Edge TTS (gratuito, sem API key, voz neural)."""
         import asyncio
@@ -339,7 +576,7 @@ class AITtsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        texto = self._limpar_markdown(texto_bruto)[:4500]
+        texto = self._limpar_e_humanizar_texto(texto_bruto)[:4500]
         voz_solicitada = request.data.get('voz', '')
         
         # Lê configurações do arquivo .env

@@ -1239,9 +1239,11 @@ Instruções:
 - Seja conciso mas informativo
 - Use números formatados (R$ para valores, separador de milhar)
 - Destaque informações importantes com **negrito**
-- Use listas quando apropriado
+- Use listas ou tabelas limpas quando apropriado para exibição visual
 - Responda em português do Brasil
-- Se houver dados relevantes, cite-os especificamente"""
+- Se houver dados relevantes, cite-os especificamente
+- IMPORTANTE: NUNCA inclua blocos de código JSON brutos ou dicionários do Python na resposta visual.
+- IMPORTANTE: Converta dados estruturados (como listas de produtos, quantidades e valores de vendas) em descrições em linguagem natural e humana. Toda resposta deve soar natural quando falada em voz alta (ex: prefira dizer 'foram vendidas 3 unidades de Abraçadeira V' a exibir chaves/valores de banco de dados)."""
 
         try:
             resposta = self._chamar_gemini_com_retry(prompt)
