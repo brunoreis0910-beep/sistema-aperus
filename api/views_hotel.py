@@ -421,9 +421,14 @@ class ReservaViewSet(viewsets.ModelViewSet):
             except Operacao.DoesNotExist:
                 return Response({"error": "Operação de faturamento não encontrada."}, status=status.HTTP_404_NOT_FOUND)
         else:
-            # Pega a operação padrão de faturamento (ou cria/busca uma padrão de Venda)
-            operacao = Operacao.objects.filter(transacao='Saida', gera_financeiro=1).first() or \
-                       Operacao.objects.filter(transacao='Venda').first()
+            # Pega a operação padrão de faturamento do usuário ou do sistema
+            from api.models import UserParametros
+            user_params = UserParametros.objects.filter(id_user=request.user).first()
+            if user_params and user_params.id_operacao_hotel_checkout:
+                operacao = user_params.id_operacao_hotel_checkout
+            else:
+                operacao = Operacao.objects.filter(transacao='Saida', gera_financeiro=1).first() or \
+                           Operacao.objects.filter(transacao='Venda').first()
             if not operacao:
                 # Caso não exista nenhuma operação, cria uma simples de teste
                 operacao, _ = Operacao.objects.get_or_create(
@@ -677,13 +682,16 @@ class ReservaViewSet(viewsets.ModelViewSet):
         # 2. Obter parâmetros do usuário
         from api.models import UserParametros
         user_params = UserParametros.objects.filter(id_user=request.user).first()
-        if not user_params or not user_params.id_operacao_nfce:
+        operacao_nfce = None
+        if user_params:
+            operacao_nfce = user_params.id_operacao_hotel_nfce or user_params.id_operacao_nfce
+
+        if not operacao_nfce:
             return Response(
-                {"error": "Nenhuma operação de NFC-e configurada para o seu usuário. Acesse Configurações > Usuário > aba NFCe."},
+                {"error": "Nenhuma operação de NFC-e de Hotelaria ou Geral configurada para o seu usuário. Acesse Configurações > Usuário > aba Hotelaria ou NFCe."},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        operacao_nfce = user_params.id_operacao_nfce
         vendedor_nfce = user_params.id_vendedor_nfce or original_venda.id_vendedor1
         cliente_nfce = user_params.id_cliente_nfce or original_venda.id_cliente
         

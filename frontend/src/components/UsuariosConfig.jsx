@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Grid,
@@ -88,7 +88,11 @@ const UsuariosConfig = () => {
       id_tabela_comercial: null,
       id_cliente_nfce: null,
       id_operacao_nfce: null,
-      id_vendedor_nfce: null
+      id_vendedor_nfce: null,
+      id_operacao_hotel: null,
+      perguntar_operacao_checkout: false,
+      id_operacao_hotel_checkout: null,
+      id_operacao_hotel_nfce: null
     },
     permissoes: {
       clientes_acessar: false,
@@ -413,7 +417,8 @@ const UsuariosConfig = () => {
         parametros: {
           ...currentUsuario.parametros,
           controle_de_caixa: currentUsuario.parametros?.controle_de_caixa ? 1 : 0,
-          mostrar_lucratividade: currentUsuario.parametros?.mostrar_lucratividade ? 1 : 0
+          mostrar_lucratividade: currentUsuario.parametros?.mostrar_lucratividade ? 1 : 0,
+          perguntar_operacao_checkout: currentUsuario.parametros?.perguntar_operacao_checkout ? 1 : 0
         },
         permissoes: permissoesPayload
       };
@@ -511,6 +516,11 @@ const UsuariosConfig = () => {
         id_cliente_nfce: usuario.parametros?.id_cliente_nfce || null,
         id_vendedor_nfce: usuario.parametros?.id_vendedor_nfce || null,
         id_operacao_nfce: usuario.parametros?.id_operacao_nfce || null,
+        // Novos campos para Hotelaria
+        id_operacao_hotel: usuario.parametros?.id_operacao_hotel || null,
+        perguntar_operacao_checkout: Boolean(usuario.parametros?.perguntar_operacao_checkout),
+        id_operacao_hotel_checkout: usuario.parametros?.id_operacao_hotel_checkout || null,
+        id_operacao_hotel_nfce: usuario.parametros?.id_operacao_hotel_nfce || null,
         // Visibilidade
         mostrar_lucratividade: Boolean(usuario.parametros?.mostrar_lucratividade)
       },
@@ -544,6 +554,10 @@ const UsuariosConfig = () => {
         id_cliente_nfce: null,
         id_operacao_nfce: null,
         id_vendedor_nfce: null,
+        id_operacao_hotel: null,
+        perguntar_operacao_checkout: false,
+        id_operacao_hotel_checkout: null,
+        id_operacao_hotel_nfce: null,
         mostrar_lucratividade: false
       },
       permissoes: {
@@ -1202,6 +1216,7 @@ const UsuariosConfig = () => {
             <Tab label="Venda Rápida" />
             <Tab label="Vendas e OS" />
             <Tab label="NFC-e" />
+            <Tab label="Hotelaria" />
           </Tabs>
 
           {/* Aba Dados Básicos */}
@@ -1728,6 +1743,92 @@ const UsuariosConfig = () => {
                     />
                   }
                   label="Controle de Caixa? (Exige abertura/fechamento)"
+                />
+              </Grid>
+            </Grid>
+          )}
+          {tabValue === 5 && (
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>
+                  Parâmetros de Hotelaria
+                </Typography>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Configure as operações padrão e comportamentos do módulo hoteleiro (PMS)
+                </Typography>
+                <Divider sx={{ mb: 3 }} />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                 <FormControl fullWidth variant="outlined">
+                  <InputLabel>Operação Padrão (Hospedagem)</InputLabel>
+                  <Select
+                    value={currentUsuario.parametros?.id_operacao_hotel || ''}
+                    onChange={(e) => handleInputChange('parametros.id_operacao_hotel', e.target.value || null)}
+                    label="Operação Padrão (Hospedagem)"
+                  >
+                    <MenuItem value="">
+                      <em>Nenhuma</em>
+                    </MenuItem>
+                    {Array.isArray(operacoes) && operacoes.map((operacao) => (
+                      <MenuItem key={operacao.id_operacao} value={operacao.id_operacao}>
+                        {operacao.nome_operacao}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                 <FormControl fullWidth variant="outlined">
+                  <InputLabel>Operação de Checkout</InputLabel>
+                  <Select
+                    value={currentUsuario.parametros?.id_operacao_hotel_checkout || ''}
+                    onChange={(e) => handleInputChange('parametros.id_operacao_hotel_checkout', e.target.value || null)}
+                    label="Operação de Checkout"
+                  >
+                    <MenuItem value="">
+                      <em>Nenhuma</em>
+                    </MenuItem>
+                    {Array.isArray(operacoes) && operacoes.map((operacao) => (
+                      <MenuItem key={operacao.id_operacao} value={operacao.id_operacao}>
+                        {operacao.nome_operacao}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                 <FormControl fullWidth variant="outlined">
+                  <InputLabel>Operação de Nota Fiscal (NFC-e)</InputLabel>
+                  <Select
+                    value={currentUsuario.parametros?.id_operacao_hotel_nfce || ''}
+                    onChange={(e) => handleInputChange('parametros.id_operacao_hotel_nfce', e.target.value || null)}
+                    label="Operação de Nota Fiscal (NFC-e)"
+                  >
+                    <MenuItem value="">
+                      <em>Nenhuma</em>
+                    </MenuItem>
+                    {Array.isArray(operacoes) && operacoes.map((operacao) => (
+                      <MenuItem key={operacao.id_operacao} value={operacao.id_operacao}>
+                        {operacao.nome_operacao}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={currentUsuario.parametros?.perguntar_operacao_checkout || false}
+                      onChange={(e) => handleInputChange('parametros.perguntar_operacao_checkout', e.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label="Na hora de fechar, pedir a operação?"
                 />
               </Grid>
             </Grid>

@@ -1390,6 +1390,12 @@ class UserParametros(models.Model):
     # WhatsApp do supervisor para aprovação de desconto
     whatsapp_supervisor = models.CharField(max_length=20, blank=True, null=True)
 
+    # Novos campos para Hotelaria
+    id_operacao_hotel = models.ForeignKey(Operacao, models.SET_NULL, db_column='id_operacao_hotel', blank=True, null=True, related_name='parametros_hotel')
+    perguntar_operacao_checkout = models.IntegerField(default=0, db_column='perguntar_operacao_checkout', blank=True, null=True)
+    id_operacao_hotel_checkout = models.ForeignKey(Operacao, models.SET_NULL, db_column='id_operacao_hotel_checkout', blank=True, null=True, related_name='parametros_hotel_checkout')
+    id_operacao_hotel_nfce = models.ForeignKey(Operacao, models.SET_NULL, db_column='id_operacao_hotel_nfce', blank=True, null=True, related_name='parametros_hotel_nfce')
+
     class Meta:
         managed = False
         db_table = 'user_parametros'

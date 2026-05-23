@@ -82,6 +82,7 @@ import {
   MoreVert
 } from '@mui/icons-material';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import useImpressaoVenda from '../hooks/useImpressaoVenda';
 import {
@@ -105,6 +106,7 @@ const DEFAULT_STATUS_OPTIONS = [
 ];
 
 export default function HotelPMSPage() {
+  const { user } = useAuth();
   const { imprimirDireto } = useImpressaoVenda(api);
 
   // Dados principais
@@ -901,10 +903,15 @@ export default function HotelPMSPage() {
   };
 
   const handleOpenCheckout = (booking) => {
-    // Tenta encontrar uma operação de venda padrão que gera financeiro
-    const defaultOperacao = operacoes.find(o => o.transacao === 'Saida' && o.gera_financeiro) || 
-                            operacoes.find(o => o.transacao === 'Venda') || 
-                            operacoes[0] || '';
+    // Tenta encontrar a operação de checkout configurada para o usuário
+    const userCheckoutOp = user?.parametros?.id_operacao_hotel_checkout;
+    const defaultOperacaoObj = userCheckoutOp 
+      ? operacoes.find(o => Number(o.id_operacao) === Number(userCheckoutOp))
+      : (operacoes.find(o => o.transacao === 'Saida' && o.gera_financeiro) || 
+         operacoes.find(o => o.transacao === 'Venda') || 
+         operacoes[0]);
+    
+    const defaultOperacao = defaultOperacaoObj ? defaultOperacaoObj.id_operacao : '';
     
     // Tenta encontrar a forma de pagamento padrão (ex: DINHEIRO)
     const defaultForma = formasPagamento.find(f => f.nome_forma.toUpperCase().includes('DINHEIRO')) || 
@@ -916,7 +923,7 @@ export default function HotelPMSPage() {
 
     setCheckoutBooking(booking);
     setCheckoutForm({
-      id_operacao: defaultOperacao ? defaultOperacao.id_operacao : '',
+      id_operacao: defaultOperacao,
       id_forma_pagamento: defaultForma ? defaultForma.id_forma_pagamento : '',
       id_conta_cobranca: defaultConta ? defaultConta.id_conta_bancaria : '',
       data_vencimento: new Date().toISOString().split('T')[0],
@@ -2136,20 +2143,22 @@ export default function HotelPMSPage() {
 
             {checkoutForm.gerar_financeiro && (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pl: 2, borderLeft: '3px solid #2e7d32', mt: 1 }}>
-                <TextField
-                  select
-                  fullWidth
-                  label="Operação *"
-                  value={checkoutForm.id_operacao}
-                  onChange={(e) => setCheckoutForm(prev => ({ ...prev, id_operacao: e.target.value }))}
-                >
-                  <MenuItem value="">Selecione...</MenuItem>
-                  {operacoes.map(op => (
-                    <MenuItem key={op.id_operacao} value={op.id_operacao}>
-                      {op.nome_operacao} ({op.transacao})
-                    </MenuItem>
-                  ))}
-                </TextField>
+                {(user?.parametros?.perguntar_operacao_checkout === undefined || user?.parametros?.perguntar_operacao_checkout) && (
+                  <TextField
+                    select
+                    fullWidth
+                    label="Operação *"
+                    value={checkoutForm.id_operacao}
+                    onChange={(e) => setCheckoutForm(prev => ({ ...prev, id_operacao: e.target.value }))}
+                  >
+                    <MenuItem value="">Selecione...</MenuItem>
+                    {operacoes.map(op => (
+                      <MenuItem key={op.id_operacao} value={op.id_operacao}>
+                        {op.nome_operacao} ({op.transacao})
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                )}
 
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6}>
