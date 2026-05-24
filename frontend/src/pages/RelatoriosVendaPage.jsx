@@ -764,7 +764,24 @@ function RelCobrancas({ axiosInstance, filterData }) {
 function RelVendasPorCliente({ axiosInstance, filterData }) {
   const [dados, setDados] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [filtros, setFiltros] = useState({ data_inicio: '', data_fim: '', limite: '50', id_operacao: '' });
+  const [filtros, setFiltros] = useState({ data_inicio: '', data_fim: '', limite: '50', id_operacao: '', id_cliente: '' });
+  const [clienteInput, setClienteInput] = useState('');
+  const [clientes, setClientes] = useState([]);
+  const [loadingClientes, setLoadingClientes] = useState(false);
+
+  // Busca clientes com debounce
+  useEffect(() => {
+    if (clienteInput.length < 2) { setClientes([]); return; }
+    const t = setTimeout(async () => {
+      setLoadingClientes(true);
+      try {
+        const r = await axiosInstance.get('/clientes/', { params: { search: clienteInput, page_size: 20 } });
+        setClientes(Array.isArray(r.data) ? r.data : r.data.results || []);
+      } catch { setClientes([]); }
+      setLoadingClientes(false);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [clienteInput]);
 
   const buscar = async () => {
     setLoading(true);
@@ -790,6 +807,33 @@ function RelVendasPorCliente({ axiosInstance, filterData }) {
             <MenuItem value="100">Top 100</MenuItem>
             <MenuItem value="500">Top 500</MenuItem>
           </TextField>
+        </Grid>
+        <Grid item xs={12} sm={4} md={3}>
+          <Autocomplete
+            size="small"
+            options={clientes}
+            getOptionLabel={o => o.nome_razao_social || o.nome_fantasia || ''}
+            filterOptions={x => x}
+            loading={loadingClientes}
+            onInputChange={(_, v) => setClienteInput(v)}
+            onChange={(_, v) => setFiltros(f => ({ ...f, id_cliente: v?.id_cliente || '' }))}
+            renderInput={p => (
+              <TextField
+                {...p}
+                label="Cliente"
+                placeholder="Filtrar por cliente..."
+                InputProps={{
+                  ...p.InputProps,
+                  endAdornment: (
+                    <>
+                      {loadingClientes ? <CircularProgress size={18} /> : null}
+                      {p.InputProps.endAdornment}
+                    </>
+                  ),
+                }}
+              />
+            )}
+          />
         </Grid>
         <OperacaoSelect filtros={filtros} setFiltros={setFiltros} operacoes={filterData.operacoes} />
         <Grid item xs={6} sm={3} md={2}><BotaoBuscar onClick={buscar} loading={loading} /></Grid>

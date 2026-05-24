@@ -2254,6 +2254,30 @@ class ConfiguracaoImpressaoSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'atualizado_em']
 
 
+class SaaSClienteMensalidadeSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import SaaSClienteMensalidade
+        model = SaaSClienteMensalidade
+        fields = '__all__'
+
+
+class SaaSClienteContratoSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import SaaSClienteContrato
+        model = SaaSClienteContrato
+        fields = '__all__'
+
+
+class SaaSClienteSerializer(serializers.ModelSerializer):
+    mensalidades = SaaSClienteMensalidadeSerializer(many=True, read_only=True)
+    contratos = SaaSClienteContratoSerializer(many=True, read_only=True)
+
+    class Meta:
+        from .models import SaaSCliente
+        model = SaaSCliente
+        fields = '__all__'
+
+
 
 
 

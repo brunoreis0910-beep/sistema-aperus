@@ -280,6 +280,13 @@ from .views import (
     LoteProdutoViewSet,  # Controle de Lotes
     UserAtalhoViewSet,  # Atalhos de teclado por usuário
     user_preferencias_view,  # Preferências de interface por usuário
+    SaaSClienteViewSet,
+    SaaSClienteMensalidadeViewSet,
+    SaaSClienteContratoViewSet,
+    saas_verificar_licenca,
+    saas_financeiro,
+    saas_contrato_pendente,
+    saas_assinar_contrato,
 )
 
 from .viewsets_formapagamento import FormaPagamentoViewSet
@@ -362,6 +369,9 @@ router.register(r'email/templates', EmailTemplateViewSet, basename='email-templa
 router.register(r'email/campaigns', EmailCampaignViewSet, basename='email-campaign')
 router.register(r'email/logs', EmailLogViewSet, basename='email-log')
 router.register(r'intelligence', ProductIntelligenceViewSet, basename='intelligence')
+router.register(r'saas-clientes', SaaSClienteViewSet, basename='saas-cliente')
+router.register(r'saas-mensalidades', SaaSClienteMensalidadeViewSet, basename='saas-mensalidade')
+router.register(r'saas-contratos', SaaSClienteContratoViewSet, basename='saas-contrato')
 # PCP — Planejamento e Controle de Produção
 router.register(r'pcp/ordens', OrdemProducaoViewSet, basename='pcp-ordem')
 router.register(r'pcp/composicoes', ComposicaoProdutoViewSet, basename='pcp-composicao')
@@ -664,6 +674,12 @@ urlpatterns = [
     path('descontos/validar/', validar_desconto_proposto, name='validar-desconto-proposto'),
     path('descontos/cliente/<int:cliente_id>/', obter_config_desconto_cliente, name='obter-config-desconto-cliente'),
     path('descontos/clientes-com-desconto/', listar_clientes_com_desconto, name='listar-clientes-com-desconto'),
+    
+    # SaaS Billing & Licensing endpoints
+    path('saas/licenca/', saas_verificar_licenca, name='saas-verificar-licenca'),
+    path('saas/financeiro/', saas_financeiro, name='saas-financeiro'),
+    path('saas/contrato-pendente/', saas_contrato_pendente, name='saas-contrato-pendente'),
+    path('saas/assinar-contrato/', saas_assinar_contrato, name='saas-assinar-contrato'),
     
     path('', include(router.urls)),
     # Preferências de Interface do Usuário

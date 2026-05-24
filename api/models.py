@@ -5711,3 +5711,67 @@ class TTSAudioCache(models.Model):
     def __str__(self):
         return f"{self.provider} - {self.voice} - {self.text_hash}"
 
+
+class SaaSCliente(models.Model):
+    id_saas_cliente = models.AutoField(primary_key=True)
+    cnpj = models.CharField(max_length=14, unique=True, help_text="CNPJ da empresa contratante")
+    razao_social = models.CharField(max_length=255)
+    dia_vencimento = models.IntegerField(default=10)
+    valor_mensalidade = models.DecimalField(max_digits=10, decimal_places=2)
+    emite_nota = models.BooleanField(default=False)
+    status_licenca = models.CharField(max_length=20, default='ATIVO', help_text="Status da licença: ATIVO, BLOQUEADO, DEMO")
+    data_reajuste = models.DateField(blank=True, null=True)
+    data_cadastro = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = 'saas_cliente'
+        verbose_name = 'SaaS Cliente'
+        verbose_name_plural = 'SaaS Clientes'
+
+    def __str__(self):
+        return f"{self.razao_social} ({self.cnpj})"
+
+
+class SaaSClienteMensalidade(models.Model):
+    id_mensalidade = models.AutoField(primary_key=True)
+    saas_cliente = models.ForeignKey(SaaSCliente, on_delete=models.CASCADE, related_name='mensalidades', db_column='saas_cliente_id')
+    nosso_numero = models.CharField(max_length=50, blank=True, null=True)
+    data_emissao = models.DateField(auto_now_add=True)
+    data_vencimento = models.DateField()
+    valor = models.DecimalField(max_digits=10, decimal_places=2)
+    status_pagamento = models.CharField(max_length=20, default='PENDENTE', help_text="PENDENTE, PAGO, VENCIDO, CANCELADO")
+    url_boleto = models.CharField(max_length=500, blank=True, null=True)
+    linha_digitavel = models.CharField(max_length=255, blank=True, null=True)
+    pix_copia_cola = models.TextField(blank=True, null=True)
+    data_pagamento = models.DateField(blank=True, null=True)
+
+    class Meta:
+        managed = True
+        db_table = 'saas_cliente_mensalidade'
+        verbose_name = 'SaaS Mensalidade'
+        verbose_name_plural = 'SaaS Mensalidades'
+
+    def __str__(self):
+        return f"Mensalidade {self.id_mensalidade} - {self.saas_cliente.razao_social} - {self.data_vencimento}"
+
+
+class SaaSClienteContrato(models.Model):
+    id_contrato = models.AutoField(primary_key=True)
+    saas_cliente = models.ForeignKey(SaaSCliente, on_delete=models.CASCADE, related_name='contratos', db_column='saas_cliente_id')
+    texto_contrato = models.TextField()
+    data_geracao = models.DateTimeField(auto_now_add=True)
+    assinado = models.BooleanField(default=False)
+    data_assinatura = models.DateTimeField(blank=True, null=True)
+    ip_assinatura = models.CharField(max_length=45, blank=True, null=True)
+    usuario_assinou = models.CharField(max_length=100, blank=True, null=True)
+
+    class Meta:
+        managed = True
+        db_table = 'saas_cliente_contrato'
+        verbose_name = 'SaaS Contrato'
+        verbose_name_plural = 'SaaS Contratos'
+
+    def __str__(self):
+        return f"Contrato {self.id_contrato} - {self.saas_cliente.razao_social} - {'Assinado' if self.assinado else 'Pendente'}"
+

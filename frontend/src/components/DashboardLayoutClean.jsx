@@ -79,6 +79,7 @@ import {
   ,Sync as SyncIcon
   ,WifiOff as WifiOffIcon
   ,Hotel as HotelIcon
+  ,AdminPanelSettings as AdminIcon
 } from '@mui/icons-material';
 
 import { useAuth } from '../context/AuthContext';
@@ -231,6 +232,7 @@ const DashboardLayoutClean = () => {
       { label: 'Pix Dinâmico', path: '/pix', icon: <QrCodeIcon sx={{ color: '#fff' }} /> },
       { label: 'Contratos de Recorrência', path: '/recorrencia', icon: <RecorrenciaIcon sx={{ color: '#fff' }} /> },
       { label: 'Análise de Churn', path: '/churn', icon: <ChurnIcon sx={{ color: '#fff' }} /> },
+      ...(can('config_acessar') ? [{ label: 'Aperus Central SaaS', path: '/saas-central', icon: <AdminIcon sx={{ color: '#fff' }} /> }] : []),
     ],
   }), [can]);
 
@@ -280,6 +282,7 @@ const DashboardLayoutClean = () => {
       '/agro/conversoes': 'agro_acessar',
       '/agro/operacional': 'agro_acessar',
       '/devolucoes/nova': 'devolucoes_acessar',
+      '/saas-central': 'config_acessar',
       '/trocas/nova': 'trocas_acessar',
       '/cadastro-turbo': 'produtos_acessar',
     });
@@ -1121,6 +1124,12 @@ const DashboardLayoutClean = () => {
                   <ChurnIcon sx={{ mr: 1, color: '#C62828' }} />
                   Análise de Churn
                 </MenuItem>
+                {can('config_acessar') && (
+                  <MenuItem onClick={() => { setOpcoesMenuAnchor(null); navigate('/saas-central'); }}>
+                    <AdminIcon sx={{ mr: 1, color: '#1565C0' }} />
+                    Aperus Central SaaS
+                  </MenuItem>
+                )}
               </Menu>
             </Box>
           )}

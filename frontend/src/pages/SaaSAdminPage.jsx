@@ -1,0 +1,728 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Box, Paper, Typography, Grid, Button, Chip, TextField,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  CircularProgress, IconButton, Stack, Table, TableBody,
+  TableCell, TableContainer, TableHead, TableRow, Alert,
+  FormControl, InputLabel, Select, MenuItem, Tooltip, Tabs, Tab, Card, CardContent, Divider
+} from '@mui/material';
+import {
+  Add as AddIcon, Edit as EditIcon, Refresh as RefreshIcon,
+  CheckCircle as PaidIcon, Cancel as CancelIcon, ReceiptLong as InvoiceIcon,
+  Description as ContractIcon, Fingerprint as SignIcon, QrCode as QrIcon,
+  ContentCopy as CopyIcon, MonetizationOn as MoneyIcon, Business as ClientIcon,
+  Warning as WarningIcon, Launch as LaunchIcon
+} from '@mui/icons-material';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/common/Toast';
+
+const fmtMoeda = (v) =>
+  Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const fmtData = (d) =>
+  d ? new Date(d).toLocaleDateString('pt-BR') : '—';
+
+const fmtDataHora = (d) =>
+  d ? new Date(d).toLocaleString('pt-BR') : '—';
+
+const StatusLicencaChip = ({ status }) => {
+  const map = {
+    ATIVO: { label: 'Ativo', color: 'success' },
+    BLOQUEADO: { label: 'Bloqueado', color: 'error' },
+    DEMO: { label: 'Demonstração', color: 'info' },
+  };
+  const info = map[status] || { label: status, color: 'default' };
+  return <Chip label={info.label} color={info.color} size="small" variant="outlined" sx={{ fontWeight: 'bold' }} />;
+};
+
+const StatusPagamentoChip = ({ status }) => {
+  const map = {
+    PENDENTE: { label: 'Pendente', color: 'warning' },
+    PAGO: { label: 'Pago', color: 'success' },
+    VENCIDO: { label: 'Vencido', color: 'error' },
+    CANCELADO: { label: 'Cancelado', color: 'default' },
+  };
+  const info = map[status] || { label: status, color: 'default' };
+  return <Chip label={info.label} color={info.color} size="small" sx={{ borderRadius: 1 }} />;
+};
+
+const SaaSAdminPage = () => {
+  const { axiosInstance } = useAuth();
+  const { showToast } = useToast();
+  
+  const [tabValue, setTabValue] = useState(0);
+  const [loading, setLoading] = useState(false);
+  
+  // Data lists
+  const [clientes, setClientes] = useState([]);
+  const [mensalidades, setMensalidades] = useState([]);
+  
+  // KPI stats
+  const [stats, setStats] = useState({ activeClients: 0, overduePayments: 0, mrr: 0 });
+  
+  // Selected customer for details
+  const [selectedClient, setSelectedClient] = useState(null);
+  
+  // Modals status
+  const [clientModal, setClientModal] = useState({ open: false, mode: 'create', data: null });
+  const [billingModal, setBillingModal] = useState({ open: false, clientId: null, meses: 6 });
+  const [contractModal, setContractModal] = useState({ open: false, clientId: null, texto: '' });
+  const [paymentModal, setPaymentModal] = useState({ open: false, payment: null });
+  
+  // Client forms
+  const [clientForm, setClientForm] = useState({
+    cnpj: '', razao_social: '', dia_vencimento: 10,
+    valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: ''
+  });
+
+  const carregarDados = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [resCli, resMens] = await Promise.all([
+        axiosInstance.get('/saas-clientes/'),
+        axiosInstance.get('/saas-mensalidades/')
+      ]);
+      
+      const clientsData = resCli.data?.results ?? resCli.data ?? [];
+      const billingData = resMens.data?.results ?? resMens.data ?? [];
+      
+      setClientes(clientsData);
+      setMensalidades(billingData);
+      
+      // Calculate Stats
+      const active = clientsData.filter(c => c.status_licenca === 'ATIVO').length;
+      const overdue = billingData.filter(m => m.status_pagamento === 'PENDENTE' && new Date(m.data_vencimento) < new Date()).length;
+      const mrrVal = clientsData.reduce((acc, c) => acc + parseFloat(c.valor_mensalidade || 0), 0);
+      
+      setStats({ activeClients: active, overduePayments: overdue, mrr: mrrVal });
+      
+      // Update selected client if open
+      if (selectedClient) {
+        const updated = clientsData.find(c => c.id_saas_cliente === selectedClient.id_saas_cliente);
+        if (updated) setSelectedClient(updated);
+      }
+      
+    } catch (e) {
+      showToast('Erro ao carregar os dados do SaaS.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [axiosInstance, showToast, selectedClient]);
+
+  useEffect(() => {
+    carregarDados();
+  }, []);
+
+  const handleTabChange = (event, newValue) => {
+    setTabValue(newValue);
+  };
+
+  const handleOpenClientModal = (mode, data = null) => {
+    if (mode === 'create') {
+      setClientForm({
+        cnpj: '', razao_social: '', dia_vencimento: 10,
+        valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: ''
+      });
+    } else {
+      setClientForm({
+        cnpj: data.cnpj,
+        razao_social: data.razao_social,
+        dia_vencimento: data.dia_vencimento,
+        valor_mensalidade: data.valor_mensalidade,
+        emite_nota: data.emite_nota,
+        status_licenca: data.status_licenca,
+        data_reajuste: data.data_reajuste || ''
+      });
+    }
+    setClientModal({ open: true, mode, data });
+  };
+
+  const handleSaveClient = async () => {
+    if (!clientForm.cnpj || !clientForm.razao_social || !clientForm.valor_mensalidade) {
+      showToast('Por favor, preencha todos os campos obrigatórios.', 'warning');
+      return;
+    }
+    
+    // Clean CNPJ from masks
+    const cleanForm = { ...clientForm, cnpj: clientForm.cnpj.replace(/\D/g, '') };
+
+    try {
+      if (clientModal.mode === 'create') {
+        await axiosInstance.post('/saas-clientes/', cleanForm);
+        showToast('Cliente cadastrado com sucesso!', 'success');
+      } else {
+        await axiosInstance.put(`/saas-clientes/${clientModal.data.id_saas_cliente}/`, cleanForm);
+        showToast('Cliente atualizado com sucesso!', 'success');
+      }
+      setClientModal({ open: false, mode: 'create', data: null });
+      carregarDados();
+    } catch (e) {
+      showToast(e.response?.data?.error || 'Erro ao salvar cliente.', 'error');
+    }
+  };
+
+  const handleGerarMensalidades = async () => {
+    try {
+      await axiosInstance.post(`/saas-clientes/${billingModal.clientId}/gerar_mensalidades/`, {
+        meses: billingModal.meses
+      });
+      showToast(`Mensalidades geradas com sucesso!`, 'success');
+      setBillingModal({ open: false, clientId: null, meses: 6 });
+      carregarDados();
+    } catch (e) {
+      showToast('Erro ao gerar mensalidades.', 'error');
+    }
+  };
+
+  const handleGerarContrato = async () => {
+    if (!contractModal.texto) {
+      showToast('Informe os termos do contrato.', 'warning');
+      return;
+    }
+    try {
+      await axiosInstance.post(`/saas-contratos/`, {
+        saas_cliente: contractModal.clientId,
+        texto_contrato: contractModal.texto,
+        assinado: false
+      });
+      showToast('Contrato gerado com sucesso!', 'success');
+      setContractModal({ open: false, clientId: null, texto: '' });
+      carregarDados();
+    } catch (e) {
+      showToast('Erro ao gerar contrato.', 'error');
+    }
+  };
+
+  const handleConfirmarPagamento = async (statusPagamento) => {
+    try {
+      const payload = {
+        status_pagamento: statusPagamento,
+      };
+      if (statusPagamento === 'PAGO') {
+        payload.data_pagamento = new Date().toISOString().split('T')[0];
+      } else {
+        payload.data_pagamento = null;
+      }
+      await axiosInstance.patch(`/saas-mensalidades/${paymentModal.payment.id_mensalidade}/`, payload);
+      showToast(`Situação da mensalidade atualizada!`, 'success');
+      setPaymentModal({ open: false, payment: null });
+      carregarDados();
+    } catch (e) {
+      showToast('Erro ao atualizar mensalidade.', 'error');
+    }
+  };
+
+  const copiarPix = (payload) => {
+    navigator.clipboard.writeText(payload);
+    showToast('Pix Copia e Cola copiado!', 'success');
+  };
+
+  return (
+    <Box sx={{ p: 3, minHeight: '85vh' }}>
+      
+      {/* HEADER & METRICS */}
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+        <Box>
+          <Typography variant="h4" fontWeight={800} color="primary" sx={{ letterSpacing: -0.5 }}>
+            Aperus Central SaaS
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Administração, Faturamento e Licenciamento das instâncias de clientes
+          </Typography>
+        </Box>
+        <IconButton onClick={carregarDados} disabled={loading} color="primary" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          {loading ? <CircularProgress size={24} /> : <RefreshIcon />}
+        </IconButton>
+      </Box>
+
+      <Grid container spacing={3} mb={4}>
+        <Grid item xs={12} sm={4}>
+          <Card sx={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 3, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.07)' }}>
+            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ p: 1.5, borderRadius: 2.5, bgcolor: 'success.light', color: 'success.dark', display: 'flex' }}>
+                <ClientIcon fontSize="large" />
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary" fontWeight={500}>Clientes Ativos</Typography>
+                <Typography variant="h5" fontWeight={700}>{stats.activeClients}</Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Card sx={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 3, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.07)' }}>
+            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ p: 1.5, borderRadius: 2.5, bgcolor: 'primary.light', color: 'primary.dark', display: 'flex' }}>
+                <MoneyIcon fontSize="large" />
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary" fontWeight={500}>Recorrência Mensal (MRR)</Typography>
+                <Typography variant="h5" fontWeight={700}>{fmtMoeda(stats.mrr)}</Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Card sx={{ backdropFilter: 'blur(20px)', backgroundColor: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 3, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.07)' }}>
+            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ p: 1.5, borderRadius: 2.5, bgcolor: 'error.light', color: 'error.dark', display: 'flex' }}>
+                <WarningIcon fontSize="large" />
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary" fontWeight={500}>Mensalidades Atrasadas</Typography>
+                <Typography variant="h5" fontWeight={700} color="error.main">{stats.overduePayments}</Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* TABS CONTAINER */}
+      <Paper sx={{ borderRadius: 4, overflow: 'hidden', mb: 3 }}>
+        <Tabs value={tabValue} onChange={handleTabChange} indicatorColor="primary" textColor="primary" variant="fullWidth" sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Tab label="Clientes SaaS" icon={<ClientIcon />} iconPosition="start" />
+          <Tab label="Faturamento e Cobranças" icon={<InvoiceIcon />} iconPosition="start" />
+        </Tabs>
+
+        {/* TAB 0 - CLIENTES */}
+        {tabValue === 0 && (
+          <Box sx={{ p: 3 }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+              <Typography variant="h6" fontWeight={700}>Lista de Contratantes</Typography>
+              <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenClientModal('create')}>
+                Novo Cliente
+              </Button>
+            </Box>
+
+            <TableContainer>
+              <Table size="medium">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'action.hover' }}>
+                    <TableCell fontWeight={600}>Razão Social / CNPJ</TableCell>
+                    <TableCell align="center">Vencimento (Dia)</TableCell>
+                    <TableCell align="right">Valor Mensalidade</TableCell>
+                    <TableCell align="center">Emissão NF</TableCell>
+                    <TableCell align="center">Situação</TableCell>
+                    <TableCell align="center">Ações</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {clientes.map((c) => (
+                    <TableRow key={c.id_saas_cliente} hover onClick={() => setSelectedClient(c)} sx={{ cursor: 'pointer', bgcolor: selectedClient?.id_saas_cliente === c.id_saas_cliente ? 'action.selected' : 'inherit' }}>
+                      <TableCell>
+                        <Typography fontWeight={600} variant="body2">{c.razao_social}</Typography>
+                        <Typography variant="caption" color="text.secondary">CNPJ: {c.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5")}</Typography>
+                      </TableCell>
+                      <TableCell align="center">Dia {c.dia_vencimento}</TableCell>
+                      <TableCell align="right"><b>{fmtMoeda(c.valor_mensalidade)}</b></TableCell>
+                      <TableCell align="center">
+                        <Chip label={c.emite_nota ? 'Sim' : 'Não'} size="small" color={c.emite_nota ? 'primary' : 'default'} />
+                      </TableCell>
+                      <TableCell align="center">
+                        <StatusLicencaChip status={c.status_licenca} />
+                      </TableCell>
+                      <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                        <Stack direction="row" spacing={1} justifyContent="center">
+                          <Tooltip title="Editar Dados">
+                            <IconButton size="small" onClick={() => handleOpenClientModal('edit', c)}>
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Gerar Lote de Cobranças">
+                            <IconButton size="small" color="primary" onClick={() => setBillingModal({ open: true, clientId: c.id_saas_cliente, meses: 6 })}>
+                              <InvoiceIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Gerar Termo/Contrato">
+                            <IconButton size="small" color="secondary" onClick={() => setContractModal({ open: true, clientId: c.id_saas_cliente, texto: '' })}>
+                              <ContractIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {clientes.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                        Nenhum cliente cadastrado.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            {/* SELECTION DETAIL DRAWER / SUB PANEL */}
+            {selectedClient && (
+              <Box sx={{ mt: 4, p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 3, bgcolor: 'grey.50' }}>
+                <Typography variant="h6" fontWeight={700} gutterBottom>
+                  Detalhes do Cliente: {selectedClient.razao_social}
+                </Typography>
+                
+                <Grid container spacing={3}>
+                  <Grid item xs={12} md={6}>
+                    <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                      <CardContent>
+                        <Typography variant="subtitle2" fontWeight={700} color="text.secondary" gutterBottom>Mensalidades Relacionadas</Typography>
+                        <Divider sx={{ mb: 1.5 }} />
+                        <TableContainer sx={{ maxHeight: 220 }}>
+                          <Table size="small" stickyHeader>
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Vencimento</TableCell>
+                                <TableCell align="right">Valor</TableCell>
+                                <TableCell align="center">Situação</TableCell>
+                                <TableCell align="center">Ação</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {selectedClient.mensalidades?.map(m => (
+                                <TableRow key={m.id_mensalidade} hover>
+                                  <TableCell>{fmtData(m.data_vencimento)}</TableCell>
+                                  <TableCell align="right">{fmtMoeda(m.valor)}</TableCell>
+                                  <TableCell align="center"><StatusPagamentoChip status={m.status_pagamento} /></TableCell>
+                                  <TableCell align="center">
+                                    <IconButton size="small" onClick={() => setPaymentModal({ open: true, payment: m })}>
+                                      <MoneyIcon fontSize="small" />
+                                    </IconButton>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              {(!selectedClient.mensalidades || selectedClient.mensalidades.length === 0) && (
+                                <TableRow>
+                                  <TableCell colSpan={4} align="center">Nenhuma mensalidade gerada.</TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
+                    <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                      <CardContent>
+                        <Typography variant="subtitle2" fontWeight={700} color="text.secondary" gutterBottom>Contratos e Termos Aceites</Typography>
+                        <Divider sx={{ mb: 1.5 }} />
+                        <TableContainer sx={{ maxHeight: 220 }}>
+                          <Table size="small" stickyHeader>
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Data Geração</TableCell>
+                                <TableCell align="center">Assinado</TableCell>
+                                <TableCell>IP / Usuário Assinatura</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {selectedClient.contratos?.map(contr => (
+                                <TableRow key={contr.id_contrato}>
+                                  <TableCell>{fmtDataHora(contr.data_geracao)}</TableCell>
+                                  <TableCell align="center">
+                                    <Chip label={contr.assinado ? 'Assinado' : 'Pendente'} color={contr.assinado ? 'success' : 'default'} size="small" />
+                                  </TableCell>
+                                  <TableCell>
+                                    {contr.assinado ? (
+                                      <Box>
+                                        <Typography variant="caption" display="block">IP: {contr.ip_assinatura || '—'}</Typography>
+                                        <Typography variant="caption" display="block">Por: {contr.usuario_assinou || '—'}</Typography>
+                                        <Typography variant="caption" display="block">Em: {fmtDataHora(contr.data_assinatura)}</Typography>
+                                      </Box>
+                                    ) : '—'}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              {(!selectedClient.contratos || selectedClient.contratos.length === 0) && (
+                                <TableRow>
+                                  <TableCell colSpan={3} align="center">Nenhum contrato gerado.</TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                </Grid>
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {/* TAB 1 - GENERAL BILLING */}
+        {tabValue === 1 && (
+          <Box sx={{ p: 3 }}>
+            <Typography variant="h6" fontWeight={700} mb={2}>Lançamentos de Cobranças Globais</Typography>
+            
+            <TableContainer>
+              <Table size="medium">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'action.hover' }}>
+                    <TableCell fontWeight={600}>Cliente</TableCell>
+                    <TableCell>Nosso Número</TableCell>
+                    <TableCell>Vencimento</TableCell>
+                    <TableCell align="right">Valor</TableCell>
+                    <TableCell align="center">Situação</TableCell>
+                    <TableCell align="center">Data Pagamento</TableCell>
+                    <TableCell align="center">Ações</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {mensalidades.map((m) => {
+                    const cli = clientes.find(c => c.id_saas_cliente === m.saas_cliente);
+                    return (
+                      <TableRow key={m.id_mensalidade} hover>
+                        <TableCell>
+                          <Typography fontWeight={600} variant="body2">{cli ? cli.razao_social : 'Carregando...'}</Typography>
+                        </TableCell>
+                        <TableCell sx={{ fontFamily: 'monospace' }}>{m.nosso_numero}</TableCell>
+                        <TableCell>{fmtData(m.data_vencimento)}</TableCell>
+                        <TableCell align="right"><b>{fmtMoeda(m.valor)}</b></TableCell>
+                        <TableCell align="center">
+                          <StatusPagamentoChip status={m.status_pagamento} />
+                        </TableCell>
+                        <TableCell align="center">{m.data_pagamento ? fmtData(m.data_pagamento) : '—'}</TableCell>
+                        <TableCell align="center">
+                          <Tooltip title="Detalhes do Pagamento / Baixa Manual">
+                            <IconButton size="small" color="primary" onClick={() => setPaymentModal({ open: true, payment: m })}>
+                              <MoneyIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {mensalidades.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                        Nenhuma cobrança registrada no sistema.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
+      </Paper>
+
+      {/* DIALOGS */}
+
+      {/* 1. CLIENT MODAL */}
+      <Dialog open={clientModal.open} onClose={() => setClientModal({ ...clientModal, open: false })} maxWidth="sm" fullWidth>
+        <DialogTitle>{clientModal.mode === 'create' ? 'Cadastrar Novo Cliente' : 'Editar Dados do Cliente'}</DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="CNPJ *" fullWidth size="small"
+                value={clientForm.cnpj} onChange={(e) => setClientForm({ ...clientForm, cnpj: e.target.value })}
+                placeholder="00.000.000/0000-00"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Razão Social *" fullWidth size="small"
+                value={clientForm.razao_social} onChange={(e) => setClientForm({ ...clientForm, razao_social: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Dia do Vencimento *" type="number" fullWidth size="small"
+                value={clientForm.dia_vencimento} onChange={(e) => setClientForm({ ...clientForm, dia_vencimento: parseInt(e.target.value) || 10 })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Valor da Mensalidade (R$) *" type="number" fullWidth size="small"
+                value={clientForm.valor_mensalidade} onChange={(e) => setClientForm({ ...clientForm, valor_mensalidade: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Situação da Licença</InputLabel>
+                <Select
+                  value={clientForm.status_licenca}
+                  onChange={(e) => setClientForm({ ...clientForm, status_licenca: e.target.value })}
+                  label="Situação da Licença"
+                >
+                  <MenuItem value="ATIVO">Ativo</MenuItem>
+                  <MenuItem value="BLOQUEADO">Bloqueado</MenuItem>
+                  <MenuItem value="DEMO">Demonstração</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Próximo Reajuste" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }}
+                value={clientForm.data_reajuste} onChange={(e) => setClientForm({ ...clientForm, data_reajuste: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Emite Notas Fiscais?</InputLabel>
+                <Select
+                  value={clientForm.emite_nota}
+                  onChange={(e) => setClientForm({ ...clientForm, emite_nota: e.target.value === 'true' || e.target.value === true })}
+                  label="Emite Notas Fiscais?"
+                >
+                  <MenuItem value={true}>Sim</MenuItem>
+                  <MenuItem value={false}>Não</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setClientModal({ ...clientModal, open: false })}>Cancelar</Button>
+          <Button variant="contained" onClick={handleSaveClient}>Salvar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 2. BATCH BILLING MODAL */}
+      <Dialog open={billingModal.open} onClose={() => setBillingModal({ open: false, clientId: null, meses: 6 })} maxWidth="xs" fullWidth>
+        <DialogTitle>Gerar Lote de Mensalidades</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" mb={2}>
+            Gere cobranças recorrentes subsequentes para o cliente selecionado automaticamente.
+          </Typography>
+          <FormControl fullWidth size="small">
+            <InputLabel>Quantidade de meses</InputLabel>
+            <Select
+              value={billingModal.meses}
+              onChange={(e) => setBillingModal({ ...billingModal, meses: parseInt(e.target.value) || 1 })}
+              label="Quantidade de meses"
+            >
+              <MenuItem value={1}>1 Mês</MenuItem>
+              <MenuItem value={3}>3 Meses</MenuItem>
+              <MenuItem value={6}>6 Meses (Semestral)</MenuItem>
+              <MenuItem value={12}>12 Meses (Anual)</MenuItem>
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBillingModal({ open: false, clientId: null, meses: 6 })}>Cancelar</Button>
+          <Button variant="contained" onClick={handleGerarMensalidades}>Gerar Cobranças</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 3. CONTRACT MODAL */}
+      <Dialog open={contractModal.open} onClose={() => setContractModal({ open: false, clientId: null, texto: '' })} maxWidth="sm" fullWidth>
+        <DialogTitle>Gerar Contrato de Prestação de Serviços</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" mb={2}>
+            Insira o texto completo do termo ou contrato a ser aceito digitalmente pela instância do cliente.
+          </Typography>
+          <TextField
+            label="Conteúdo do Contrato"
+            multiline
+            rows={10}
+            fullWidth
+            value={contractModal.texto}
+            onChange={(e) => setContractModal({ ...contractModal, texto: e.target.value })}
+            placeholder="Cláusula 1ª: O presente termo de adesão rege a utilização do sistema Aperus..."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setContractModal({ open: false, clientId: null, texto: '' })}>Cancelar</Button>
+          <Button variant="contained" onClick={handleGerarContrato}>Publicar Contrato</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 4. PAYMENT DETAIL / ACTION MODAL */}
+      <Dialog open={paymentModal.open} onClose={() => setPaymentModal({ open: false, payment: null })} maxWidth="sm" fullWidth>
+        <DialogTitle>Faturamento — Nosso Número: {paymentModal.payment?.nosso_numero}</DialogTitle>
+        <DialogContent dividers>
+          {paymentModal.payment && (
+            <Stack spacing={2.5}>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Valor da Cobrança</Typography>
+                <Typography variant="h5" fontWeight={700} color="primary">{fmtMoeda(paymentModal.payment.valor)}</Typography>
+              </Box>
+
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary">Vencimento</Typography>
+                  <Typography variant="body1" fontWeight={500}>{fmtData(paymentModal.payment.data_vencimento)}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary">Situação</Typography>
+                  <Box mt={0.5}>
+                    <StatusPagamentoChip status={paymentModal.payment.status_pagamento} />
+                  </Box>
+                </Grid>
+              </Grid>
+
+              {paymentModal.payment.status_pagamento !== 'PAGO' && (
+                <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'grey.50' }}>
+                  <Typography variant="subtitle2" fontWeight={600} mb={1}>Meios de Pagamento Integrados (Simulado)</Typography>
+                  <Stack spacing={1.5}>
+                    {paymentModal.payment.url_boleto && (
+                      <Button
+                        variant="outlined"
+                        startIcon={<LaunchIcon />}
+                        href={paymentModal.payment.url_boleto}
+                        target="_blank"
+                        size="small"
+                        fullWidth
+                      >
+                        Visualizar Boleto Bancário
+                      </Button>
+                    )}
+                    {paymentModal.payment.pix_copia_cola && (
+                      <Stack direction="row" spacing={1}>
+                        <TextField
+                          label="Pix Copia e Cola"
+                          value={paymentModal.payment.pix_copia_cola}
+                          fullWidth
+                          size="small"
+                          InputProps={{ readOnly: true }}
+                        />
+                        <Button variant="contained" size="small" onClick={() => copiarPix(paymentModal.payment.pix_copia_cola)}>
+                          Copiar
+                        </Button>
+                      </Stack>
+                    )}
+                  </Stack>
+                </Box>
+              )}
+
+              {paymentModal.payment.data_pagamento && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Liquidado em</Typography>
+                  <Typography variant="body1" fontWeight={500}>{fmtData(paymentModal.payment.data_pagamento)}</Typography>
+                </Box>
+              )}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
+          <Box>
+            {paymentModal.payment?.status_pagamento !== 'PAGO' && (
+              <Button color="success" variant="contained" startIcon={<PaidIcon />} onClick={() => handleConfirmarPagamento('PAGO')}>
+                Confirmar Pagamento
+              </Button>
+            )}
+            {paymentModal.payment?.status_pagamento === 'PAGO' && (
+              <Button color="warning" variant="outlined" onClick={() => handleConfirmarPagamento('PENDENTE')}>
+                Estornar para Pendente
+              </Button>
+            )}
+          </Box>
+          <Box>
+            {paymentModal.payment?.status_pagamento !== 'CANCELADO' && paymentModal.payment?.status_pagamento !== 'PAGO' && (
+              <Button color="error" variant="text" startIcon={<CancelIcon />} onClick={() => handleConfirmarPagamento('CANCELADO')} sx={{ mr: 1 }}>
+                Cancelar Cobrança
+              </Button>
+            )}
+            <Button onClick={() => setPaymentModal({ open: false, payment: null })}>Fechar</Button>
+          </Box>
+        </DialogActions>
+      </Dialog>
+
+    </Box>
+  );
+};
+
+export default SaaSAdminPage;

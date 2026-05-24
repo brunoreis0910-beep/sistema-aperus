@@ -3438,3 +3438,238 @@ def simular_desconto(request):
         'travado': travado,
         'motivo': motivo
     })
+
+
+# ====================================================
+# SaaS Central Billing & Licensing Views
+# ====================================================
+
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from django.utils import timezone
+from datetime import date, timedelta
+import calendar
+import re
+
+def get_client_ip(request):
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
+
+def clean_cnpj(cnpj_str):
+    if not cnpj_str:
+        return ""
+    return re.sub(r'\D', '', str(cnpj_str))
+
+
+class SaaSClienteViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciamento de clientes SaaS (Aperus Mãe).
+    """
+    queryset = models.SaaSCliente.objects.all().order_by('-data_cadastro')
+    serializer_class = serializers.SaaSClienteSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filterset_fields = ['status_licenca', 'dia_vencimento']
+    search_fields = ['cnpj', 'razao_social']
+
+    @action(detail=True, methods=['post'])
+    def gerar_mensalidades(self, request, pk=None):
+        """
+        Gera mensalidades em lote para um cliente.
+        Payload: {"meses": 6}
+        """
+        cliente = self.get_object()
+        try:
+            meses = int(request.data.get('meses', 1))
+        except (ValueError, TypeError):
+            meses = 1
+
+        mensalidades_geradas = []
+        hoje = timezone.now().date()
+        ano = hoje.year
+        mes = hoje.month
+
+        for i in range(meses):
+            # Incrementa o mês
+            mes += 1
+            if mes > 12:
+                mes = 1
+                ano += 1
+
+            # Proteção contra dias inexistentes (ex: dia 31 em fevereiro)
+            dia = cliente.dia_vencimento
+            ultimo_dia_mes = calendar.monthrange(ano, mes)[1]
+            dia_efetivo = min(dia, ultimo_dia_mes)
+            vencimento = date(ano, mes, dia_efetivo)
+
+            nosso_numero = f"{cliente.id_saas_cliente:03d}{ano}{mes:02d}"
+            valor_formatado = f"{int(cliente.valor_mensalidade * 100):010d}"
+
+            mensalidade = models.SaaSClienteMensalidade.objects.create(
+                saas_cliente=cliente,
+                nosso_numero=nosso_numero,
+                data_vencimento=vencimento,
+                valor=cliente.valor_mensalidade,
+                status_pagamento='PENDENTE',
+                url_boleto=f"https://api.aperus.com.br/boletos/fake_{nosso_numero}.pdf",
+                linha_digitavel=f"34191.79001 01043.513184 91020.150008 7 {vencimento.strftime('%Y%M%d')}{valor_formatado[:6]}",
+                pix_copia_cola=f"00020101021226830014br.gov.bcb.pix2561api.aperus.com.br/pix/qr/v2/fake_{nosso_numero}5204000053039865406{cliente.valor_mensalidade:.2f}5802BR5910AperusSaaS6009SaoPaulo62070503***6304ABCD",
+            )
+            mensalidades_geradas.append(mensalidade)
+
+        serializer = serializers.SaaSClienteMensalidadeSerializer(mensalidades_geradas, many=True)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class SaaSClienteMensalidadeViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciamento de mensalidades dos clientes SaaS.
+    """
+    queryset = models.SaaSClienteMensalidade.objects.all().order_by('-data_vencimento')
+    serializer_class = serializers.SaaSClienteMensalidadeSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filterset_fields = ['saas_cliente', 'status_pagamento']
+    search_fields = ['nosso_numero']
+
+
+class SaaSClienteContratoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciamento de contratos dos clientes SaaS.
+    """
+    queryset = models.SaaSClienteContrato.objects.all().order_by('-data_geracao')
+    serializer_class = serializers.SaaSClienteContratoSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filterset_fields = ['saas_cliente', 'assinado']
+
+
+# ─── Public API Endpoints for Client Instances ────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def saas_verificar_licenca(request):
+    """
+    Verifica a situação da licença do CNPJ.
+    URL: /api/saas/licenca/?cnpj=...
+    """
+    cnpj = clean_cnpj(request.query_params.get('cnpj'))
+    if not cnpj:
+        return Response({'error': 'CNPJ é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        cliente = models.SaaSCliente.objects.get(cnpj=cnpj)
+        
+        # Bloqueio automático por mensalidades vencidas há mais de 5 dias
+        cinco_dias_atras = timezone.now().date() - timedelta(days=5)
+        tem_financeiro_atrasado = models.SaaSClienteMensalidade.objects.filter(
+            saas_cliente=cliente,
+            status_pagamento='PENDENTE',
+            data_vencimento__lt=cinco_dias_atras
+        ).exists()
+        
+        status_licenca = cliente.status_licenca
+        motivo = "Licença ativa e regular."
+        if tem_financeiro_atrasado:
+            status_licenca = 'BLOQUEADO'
+            motivo = "Mensalidade em atraso há mais de 5 dias."
+        elif status_licenca == 'BLOQUEADO':
+            motivo = "Bloqueado administrativamente pelo painel SaaS."
+
+        return Response({
+            'cnpj': cliente.cnpj,
+            'razao_social': cliente.razao_social,
+            'status_licenca': status_licenca,
+            'motivo': motivo,
+            'data_reajuste': cliente.data_reajuste,
+            'emite_nota': cliente.emite_nota,
+        })
+    except models.SaaSCliente.DoesNotExist:
+        return Response({
+            'status_licenca': 'BLOQUEADO',
+            'motivo': 'CNPJ não localizado na base central do Aperus.'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def saas_financeiro(request):
+    """
+    Lista histórico financeiro/mensalidades pendentes e pagas do cliente.
+    URL: /api/saas/financeiro/?cnpj=...
+    """
+    cnpj = clean_cnpj(request.query_params.get('cnpj'))
+    if not cnpj:
+        return Response({'error': 'CNPJ é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        cliente = models.SaaSCliente.objects.get(cnpj=cnpj)
+        mensalidades = models.SaaSClienteMensalidade.objects.filter(
+            saas_cliente=cliente
+        ).order_by('-data_vencimento')
+        
+        serializer = serializers.SaaSClienteMensalidadeSerializer(mensalidades, many=True)
+        return Response(serializer.data)
+    except models.SaaSCliente.DoesNotExist:
+        return Response({'error': 'CNPJ não encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def saas_contrato_pendente(request):
+    """
+    Busca se há algum contrato pendente de assinatura para o CNPJ.
+    URL: /api/saas/contrato-pendente/?cnpj=...
+    """
+    cnpj = clean_cnpj(request.query_params.get('cnpj'))
+    if not cnpj:
+        return Response({'error': 'CNPJ é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        cliente = models.SaaSCliente.objects.get(cnpj=cnpj)
+        contrato = models.SaaSClienteContrato.objects.filter(
+            saas_cliente=cliente,
+            assinado=False
+        ).order_by('-data_geracao').first()
+        
+        if not contrato:
+            return Response({'id_contrato': None, 'texto_contrato': None})
+            
+        serializer = serializers.SaaSClienteContratoSerializer(contrato)
+        return Response(serializer.data)
+    except models.SaaSCliente.DoesNotExist:
+        return Response({'error': 'CNPJ não encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def saas_assinar_contrato(request):
+    """
+    Registra a assinatura/aceite do contrato.
+    URL: /api/saas/assinar-contrato/
+    """
+    id_contrato = request.data.get('id_contrato')
+    usuario_assinou = request.data.get('usuario_assinou')
+    
+    if not id_contrato or not usuario_assinou:
+        return Response({'error': 'id_contrato e usuario_assinou são obrigatórios'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    try:
+        contrato = models.SaaSClienteContrato.objects.get(id_contrato=id_contrato)
+        if contrato.assinado:
+            return Response({'error': 'Este contrato já está assinado.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        contrato.assinado = True
+        contrato.data_assinatura = timezone.now()
+        contrato.ip_assinatura = get_client_ip(request)
+        contrato.usuario_assinou = usuario_assinou
+        contrato.save()
+        
+        serializer = serializers.SaaSClienteContratoSerializer(contrato)
+        return Response(serializer.data)
+    except models.SaaSClienteContrato.DoesNotExist:
+        return Response({'error': 'Contrato não encontrado'}, status=status.HTTP_404_NOT_FOUND)
+

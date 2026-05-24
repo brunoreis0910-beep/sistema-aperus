@@ -591,6 +591,7 @@ class RelVendasPorClienteView(APIView):
         data_fim = _parse_date(request.query_params.get('data_fim'), date.today())
         limite = int(request.query_params.get('limite', 100))
         id_operacao = request.query_params.get('id_operacao')
+        id_cliente = request.query_params.get('id_cliente')
         dt_inicio, dt_fim = _make_dt_range(data_inicio, data_fim)
 
         qs_base = Venda.objects.filter(
@@ -598,6 +599,8 @@ class RelVendasPorClienteView(APIView):
         )
         if id_operacao:
             qs_base = qs_base.filter(id_operacao_id=id_operacao)
+        if id_cliente:
+            qs_base = qs_base.filter(id_cliente_id=id_cliente)
         dados = qs_base.values(
             'id_cliente', 'id_cliente__nome_razao_social',
             'id_cliente__cpf_cnpj', 'id_cliente__cidade',

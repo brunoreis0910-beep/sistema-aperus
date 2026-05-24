@@ -80,7 +80,8 @@ import {
   Email as EmailIcon,
   Print,
   MoreVert,
-  LocalOffer
+  LocalOffer,
+  Delete
 } from '@mui/icons-material';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -900,6 +901,25 @@ export default function HotelPMSPage() {
     } catch (err) {
       console.error(err);
       toast.error('Erro ao lançar consumo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteConsumo = async (bookingId, consumoId) => {
+    if (!window.confirm('Tem certeza que deseja remover este item de consumo?')) return;
+    try {
+      setLoading(true);
+      await api.delete(`/api/hotel/consumos/${consumoId}/`);
+      toast.success('Consumo removido com sucesso!');
+      
+      // Recarrega reserva selecionada e dados
+      const updatedRes = await api.get(`/api/hotel/reservas/${bookingId}/`);
+      setSelectedBooking(updatedRes.data);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao remover consumo.');
     } finally {
       setLoading(false);
     }
@@ -2090,6 +2110,7 @@ export default function HotelPMSPage() {
                       <TableCell align="center">Qtd</TableCell>
                       <TableCell align="right">Unitário</TableCell>
                       <TableCell align="right">Total</TableCell>
+                      <TableCell align="center">Ações</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -2100,11 +2121,20 @@ export default function HotelPMSPage() {
                           <TableCell align="center">{parseFloat(c.quantidade).toFixed(0)}</TableCell>
                           <TableCell align="right">R$ {parseFloat(c.valor_unitario).toFixed(2)}</TableCell>
                           <TableCell align="right">R$ {parseFloat(c.valor_total).toFixed(2)}</TableCell>
+                          <TableCell align="center">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => handleDeleteConsumo(selectedBooking.id_reserva, c.id_consumo)}
+                            >
+                              <Delete fontSize="small" />
+                            </IconButton>
+                          </TableCell>
                         </TableRow>
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={4} align="center" color="text.secondary">Nenhum consumo lançado.</TableCell>
+                        <TableCell colSpan={5} align="center" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>Nenhum consumo lançado.</TableCell>
                       </TableRow>
                     )}
                   </TableBody>
