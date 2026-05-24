@@ -1801,11 +1801,11 @@ const UsuariosConfig = () => {
 
               <Grid item xs={12} md={6}>
                  <FormControl fullWidth variant="outlined">
-                  <InputLabel>Operação de Nota Fiscal (NFC-e)</InputLabel>
+                  <InputLabel>Operação de Nota Fiscal (NF-e)</InputLabel>
                   <Select
                     value={currentUsuario.parametros?.id_operacao_hotel_nfce || ''}
                     onChange={(e) => handleInputChange('parametros.id_operacao_hotel_nfce', e.target.value || null)}
-                    label="Operação de Nota Fiscal (NFC-e)"
+                    label="Operação de Nota Fiscal (NF-e)"
                   >
                     <MenuItem value="">
                       <em>Nenhuma</em>

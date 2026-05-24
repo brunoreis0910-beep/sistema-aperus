@@ -422,30 +422,33 @@ class ReservaViewSet(viewsets.ModelViewSet):
             valor_desconto_input = Decimal('0.00')
 
         # Buscar Operacao de faturamento
-        if id_operacao:
-            try:
-                operacao = Operacao.objects.get(pk=id_operacao)
-            except Operacao.DoesNotExist:
-                return Response({"error": "Operação de faturamento não encontrada."}, status=status.HTTP_404_NOT_FOUND)
-        else:
-            # Pega a operação padrão de faturamento do usuário ou do sistema
-            from api.models import UserParametros
-            user_params = UserParametros.objects.filter(id_user=request.user).first()
-            if user_params and user_params.id_operacao_hotel_checkout:
-                operacao = user_params.id_operacao_hotel_checkout
+        from api.models import UserParametros
+        user_params = UserParametros.objects.filter(id_user=request.user).first()
+        
+        operacao = None
+        if user_params and user_params.id_operacao_hotel_checkout:
+            operacao = user_params.id_operacao_hotel_checkout
+            
+        if not operacao:
+            if id_operacao:
+                try:
+                    operacao = Operacao.objects.get(pk=id_operacao)
+                except Operacao.DoesNotExist:
+                    return Response({"error": "Operação de faturamento não encontrada."}, status=status.HTTP_404_NOT_FOUND)
             else:
+                # Pega a operação padrão de faturamento do sistema
                 operacao = Operacao.objects.filter(transacao='Saida', gera_financeiro=1).first() or \
                            Operacao.objects.filter(transacao='Venda').first()
-            if not operacao:
-                # Caso não exista nenhuma operação, cria uma simples de teste
-                operacao, _ = Operacao.objects.get_or_create(
-                    nome_operacao='Venda Balcão Hotel',
-                    defaults={
-                        'transacao': 'Venda',
-                        'empresa': 'Hotel Aperus',
-                        'gera_financeiro': 1
-                    }
-                )
+                if not operacao:
+                    # Caso não exista nenhuma operação, cria uma simples de teste
+                    operacao, _ = Operacao.objects.get_or_create(
+                        nome_operacao='Venda Balcão Hotel',
+                        defaults={
+                            'transacao': 'Venda',
+                            'empresa': 'Hotel Aperus',
+                            'gera_financeiro': 1
+                        }
+                    )
 
         # Definir data de vencimento e se será baixa automática
         today = timezone.now().date()
@@ -708,16 +711,16 @@ class ReservaViewSet(viewsets.ModelViewSet):
         user_params = UserParametros.objects.filter(id_user=request.user).first()
         operacao_nfce = None
         if user_params:
-            operacao_nfce = user_params.id_operacao_hotel_nfce or user_params.id_operacao_nfce
+            operacao_nfce = user_params.id_operacao_nfce
 
         if not operacao_nfce:
             return Response(
-                {"error": "Nenhuma operação de NFC-e de Hotelaria ou Geral configurada para o seu usuário. Acesse Configurações > Usuário > aba Hotelaria ou NFCe."},
+                {"error": "Nenhuma operação de NFC-e configurada na aba NFC-e para o seu usuário. Acesse Configurações > Usuário > aba NFC-e."},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        vendedor_nfce = user_params.id_vendedor_nfce or original_venda.id_vendedor1
-        cliente_nfce = user_params.id_cliente_nfce or original_venda.id_cliente
+        vendedor_nfce = (user_params.id_vendedor_nfce or original_venda.id_vendedor1) if user_params else original_venda.id_vendedor1
+        cliente_nfce = (user_params.id_cliente_nfce or original_venda.id_cliente) if user_params else original_venda.id_cliente
         
         # 3. Filtrar produtos (excluir diárias)
         items_original = VendaItem.objects.filter(id_venda=original_venda)
@@ -851,11 +854,11 @@ class ReservaViewSet(viewsets.ModelViewSet):
         user_params = UserParametros.objects.filter(id_user=request.user).first()
         operacao_nfe = None
         if user_params:
-            operacao_nfe = user_params.id_operacao_hotel
+            operacao_nfe = user_params.id_operacao_hotel_nfce
             
         if not operacao_nfe:
             return Response(
-                {"error": "Nenhuma operação de NF-e de Hotelaria (Operação Padrão Hospedagem) configurada para o seu usuário. Acesse Configurações > Usuário > aba Hotelaria."},
+                {"error": "Nenhuma operação de NF-e configurada na aba Hotelaria para o seu usuário. Acesse Configurações > Usuário > aba Hotelaria."},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
@@ -874,8 +877,8 @@ class ReservaViewSet(viewsets.ModelViewSet):
             status_code = status.HTTP_200_OK if result.get('sucesso') else status.HTTP_400_BAD_REQUEST
             return Response(result, status=status_code)
             
-        vendedor_nfe = user_params.id_vendedor_nfce or original_venda.id_vendedor1
-        cliente_nfe = user_params.id_cliente_nfce or original_venda.id_cliente
+        vendedor_nfe = (user_params.id_vendedor_nfce or original_venda.id_vendedor1) if user_params else original_venda.id_vendedor1
+        cliente_nfe = (user_params.id_cliente_nfce or original_venda.id_cliente) if user_params else original_venda.id_cliente
         
         # 3. Filtrar produtos (excluir diárias)
         items_original = VendaItem.objects.filter(id_venda=original_venda)
