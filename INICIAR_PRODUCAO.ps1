@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 #  INICIAR_PRODUCAO.ps1  -  Iniciar o Sistema APERUS em Produção
 #  Executa: frontend build, collectstatic, migrate e Django server
 # ============================================================
@@ -19,7 +19,7 @@ Write-Host ""
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
 
-$PORTA = "8005"
+$PORTA = "8006"
 $step = 0
 function Step($msg) {
     $script:step++

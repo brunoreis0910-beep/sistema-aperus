@@ -238,6 +238,7 @@ from .whatsapp_e_aprovacao import (
     evolution_qrcode,
     evolution_status,
 )
+from .views_git_webhook import github_webhook_update
 
 from .views import (
     ClienteViewSet,
@@ -680,6 +681,7 @@ urlpatterns = [
     path('saas/financeiro/', saas_financeiro, name='saas-financeiro'),
     path('saas/contrato-pendente/', saas_contrato_pendente, name='saas-contrato-pendente'),
     path('saas/assinar-contrato/', saas_assinar_contrato, name='saas-assinar-contrato'),
+    path('git-webhook-update/', github_webhook_update, name='git-webhook-update'),
     
     path('', include(router.urls)),
     # Preferências de Interface do Usuário

@@ -3493,15 +3493,12 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
             })
 
     def provisionar_banco_cliente(self, cliente):
-        from django.db import connection, connections
+        from django.db import connection
         from django.conf import settings
         from django.core.management import call_command
-        from django.db.backends.utils import CursorWrapper
-        from django.apps import apps
         import re
         import copy
         import threading
-        import contextlib
         
         cnpj = re.sub(r'\D', '', str(cliente.cnpj))
         db_name = f"aperus_{cnpj}"
@@ -3515,105 +3512,13 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         settings.DATABASES[db_name] = copy.deepcopy(default_db)
         settings.DATABASES[db_name]['NAME'] = db_name
         
-        # 3. Copia as tabelas não gerenciadas (unmanaged) do banco central para o novo banco
-        try:
-            unmanaged_tables = []
-            for model in apps.get_models():
-                if not model._meta.managed:
-                    unmanaged_tables.append(model._meta.db_table)
-            unmanaged_tables = list(set(unmanaged_tables))
-            
-            central_conn = connections['default']
-            target_conn = connections[db_name]
-            
-            with central_conn.cursor() as central_cursor, target_conn.cursor() as target_cursor:
-                target_cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
-                central_cursor.execute("SHOW TABLES")
-                central_tables = [row[0] for row in central_cursor.fetchall()]
-                
-                for table in unmanaged_tables:
-                    if table in central_tables:
-                        central_cursor.execute(f"SHOW CREATE TABLE `{table}`")
-                        create_sql = central_cursor.fetchone()[1]
-                        target_cursor.execute(f"DROP TABLE IF EXISTS `{table}`")
-                        target_cursor.execute(create_sql)
-                target_cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
-        except Exception as e:
-            if db_name in settings.DATABASES:
-                del settings.DATABASES[db_name]
-            raise Exception(f"Erro ao copiar tabelas não gerenciadas para o novo banco: {str(e)}")
-            
-        # 4. Roda migrações do Django na nova base de dados isolada em uma thread separada
-        # para evitar conflito com a transação da requisição HTTP atual e ignorando erros seguros.
-        @contextlib.contextmanager
-        def ignore_migration_errors():
-            original_execute = CursorWrapper.execute
-            original_executemany = CursorWrapper.executemany
-            
-            def patched_execute(self, sql, params=None):
-                try:
-                    return original_execute(self, sql, params)
-                except Exception as e:
-                    import MySQLdb
-                    inner_exc = e
-                    while hasattr(inner_exc, '__cause__') and inner_exc.__cause__:
-                        inner_exc = inner_exc.__cause__
-                        
-                    if isinstance(inner_exc, (MySQLdb.OperationalError, MySQLdb.ProgrammingError, MySQLdb.IntegrityError)):
-                        code = inner_exc.args[0]
-                        # 1050: Table already exists
-                        # 1060: Duplicate column name
-                        # 1061: Duplicate key name
-                        # 1067: Invalid default value
-                        # 1072: Key column doesn't exist
-                        # 1091: Can't drop column/key
-                        # 1022: Duplicate key/constraint
-                        # 1826: Duplicate foreign key constraint
-                        # 3734: Failed to add foreign key constraint (referenced column missing)
-                        # 1215: Cannot add foreign key constraint
-                        # 1553: Cannot drop index needed in foreign key constraint
-                        # 1146: Table doesn't exist
-                        # 1051: Unknown table
-                        if code in (1050, 1060, 1061, 1067, 1072, 1091, 1022, 1826, 3734, 1215, 1553, 1146, 1051):
-                            return
-                    raise e
-                    
-            def patched_executemany(self, sql, param_list):
-                try:
-                    return original_executemany(self, sql, param_list)
-                except Exception as e:
-                    import MySQLdb
-                    inner_exc = e
-                    while hasattr(inner_exc, '__cause__') and inner_exc.__cause__:
-                        inner_exc = inner_exc.__cause__
-                        
-                    if isinstance(inner_exc, (MySQLdb.OperationalError, MySQLdb.ProgrammingError, MySQLdb.IntegrityError)):
-                        code = inner_exc.args[0]
-                        if code in (1050, 1060, 1061, 1067, 1072, 1091, 1022, 1826, 3734, 1215, 1553, 1146, 1051):
-                            return
-                    raise e
-
-            CursorWrapper.execute = patched_execute
-            CursorWrapper.executemany = patched_executemany
-            try:
-                yield
-            finally:
-                CursorWrapper.execute = original_execute
-                CursorWrapper.executemany = original_executemany
-
+        # 3. Roda migrações do Django na nova base de dados isolada em uma thread separada
+        # para evitar conflito com a transação da requisição HTTP atual.
         exception_holder = []
         
         def run_migration():
             try:
-                # Desabilita foreign keys no início da thread para a nova conexão
-                with connections[db_name].cursor() as cursor:
-                    cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
-                
-                with ignore_migration_errors():
-                    call_command('migrate', database=db_name, interactive=False)
-                    
-                with connections[db_name].cursor() as cursor:
-                    cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
+                call_command('migrate', database=db_name, interactive=False)
             except Exception as e:
                 exception_holder.append(e)
                 

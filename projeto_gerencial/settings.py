@@ -33,7 +33,7 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,testserver'
 
 # Adiciona IPs específicos da rede local para garantir acesso
 # O '*' permite qualquer domínio (incluindo aperus.com.br via túnel Cloudflare)
-ALLOWED_HOSTS += ['192.168.1.8', '192.168.1.6', '10.0.6.186', '*']
+ALLOWED_HOSTS += ['192.168.1.8', '192.168.1.6', '10.0.6.186', 'sistema.aperus.com.br', 'central.aperus.com.br', '*']
 
 
 # Application definition
@@ -349,4 +349,17 @@ LOGGING = {
         },
     },
 }
+
+import os
+
+# Identificador exclusivo do ambiente
+IS_CENTRAL = True
+
+# Caminho físico absoluto da pasta central no Windows Server
+PASTA_PROJETO_CENTRAL = r"C:\aperus\aperus_mae"
+
+# Chave secreta para validação do Webhook do GitHub
+GITHUB_WEBHOOK_SECRET = config('GITHUB_WEBHOOK_SECRET', default='')
+
+
 

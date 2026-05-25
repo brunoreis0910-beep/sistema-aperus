@@ -32,16 +32,16 @@ if not exist .env (
 echo [1/2] Ativando ambiente virtual...
 call .venv\Scripts\activate.bat
 
-echo [2/2] Iniciando servidor Django na porta 8005...
+echo [2/2] Iniciando servidor Django na porta 8006...
 echo.
 echo ════════════════════════════════════════════════════════════════
-echo   Sistema rodando em: http://localhost:8005
-echo   Admin: http://localhost:8005/admin/
+echo   Sistema rodando em: http://localhost:8006
+echo   Admin: http://localhost:8006/admin/
 echo.
 echo   Para parar: Pressione Ctrl+C
 echo ════════════════════════════════════════════════════════════════
 echo.
 
-python manage.py runserver 0.0.0.0:8005
+python manage.py runserver 0.0.0.0:8006
 
 pause
