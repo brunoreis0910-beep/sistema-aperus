@@ -5,7 +5,7 @@ from django.db import migrations, models, connection
 
 
 def create_formas_pagamento(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     if is_sqlite:
         sql = """
@@ -26,19 +26,20 @@ def create_formas_pagamento(apps, schema_editor):
         ) ENGINE=InnoDB
         """
     
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         cursor.execute(sql)
 
 
 def drop_formas_pagamento(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     table_name = 'formas_pagamento' if is_sqlite else '`formas_pagamento`'
     
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
 
 
 class Migration(migrations.Migration):
+    atomic = False
 
     dependencies = [
         ('api', '0011_delete_formapagamento'),

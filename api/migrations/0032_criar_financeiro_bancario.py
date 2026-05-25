@@ -34,19 +34,24 @@ class Migration(migrations.Migration):
             name='contabancaria',
             options={'managed': True, 'ordering': ['nome_conta'], 'verbose_name': 'Conta BancÃ¡ria', 'verbose_name_plural': 'Contas BancÃ¡rias'},
         ),
-        migrations.RenameField(
-            model_name='financeiroconta',
-            old_name='valor_pago',
-            new_name='valor_desconto',
-        ),
-        migrations.RenameField(
-            model_name='financeiroconta',
-            old_name='valor_total',
-            new_name='valor_parcela',
-        ),
-        migrations.RemoveField(
-            model_name='financeiroconta',
-            name='centro_custo',
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],
+            state_operations=[
+                migrations.RenameField(
+                    model_name='financeiroconta',
+                    old_name='valor_pago',
+                    new_name='valor_desconto',
+                ),
+                migrations.RenameField(
+                    model_name='financeiroconta',
+                    old_name='valor_total',
+                    new_name='valor_parcela',
+                ),
+                migrations.RemoveField(
+                    model_name='financeiroconta',
+                    name='centro_custo',
+                ),
+            ]
         ),
         migrations.RemoveField(
             model_name='produto',
@@ -114,95 +119,110 @@ class Migration(migrations.Migration):
             name='tipo_conta',
             field=models.CharField(choices=[('C', 'Conta Corrente'), ('P', 'PoupanÃ§a')], default='C', help_text='Tipo da conta bancÃ¡ria', max_length=1),
         ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='documento_numero',
-            field=models.CharField(blank=True, max_length=50, null=True),
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],
+            state_operations=[
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='documento_numero',
+                    field=models.CharField(blank=True, max_length=50, null=True),
+                ),
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='gerencial',
+                    field=models.IntegerField(blank=True, default=0, null=True),
+                ),
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='id_centro_custo',
+                    field=models.ForeignKey(blank=True, db_column='id_centro_custo', null=True, on_delete=django.db.models.deletion.SET_NULL, to='api.centrocusto'),
+                ),
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='id_cliente_fornecedor',
+                    field=models.ForeignKey(blank=True, db_column='id_cliente_fornecedor', null=True, on_delete=django.db.models.deletion.SET_NULL, to='api.cliente'),
+                ),
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='id_conta_baixa',
+                    field=models.ForeignKey(blank=True, db_column='id_conta_baixa', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='contas_baixa', to='api.contabancaria'),
+                ),
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='id_conta_cobranca',
+                    field=models.ForeignKey(blank=True, db_column='id_conta_cobranca', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='contas_cobranca', to='api.contabancaria'),
+                ),
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='id_departamento',
+                    field=models.ForeignKey(blank=True, db_column='id_departamento', null=True, on_delete=django.db.models.deletion.SET_NULL, to='api.departamento'),
+                ),
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='id_operacao',
+                    field=models.ForeignKey(blank=True, db_column='id_operacao', null=True, on_delete=django.db.models.deletion.SET_NULL, to='api.operacao'),
+                ),
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='parcela_numero',
+                    field=models.IntegerField(blank=True, default=1, null=True),
+                ),
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='parcela_total',
+                    field=models.IntegerField(blank=True, default=1, null=True),
+                ),
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='valor_juros',
+                    field=models.DecimalField(blank=True, decimal_places=2, default=0.0, max_digits=10, null=True),
+                ),
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='valor_liquidado',
+                    field=models.DecimalField(blank=True, decimal_places=2, default=0.0, max_digits=10, null=True),
+                ),
+                migrations.AddField(
+                    model_name='financeiroconta',
+                    name='valor_multa',
+                    field=models.DecimalField(blank=True, decimal_places=2, default=0.0, max_digits=10, null=True),
+                ),
+            ]
         ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='gerencial',
-            field=models.IntegerField(blank=True, default=0, null=True),
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],
+            state_operations=[
+                migrations.AddField(
+                    model_name='operacao',
+                    name='id_deposito_incremento',
+                    field=models.IntegerField(blank=True, db_column='id_deposito_incremento', null=True),
+                ),
+                migrations.AddField(
+                    model_name='operacao',
+                    name='incrementar_estoque',
+                    field=models.IntegerField(blank=True, db_column='incrementar_estoque', default=0, null=True),
+                ),
+                migrations.AddField(
+                    model_name='operacao',
+                    name='tipo_estoque_incremento',
+                    field=models.CharField(blank=True, default='Nenhum', max_length=9, null=True),
+                ),
+            ]
         ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='id_centro_custo',
-            field=models.ForeignKey(blank=True, db_column='id_centro_custo', null=True, on_delete=django.db.models.deletion.SET_NULL, to='api.centrocusto'),
-        ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='id_cliente_fornecedor',
-            field=models.ForeignKey(blank=True, db_column='id_cliente_fornecedor', null=True, on_delete=django.db.models.deletion.SET_NULL, to='api.cliente'),
-        ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='id_conta_baixa',
-            field=models.ForeignKey(blank=True, db_column='id_conta_baixa', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='contas_baixa', to='api.contabancaria'),
-        ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='id_conta_cobranca',
-            field=models.ForeignKey(blank=True, db_column='id_conta_cobranca', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='contas_cobranca', to='api.contabancaria'),
-        ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='id_departamento',
-            field=models.ForeignKey(blank=True, db_column='id_departamento', null=True, on_delete=django.db.models.deletion.SET_NULL, to='api.departamento'),
-        ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='id_operacao',
-            field=models.ForeignKey(blank=True, db_column='id_operacao', null=True, on_delete=django.db.models.deletion.SET_NULL, to='api.operacao'),
-        ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='parcela_numero',
-            field=models.IntegerField(blank=True, default=1, null=True),
-        ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='parcela_total',
-            field=models.IntegerField(blank=True, default=1, null=True),
-        ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='valor_juros',
-            field=models.DecimalField(blank=True, decimal_places=2, default=0.0, max_digits=10, null=True),
-        ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='valor_liquidado',
-            field=models.DecimalField(blank=True, decimal_places=2, default=0.0, max_digits=10, null=True),
-        ),
-        migrations.AddField(
-            model_name='financeiroconta',
-            name='valor_multa',
-            field=models.DecimalField(blank=True, decimal_places=2, default=0.0, max_digits=10, null=True),
-        ),
-        migrations.AddField(
-            model_name='operacao',
-            name='id_deposito_incremento',
-            field=models.IntegerField(blank=True, db_column='id_deposito_incremento', null=True),
-        ),
-        migrations.AddField(
-            model_name='operacao',
-            name='incrementar_estoque',
-            field=models.IntegerField(blank=True, db_column='incrementar_estoque', default=0, null=True),
-        ),
-        migrations.AddField(
-            model_name='operacao',
-            name='tipo_estoque_incremento',
-            field=models.CharField(blank=True, default='Nenhum', max_length=9, null=True),
-        ),
-        migrations.AddField(
-            model_name='produto',
-            name='id_grupo',
-            field=models.ForeignKey(blank=True, db_column='id_grupo', null=True, on_delete=django.db.models.deletion.DO_NOTHING, to='api.grupoproduto'),
-        ),
-        migrations.AddField(
-            model_name='produto',
-            name='imagem_url',
-            field=models.CharField(blank=True, max_length=500, null=True),
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],
+            state_operations=[
+                migrations.AddField(
+                    model_name='produto',
+                    name='id_grupo',
+                    field=models.ForeignKey(blank=True, db_column='id_grupo', null=True, on_delete=django.db.models.deletion.DO_NOTHING, to='api.grupoproduto'),
+                ),
+                migrations.AddField(
+                    model_name='produto',
+                    name='imagem_url',
+                    field=models.CharField(blank=True, max_length=500, null=True),
+                ),
+            ]
         ),
         migrations.AlterField(
             model_name='contabancaria',

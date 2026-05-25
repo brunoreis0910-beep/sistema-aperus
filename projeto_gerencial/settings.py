@@ -63,6 +63,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # CORS deve ser o PRIMEIRO
     'django.middleware.security.SecurityMiddleware',
+    'api.middleware_tenant.TenantMiddleware',  # Multi-tenancy database connection router
     'whitenoise.middleware.WhiteNoiseMiddleware', # <-- WhiteNoise para arquivos estáticos
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -140,6 +141,9 @@ else:
             },
         }
     }
+
+# Roteador de banco de dados para Multi-tenancy
+DATABASE_ROUTERS = ['api.db_router.TenantRouter']
 
 # --- 2. CONFIGURAÇÃO DE AUTENTICAÇÃO (JWT) ---
 REST_FRAMEWORK = {

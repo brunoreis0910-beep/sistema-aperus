@@ -2,14 +2,14 @@ from django.db import migrations, connection
 
 
 def add_incremento_columns(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     columns_to_add = [
         ('incrementar_estoque', 'TINYINT DEFAULT 0', 'INTEGER DEFAULT 0'),
         ('id_deposito_incremento', 'INT', 'INTEGER'),
     ]
     
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         if is_sqlite:
             cursor.execute("PRAGMA table_info(operacoes)")
             existing_cols = [row[1] for row in cursor.fetchall()]
@@ -35,15 +35,16 @@ def add_incremento_columns(apps, schema_editor):
 
 
 def remove_incremento_columns(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     if not is_sqlite:
-        with connection.cursor() as cursor:
+        with schema_editor.connection.cursor() as cursor:
             cursor.execute("ALTER TABLE `operacoes` DROP COLUMN IF EXISTS `id_deposito_incremento`")
             cursor.execute("ALTER TABLE `operacoes` DROP COLUMN IF EXISTS `incrementar_estoque`")
 
 
 class Migration(migrations.Migration):
+    atomic = False
     dependencies = [
         ("api", "0021_add_vendas_columns"),
     ]

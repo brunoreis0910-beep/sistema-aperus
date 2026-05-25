@@ -2,9 +2,9 @@ from django.db import migrations, connection
 
 
 def add_tipo_estoque_incremento(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         if is_sqlite:
             # SQLite: Verificar se coluna já existe
             cursor.execute("PRAGMA table_info(operacoes)")
@@ -35,9 +35,9 @@ def add_tipo_estoque_incremento(apps, schema_editor):
 
 
 def remove_tipo_estoque_incremento(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         if is_sqlite:
             # SQLite não suporta DROP COLUMN facilmente
             # Vamos apenas deixar a coluna (não causa problema)
@@ -47,6 +47,7 @@ def remove_tipo_estoque_incremento(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    atomic = False
     dependencies = []
 
     operations = [

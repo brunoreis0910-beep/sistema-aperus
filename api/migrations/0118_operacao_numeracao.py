@@ -30,6 +30,10 @@ class Migration(migrations.Migration):
                 'ordering': ['id_operacao', 'serie', 'ambiente'],
             },
         ),
+        migrations.AlterUniqueTogether(
+            name='produtobalanca',
+            unique_together=None,
+        ),
         migrations.RemoveField(
             model_name='boleto',
             name='id_cliente',
@@ -197,10 +201,7 @@ class Migration(migrations.Migration):
             model_name='ordemproducaoconsumo',
             name='produto_insumo',
         ),
-        migrations.AlterUniqueTogether(
-            name='produtobalanca',
-            unique_together=None,
-        ),
+
         migrations.RemoveField(
             model_name='produtobalanca',
             name='produto',

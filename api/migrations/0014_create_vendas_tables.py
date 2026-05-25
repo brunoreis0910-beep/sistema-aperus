@@ -2,7 +2,7 @@ from django.db import migrations, connection
 
 
 def create_vendas_tables(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     if is_sqlite:
         vendas_sql = """
@@ -67,13 +67,13 @@ def create_vendas_tables(apps, schema_editor):
         ) ENGINE=InnoDB
         """
     
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         cursor.execute(vendas_sql)
         cursor.execute(itens_sql)
 
 
 def drop_vendas_tables(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     if is_sqlite:
         drop_itens = "DROP TABLE IF EXISTS venda_itens"
@@ -82,12 +82,13 @@ def drop_vendas_tables(apps, schema_editor):
         drop_itens = "DROP TABLE IF EXISTS `venda_itens`"
         drop_vendas = "DROP TABLE IF EXISTS `vendas`"
     
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         cursor.execute(drop_itens)
         cursor.execute(drop_vendas)
 
 
 class Migration(migrations.Migration):
+    atomic = False
     dependencies = [
         ("api", "0013_merge"),
     ]

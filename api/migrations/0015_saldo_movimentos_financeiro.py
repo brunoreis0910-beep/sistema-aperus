@@ -2,7 +2,7 @@ from django.db import migrations, connection
 
 
 def create_estoque_tables(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     if is_sqlite:
         saldo_sql = """
@@ -53,13 +53,13 @@ def create_estoque_tables(apps, schema_editor):
         ) ENGINE=InnoDB
         """
     
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         cursor.execute(saldo_sql)
         cursor.execute(movimentos_sql)
 
 
 def drop_estoque_tables(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     if is_sqlite:
         drop_movimentos = "DROP TABLE IF EXISTS movimentos_estoque"
@@ -68,12 +68,13 @@ def drop_estoque_tables(apps, schema_editor):
         drop_movimentos = "DROP TABLE IF EXISTS `movimentos_estoque`"
         drop_saldo = "DROP TABLE IF EXISTS `saldo_deposito`"
     
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         cursor.execute(drop_movimentos)
         cursor.execute(drop_saldo)
 
 
 class Migration(migrations.Migration):
+    atomic = False
     dependencies = [
         ("api", "0014_create_vendas_tables"),
     ]

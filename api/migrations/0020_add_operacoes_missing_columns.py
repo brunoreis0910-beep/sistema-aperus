@@ -2,7 +2,7 @@ from django.db import migrations, connection
 
 
 def add_operacoes_columns(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     columns_to_add = [
         ('empresa', 'VARCHAR(100)'),
@@ -12,7 +12,7 @@ def add_operacoes_columns(apps, schema_editor):
         ('serie_nf', 'INT DEFAULT 1', 'INTEGER DEFAULT 1'),
     ]
     
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         if is_sqlite:
             # SQLite: Verificar colunas existentes
             cursor.execute("PRAGMA table_info(operacoes)")
@@ -49,16 +49,17 @@ def add_operacoes_columns(apps, schema_editor):
 
 def remove_operacoes_columns(apps, schema_editor):
     # SQLite não suporta DROP COLUMN facilmente, deixar as colunas
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     if not is_sqlite:
-        with connection.cursor() as cursor:
+        with schema_editor.connection.cursor() as cursor:
             columns = ['serie_nf', 'emitente', 'modelo_documento', 'transacao', 'empresa']
             for col in columns:
                 cursor.execute(f"ALTER TABLE `operacoes` DROP COLUMN IF EXISTS `{col}`")
 
 
 class Migration(migrations.Migration):
+    atomic = False
     dependencies = [
         ("api", "0019_merge"),
     ]

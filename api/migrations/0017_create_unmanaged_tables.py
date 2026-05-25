@@ -3,10 +3,27 @@ from django.db import migrations, connection
 
 def create_tables(apps, schema_editor):
     """Create unmanaged tables with database-specific SQL"""
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     if is_sqlite:
         # SQLite syntax
+        schema_editor.execute("""
+            CREATE TABLE IF NOT EXISTS deposito (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome VARCHAR(100) NOT NULL,
+                descricao TEXT,
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                estoque_baixo INTEGER DEFAULT 0,
+                estoque_incremento INTEGER DEFAULT 0
+            )
+        """)
+        schema_editor.execute("""
+            CREATE TABLE IF NOT EXISTS grupos_produto (
+                id_grupo INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome_grupo VARCHAR(100) NOT NULL
+            )
+        """)
         schema_editor.execute("""
             CREATE TABLE IF NOT EXISTS contas_bancarias (
                 id_conta_bancaria INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,6 +60,23 @@ def create_tables(apps, schema_editor):
         """)
     else:
         # MySQL syntax
+        schema_editor.execute("""
+            CREATE TABLE IF NOT EXISTS `deposito` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `nome` VARCHAR(100) NOT NULL,
+                `descricao` TEXT,
+                `criado_em` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                `atualizado_em` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                `estoque_baixo` INT NOT NULL DEFAULT 0,
+                `estoque_incremento` INT NOT NULL DEFAULT 0
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        schema_editor.execute("""
+            CREATE TABLE IF NOT EXISTS `grupos_produto` (
+                `id_grupo` INT AUTO_INCREMENT PRIMARY KEY,
+                `nome_grupo` VARCHAR(100) NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
         schema_editor.execute("""
             CREATE TABLE IF NOT EXISTS `contas_bancarias` (
                 `id_conta_bancaria` INT AUTO_INCREMENT PRIMARY KEY,
@@ -85,9 +119,13 @@ def drop_tables(apps, schema_editor):
     schema_editor.execute("DROP TABLE IF EXISTS departamentos")
     schema_editor.execute("DROP TABLE IF EXISTS centro_custo")
     schema_editor.execute("DROP TABLE IF EXISTS contas_bancarias")
+    schema_editor.execute("DROP TABLE IF EXISTS deposito")
+    schema_editor.execute("DROP TABLE IF EXISTS grupos_produto")
 
 
 class Migration(migrations.Migration):
+    atomic = False
+
     # Make this migration depend on an earlier, stable migration so
     # unmanaged tables are created before migrations that reference them
     # (avoids circular dependency with later merge migrations).

@@ -4,7 +4,7 @@ from django.db import migrations
 def add_columns_if_not_exists(apps, schema_editor):
     """Adiciona as colunas de Aproveitamento ICMS ao MySQL de forma segura."""
     connection = schema_editor.connection
-    cursor = connection.cursor()
+    cursor = schema_editor.connection.cursor()
     cursor.execute(
         "SELECT COUNT(*) FROM information_schema.COLUMNS "
         "WHERE TABLE_SCHEMA = DATABASE() "

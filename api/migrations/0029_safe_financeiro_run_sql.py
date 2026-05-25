@@ -109,6 +109,7 @@ def forwards(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    atomic = False
 
     dependencies = [
         ('api', '0028_fornecedor_alter_centrocusto_options_and_more'),

@@ -3,7 +3,7 @@
 from django.db import migrations, connection
 
 def add_cliente_fields(apps, schema_editor):
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         # Check existing columns
         cursor.execute("SHOW COLUMNS FROM clientes")
         columns = [row[0] for row in cursor.fetchall()]
@@ -30,7 +30,7 @@ def add_cliente_fields(apps, schema_editor):
         """)
 
 def remove_cliente_fields(apps, schema_editor):
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         cursor.execute("DROP TABLE IF EXISTS clientes_grupos_excecao")
         
         cursor.execute("SHOW COLUMNS FROM clientes")
@@ -46,6 +46,7 @@ def remove_cliente_fields(apps, schema_editor):
             cursor.execute("ALTER TABLE clientes DROP COLUMN priorizar_desconto_cliente")
 
 class Migration(migrations.Migration):
+    atomic = False
 
     dependencies = [
         ('api', '0170_operacao_tipo_desconto'),

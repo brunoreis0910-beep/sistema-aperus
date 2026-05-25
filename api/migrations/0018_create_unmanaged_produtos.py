@@ -3,7 +3,7 @@ from django.db import migrations, connection
 
 def create_produtos_table(apps, schema_editor):
     """Create produtos table with database-specific SQL"""
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     if is_sqlite:
         schema_editor.execute("""
@@ -55,6 +55,7 @@ def drop_produtos_table(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    atomic = False
     dependencies = [
         ('api', '0017_create_unmanaged_tables'),
     ]

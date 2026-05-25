@@ -2,7 +2,7 @@ from django.db import migrations, connection
 
 
 def add_vendas_columns(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     columns_to_add = [
         ('criado_por', 'INT', 'INTEGER'),
@@ -10,7 +10,7 @@ def add_vendas_columns(apps, schema_editor):
         ('vista', 'TINYINT(1) DEFAULT 0', 'INTEGER DEFAULT 0'),
     ]
     
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         if is_sqlite:
             # SQLite: Verificar colunas existentes
             cursor.execute("PRAGMA table_info(vendas)")
@@ -41,16 +41,17 @@ def add_vendas_columns(apps, schema_editor):
 
 def remove_vendas_columns(apps, schema_editor):
     # SQLite não suporta DROP COLUMN facilmente
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     if not is_sqlite:
-        with connection.cursor() as cursor:
+        with schema_editor.connection.cursor() as cursor:
             columns = ['vista', 'gerou_financeiro', 'criado_por']
             for col in columns:
                 cursor.execute(f"ALTER TABLE `vendas` DROP COLUMN IF EXISTS `{col}`")
 
 
 class Migration(migrations.Migration):
+    atomic = False
     dependencies = [
         ("api", "0020_add_operacoes_missing_columns"),
     ]

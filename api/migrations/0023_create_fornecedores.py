@@ -2,7 +2,7 @@ from django.db import migrations, connection
 
 
 def create_fornecedores_table(apps, schema_editor):
-    is_sqlite = connection.vendor == 'sqlite'
+    is_sqlite = schema_editor.connection.vendor == 'sqlite'
     
     if is_sqlite:
         sql = '''
@@ -47,16 +47,17 @@ def create_fornecedores_table(apps, schema_editor):
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         '''
     
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         cursor.execute(sql)
 
 
 def drop_fornecedores_table(apps, schema_editor):
-    with connection.cursor() as cursor:
+    with schema_editor.connection.cursor() as cursor:
         cursor.execute("DROP TABLE IF EXISTS fornecedores")
 
 
 class Migration(migrations.Migration):
+    atomic = False
 
     dependencies = [
         ('api', '0022_merge_20251028_1116'),

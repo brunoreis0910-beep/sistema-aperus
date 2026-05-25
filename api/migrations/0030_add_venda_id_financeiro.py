@@ -104,6 +104,7 @@ def reverse_safe_add_and_populate(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    atomic = False
 
     dependencies = [
         ('api', '0029_safe_financeiro_run_sql'),

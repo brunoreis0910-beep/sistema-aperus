@@ -22,6 +22,7 @@ def add_hotelaria_columns(apps, schema_editor):
                 cur.execute(f"ALTER TABLE user_parametros ADD COLUMN {col_name} {col_type}")
 
 class Migration(migrations.Migration):
+    atomic = False
 
     dependencies = [
         ('api', '0176_venda_chave_nfse_venda_data_emissao_nfse_and_more'),

@@ -49,6 +49,7 @@ def remove_empresa_config_columns(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    atomic = False
 
     dependencies = [
         ('api', '0108_venda_chave_nfe_referenciada'),
