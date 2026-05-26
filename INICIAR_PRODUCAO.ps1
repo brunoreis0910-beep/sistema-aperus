@@ -92,7 +92,7 @@ if (Test-Path "frontend\package.json") {
 # ────────────────────────────────────────────────────────────
 Step "Coletando arquivos estáticos..."
 
-python manage.py collectstatic --noinput --clear -v 0 2>&1
+.\.venv\Scripts\python.exe manage.py collectstatic --noinput --clear -v 0 2>&1
 if ($LASTEXITCODE -eq 0) {
     Write-Host "  ✅ Arquivos estáticos coletados." -ForegroundColor Green
 } else {
@@ -104,7 +104,7 @@ if ($LASTEXITCODE -eq 0) {
 # ────────────────────────────────────────────────────────────
 Step "Aplicando migrações do banco de dados..."
 
-python manage.py migrate --run-syncdb 2>&1
+.\.venv\Scripts\python.exe manage.py migrate --run-syncdb 2>&1
 if ($LASTEXITCODE -eq 0) {
     Write-Host "  ✅ Migrações aplicadas." -ForegroundColor Green
 } else {
@@ -127,7 +127,7 @@ Write-Host "  Para parar o servidor: Ctrl+C" -ForegroundColor DarkGray
 Write-Host "════════════════════════════════════════════════════════════════" -ForegroundColor Green
 Write-Host ""
 
-python manage.py runserver 0.0.0.0:$PORTA --noreload
+.\.venv\Scripts\python.exe manage.py runserver 0.0.0.0:$PORTA --noreload
 
 # ALTERNATIVA RECOMENDADA: Waitress (servidor WSGI para produção no Windows)
 # Descomente a linha abaixo e comente a linha acima para usar o Waitress:
