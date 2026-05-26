@@ -1,4 +1,4 @@
-﻿// Configuração centralizada da API
+// Configuração centralizada da API
 // Detecta automaticamente o IP do servidor (WiFi ou cabo)
 
 // Detecta se está rodando dentro do Capacitor (app nativo)
@@ -57,22 +57,8 @@ const detectarIPDisponivel = async () => {
 };
 
 const getApiUrl = () => {
-  // ⚡ PRIORIDADE MÁXIMA: Variável de ambiente (produção/build)
-  // Esta DEVE ser verificada PRIMEIRO, antes de qualquer outra lógica
-  if (import.meta.env.VITE_API_URL) {
-    console.log('🔧 [PRIORIDADE 1] Usando VITE_API_URL:', import.meta.env.VITE_API_URL);
-    return import.meta.env.VITE_API_URL.replace('/api', '');
-  }
-
-  // PRIORIDADE 2: IP configurado manualmente pelo usuário (ConfiguracaoIP)
-  const ipManual = localStorage.getItem('servidor_ip');
-  if (ipManual) {
-    console.log('🔧 [PRIORIDADE 2] Usando IP manual:', ipManual);
-    return `http://${ipManual}:${SERVIDOR_PORTA}`;
-  }
-
-  // PRIORIDADE 3: Se a página está em HTTPS no domínio público, usa a mesma origem
-  // para evitar Mixed Content (nginx deve ter proxy_pass /api/ → localhost:8005)
+  // ⚡ PRIORIDADE 1: Se a página está em HTTPS no domínio público, usa a mesma origem
+  // para evitar Mixed Content (nginx deve ter proxy_pass /api/ → localhost:8005/8006)
   const pageProtocol = window.location.protocol;
   const pageHostname = window.location.hostname;
   if (
@@ -80,8 +66,21 @@ const getApiUrl = () => {
     pageHostname !== 'localhost' &&
     pageHostname !== '127.0.0.1'
   ) {
-    console.log('🔒 [PRIORIDADE 3] HTTPS detectado - usando origem da página:', window.location.origin);
+    console.log('🔒 [PRIORIDADE 1] HTTPS detectado - usando origem da página:', window.location.origin);
     return window.location.origin;
+  }
+
+  // PRIORIDADE 2: Variável de ambiente (produção/build)
+  if (import.meta.env.VITE_API_URL) {
+    console.log('🔧 [PRIORIDADE 2] Usando VITE_API_URL:', import.meta.env.VITE_API_URL);
+    return import.meta.env.VITE_API_URL.replace('/api', '');
+  }
+
+  // PRIORIDADE 3: IP configurado manualmente pelo usuário (ConfiguracaoIP)
+  const ipManual = localStorage.getItem('servidor_ip');
+  if (ipManual) {
+    console.log('🔧 [PRIORIDADE 3] Usando IP manual:', ipManual);
+    return `http://${ipManual}:${SERVIDOR_PORTA}`;
   }
 
   // PRIORIDADE 4: Se estiver no Capacitor (app nativo) → usar IP fixo do servidor
