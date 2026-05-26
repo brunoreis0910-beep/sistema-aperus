@@ -4,17 +4,20 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   CircularProgress, IconButton, Stack, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Alert,
-  FormControl, InputLabel, Select, MenuItem, Tooltip, Tabs, Tab, Card, CardContent, Divider
+  FormControl, InputLabel, Select, MenuItem, Tooltip, Tabs, Tab, Card, CardContent, Divider,
+  InputAdornment
 } from '@mui/material';
 import {
   Add as AddIcon, Edit as EditIcon, Refresh as RefreshIcon,
   CheckCircle as PaidIcon, Cancel as CancelIcon, ReceiptLong as InvoiceIcon,
   Description as ContractIcon, Fingerprint as SignIcon, QrCode as QrIcon,
   ContentCopy as CopyIcon, MonetizationOn as MoneyIcon, Business as ClientIcon,
-  Warning as WarningIcon, Launch as LaunchIcon
+  Warning as WarningIcon, Launch as LaunchIcon, Search as SearchIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
+import { buscarCNPJ } from '../utils/cnpjCepUtils';
+
 
 const fmtMoeda = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -68,6 +71,7 @@ const SaaSAdminPage = () => {
   const [billingModal, setBillingModal] = useState({ open: false, clientId: null, meses: 6 });
   const [contractModal, setContractModal] = useState({ open: false, clientId: null, texto: '' });
   const [paymentModal, setPaymentModal] = useState({ open: false, payment: null });
+  const [loadingCNPJ, setLoadingCNPJ] = useState(false);
   
   // Client forms
   const [clientForm, setClientForm] = useState({
@@ -141,6 +145,38 @@ const SaaSAdminPage = () => {
       });
     }
     setClientModal({ open: true, mode, data });
+  };
+
+  const handleBuscaCNPJ = async () => {
+    const cnpj = clientForm.cnpj.replace(/\D/g, '');
+    if (cnpj.length !== 14) {
+      showToast('Digite um CNPJ com 14 números.', 'warning');
+      return;
+    }
+    setLoadingCNPJ(true);
+    try {
+      const dados = await buscarCNPJ(cnpj);
+      setClientForm(p => {
+        const baseName = dados.nome_fantasia || dados.razao_social || '';
+        const suggestedSchema = baseName
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9_-]/g, '')
+          .substring(0, 30);
+        
+        return {
+          ...p,
+          razao_social: dados.razao_social || '',
+          schema_name: p.schema_name || suggestedSchema
+        };
+      });
+      showToast('Dados do CNPJ carregados com sucesso!', 'success');
+    } catch (err) {
+      showToast(err.message || 'Erro ao buscar CNPJ.', 'error');
+    } finally {
+      setLoadingCNPJ(false);
+    }
   };
 
   const handleSaveClient = async () => {
@@ -529,6 +565,24 @@ const SaaSAdminPage = () => {
                 label="CNPJ *" fullWidth size="small"
                 value={clientForm.cnpj} onChange={(e) => setClientForm({ ...clientForm, cnpj: e.target.value })}
                 placeholder="00.000.000/0000-00"
+                disabled={loadingCNPJ}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <span>
+                        <IconButton
+                          aria-label="buscar cnpj"
+                          onClick={handleBuscaCNPJ}
+                          disabled={loadingCNPJ || Boolean(clientForm.cnpj && clientForm.cnpj.replace(/\D/g, '').length !== 14)}
+                          edge="end"
+                          size="small"
+                        >
+                          {loadingCNPJ ? <CircularProgress size={20} /> : <SearchIcon />}
+                        </IconButton>
+                      </span>
+                    </InputAdornment>
+                  ),
+                }}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
