@@ -1274,6 +1274,26 @@ class EmpresaConfig(models.Model):
     
     cnae = models.CharField(max_length=10, blank=True, null=True, help_text="Código CNAE Fiscal")
 
+    # MDFe / Outros Documentos Fiscais
+    ambiente_mdfe = models.CharField(max_length=1, choices=AMBIENTE_CHOICES, default='2', blank=True, null=True, help_text="Ambiente de emissão MDFe")
+    rntrc_empresa = models.CharField(max_length=8, blank=True, null=True, help_text="RNTRC da Empresa")
+    serie_mdfe = models.CharField(max_length=3, default='1', blank=True, null=True, help_text="Série padrão para emissão de MDFe")
+    ultimo_numero_mdfe = models.IntegerField(default=0, blank=True, null=True, help_text="Último número de MDFe emitido")
+
+    # NF-e
+    ultimo_numero_nfe = models.IntegerField(default=0, help_text="Último número de NF-e emitido")
+    serie_nfe_padrao = models.CharField(max_length=3, default='1', help_text="Série padrão para emissão de NF-e")
+
+    # Aproveitamento ICMS
+    nfe_aproveitamento_icms_ativo = models.BooleanField(default=False, help_text="Aproveitamento de ICMS Ativo")
+    nfe_aproveitamento_icms_aliquota = models.DecimalField(max_digits=7, decimal_places=4, default=0.0000, blank=True, null=True, help_text="Alíquota de Aproveitamento de ICMS (%)")
+    nfe_aproveitamento_icms_mensagem = models.TextField(blank=True, null=True, help_text="Mensagem de Aproveitamento de ICMS")
+    nfe_aproveitamento_icms_csosns = models.CharField(max_length=100, blank=True, null=True, help_text="CSOSNs para Aproveitamento de ICMS")
+
+    # Habilitação SPED
+    sped_habilitar_icms = models.BooleanField(default=True, blank=True, null=True, help_text="Habilitar SPED ICMS/IPI")
+    sped_habilitar_contrib = models.BooleanField(default=True, blank=True, null=True, help_text="Habilitar SPED Contribuições")
+
     class Meta:
         managed = False
         db_table = 'empresa_config'
