@@ -235,7 +235,8 @@ const SaaSAdminPage = () => {
   };
 
   const handleSaveClient = async () => {
-    if (!clientForm.cnpj || !clientForm.razao_social || !clientForm.valor_mensalidade || !clientForm.schema_name) {
+    const isTest = clientForm.is_test_environment;
+    if (!clientForm.cnpj || !clientForm.razao_social || (!isTest && !clientForm.valor_mensalidade) || !clientForm.schema_name) {
       showToast('Por favor, preencha todos os campos obrigatórios (incluindo o Identificador).', 'warning');
       return;
     }
@@ -244,7 +245,8 @@ const SaaSAdminPage = () => {
     const cleanForm = { 
       ...clientForm, 
       cnpj: clientForm.cnpj.replace(/\D/g, ''),
-      schema_name: clientForm.schema_name.toLowerCase().replace(/[^a-z0-9_-]/g, '')
+      schema_name: clientForm.schema_name.toLowerCase().replace(/[^a-z0-9_-]/g, ''),
+      valor_mensalidade: isTest ? (clientForm.valor_mensalidade || '0.00') : clientForm.valor_mensalidade
     };
 
     try {
@@ -447,11 +449,13 @@ const SaaSAdminPage = () => {
                               <EditIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Gerar Lote de Cobranças">
-                            <IconButton size="small" color="primary" onClick={() => setBillingModal({ open: true, clientId: c.id_saas_cliente, meses: 6 })}>
-                              <InvoiceIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+                          {!c.is_test_environment && (
+                            <Tooltip title="Gerar Lote de Cobranças">
+                              <IconButton size="small" color="primary" onClick={() => setBillingModal({ open: true, clientId: c.id_saas_cliente, meses: 6 })}>
+                                <InvoiceIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                           <Tooltip title="Gerar Termo/Contrato">
                             <IconButton size="small" color="secondary" onClick={() => setContractModal({ open: true, clientId: c.id_saas_cliente, texto: '' })}>
                               <ContractIcon fontSize="small" />

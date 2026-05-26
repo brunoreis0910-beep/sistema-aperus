@@ -3539,6 +3539,9 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         Payload: {"meses": 6}
         """
         cliente = self.get_object()
+        if cliente.is_test_environment:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'error': 'Não é possível gerar mensalidades para um cliente de ambiente de teste.'})
         try:
             meses = int(request.data.get('meses', 1))
         except (ValueError, TypeError):
