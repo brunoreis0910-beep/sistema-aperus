@@ -200,12 +200,12 @@ COSMOS_API_KEY=GL6eaojCxtAn2RMAFXFTjA
 }
 
 Write-Host ""
-Write-Host "[>>] Reiniciando Django na porta 8005..." -ForegroundColor Cyan
+Write-Host "[>>] Reiniciando Django na porta 8006..." -ForegroundColor Cyan
 if (Test-Path ".venv\Scripts\python.exe") {
-    Start-Process powershell -ArgumentList "-WindowStyle Minimized -ExecutionPolicy Bypass -Command `"cd '$scriptDir'; .\.venv\Scripts\python.exe manage.py runserver 0.0.0.0:8005 --noreload`""
+    Start-Process powershell -ArgumentList "-WindowStyle Minimized -ExecutionPolicy Bypass -Command `"cd '$scriptDir'; .\.venv\Scripts\python.exe manage.py runserver 0.0.0.0:8006 --noreload`""
     Write-Host "      Django iniciado com as configuracoes do .env!" -ForegroundColor Green
 } else {
-    Write-Host "      [AVISO] Execute: python manage.py runserver 0.0.0.0:8005" -ForegroundColor Yellow
+    Write-Host "      [AVISO] Execute: python manage.py runserver 0.0.0.0:8006" -ForegroundColor Yellow
 }
 
 Write-Host ""
@@ -213,6 +213,6 @@ Write-Host "============================================================" -Foreg
 Write-Host "  [OK] SERVIDOR ATUALIZADO COM SUCESSO!" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Acesse: http://aperus.com.br" -ForegroundColor White
+Write-Host "  Acesse: https://central.aperus.com.br" -ForegroundColor White
 Write-Host ""
 Read-Host "Pressione ENTER para sair"
