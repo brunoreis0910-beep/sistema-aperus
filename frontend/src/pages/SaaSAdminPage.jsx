@@ -16,7 +16,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
-import { buscarCNPJ } from '../utils/cnpjCepUtils';
+import { buscarCNPJ, buscarCEP } from '../utils/cnpjCepUtils';
 
 
 const fmtMoeda = (v) =>
@@ -72,11 +72,15 @@ const SaaSAdminPage = () => {
   const [contractModal, setContractModal] = useState({ open: false, clientId: null, texto: '' });
   const [paymentModal, setPaymentModal] = useState({ open: false, payment: null });
   const [loadingCNPJ, setLoadingCNPJ] = useState(false);
+  const [loadingCEP, setLoadingCEP] = useState(false);
+  const [modalTab, setModalTab] = useState(0);
   
   // Client forms
   const [clientForm, setClientForm] = useState({
-    cnpj: '', razao_social: '', dia_vencimento: 10,
-    valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: '',
+    cnpj: '', razao_social: '', nome_fantasia: '', inscricao_estadual: '',
+    proprietario: '', telefone: '', email: '', vendedor: '',
+    cep: '', endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
+    dia_vencimento: 10, valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: '',
     schema_name: '', db_host: 'localhost', db_port: '8005', is_test_environment: false
   });
 
@@ -123,16 +127,32 @@ const SaaSAdminPage = () => {
   };
 
   const handleOpenClientModal = (mode, data = null) => {
+    setModalTab(0);
     if (mode === 'create') {
       setClientForm({
-        cnpj: '', razao_social: '', dia_vencimento: 10,
-        valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: '',
+        cnpj: '', razao_social: '', nome_fantasia: '', inscricao_estadual: '',
+        proprietario: '', telefone: '', email: '', vendedor: '',
+        cep: '', endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
+        dia_vencimento: 10, valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: '',
         schema_name: '', db_host: 'localhost', db_port: '8005', is_test_environment: false
       });
     } else {
       setClientForm({
         cnpj: data.cnpj,
         razao_social: data.razao_social,
+        nome_fantasia: data.nome_fantasia || '',
+        inscricao_estadual: data.inscricao_estadual || '',
+        proprietario: data.proprietario || '',
+        telefone: data.telefone || '',
+        email: data.email || '',
+        vendedor: data.vendedor || '',
+        cep: data.cep || '',
+        endereco: data.endereco || '',
+        numero: data.numero || '',
+        complemento: data.complemento || '',
+        bairro: data.bairro || '',
+        cidade: data.cidade || '',
+        estado: data.estado || '',
         dia_vencimento: data.dia_vencimento,
         valor_mensalidade: data.valor_mensalidade,
         emite_nota: data.emite_nota,
@@ -168,6 +188,17 @@ const SaaSAdminPage = () => {
         return {
           ...p,
           razao_social: dados.razao_social || '',
+          nome_fantasia: dados.nome_fantasia || '',
+          inscricao_estadual: dados.inscricao_estadual || '',
+          telefone: dados.telefone || '',
+          email: dados.email || '',
+          cep: dados.cep || '',
+          endereco: dados.endereco || '',
+          numero: dados.numero || '',
+          complemento: dados.complemento || '',
+          bairro: dados.bairro || '',
+          cidade: dados.cidade || '',
+          estado: dados.estado || '',
           schema_name: p.schema_name || suggestedSchema
         };
       });
@@ -176,6 +207,30 @@ const SaaSAdminPage = () => {
       showToast(err.message || 'Erro ao buscar CNPJ.', 'error');
     } finally {
       setLoadingCNPJ(false);
+    }
+  };
+
+  const handleBuscaCEP = async () => {
+    const cep = clientForm.cep.replace(/\D/g, '');
+    if (cep.length !== 8) {
+      showToast('Digite um CEP com 8 números.', 'warning');
+      return;
+    }
+    setLoadingCEP(true);
+    try {
+      const dados = await buscarCEP(cep);
+      setClientForm(p => ({
+        ...p,
+        endereco: dados.endereco || '',
+        bairro: dados.bairro || '',
+        cidade: dados.cidade || '',
+        estado: dados.estado || ''
+      }));
+      showToast('Endereço carregado com sucesso!', 'success');
+    } catch (err) {
+      showToast(err.message || 'Erro ao buscar CEP.', 'error');
+    } finally {
+      setLoadingCEP(false);
     }
   };
 
@@ -556,122 +611,239 @@ const SaaSAdminPage = () => {
       {/* DIALOGS */}
 
       {/* 1. CLIENT MODAL */}
-      <Dialog open={clientModal.open} onClose={() => setClientModal({ ...clientModal, open: false })} maxWidth="sm" fullWidth>
+      <Dialog open={clientModal.open} onClose={() => setClientModal({ ...clientModal, open: false })} maxWidth="md" fullWidth>
         <DialogTitle>{clientModal.mode === 'create' ? 'Cadastrar Novo Cliente' : 'Editar Dados do Cliente'}</DialogTitle>
-        <DialogContent dividers>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="CNPJ *" fullWidth size="small"
-                value={clientForm.cnpj} onChange={(e) => setClientForm({ ...clientForm, cnpj: e.target.value })}
-                placeholder="00.000.000/0000-00"
-                disabled={loadingCNPJ}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <span>
-                        <IconButton
-                          aria-label="buscar cnpj"
-                          onClick={handleBuscaCNPJ}
-                          disabled={loadingCNPJ || Boolean(clientForm.cnpj && clientForm.cnpj.replace(/\D/g, '').length !== 14)}
-                          edge="end"
-                          size="small"
-                        >
-                          {loadingCNPJ ? <CircularProgress size={20} /> : <SearchIcon />}
-                        </IconButton>
-                      </span>
-                    </InputAdornment>
-                  ),
-                }}
-              />
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
+          <Tabs value={modalTab} onChange={(e, v) => setModalTab(v)} variant="fullWidth">
+            <Tab label="Dados Básicos" />
+            <Tab label="Endereço" />
+            <Tab label="Contrato & Conexão" />
+          </Tabs>
+        </Box>
+        <DialogContent dividers sx={{ minHeight: '340px' }}>
+          {modalTab === 0 && (
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="CNPJ *" fullWidth size="small"
+                  value={clientForm.cnpj} onChange={(e) => setClientForm({ ...clientForm, cnpj: e.target.value })}
+                  placeholder="00.000.000/0000-00"
+                  disabled={loadingCNPJ}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <span>
+                          <IconButton
+                            aria-label="buscar cnpj"
+                            onClick={handleBuscaCNPJ}
+                            disabled={loadingCNPJ || Boolean(clientForm.cnpj && clientForm.cnpj.replace(/\D/g, '').length !== 14)}
+                            edge="end"
+                            size="small"
+                          >
+                            {loadingCNPJ ? <CircularProgress size={20} /> : <SearchIcon />}
+                          </IconButton>
+                        </span>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Razão Social *" fullWidth size="small"
+                  value={clientForm.razao_social} onChange={(e) => setClientForm({ ...clientForm, razao_social: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Nome Fantasia" fullWidth size="small"
+                  value={clientForm.nome_fantasia} onChange={(e) => setClientForm({ ...clientForm, nome_fantasia: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Inscrição Estadual" fullWidth size="small"
+                  value={clientForm.inscricao_estadual} onChange={(e) => setClientForm({ ...clientForm, inscricao_estadual: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Proprietário / Responsável" fullWidth size="small"
+                  value={clientForm.proprietario} onChange={(e) => setClientForm({ ...clientForm, proprietario: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Vendedor / Representante" fullWidth size="small"
+                  value={clientForm.vendedor} onChange={(e) => setClientForm({ ...clientForm, vendedor: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Telefone" fullWidth size="small"
+                  value={clientForm.telefone} onChange={(e) => setClientForm({ ...clientForm, telefone: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="E-mail" fullWidth size="small"
+                  value={clientForm.email} onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
+                />
+              </Grid>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Razão Social *" fullWidth size="small"
-                value={clientForm.razao_social} onChange={(e) => setClientForm({ ...clientForm, razao_social: e.target.value })}
-              />
+          )}
+
+          {modalTab === 1 && (
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="CEP" fullWidth size="small"
+                  value={clientForm.cep} onChange={(e) => setClientForm({ ...clientForm, cep: e.target.value })}
+                  placeholder="00000-000"
+                  disabled={loadingCEP}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <span>
+                          <IconButton
+                            aria-label="buscar cep"
+                            onClick={handleBuscaCEP}
+                            disabled={loadingCEP || Boolean(clientForm.cep && clientForm.cep.replace(/\D/g, '').length !== 8)}
+                            edge="end"
+                            size="small"
+                          >
+                            {loadingCEP ? <CircularProgress size={20} /> : <SearchIcon />}
+                          </IconButton>
+                        </span>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Logradouro" fullWidth size="small"
+                  value={clientForm.endereco} onChange={(e) => setClientForm({ ...clientForm, endereco: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  label="Número" fullWidth size="small"
+                  value={clientForm.numero} onChange={(e) => setClientForm({ ...clientForm, numero: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={8}>
+                <TextField
+                  label="Complemento" fullWidth size="small"
+                  value={clientForm.complemento} onChange={(e) => setClientForm({ ...clientForm, complemento: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={5}>
+                <TextField
+                  label="Bairro" fullWidth size="small"
+                  value={clientForm.bairro} onChange={(e) => setClientForm({ ...clientForm, bairro: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={5}>
+                <TextField
+                  label="Cidade" fullWidth size="small"
+                  value={clientForm.cidade} onChange={(e) => setClientForm({ ...clientForm, cidade: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={2}>
+                <TextField
+                  label="UF" fullWidth size="small"
+                  value={clientForm.estado} onChange={(e) => setClientForm({ ...clientForm, estado: e.target.value })}
+                  inputProps={{ maxLength: 2 }}
+                />
+              </Grid>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Identificador (Schema Name) *" fullWidth size="small"
-                value={clientForm.schema_name} onChange={(e) => setClientForm({ ...clientForm, schema_name: e.target.value })}
-                placeholder="ex: testes"
-                helperText="Deves ser único (letras, números, - ou _)"
-              />
+          )}
+
+          {modalTab === 2 && (
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Identificador (Schema Name) *" fullWidth size="small"
+                  value={clientForm.schema_name} onChange={(e) => setClientForm({ ...clientForm, schema_name: e.target.value })}
+                  placeholder="ex: testes"
+                  helperText="Deve ser único (letras, números, - ou _)"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Host do Banco (db_host) *" fullWidth size="small"
+                  value={clientForm.db_host} onChange={(e) => setClientForm({ ...clientForm, db_host: e.target.value })}
+                  placeholder="localhost"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Porta do Banco (db_port) *" fullWidth size="small"
+                  value={clientForm.db_port} onChange={(e) => setClientForm({ ...clientForm, db_port: e.target.value })}
+                  placeholder="8005"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Ambiente de Teste?</InputLabel>
+                  <Select
+                    value={clientForm.is_test_environment}
+                    onChange={(e) => setClientForm({ ...clientForm, is_test_environment: e.target.value === 'true' || e.target.value === true })}
+                    label="Ambiente de Teste?"
+                  >
+                    <MenuItem value={true}>Sim</MenuItem>
+                    <MenuItem value={false}>Não</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Dia do Vencimento *" type="number" fullWidth size="small"
+                  value={clientForm.dia_vencimento} onChange={(e) => setClientForm({ ...clientForm, dia_vencimento: parseInt(e.target.value) || 10 })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Valor da Mensalidade (R$) *" type="number" fullWidth size="small"
+                  value={clientForm.valor_mensalidade} onChange={(e) => setClientForm({ ...clientForm, valor_mensalidade: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Situação da Licença</InputLabel>
+                  <Select
+                    value={clientForm.status_licenca}
+                    onChange={(e) => setClientForm({ ...clientForm, status_licenca: e.target.value })}
+                    label="Situação da Licença"
+                  >
+                    <MenuItem value="ATIVO">Ativo</MenuItem>
+                    <MenuItem value="BLOQUEADO">Bloqueado</MenuItem>
+                    <MenuItem value="DEMO">Demonstração</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Próximo Reajuste" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }}
+                  value={clientForm.data_reajuste} onChange={(e) => setClientForm({ ...clientForm, data_reajuste: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Emite Notas Fiscais?</InputLabel>
+                  <Select
+                    value={clientForm.emite_nota}
+                    onChange={(e) => setClientForm({ ...clientForm, emite_nota: e.target.value === 'true' || e.target.value === true })}
+                    label="Emite Notas Fiscais?"
+                  >
+                    <MenuItem value={true}>Sim</MenuItem>
+                    <MenuItem value={false}>Não</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Host do Banco (db_host) *" fullWidth size="small"
-                value={clientForm.db_host} onChange={(e) => setClientForm({ ...clientForm, db_host: e.target.value })}
-                placeholder="localhost"
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Porta do Banco (db_port) *" fullWidth size="small"
-                value={clientForm.db_port} onChange={(e) => setClientForm({ ...clientForm, db_port: e.target.value })}
-                placeholder="8005"
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Ambiente de Teste?</InputLabel>
-                <Select
-                  value={clientForm.is_test_environment}
-                  onChange={(e) => setClientForm({ ...clientForm, is_test_environment: e.target.value === 'true' || e.target.value === true })}
-                  label="Ambiente de Teste?"
-                >
-                  <MenuItem value={true}>Sim</MenuItem>
-                  <MenuItem value={false}>Não</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Dia do Vencimento *" type="number" fullWidth size="small"
-                value={clientForm.dia_vencimento} onChange={(e) => setClientForm({ ...clientForm, dia_vencimento: parseInt(e.target.value) || 10 })}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Valor da Mensalidade (R$) *" type="number" fullWidth size="small"
-                value={clientForm.valor_mensalidade} onChange={(e) => setClientForm({ ...clientForm, valor_mensalidade: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Situação da Licença</InputLabel>
-                <Select
-                  value={clientForm.status_licenca}
-                  onChange={(e) => setClientForm({ ...clientForm, status_licenca: e.target.value })}
-                  label="Situação da Licença"
-                >
-                  <MenuItem value="ATIVO">Ativo</MenuItem>
-                  <MenuItem value="BLOQUEADO">Bloqueado</MenuItem>
-                  <MenuItem value="DEMO">Demonstração</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Próximo Reajuste" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }}
-                value={clientForm.data_reajuste} onChange={(e) => setClientForm({ ...clientForm, data_reajuste: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Emite Notas Fiscais?</InputLabel>
-                <Select
-                  value={clientForm.emite_nota}
-                  onChange={(e) => setClientForm({ ...clientForm, emite_nota: e.target.value === 'true' || e.target.value === true })}
-                  label="Emite Notas Fiscais?"
-                >
-                  <MenuItem value={true}>Sim</MenuItem>
-                  <MenuItem value={false}>Não</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setClientModal({ ...clientModal, open: false })}>Cancelar</Button>

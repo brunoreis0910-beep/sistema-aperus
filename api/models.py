@@ -5736,6 +5736,22 @@ class SaaSCliente(models.Model):
     id_saas_cliente = models.AutoField(primary_key=True)
     cnpj = models.CharField(max_length=18, unique=False, help_text="CNPJ da empresa contratante")
     razao_social = models.CharField(max_length=255)
+    nome_fantasia = models.CharField(max_length=255, blank=True, null=True, verbose_name="Nome Fantasia")
+    inscricao_estadual = models.CharField(max_length=20, blank=True, null=True, verbose_name="Inscrição Estadual")
+    proprietario = models.CharField(max_length=255, blank=True, null=True, verbose_name="Proprietário/Responsável")
+    telefone = models.CharField(max_length=20, blank=True, null=True, verbose_name="Telefone")
+    email = models.EmailField(max_length=100, blank=True, null=True, verbose_name="E-mail")
+    vendedor = models.CharField(max_length=100, blank=True, null=True, verbose_name="Vendedor/Representante")
+    
+    # Endereço Completo
+    cep = models.CharField(max_length=10, blank=True, null=True, verbose_name="CEP")
+    endereco = models.CharField(max_length=255, blank=True, null=True, verbose_name="Logradouro")
+    numero = models.CharField(max_length=20, blank=True, null=True, verbose_name="Número")
+    complemento = models.CharField(max_length=100, blank=True, null=True, verbose_name="Complemento")
+    bairro = models.CharField(max_length=100, blank=True, null=True, verbose_name="Bairro")
+    cidade = models.CharField(max_length=100, blank=True, null=True, verbose_name="Cidade")
+    estado = models.CharField(max_length=2, blank=True, null=True, verbose_name="UF")
+
     dia_vencimento = models.IntegerField(default=10)
     valor_mensalidade = models.DecimalField(max_digits=10, decimal_places=2)
     emite_nota = models.BooleanField(default=False)
