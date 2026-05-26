@@ -5714,7 +5714,7 @@ class TTSAudioCache(models.Model):
 
 class SaaSCliente(models.Model):
     id_saas_cliente = models.AutoField(primary_key=True)
-    cnpj = models.CharField(max_length=14, unique=True, help_text="CNPJ da empresa contratante")
+    cnpj = models.CharField(max_length=18, unique=False, help_text="CNPJ da empresa contratante")
     razao_social = models.CharField(max_length=255)
     dia_vencimento = models.IntegerField(default=10)
     valor_mensalidade = models.DecimalField(max_digits=10, decimal_places=2)
@@ -5723,6 +5723,12 @@ class SaaSCliente(models.Model):
     data_reajuste = models.DateField(blank=True, null=True)
     data_cadastro = models.DateTimeField(auto_now_add=True)
 
+    # Novos campos para suportar múltiplos ambientes
+    schema_name = models.SlugField(max_length=50, unique=True, default='central', help_text="Identificador único do banco de dados (slug)")
+    db_host = models.CharField(max_length=100, default='localhost')
+    db_port = models.CharField(max_length=5, default='8005')
+    is_test_environment = models.BooleanField(default=False, help_text="Marcador para saber se é um ambiente de teste")
+
     class Meta:
         managed = True
         db_table = 'saas_cliente'
@@ -5730,7 +5736,7 @@ class SaaSCliente(models.Model):
         verbose_name_plural = 'SaaS Clientes'
 
     def __str__(self):
-        return f"{self.razao_social} ({self.cnpj})"
+        return f"{self.razao_social} ({self.schema_name})"
 
 
 class SaaSClienteMensalidade(models.Model):

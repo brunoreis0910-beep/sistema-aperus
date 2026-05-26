@@ -3481,16 +3481,17 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         # 1. Salva o cliente centralmente
         instance = serializer.save()
         
-        # 2. Provisiona o novo banco de dados no MySQL para o cliente
-        try:
-            self.provisionar_banco_cliente(instance)
-        except Exception as e:
-            # Exclui o registro central em caso de falha para evitar inconsistência
-            instance.delete()
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError({
-                'cnpj': f'Erro ao provisionar banco de dados no MySQL para este cliente: {str(e)}'
-            })
+        # 2. Provisiona o novo banco de dados no MySQL para o cliente apenas se não for ambiente de teste
+        if not instance.is_test_environment:
+            try:
+                self.provisionar_banco_cliente(instance)
+            except Exception as e:
+                # Exclui o registro central em caso de falha para evitar inconsistência
+                instance.delete()
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({
+                    'cnpj': f'Erro ao provisionar banco de dados no MySQL para este cliente: {str(e)}'
+                })
 
     def provisionar_banco_cliente(self, cliente):
         from django.db import connection
@@ -3608,14 +3609,20 @@ class SaaSClienteContratoViewSet(viewsets.ModelViewSet):
 def saas_verificar_licenca(request):
     """
     Verifica a situação da licença do CNPJ.
-    URL: /api/saas/licenca/?cnpj=...
+    URL: /api/saas/licenca/?cnpj=...&schema_name=...
     """
     cnpj = clean_cnpj(request.query_params.get('cnpj'))
     if not cnpj:
         return Response({'error': 'CNPJ é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
     
     try:
-        cliente = models.SaaSCliente.objects.get(cnpj=cnpj)
+        schema_name = request.query_params.get('schema_name')
+        if schema_name:
+            cliente = models.SaaSCliente.objects.get(cnpj=cnpj, schema_name=schema_name)
+        else:
+            cliente = models.SaaSCliente.objects.filter(cnpj=cnpj).order_by('is_test_environment').first()
+            if not cliente:
+                raise models.SaaSCliente.DoesNotExist
         
         # Bloqueio automático por mensalidades vencidas há mais de 5 dias
         cinco_dias_atras = timezone.now().date() - timedelta(days=5)
@@ -3644,7 +3651,7 @@ def saas_verificar_licenca(request):
     except models.SaaSCliente.DoesNotExist:
         return Response({
             'status_licenca': 'BLOQUEADO',
-            'motivo': 'CNPJ não localizado na base central do Aperus.'
+            'motivo': 'CNPJ ou Identificador não localizado na base central do Aperus.'
         }, status=status.HTTP_404_NOT_FOUND)
 
 
@@ -3653,14 +3660,21 @@ def saas_verificar_licenca(request):
 def saas_financeiro(request):
     """
     Lista histórico financeiro/mensalidades pendentes e pagas do cliente.
-    URL: /api/saas/financeiro/?cnpj=...
+    URL: /api/saas/financeiro/?cnpj=...&schema_name=...
     """
     cnpj = clean_cnpj(request.query_params.get('cnpj'))
     if not cnpj:
         return Response({'error': 'CNPJ é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
     
     try:
-        cliente = models.SaaSCliente.objects.get(cnpj=cnpj)
+        schema_name = request.query_params.get('schema_name')
+        if schema_name:
+            cliente = models.SaaSCliente.objects.get(cnpj=cnpj, schema_name=schema_name)
+        else:
+            cliente = models.SaaSCliente.objects.filter(cnpj=cnpj).order_by('is_test_environment').first()
+            if not cliente:
+                raise models.SaaSCliente.DoesNotExist
+        
         mensalidades = models.SaaSClienteMensalidade.objects.filter(
             saas_cliente=cliente
         ).order_by('-data_vencimento')
@@ -3668,7 +3682,7 @@ def saas_financeiro(request):
         serializer = serializers.SaaSClienteMensalidadeSerializer(mensalidades, many=True)
         return Response(serializer.data)
     except models.SaaSCliente.DoesNotExist:
-        return Response({'error': 'CNPJ não encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'CNPJ ou Identificador não encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['GET'])
@@ -3676,14 +3690,21 @@ def saas_financeiro(request):
 def saas_contrato_pendente(request):
     """
     Busca se há algum contrato pendente de assinatura para o CNPJ.
-    URL: /api/saas/contrato-pendente/?cnpj=...
+    URL: /api/saas/contrato-pendente/?cnpj=...&schema_name=...
     """
     cnpj = clean_cnpj(request.query_params.get('cnpj'))
     if not cnpj:
         return Response({'error': 'CNPJ é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
     
     try:
-        cliente = models.SaaSCliente.objects.get(cnpj=cnpj)
+        schema_name = request.query_params.get('schema_name')
+        if schema_name:
+            cliente = models.SaaSCliente.objects.get(cnpj=cnpj, schema_name=schema_name)
+        else:
+            cliente = models.SaaSCliente.objects.filter(cnpj=cnpj).order_by('is_test_environment').first()
+            if not cliente:
+                raise models.SaaSCliente.DoesNotExist
+        
         contrato = models.SaaSClienteContrato.objects.filter(
             saas_cliente=cliente,
             assinado=False
@@ -3695,7 +3716,7 @@ def saas_contrato_pendente(request):
         serializer = serializers.SaaSClienteContratoSerializer(contrato)
         return Response(serializer.data)
     except models.SaaSCliente.DoesNotExist:
-        return Response({'error': 'CNPJ não encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'CNPJ ou Identificador não encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['POST'])

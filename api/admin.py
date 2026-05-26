@@ -13,6 +13,9 @@ from .models import (
     Quarto,
     Reserva,
     ConsumoQuarto,
+    SaaSCliente,
+    SaaSClienteMensalidade,
+    SaaSClienteContrato,
 )
 
 # Configuração básica dos modelos
@@ -364,3 +367,28 @@ class ConsumoQuartoAdmin(admin.ModelAdmin):
     list_filter = ('data_lancamento',)
     search_fields = ('reserva__id_reserva', 'produto__nome_produto')
     ordering = ['-data_lancamento']
+
+
+@admin.register(SaaSCliente)
+class SaaSClienteAdmin(admin.ModelAdmin):
+    list_display = ('razao_social', 'cnpj', 'schema_name', 'db_host', 'db_port', 'is_test_environment', 'status_licenca')
+    list_filter = ('is_test_environment', 'status_licenca')
+    search_fields = ('razao_social', 'cnpj', 'schema_name')
+    ordering = ['razao_social']
+
+
+@admin.register(SaaSClienteMensalidade)
+class SaaSClienteMensalidadeAdmin(admin.ModelAdmin):
+    list_display = ('saas_cliente', 'valor_mensalidade', 'data_vencimento', 'pago', 'data_pagamento')
+    list_filter = ('pago', 'data_vencimento')
+    search_fields = ('saas_cliente__razao_social', 'saas_cliente__cnpj')
+    ordering = ['-data_vencimento']
+
+
+@admin.register(SaaSClienteContrato)
+class SaaSClienteContratoAdmin(admin.ModelAdmin):
+    list_display = ('saas_cliente', 'assinado', 'data_assinatura', 'criado_em')
+    list_filter = ('assinado', 'criado_em')
+    search_fields = ('saas_cliente__razao_social', 'saas_cliente__cnpj')
+    ordering = ['-criado_em']
+

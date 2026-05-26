@@ -72,7 +72,8 @@ const SaaSAdminPage = () => {
   // Client forms
   const [clientForm, setClientForm] = useState({
     cnpj: '', razao_social: '', dia_vencimento: 10,
-    valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: ''
+    valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: '',
+    schema_name: '', db_host: 'localhost', db_port: '8005', is_test_environment: false
   });
 
   const carregarDados = useCallback(async () => {
@@ -111,7 +112,7 @@ const SaaSAdminPage = () => {
 
   useEffect(() => {
     carregarDados();
-  }, []);
+  }, [carregarDados]);
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -121,7 +122,8 @@ const SaaSAdminPage = () => {
     if (mode === 'create') {
       setClientForm({
         cnpj: '', razao_social: '', dia_vencimento: 10,
-        valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: ''
+        valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: '',
+        schema_name: '', db_host: 'localhost', db_port: '8005', is_test_environment: false
       });
     } else {
       setClientForm({
@@ -131,20 +133,28 @@ const SaaSAdminPage = () => {
         valor_mensalidade: data.valor_mensalidade,
         emite_nota: data.emite_nota,
         status_licenca: data.status_licenca,
-        data_reajuste: data.data_reajuste || ''
+        data_reajuste: data.data_reajuste || '',
+        schema_name: data.schema_name || '',
+        db_host: data.db_host || 'localhost',
+        db_port: data.db_port || '8005',
+        is_test_environment: data.is_test_environment || false
       });
     }
     setClientModal({ open: true, mode, data });
   };
 
   const handleSaveClient = async () => {
-    if (!clientForm.cnpj || !clientForm.razao_social || !clientForm.valor_mensalidade) {
-      showToast('Por favor, preencha todos os campos obrigatórios.', 'warning');
+    if (!clientForm.cnpj || !clientForm.razao_social || !clientForm.valor_mensalidade || !clientForm.schema_name) {
+      showToast('Por favor, preencha todos os campos obrigatórios (incluindo o Identificador).', 'warning');
       return;
     }
     
-    // Clean CNPJ from masks
-    const cleanForm = { ...clientForm, cnpj: clientForm.cnpj.replace(/\D/g, '') };
+    // Clean CNPJ from masks and format schema_name as slug
+    const cleanForm = { 
+      ...clientForm, 
+      cnpj: clientForm.cnpj.replace(/\D/g, ''),
+      schema_name: clientForm.schema_name.toLowerCase().replace(/[^a-z0-9_-]/g, '')
+    };
 
     try {
       if (clientModal.mode === 'create') {
@@ -157,7 +167,7 @@ const SaaSAdminPage = () => {
       setClientModal({ open: false, mode: 'create', data: null });
       carregarDados();
     } catch (e) {
-      showToast(e.response?.data?.error || 'Erro ao salvar cliente.', 'error');
+      showToast(e.response?.data?.error || e.response?.data?.cnpj?.[0] || e.response?.data?.schema_name?.[0] || 'Erro ao salvar cliente.', 'error');
     }
   };
 
@@ -526,6 +536,41 @@ const SaaSAdminPage = () => {
                 label="Razão Social *" fullWidth size="small"
                 value={clientForm.razao_social} onChange={(e) => setClientForm({ ...clientForm, razao_social: e.target.value })}
               />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Identificador (Schema Name) *" fullWidth size="small"
+                value={clientForm.schema_name} onChange={(e) => setClientForm({ ...clientForm, schema_name: e.target.value })}
+                placeholder="ex: testes"
+                helperText="Deves ser único (letras, números, - ou _)"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Host do Banco (db_host) *" fullWidth size="small"
+                value={clientForm.db_host} onChange={(e) => setClientForm({ ...clientForm, db_host: e.target.value })}
+                placeholder="localhost"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Porta do Banco (db_port) *" fullWidth size="small"
+                value={clientForm.db_port} onChange={(e) => setClientForm({ ...clientForm, db_port: e.target.value })}
+                placeholder="8005"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Ambiente de Teste?</InputLabel>
+                <Select
+                  value={clientForm.is_test_environment}
+                  onChange={(e) => setClientForm({ ...clientForm, is_test_environment: e.target.value === 'true' || e.target.value === true })}
+                  label="Ambiente de Teste?"
+                >
+                  <MenuItem value={true}>Sim</MenuItem>
+                  <MenuItem value={false}>Não</MenuItem>
+                </Select>
+              </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
