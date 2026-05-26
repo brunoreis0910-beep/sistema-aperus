@@ -12,7 +12,8 @@ import {
   CheckCircle as PaidIcon, Cancel as CancelIcon, ReceiptLong as InvoiceIcon,
   Description as ContractIcon, Fingerprint as SignIcon, QrCode as QrIcon,
   ContentCopy as CopyIcon, MonetizationOn as MoneyIcon, Business as ClientIcon,
-  Warning as WarningIcon, Launch as LaunchIcon, Search as SearchIcon
+  Warning as WarningIcon, Launch as LaunchIcon, Search as SearchIcon,
+  SystemUpdate as UpdateIcon, Terminal as LogIcon, Delete as DeleteIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
@@ -59,6 +60,8 @@ const SaaSAdminPage = () => {
   // Data lists
   const [clientes, setClientes] = useState([]);
   const [mensalidades, setMensalidades] = useState([]);
+  const [versoes, setVersoes] = useState([]);
+  const [historicoAtualizacoes, setHistoricoAtualizacoes] = useState([]);
   
   // KPI stats
   const [stats, setStats] = useState({ activeClients: 0, overduePayments: 0, mrr: 0 });
@@ -71,6 +74,9 @@ const SaaSAdminPage = () => {
   const [billingModal, setBillingModal] = useState({ open: false, clientId: null, meses: 6 });
   const [contractModal, setContractModal] = useState({ open: false, clientId: null, texto: '' });
   const [paymentModal, setPaymentModal] = useState({ open: false, payment: null });
+  const [versionModal, setVersionModal] = useState({ open: false, versao: '', descricao: '' });
+  const [logModal, setLogModal] = useState({ open: false, title: '', log: '' });
+  const [loadingUpdate, setLoadingUpdate] = useState({});
   const [loadingCNPJ, setLoadingCNPJ] = useState(false);
   const [loadingCEP, setLoadingCEP] = useState(false);
   const [modalTab, setModalTab] = useState(0);
@@ -87,16 +93,22 @@ const SaaSAdminPage = () => {
   const carregarDados = useCallback(async () => {
     setLoading(true);
     try {
-      const [resCli, resMens] = await Promise.all([
+      const [resCli, resMens, resVers, resHist] = await Promise.all([
         axiosInstance.get('/saas-clientes/'),
-        axiosInstance.get('/saas-mensalidades/')
+        axiosInstance.get('/saas-mensalidades/'),
+        axiosInstance.get('/saas-versoes/'),
+        axiosInstance.get('/saas-historico-atualizacoes/')
       ]);
       
       const clientsData = resCli.data?.results ?? resCli.data ?? [];
       const billingData = resMens.data?.results ?? resMens.data ?? [];
+      const versionsData = resVers.data?.results ?? resVers.data ?? [];
+      const historyData = resHist.data?.results ?? resHist.data ?? [];
       
       setClientes(clientsData);
       setMensalidades(billingData);
+      setVersoes(versionsData);
+      setHistoricoAtualizacoes(historyData);
       
       // Calculate Stats
       const active = clientsData.filter(c => c.status_licenca === 'ATIVO').length;
@@ -314,6 +326,43 @@ const SaaSAdminPage = () => {
     }
   };
 
+  const handleDispararAtualizacao = async (clientId) => {
+    setLoadingUpdate(prev => ({ ...prev, [clientId]: true }));
+    try {
+      await axiosInstance.post(`/saas-clientes/${clientId}/disparar_atualizacao/`);
+      showToast('Processo de atualização disparado em segundo plano!', 'success');
+      carregarDados();
+    } catch (e) {
+      let msg = 'Erro ao disparar atualização.';
+      if (e.response?.data?.error) {
+        msg = e.response.data.error;
+      } else if (e.response?.data?.detail) {
+        msg = e.response.data.detail;
+      }
+      showToast(msg, 'error');
+    } finally {
+      setLoadingUpdate(prev => ({ ...prev, [clientId]: false }));
+    }
+  };
+
+  const handleCadastrarVersao = async () => {
+    if (!versionModal.versao) {
+      showToast('Por favor, informe a tag da versão (ex: v1.0.0).', 'warning');
+      return;
+    }
+    try {
+      await axiosInstance.post('/saas-versoes/', {
+        versao: versionModal.versao,
+        descricao: versionModal.descricao
+      });
+      showToast('Versão cadastrada com sucesso!', 'success');
+      setVersionModal({ open: false, versao: '', descricao: '' });
+      carregarDados();
+    } catch (e) {
+      showToast('Erro ao cadastrar versão.', 'error');
+    }
+  };
+
   const handleConfirmarPagamento = async (statusPagamento) => {
     try {
       const payload = {
@@ -403,6 +452,7 @@ const SaaSAdminPage = () => {
         <Tabs value={tabValue} onChange={handleTabChange} indicatorColor="primary" textColor="primary" variant="fullWidth" sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
           <Tab label="Clientes SaaS" icon={<ClientIcon />} iconPosition="start" />
           <Tab label="Faturamento e Cobranças" icon={<InvoiceIcon />} iconPosition="start" />
+          <Tab label="Atualizações do Sistema" icon={<UpdateIcon />} iconPosition="start" />
         </Tabs>
 
         {/* TAB 0 - CLIENTES */}
@@ -626,6 +676,215 @@ const SaaSAdminPage = () => {
                 </TableBody>
               </Table>
             </TableContainer>
+          </Box>
+        )}
+
+        {/* TAB 2 - UPDATES */}
+        {tabValue === 2 && (
+          <Box sx={{ p: 3 }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+              <Typography variant="h6" fontWeight={700}>Controle de Atualizações e Versões</Typography>
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />} 
+                onClick={() => setVersionModal({ open: true, versao: '', descricao: '' })}
+              >
+                Cadastrar Versão
+              </Button>
+            </Box>
+
+            <Grid container spacing={3}>
+              {/* Left Column: Version Management & History logs */}
+              <Grid item xs={12} md={4}>
+                <Stack spacing={3}>
+                  {/* Versions Card */}
+                  <Card variant="outlined" sx={{ borderRadius: 3 }}>
+                    <CardContent>
+                      <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+                        Versões Disponíveis
+                      </Typography>
+                      <Divider sx={{ mb: 2 }} />
+                      <Box sx={{ maxHeight: 200, overflowY: 'auto' }}>
+                        {versoes.map((v) => (
+                          <Paper 
+                            key={v.id_versao} 
+                            variant="outlined" 
+                            sx={{ p: 1.5, mb: 1.5, borderRadius: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                          >
+                            <Box>
+                              <Typography variant="subtitle2" fontWeight={700} color="primary">
+                                {v.versao}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {fmtData(v.data_lancamento)}
+                              </Typography>
+                            </Box>
+                            <Tooltip title={v.descricao || 'Sem descrição'}>
+                              <Chip label="Ver Notas" size="small" variant="outlined" clickable onClick={() => showToast(v.descricao || 'Sem changelog.', 'info')} />
+                            </Tooltip>
+                          </Paper>
+                        ))}
+                        {versoes.length === 0 && (
+                          <Typography align="center" color="text.secondary" variant="body2" py={2}>
+                            Nenhuma versão cadastrada.
+                          </Typography>
+                        )}
+                      </Box>
+                    </CardContent>
+                  </Card>
+
+                  {/* Logs Card */}
+                  <Card variant="outlined" sx={{ borderRadius: 3 }}>
+                    <CardContent>
+                      <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+                        Logs de Erros Recentes
+                      </Typography>
+                      <Divider sx={{ mb: 2 }} />
+                      <Box sx={{ maxHeight: 220, overflowY: 'auto' }}>
+                        {historicoAtualizacoes
+                          .filter(h => h.status === 'FALHA')
+                          .slice(0, 5)
+                          .map((h) => (
+                            <Paper 
+                              key={h.id_historico} 
+                              variant="outlined" 
+                              sx={{ p: 1.5, mb: 1.5, borderRadius: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderColor: 'error.light' }}
+                            >
+                              <Box>
+                                <Typography variant="subtitle2" fontWeight={700} color="error">
+                                  {h.cliente_razao_social}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  Versão: {h.versao_nome} | {fmtDataHora(h.data_atualizacao)}
+                                </Typography>
+                              </Box>
+                              <IconButton 
+                                size="small" 
+                                color="error" 
+                                onClick={() => setLogModal({ open: true, title: `Log de Erro - ${h.cliente_razao_social} (${h.versao_nome})`, log: h.log_erro })}
+                              >
+                                <LogIcon fontSize="small" />
+                              </IconButton>
+                            </Paper>
+                          ))}
+                        {historicoAtualizacoes.filter(h => h.status === 'FALHA').length === 0 && (
+                          <Typography align="center" color="text.secondary" variant="body2" py={2}>
+                            Nenhum log de erro registrado.
+                          </Typography>
+                        )}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Stack>
+              </Grid>
+
+              {/* Right Column: Environments list & Actions */}
+              <Grid item xs={12} md={8}>
+                <Card variant="outlined" sx={{ borderRadius: 3 }}>
+                  <CardContent>
+                    <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+                      Ambientes e Servidores
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Cliente / Identificador</TableCell>
+                            <TableCell align="center">Tipo</TableCell>
+                            <TableCell align="center">Última Versão</TableCell>
+                            <TableCell align="center">Status</TableCell>
+                            <TableCell align="center">Ações</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {clientes.map((c) => {
+                            // Find the last update history for this customer
+                            const updateHistory = historicoAtualizacoes.filter(h => h.cliente === c.id_saas_cliente);
+                            const lastUpdate = updateHistory[0]; // Ordered by -data_atualizacao in viewset
+
+                            const getStatusChip = (status) => {
+                              if (status === 'SUCESSO') return <Chip label="Sucesso" color="success" size="small" variant="outlined" sx={{ fontWeight: 'bold' }} />;
+                              if (status === 'FALHA') return <Chip label="Falha" color="error" size="small" variant="outlined" sx={{ fontWeight: 'bold' }} />;
+                              if (status === 'PROCESSANDO') return <Chip label="Processando" color="warning" size="small" variant="outlined" sx={{ fontWeight: 'bold' }} />;
+                              return <Chip label="Não Atualizado" color="default" size="small" variant="outlined" />;
+                            };
+
+                            return (
+                              <TableRow key={c.id_saas_cliente} hover>
+                                <TableCell>
+                                  <Typography variant="subtitle2" fontWeight={700}>
+                                    {c.razao_social}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                                    {c.schema_name} (Porta: {c.db_port})
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                  {c.is_test_environment ? (
+                                    <Chip label="Teste/Laboratório" color="secondary" size="small" sx={{ fontWeight: 600 }} />
+                                  ) : (
+                                    <Chip label="Produção" color="primary" size="small" sx={{ fontWeight: 600 }} />
+                                  )}
+                                </TableCell>
+                                <TableCell align="center">
+                                  {lastUpdate ? (
+                                    <Typography variant="body2" fontWeight={600} color="primary.main">
+                                      {lastUpdate.versao_nome}
+                                    </Typography>
+                                  ) : '—'}
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Box display="flex" alignItems="center" justifyContent="center" gap={0.5}>
+                                    {getStatusChip(lastUpdate?.status)}
+                                    {lastUpdate?.status === 'FALHA' && (
+                                      <Tooltip title="Ver log de erro">
+                                        <IconButton 
+                                          size="small" 
+                                          color="error"
+                                          onClick={() => setLogModal({ open: true, title: `Log de Erro - ${c.razao_social}`, log: lastUpdate.log_erro })}
+                                        >
+                                          <LogIcon fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    )}
+                                  </Box>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Button
+                                    variant="outlined"
+                                    color="primary"
+                                    size="small"
+                                    disabled={loadingUpdate[c.id_saas_cliente] || lastUpdate?.status === 'PROCESSANDO'}
+                                    onClick={() => handleDispararAtualizacao(c.id_saas_cliente)}
+                                    startIcon={
+                                      loadingUpdate[c.id_saas_cliente] || lastUpdate?.status === 'PROCESSANDO' ? (
+                                        <CircularProgress size={14} />
+                                      ) : (
+                                        <UpdateIcon fontSize="small" />
+                                      )
+                                    }
+                                  >
+                                    {lastUpdate?.status === 'PROCESSANDO' ? 'Atualizando...' : 'Atualizar'}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          {clientes.length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                                Nenhum cliente/ambiente cadastrado no sistema.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
           </Box>
         )}
       </Paper>
@@ -1011,6 +1270,63 @@ const SaaSAdminPage = () => {
             )}
             <Button onClick={() => setPaymentModal({ open: false, payment: null })}>Fechar</Button>
           </Box>
+        </DialogActions>
+      </Dialog>
+
+      {/* 5. REGISTER NEW VERSION MODAL */}
+      <Dialog open={versionModal.open} onClose={() => setVersionModal({ ...versionModal, open: false })} maxWidth="sm" fullWidth>
+        <DialogTitle>Cadastrar Nova Versão do Sistema</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <TextField
+              label="Versão *"
+              placeholder="ex: v1.1.0"
+              fullWidth
+              size="small"
+              value={versionModal.versao}
+              onChange={(e) => setVersionModal({ ...versionModal, versao: e.target.value })}
+            />
+            <TextField
+              label="Descrição / Changelog"
+              placeholder="Descreva as novidades e correções aplicadas nesta versão..."
+              multiline
+              rows={4}
+              fullWidth
+              size="small"
+              value={versionModal.descricao}
+              onChange={(e) => setVersionModal({ ...versionModal, descricao: e.target.value })}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setVersionModal({ open: false, versao: '', descricao: '' })}>Cancelar</Button>
+          <Button variant="contained" onClick={handleCadastrarVersao}>Salvar Versão</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 6. LOG DETAIL MODAL */}
+      <Dialog open={logModal.open} onClose={() => setLogModal({ open: false, title: '', log: '' })} maxWidth="md" fullWidth>
+        <DialogTitle>{logModal.title}</DialogTitle>
+        <DialogContent dividers>
+          <Typography 
+            variant="body2" 
+            component="pre" 
+            sx={{ 
+              fontFamily: 'monospace', 
+              whiteSpace: 'pre-wrap', 
+              bgcolor: 'grey.900', 
+              color: 'grey.100', 
+              p: 2, 
+              borderRadius: 2, 
+              maxHeight: 400, 
+              overflowY: 'auto' 
+            }}
+          >
+            {logModal.log || 'Nenhum log registrado.'}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLogModal({ open: false, title: '', log: '' })}>Fechar</Button>
         </DialogActions>
       </Dialog>
 

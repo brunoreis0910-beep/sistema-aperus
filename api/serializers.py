@@ -2268,9 +2268,27 @@ class SaaSClienteContratoSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class VersaoSistemaSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import VersaoSistema
+        model = VersaoSistema
+        fields = '__all__'
+
+
+class HistoricoAtualizacaoSerializer(serializers.ModelSerializer):
+    cliente_razao_social = serializers.CharField(source='cliente.razao_social', read_only=True)
+    versao_nome = serializers.CharField(source='versao.versao', read_only=True)
+
+    class Meta:
+        from .models import HistoricoAtualizacao
+        model = HistoricoAtualizacao
+        fields = '__all__'
+
+
 class SaaSClienteSerializer(serializers.ModelSerializer):
     mensalidades = SaaSClienteMensalidadeSerializer(many=True, read_only=True)
     contratos = SaaSClienteContratoSerializer(many=True, read_only=True)
+    historicos_atualizacao = HistoricoAtualizacaoSerializer(many=True, read_only=True)
 
     class Meta:
         from .models import SaaSCliente

@@ -3583,6 +3583,80 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         serializer = serializers.SaaSClienteMensalidadeSerializer(mensalidades_geradas, many=True)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=['post'])
+    def disparar_atualizacao(self, request, pk=None):
+        """
+        Dispara o script de atualização do cliente em background.
+        """
+        cliente = self.get_object()
+        # Busca a versão mais recente cadastrada
+        versao = models.VersaoSistema.objects.all().order_by('-data_lancamento').first()
+        if not versao:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'error': 'Nenhuma versão cadastrada no sistema. Cadastre uma versão primeiro.'})
+
+        # Cria o registro de histórico de atualização com status PROCESSANDO
+        historico = models.HistoricoAtualizacao.objects.create(
+            cliente=cliente,
+            versao=versao,
+            status='PROCESSANDO'
+        )
+
+        import os
+        # Determina o caminho do script
+        script_path = f"C:\\APERUS\\atualizar_{cliente.schema_name}.bat"
+        if not os.path.exists(script_path):
+            script_path = "C:\\APERUS\\atualizar_central.bat"
+
+        if not os.path.exists(script_path):
+            historico.status = 'FALHA'
+            historico.log_erro = f"Script de atualização não encontrado: {script_path}"
+            historico.save()
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'error': f'Script de atualização não encontrado: {script_path}'})
+
+        # Inicia a execução do script em background thread
+        self.executar_script_background(historico.id_historico, script_path)
+
+        serializer = serializers.HistoricoAtualizacaoSerializer(historico)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def executar_script_background(self, historico_id, script_path):
+        import subprocess
+        import threading
+
+        def target():
+            from api.models import HistoricoAtualizacao
+            try:
+                result = subprocess.run(
+                    [script_path],
+                    cwd="C:\\APERUS",
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    shell=True,
+                    timeout=300
+                )
+                log_output = f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+                historico = HistoricoAtualizacao.objects.get(pk=historico_id)
+                if result.returncode == 0:
+                    historico.status = 'SUCESSO'
+                else:
+                    historico.status = 'FALHA'
+                    historico.log_erro = log_output
+                historico.save()
+            except Exception as e:
+                try:
+                    historico = HistoricoAtualizacao.objects.get(pk=historico_id)
+                    historico.status = 'FALHA'
+                    historico.log_erro = f"Erro de subprocesso ao executar batch: {str(e)}"
+                    historico.save()
+                except Exception:
+                    pass
+
+        thread = threading.Thread(target=target)
+        thread.start()
+
 
 class SaaSClienteMensalidadeViewSet(viewsets.ModelViewSet):
     """
@@ -3603,6 +3677,27 @@ class SaaSClienteContratoViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.SaaSClienteContratoSerializer
     permission_classes = [permissions.IsAuthenticated]
     filterset_fields = ['saas_cliente', 'assinado']
+
+
+class VersaoSistemaViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciamento de versões do sistema SaaS.
+    """
+    queryset = models.VersaoSistema.objects.all().order_by('-data_lancamento')
+    serializer_class = serializers.VersaoSistemaSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    search_fields = ['versao', 'descricao']
+
+
+class HistoricoAtualizacaoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciamento de histórico de atualizações de clientes SaaS.
+    """
+    queryset = models.HistoricoAtualizacao.objects.all().order_by('-data_atualizacao')
+    serializer_class = serializers.HistoricoAtualizacaoSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filterset_fields = ['cliente', 'status', 'versao']
+    search_fields = ['cliente__razao_social', 'versao__versao']
 
 
 # ─── Public API Endpoints for Client Instances ────────────────────────────────

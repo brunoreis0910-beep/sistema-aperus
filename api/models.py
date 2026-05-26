@@ -5817,3 +5817,46 @@ class SaaSClienteContrato(models.Model):
     def __str__(self):
         return f"Contrato {self.id_contrato} - {self.saas_cliente.razao_social} - {'Assinado' if self.assinado else 'Pendente'}"
 
+
+class VersaoSistema(models.Model):
+    id_versao = models.AutoField(primary_key=True)
+    versao = models.CharField(max_length=20, unique=True, verbose_name="Versão")
+    descricao = models.TextField(blank=True, null=True, verbose_name="Descrição/Changelog")
+    data_lancamento = models.DateTimeField(auto_now_add=True, verbose_name="Data de Lançamento")
+
+    class Meta:
+        managed = True
+        db_table = 'saas_versao_sistema'
+        verbose_name = 'Versão do Sistema'
+        verbose_name_plural = 'Versões do Sistema'
+
+    def __str__(self):
+        return self.versao
+
+
+class HistoricoAtualizacao(models.Model):
+    id_historico = models.AutoField(primary_key=True)
+    cliente = models.ForeignKey(SaaSCliente, on_delete=models.CASCADE, related_name='historicos_atualizacao', db_column='saas_cliente_id')
+    versao = models.ForeignKey(VersaoSistema, on_delete=models.CASCADE, related_name='historicos', db_column='versao_id')
+    data_atualizacao = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('SUCESSO', 'Sucesso'),
+            ('FALHA', 'Falha'),
+            ('PROCESSANDO', 'Processando')
+        ],
+        default='PROCESSANDO'
+    )
+    log_erro = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = True
+        db_table = 'saas_historico_atualizacao'
+        verbose_name = 'Histórico de Atualização'
+        verbose_name_plural = 'Históricos de Atualização'
+
+    def __str__(self):
+        return f"{self.cliente.razao_social} -> {self.versao.versao} ({self.status})"
+
+
