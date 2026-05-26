@@ -48,6 +48,7 @@ if ($pythonProcs) {
 } else {
     Write-Host "      Nenhum processo em execucao." -ForegroundColor DarkGray
 }
+$headBefore = git rev-parse HEAD 2>$null
 
 $statusOutput = git status --porcelain 2>&1
 if ($statusOutput) {
@@ -77,11 +78,28 @@ if ($pullExitCode -ne 0) {
 }
 Write-Host "      OK - $(git log --oneline -1)" -ForegroundColor Green
 
+# Detectar quais arquivos foram alterados
+$reqsChanged = $false
+$npmChanged = $false
+if ($headBefore) {
+    $diffFiles = @(git diff --name-only $headBefore HEAD 2>$null)
+    $reqsChanged = $diffFiles -contains "requirements.txt"
+    $npmChanged = ($diffFiles -contains "frontend/package.json") -or ($diffFiles -contains "frontend/package-lock.json")
+} else {
+    $reqsChanged = $true
+    $npmChanged = $true
+}
+
 Write-Host ""
 Write-Host "[3/6] Atualizando dependencias Python..." -ForegroundColor Cyan
 if (Test-Path ".venv\Scripts\python.exe") {
-    & ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt
-    Write-Host "      OK." -ForegroundColor Green
+    if ($reqsChanged) {
+        Write-Host "      Detectadas alteracoes em requirements.txt. Atualizando..." -ForegroundColor Yellow
+        & ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt --quiet
+        Write-Host "      OK." -ForegroundColor Green
+    } else {
+        Write-Host "      OK (Sem alteracoes em requirements.txt)." -ForegroundColor Green
+    }
 } else {
     Write-Host "      [AVISO] .venv nao encontrado." -ForegroundColor Yellow
 }
@@ -90,11 +108,13 @@ Write-Host ""
 Write-Host "[4/6] Build do frontend..." -ForegroundColor Cyan
 if ((Test-Path "frontend\package.json") -and (Get-Command npm -ErrorAction SilentlyContinue)) {
     Push-Location frontend
-    if (Test-Path "package-lock.json") {
-        npm ci --legacy-peer-deps
+    if ($npmChanged -or (-not (Test-Path "node_modules"))) {
+        Write-Host "      Detectadas alteracoes de dependencias ou pasta node_modules ausente. Instalando npm..." -ForegroundColor Yellow
+        npm install --legacy-peer-deps --no-audit --no-fund --loglevel=error
     } else {
-        npm install --legacy-peer-deps
+        Write-Host "      OK (Sem alteracoes de dependencias npm)." -ForegroundColor Green
     }
+    Write-Host "      Executando build do frontend..." -ForegroundColor DarkGray
     npm run build
     $buildExit = $LASTEXITCODE
     Pop-Location
@@ -117,8 +137,9 @@ if (Test-Path ".venv\Scripts\python.exe") {
 Write-Host ""
 Write-Host "[6/6] Collectstatic..." -ForegroundColor Cyan
 if (Test-Path ".venv\Scripts\python.exe") {
-    & ".\.venv\Scripts\python.exe" manage.py collectstatic --noinput --clear -v 0
-    Write-Host "      OK." -ForegroundColor Green
+    # Coleta arquivos estáticos de forma incremental (sem limpar tudo) para maior velocidade
+    & ".\.venv\Scripts\python.exe" manage.py collectstatic --noinput -v 0
+    Write-Host "      OK (Arquivos estaticos sincronizados)." -ForegroundColor Green
 }
 
 # ============================================================
