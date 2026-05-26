@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Grid,
@@ -480,7 +480,7 @@ const EmpresaConfig = () => {
   const buscarCnpjEmpresa = async () => {
     const cnpj = empresaData.cpf_cnpj.replace(/\D/g, '');
     if (cnpj.length !== 14) {
-      setError('CNPJ da empresa inválido. Preencha o CNPJ na aba Dados Gerais.');
+      setError('CNPJ da empresa inválido. Digite um CNPJ com 14 números.');
       return;
     }
     try {
@@ -490,6 +490,17 @@ const EmpresaConfig = () => {
       const data = response.data;
       setEmpresaData(prev => ({
         ...prev,
+        nome_razao_social: data.razao_social || prev.nome_razao_social,
+        nome_fantasia: data.nome_fantasia || prev.nome_fantasia,
+        endereco: data.logradouro || prev.endereco,
+        numero: data.numero || prev.numero,
+        complemento: data.complemento || prev.complemento,
+        bairro: data.bairro || prev.bairro,
+        cidade: data.cidade || data.municipio || prev.cidade,
+        estado: data.uf || prev.estado,
+        cep: data.cep ? formatCEP(data.cep) : prev.cep,
+        telefone: data.telefone ? formatTelefone(data.telefone) : prev.telefone,
+        email: data.email || prev.email,
         codigo_municipio_ibge: data.codigo_municipio_ibge || prev.codigo_municipio_ibge,
         cnae: data.cnae_fiscal || prev.cnae,
       }));
@@ -688,15 +699,26 @@ const EmpresaConfig = () => {
               </Grid>
 
               <Grid item xs={12} md={4}>
-                <TextField
-                  fullWidth
-                  label="CNPJ"
-                  value={empresaData.cpf_cnpj}
-                  onChange={(e) => handleInputChange('cpf_cnpj', formatCNPJ(e.target.value))}
-                  disabled={!isEditing}
-                  variant="outlined"
-                  placeholder="00.000.000/0000-00"
-                />
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                  <TextField
+                    fullWidth
+                    label="CNPJ"
+                    value={empresaData.cpf_cnpj}
+                    onChange={(e) => handleInputChange('cpf_cnpj', formatCNPJ(e.target.value))}
+                    disabled={!isEditing || buscandoCnpjEmpresa}
+                    variant="outlined"
+                    placeholder="00.000.000/0000-00"
+                  />
+                  <Button
+                    variant="outlined"
+                    onClick={buscarCnpjEmpresa}
+                    disabled={!isEditing || buscandoCnpjEmpresa}
+                    sx={{ minWidth: 'auto', px: 1.5, height: 56, flexShrink: 0 }}
+                    title="Buscar dados da empresa via CNPJ"
+                  >
+                    {buscandoCnpjEmpresa ? <CircularProgress size={16} /> : <SearchIcon />}
+                  </Button>
+                </Box>
               </Grid>
 
               <Grid item xs={12} md={4}>
