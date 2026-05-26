@@ -258,7 +258,25 @@ const SaaSAdminPage = () => {
       setClientModal({ open: false, mode: 'create', data: null });
       carregarDados();
     } catch (e) {
-      showToast(e.response?.data?.error || e.response?.data?.cnpj?.[0] || e.response?.data?.schema_name?.[0] || 'Erro ao salvar cliente.', 'error');
+      let errorMsg = 'Erro ao salvar cliente.';
+      if (e.response?.data) {
+        if (typeof e.response.data === 'string') {
+          errorMsg = e.response.data;
+        } else if (e.response.data.error) {
+          errorMsg = e.response.data.error;
+        } else {
+          // Extrai o primeiro erro de qualquer campo retornado pelo Django REST Framework
+          const fieldErrors = Object.entries(e.response.data)
+            .map(([field, errs]) => {
+              const msg = Array.isArray(errs) ? errs[0] : errs;
+              return `${field}: ${msg}`;
+            });
+          if (fieldErrors.length > 0) {
+            errorMsg = fieldErrors.join(' | ');
+          }
+        }
+      }
+      showToast(errorMsg, 'error');
     }
   };
 
