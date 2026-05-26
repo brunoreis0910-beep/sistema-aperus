@@ -207,8 +207,8 @@ try {
     }
 
     # Reinicia Django
-    Write-Log "🚀 Reiniciando servidor Django na porta 8005..." "Green"
-    $djangoCmd = ".\.venv\Scripts\python.exe manage.py runserver 0.0.0.0:8005"
+    Write-Log "🚀 Reiniciando servidor Django na porta 8006..." "Green"
+    $djangoCmd = ".\.venv\Scripts\python.exe manage.py runserver 0.0.0.0:8006"
     Start-Process powershell -ArgumentList "-NonInteractive -WindowStyle Minimized -Command `"cd '$scriptDir'; $djangoCmd`"" -WindowStyle Minimized
 
     Write-Log "════════════════════════════════════════════════════════" "Green"

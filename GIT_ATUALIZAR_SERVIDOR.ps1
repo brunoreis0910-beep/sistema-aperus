@@ -50,7 +50,7 @@ Write-Host ""
 
 $opcao = Read-Host "Digite a opção"
 
-# ── Função: parar processos Python rodando na porta 8005 ─────
+# ── Função: parar processos Python rodando na porta 8006 ─────
 function Stop-SistemaPython {
     Write-Host ""
     Write-Host "🛑 Parando processos Python do sistema..." -ForegroundColor Yellow
