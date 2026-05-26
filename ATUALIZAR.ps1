@@ -1,4 +1,4 @@
-﻿# ATUALIZAR.ps1 - Atualizar servidor do GitHub
+# ATUALIZAR.ps1 - Atualizar servidor do GitHub
 $Host.UI.RawUI.WindowTitle = "APERUS - ATUALIZAR SERVIDOR"
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -80,7 +80,7 @@ Write-Host "      OK - $(git log --oneline -1)" -ForegroundColor Green
 Write-Host ""
 Write-Host "[3/6] Atualizando dependencias Python..." -ForegroundColor Cyan
 if (Test-Path ".venv\Scripts\python.exe") {
-    & ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt --quiet 2>&1 | Out-Null
+    & ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt
     Write-Host "      OK." -ForegroundColor Green
 } else {
     Write-Host "      [AVISO] .venv nao encontrado." -ForegroundColor Yellow
@@ -91,11 +91,11 @@ Write-Host "[4/6] Build do frontend..." -ForegroundColor Cyan
 if ((Test-Path "frontend\package.json") -and (Get-Command npm -ErrorAction SilentlyContinue)) {
     Push-Location frontend
     if (Test-Path "package-lock.json") {
-        npm ci --silent 2>&1 | Out-Null
+        npm ci --legacy-peer-deps
     } else {
-        npm install --silent 2>&1 | Out-Null
+        npm install --legacy-peer-deps
     }
-    npm run build 2>&1 | Out-Null
+    npm run build
     $buildExit = $LASTEXITCODE
     Pop-Location
     if ($buildExit -eq 0) {
@@ -110,14 +110,14 @@ if ((Test-Path "frontend\package.json") -and (Get-Command npm -ErrorAction Silen
 Write-Host ""
 Write-Host "[5/6] Migracoes do banco..." -ForegroundColor Cyan
 if (Test-Path ".venv\Scripts\python.exe") {
-    & ".\.venv\Scripts\python.exe" manage.py migrate --run-syncdb 2>&1 | Out-Null
+    & ".\.venv\Scripts\python.exe" manage.py migrate --run-syncdb
     Write-Host "      OK." -ForegroundColor Green
 }
 
 Write-Host ""
 Write-Host "[6/6] Collectstatic..." -ForegroundColor Cyan
 if (Test-Path ".venv\Scripts\python.exe") {
-    & ".\.venv\Scripts\python.exe" manage.py collectstatic --noinput --clear -v 0 2>&1 | Out-Null
+    & ".\.venv\Scripts\python.exe" manage.py collectstatic --noinput --clear -v 0
     Write-Host "      OK." -ForegroundColor Green
 }
 
