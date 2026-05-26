@@ -379,16 +379,16 @@ class SaaSClienteAdmin(admin.ModelAdmin):
 
 @admin.register(SaaSClienteMensalidade)
 class SaaSClienteMensalidadeAdmin(admin.ModelAdmin):
-    list_display = ('saas_cliente', 'valor_mensalidade', 'data_vencimento', 'pago', 'data_pagamento')
-    list_filter = ('pago', 'data_vencimento')
+    list_display = ('saas_cliente', 'valor', 'data_vencimento', 'status_pagamento', 'data_pagamento')
+    list_filter = ('status_pagamento', 'data_vencimento')
     search_fields = ('saas_cliente__razao_social', 'saas_cliente__cnpj')
     ordering = ['-data_vencimento']
 
 
 @admin.register(SaaSClienteContrato)
 class SaaSClienteContratoAdmin(admin.ModelAdmin):
-    list_display = ('saas_cliente', 'assinado', 'data_assinatura', 'criado_em')
-    list_filter = ('assinado', 'criado_em')
+    list_display = ('saas_cliente', 'assinado', 'data_assinatura', 'data_geracao')
+    list_filter = ('assinado', 'data_geracao')
     search_fields = ('saas_cliente__razao_social', 'saas_cliente__cnpj')
-    ordering = ['-criado_em']
+    ordering = ['-data_geracao']
 
