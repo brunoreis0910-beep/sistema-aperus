@@ -46,33 +46,35 @@ def corrigir():
         except Exception:
             pass
 
-    # 2. Corrigir historico de migracoes da pasta 'api'
-    migrations_dir = 'api/migrations'
-    migration_files = []
-    if os.path.exists(migrations_dir):
-        for f in os.listdir(migrations_dir):
-            if f.endswith('.py') and f != '__init__.py':
-                migration_files.append(f[:-3])
-
+    # 2. Corrigir histórico de migrações de todos os apps usando o MigrationLoader
+    from django.db.migrations.loader import MigrationLoader
+    
+    loader = MigrationLoader(connection)
+    
     with connection.cursor() as cursor:
-        cursor.execute("SELECT name FROM django_migrations WHERE app = 'api'")
-        applied = {row[0] for row in cursor.fetchall()}
+        cursor.execute("SELECT app, name FROM django_migrations")
+        applied = {(row[0], row[1]) for row in cursor.fetchall()}
         
         missing_count = 0
-        for m in sorted(migration_files):
-            if m not in applied:
-                print(f"  -> Marcando migração api.{m} como aplicada...")
+        for migration_key in loader.disk_migrations.keys():
+            app, name = migration_key
+            if (app, name) not in applied:
+                # Não marca a migração nova como aplicada (queremos que o Django a execute de verdade)
+                if app == 'api' and name == '0184_versaosistema_historicoatualizacao':
+                    continue
+                
+                print(f"  -> Marcando migração antiga {app}.{name} como aplicada...")
                 cursor.execute(
                     "INSERT INTO django_migrations (app, name, applied) VALUES (%s, %s, %s)",
-                    ['api', m, timezone.now()]
+                    [app, name, timezone.now()]
                 )
                 missing_count += 1
         
         if missing_count > 0:
             connection.commit()
-            print(f"Registradas {missing_count} migrações da app 'api' pendentes no banco.")
+            print(f"Registradas {missing_count} migrações antigas pendentes no banco central.")
         else:
-            print("Nenhuma migração da app 'api' pendente no histórico.")
+            print("Nenhuma migração antiga pendente no histórico.")
 
     print("\n=== Correção concluída! ===")
 
