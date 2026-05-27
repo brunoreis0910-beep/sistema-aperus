@@ -80,6 +80,8 @@ const SaaSAdminPage = () => {
   const [loadingCNPJ, setLoadingCNPJ] = useState(false);
   const [loadingCEP, setLoadingCEP] = useState(false);
   const [modalTab, setModalTab] = useState(0);
+  const [subTabValue, setSubTabValue] = useState(0);
+  const [loadingLote, setLoadingLote] = useState(false);
   
   // Client forms
   const [clientForm, setClientForm] = useState({
@@ -342,6 +344,25 @@ const SaaSAdminPage = () => {
       showToast(msg, 'error');
     } finally {
       setLoadingUpdate(prev => ({ ...prev, [clientId]: false }));
+    }
+  };
+
+  const handleDispararAtualizacaoLote = async () => {
+    setLoadingLote(true);
+    try {
+      await axiosInstance.post('/saas-clientes/atualizar_em_lote/');
+      showToast('Processo de atualização em lote disparado em segundo plano para todos os clientes ativos!', 'success');
+      carregarDados();
+    } catch (e) {
+      let msg = 'Erro ao disparar atualização em lote.';
+      if (e.response?.data?.error) {
+        msg = e.response.data.error;
+      } else if (e.response?.data?.detail) {
+        msg = e.response.data.detail;
+      }
+      showToast(msg, 'error');
+    } finally {
+      setLoadingLote(false);
     }
   };
 
@@ -780,109 +801,176 @@ const SaaSAdminPage = () => {
 
               {/* Right Column: Environments list & Actions */}
               <Grid item xs={12} md={8}>
-                <Card variant="outlined" sx={{ borderRadius: 3 }}>
-                  <CardContent>
-                    <Typography variant="subtitle1" fontWeight={700} gutterBottom>
-                      Ambientes e Servidores
+                <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+                  <Tabs value={subTabValue} onChange={(e, val) => setSubTabValue(val)} indicatorColor="primary" textColor="primary" variant="fullWidth">
+                    <Tab label="Atualizar em Lote" icon={<UpdateIcon />} iconPosition="start" />
+                    <Tab label="Atualizar por Cliente" icon={<ClientIcon />} iconPosition="start" />
+                  </Tabs>
+                </Box>
+
+                {subTabValue === 0 && (
+                  <Card variant="outlined" sx={{ borderRadius: 3, p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, textAlign: 'center' }}>
+                    <Box sx={{ p: 2.5, borderRadius: '50%', bgcolor: 'primary.light', color: 'primary.contrastText', mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <UpdateIcon sx={{ fontSize: 52, animation: loadingLote ? 'spin-animation 2s linear infinite' : 'none' }} />
+                    </Box>
+                    <style>
+                      {`
+                        @keyframes spin-animation {
+                          from { transform: rotate(0deg); }
+                          to { transform: rotate(360deg); }
+                        }
+                      `}
+                    </style>
+                    <Typography variant="h5" fontWeight={700} gutterBottom>
+                      Atualização em Lote
                     </Typography>
-                    <Divider sx={{ mb: 2 }} />
-                    <TableContainer>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Cliente / Identificador</TableCell>
-                            <TableCell align="center">Tipo</TableCell>
-                            <TableCell align="center">Última Versão</TableCell>
-                            <TableCell align="center">Status</TableCell>
-                            <TableCell align="center">Ações</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {clientes.map((c) => {
-                            // Find the last update history for this customer
-                            const updateHistory = historicoAtualizacoes.filter(h => h.cliente === c.id_saas_cliente);
-                            const lastUpdate = updateHistory[0]; // Ordered by -data_atualizacao in viewset
+                    <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 520, mb: 4 }}>
+                      Esta ação executa a rotina de segurança (backup obrigatório) e atualiza todos os clientes ativos de uma só vez para a versão mais recente cadastrada ({versoes[0]?.versao || 'Nenhuma versão cadastrada'}).
+                    </Typography>
 
-                            const getStatusChip = (status) => {
-                              if (status === 'SUCESSO') return <Chip label="Sucesso" color="success" size="small" variant="outlined" sx={{ fontWeight: 'bold' }} />;
-                              if (status === 'FALHA') return <Chip label="Falha" color="error" size="small" variant="outlined" sx={{ fontWeight: 'bold' }} />;
-                              if (status === 'PROCESSANDO') return <Chip label="Processando" color="warning" size="small" variant="outlined" sx={{ fontWeight: 'bold' }} />;
-                              return <Chip label="Não Atualizado" color="default" size="small" variant="outlined" />;
-                            };
+                    {/* Stats */}
+                    <Grid container spacing={2} sx={{ maxWidth: 500, mb: 4 }}>
+                      <Grid item xs={6}>
+                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, textAlign: 'center' }}>
+                          <Typography variant="h5" fontWeight={700} color="primary">
+                            {clientes.filter(c => c.status_licenca === 'ATIVO').length}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Clientes Ativos
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, textAlign: 'center' }}>
+                          <Typography variant="h5" fontWeight={700} color="secondary">
+                            {versoes[0]?.versao || 'N/A'}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Última Versão
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    </Grid>
 
-                            return (
-                              <TableRow key={c.id_saas_cliente} hover>
-                                <TableCell>
-                                  <Typography variant="subtitle2" fontWeight={700}>
-                                    {c.razao_social}
-                                  </Typography>
-                                  <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                                    {c.schema_name} (Porta: {c.db_port})
-                                  </Typography>
-                                </TableCell>
-                                <TableCell align="center">
-                                  {c.is_test_environment ? (
-                                    <Chip label="Teste/Laboratório" color="secondary" size="small" sx={{ fontWeight: 600 }} />
-                                  ) : (
-                                    <Chip label="Produção" color="primary" size="small" sx={{ fontWeight: 600 }} />
-                                  )}
-                                </TableCell>
-                                <TableCell align="center">
-                                  {lastUpdate ? (
-                                    <Typography variant="body2" fontWeight={600} color="primary.main">
-                                      {lastUpdate.versao_nome}
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      size="large"
+                      disabled={loadingLote || clientes.filter(c => c.status_licenca === 'ATIVO').length === 0}
+                      onClick={handleDispararAtualizacaoLote}
+                      sx={{ py: 1.5, px: 5, borderRadius: 3, fontWeight: 'bold' }}
+                      startIcon={loadingLote ? <CircularProgress size={20} color="inherit" /> : <UpdateIcon />}
+                    >
+                      {loadingLote ? 'Atualizando Clientes...' : 'Disparar Atualização em Lote'}
+                    </Button>
+                  </Card>
+                )}
+
+                {subTabValue === 1 && (
+                  <Card variant="outlined" sx={{ borderRadius: 3 }}>
+                    <CardContent>
+                      <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+                        Ambientes e Servidores
+                      </Typography>
+                      <Divider sx={{ mb: 2 }} />
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Cliente / Identificador</TableCell>
+                              <TableCell align="center">Tipo</TableCell>
+                              <TableCell align="center">Última Versão</TableCell>
+                              <TableCell align="center">Status</TableCell>
+                              <TableCell align="center">Ações</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {clientes.map((c) => {
+                              // Find the last update history for this customer
+                              const updateHistory = historicoAtualizacoes.filter(h => h.cliente === c.id_saas_cliente);
+                              const lastUpdate = updateHistory[0]; // Ordered by -data_atualizacao in viewset
+
+                              const getStatusChip = (status) => {
+                                if (status === 'SUCESSO') return <Chip label="Sucesso" color="success" size="small" variant="outlined" sx={{ fontWeight: 'bold' }} />;
+                                if (status === 'FALHA') return <Chip label="Falha" color="error" size="small" variant="outlined" sx={{ fontWeight: 'bold' }} />;
+                                if (status === 'PROCESSANDO') return <Chip label="Processando" color="warning" size="small" variant="outlined" sx={{ fontWeight: 'bold' }} />;
+                                return <Chip label="Não Atualizado" color="default" size="small" variant="outlined" />;
+                              };
+
+                              return (
+                                <TableRow key={c.id_saas_cliente} hover>
+                                  <TableCell>
+                                    <Typography variant="subtitle2" fontWeight={700}>
+                                      {c.razao_social}
                                     </Typography>
-                                  ) : '—'}
-                                </TableCell>
-                                <TableCell align="center">
-                                  <Box display="flex" alignItems="center" justifyContent="center" gap={0.5}>
-                                    {getStatusChip(lastUpdate?.status)}
-                                    {lastUpdate?.status === 'FALHA' && (
-                                      <Tooltip title="Ver log de erro">
-                                        <IconButton 
-                                          size="small" 
-                                          color="error"
-                                          onClick={() => setLogModal({ open: true, title: `Log de Erro - ${c.razao_social}`, log: lastUpdate.log_erro })}
-                                        >
-                                          <LogIcon fontSize="small" />
-                                        </IconButton>
-                                      </Tooltip>
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                                      {c.schema_name} (Porta: {c.db_port})
+                                    </Typography>
+                                  </TableCell>
+                                  <TableCell align="center">
+                                    {c.is_test_environment ? (
+                                      <Chip label="Teste/Laboratório" color="secondary" size="small" sx={{ fontWeight: 600 }} />
+                                    ) : (
+                                      <Chip label="Produção" color="primary" size="small" sx={{ fontWeight: 600 }} />
                                     )}
-                                  </Box>
-                                </TableCell>
-                                <TableCell align="center">
-                                  <Button
-                                    variant="outlined"
-                                    color="primary"
-                                    size="small"
-                                    disabled={loadingUpdate[c.id_saas_cliente] || lastUpdate?.status === 'PROCESSANDO'}
-                                    onClick={() => handleDispararAtualizacao(c.id_saas_cliente)}
-                                    startIcon={
-                                      loadingUpdate[c.id_saas_cliente] || lastUpdate?.status === 'PROCESSANDO' ? (
-                                        <CircularProgress size={14} />
-                                      ) : (
-                                        <UpdateIcon fontSize="small" />
-                                      )
-                                    }
-                                  >
-                                    {lastUpdate?.status === 'PROCESSANDO' ? 'Atualizando...' : 'Atualizar'}
-                                  </Button>
+                                  </TableCell>
+                                  <TableCell align="center">
+                                    {lastUpdate ? (
+                                      <Typography variant="body2" fontWeight={600} color="primary.main">
+                                        {lastUpdate.versao_nome}
+                                      </Typography>
+                                    ) : '—'}
+                                  </TableCell>
+                                  <TableCell align="center">
+                                    <Box display="flex" alignItems="center" justifyContent="center" gap={0.5}>
+                                      {getStatusChip(lastUpdate?.status)}
+                                      {lastUpdate?.status === 'FALHA' && (
+                                        <Tooltip title="Ver log de erro">
+                                          <IconButton 
+                                            size="small" 
+                                            color="error"
+                                            onClick={() => setLogModal({ open: true, title: `Log de Erro - ${c.razao_social}`, log: lastUpdate.log_erro })}
+                                          >
+                                            <LogIcon fontSize="small" />
+                                          </IconButton>
+                                        </Tooltip>
+                                      )}
+                                    </Box>
+                                  </TableCell>
+                                  <TableCell align="center">
+                                    <Button
+                                      variant="outlined"
+                                      color="primary"
+                                      size="small"
+                                      disabled={loadingUpdate[c.id_saas_cliente] || lastUpdate?.status === 'PROCESSANDO'}
+                                      onClick={() => handleDispararAtualizacao(c.id_saas_cliente)}
+                                      startIcon={
+                                        loadingUpdate[c.id_saas_cliente] || lastUpdate?.status === 'PROCESSANDO' ? (
+                                          <CircularProgress size={14} />
+                                        ) : (
+                                          <UpdateIcon fontSize="small" />
+                                        )
+                                      }
+                                    >
+                                      {lastUpdate?.status === 'PROCESSANDO' ? 'Atualizando...' : 'Atualizar'}
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                            {clientes.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                                  Nenhum cliente/ambiente cadastrado no sistema.
                                 </TableCell>
                               </TableRow>
-                            );
-                          })}
-                          {clientes.length === 0 && (
-                            <TableRow>
-                              <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
-                                Nenhum cliente/ambiente cadastrado no sistema.
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </CardContent>
-                </Card>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </CardContent>
+                  </Card>
+                )}
               </Grid>
             </Grid>
           </Box>

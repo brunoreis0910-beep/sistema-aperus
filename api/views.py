@@ -3467,6 +3467,116 @@ def clean_cnpj(cnpj_str):
     return re.sub(r'\D', '', str(cnpj_str))
 
 
+def obter_nome_banco(cliente):
+    import re
+    from django.db import connection
+    
+    cnpj_limpo = re.sub(r'\D', '', str(cliente.cnpj))
+    candidatos = []
+    
+    if cliente.schema_name == 'central':
+        candidatos = ['aperus_central']
+    elif cliente.schema_name == 'testes':
+        candidatos = ['sistema_gerencial', 'aperus_testes', f"aperus_{cnpj_limpo}"]
+    else:
+        candidatos = [f"aperus_{cnpj_limpo}", f"aperus_{cliente.schema_name}", 'sistema_gerencial']
+        
+    with connection.cursor() as cursor:
+        cursor.execute("SHOW DATABASES")
+        dbs_existentes = {row[0] for row in cursor.fetchall()}
+        
+    for db in candidatos:
+        if db in dbs_existentes:
+            return db
+            
+    return f"aperus_{cnpj_limpo}"
+
+
+def realizar_backup_banco(cliente):
+    from django.conf import settings
+    import os
+    import subprocess
+    from django.utils import timezone
+    
+    db_config = settings.DATABASES['default']
+    engine = db_config.get('ENGINE', '').lower()
+    host = db_config.get('HOST', '127.0.0.1')
+    port = db_config.get('PORT', '3306')
+    user = db_config.get('USER', 'root')
+    password = db_config.get('PASSWORD', '')
+    
+    db_name = obter_nome_banco(cliente)
+    
+    backup_dir = os.path.join(settings.BASE_DIR, 'backups')
+    os.makedirs(backup_dir, exist_ok=True)
+    
+    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+    
+    if 'mysql' in engine:
+        backup_filename = f"backup_{db_name}_{timestamp}.sql"
+        backup_path = os.path.join(backup_dir, backup_filename)
+        
+        # Procura o executável do mysqldump em caminhos comuns no Windows
+        mysqldump_bin = 'mysqldump'
+        candidatos_mysqldump = [
+            r"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe",
+            r"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqldump.exe",
+            r"C:\Program Files\MySQL\MySQL Server 8.1\bin\mysqldump.exe",
+            r"C:\Program Files\MySQL\MySQL Server 8.2\bin\mysqldump.exe",
+            r"C:\Program Files\MySQL\MySQL Server 8.3\bin\mysqldump.exe",
+            r"C:\xampp\mysql\bin\mysqldump.exe",
+        ]
+        for path in candidatos_mysqldump:
+            if os.path.exists(path):
+                mysqldump_bin = f'"{path}"'
+                break
+                
+        cmd = f'{mysqldump_bin} -h {host} -P {port} -u {user} {db_name}'
+        
+        env = os.environ.copy()
+        if password:
+            env['MYSQL_PWD'] = password
+            
+        with open(backup_path, 'w', encoding='utf-8', errors='ignore') as f:
+            result = subprocess.run(
+                cmd,
+                env=env,
+                stdout=f,
+                stderr=subprocess.PIPE,
+                text=True,
+                shell=True,
+                timeout=120
+            )
+            
+        if result.returncode != 0 or not os.path.exists(backup_path) or os.path.getsize(backup_path) == 0:
+            err_msg = result.stderr if result.returncode != 0 else "Arquivo de backup vazio (0 KB)."
+            if os.path.exists(backup_path):
+                try:
+                    os.remove(backup_path)
+                except Exception:
+                    pass
+            raise Exception(f"Falha no mysqldump para o banco '{db_name}': {err_msg}")
+            
+        return backup_path
+        
+    elif 'sqlserver' in engine or 'mssql' in engine or 'pyodbc' in engine:
+        backup_filename = f"backup_{db_name}_{timestamp}.bak"
+        backup_path = os.path.join(backup_dir, backup_filename)
+        
+        from django.db import connection
+        with connection.cursor() as cursor:
+            sql = f"BACKUP DATABASE [{db_name}] TO DISK = %s WITH FORMAT"
+            cursor.execute(sql, [backup_path])
+            
+        if not os.path.exists(backup_path) or os.path.getsize(backup_path) == 0:
+            raise Exception(f"Falha no backup do SQL Server para '{db_name}'. Arquivo não gerado ou vazio.")
+            
+        return backup_path
+        
+    else:
+        raise Exception(f"Motor de banco de dados não suportado para backup automático: {engine}")
+
+
 class SaaSClienteViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gerenciamento de clientes SaaS (Aperus Mãe).
@@ -3621,6 +3731,49 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         serializer = serializers.HistoricoAtualizacaoSerializer(historico)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @action(detail=False, methods=['post'])
+    def atualizar_em_lote(self, request):
+        """
+        Dispara o script de atualização para todos os clientes ativos em background.
+        """
+        # Busca a versão mais recente cadastrada
+        versao = models.VersaoSistema.objects.all().order_by('-data_lancamento').first()
+        if not versao:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'error': 'Nenhuma versão cadastrada no sistema. Cadastre uma versão primeiro.'})
+
+        clientes_ativos = models.SaaSCliente.objects.filter(status_licenca='ATIVO')
+        if not clientes_ativos.exists():
+            return Response({'message': 'Nenhum cliente ativo encontrado para atualização.'}, status=status.HTTP_200_OK)
+
+        import os
+        historicos_criados = []
+        for cliente in clientes_ativos:
+            # Determina o caminho do script
+            script_path = f"C:\\APERUS\\atualizar_{cliente.schema_name}.bat"
+            if not os.path.exists(script_path):
+                script_path = "C:\\APERUS\\atualizar_central.bat"
+
+            if not os.path.exists(script_path):
+                historico = models.HistoricoAtualizacao.objects.create(
+                    cliente=cliente,
+                    versao=versao,
+                    status='FALHA',
+                    log_erro=f"Script de atualização não encontrado: {script_path}"
+                )
+            else:
+                historico = models.HistoricoAtualizacao.objects.create(
+                    cliente=cliente,
+                    versao=versao,
+                    status='PROCESSANDO'
+                )
+                self.executar_script_background(historico.id_historico, script_path)
+            
+            historicos_criados.append(historico)
+
+        serializer = serializers.HistoricoAtualizacaoSerializer(historicos_criados, many=True)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
     def executar_script_background(self, historico_id, script_path):
         import subprocess
         import threading
@@ -3628,6 +3781,21 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         def target():
             from api.models import HistoricoAtualizacao
             try:
+                historico = HistoricoAtualizacao.objects.get(pk=historico_id)
+                cliente = historico.cliente
+                
+                # Executar backup obrigatório antes da atualização (git pull)
+                log_output = ""
+                try:
+                    backup_path = realizar_backup_banco(cliente)
+                    log_output += f"--- BACKUP REALIZADO COM SUCESSO ---\nArquivo: {backup_path}\n\n"
+                except Exception as e:
+                    historico.status = 'FALHA'
+                    historico.log_erro = f"--- ERRO AO REALIZAR BACKUP (ATUALIZAÇÃO ABORTADA) ---\n{str(e)}\n\nO processo de git pull e atualização foi cancelado para segurança dos dados."
+                    historico.save()
+                    return
+
+                # Executa o script de atualização
                 result = subprocess.run(
                     [script_path],
                     cwd="C:\\APERUS",
@@ -3637,13 +3805,12 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
                     shell=True,
                     timeout=300
                 )
-                log_output = f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
-                historico = HistoricoAtualizacao.objects.get(pk=historico_id)
+                log_output += f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
                 if result.returncode == 0:
                     historico.status = 'SUCESSO'
                 else:
                     historico.status = 'FALHA'
-                    historico.log_erro = log_output
+                historico.log_erro = log_output
                 historico.save()
             except Exception as e:
                 try:
