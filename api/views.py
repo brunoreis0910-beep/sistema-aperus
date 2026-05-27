@@ -3659,8 +3659,21 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
                 except Exception:
                     pass
                     
-            # Copia o template completo
-            shutil.copytree(template_dir, arquivos_dir, dirs_exist_ok=True)
+            # Copia o template completo (ignorando pastas grandes/pesadas que podem estar travadas)
+            try:
+                shutil.copytree(
+                    template_dir, 
+                    arquivos_dir, 
+                    dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns('.venv', 'node_modules', '.git')
+                )
+            except Exception as copy_err:
+                raise Exception(
+                    "Erro ao copiar arquivos do template para a pasta do cliente. "
+                    "Isso geralmente ocorre se alguns arquivos na pasta destino (como o INICIAR.bat ou o ambiente virtual) "
+                    "estiverem abertos ou sendo executados por outro programa. Certifique-se de fechar todos os terminais "
+                    f"e arquivos do cliente e tente novamente. Detalhes: {str(copy_err)}"
+                )
                 
             # Configura o .env do novo cliente
             env_file = os.path.join(arquivos_dir, ".env")
