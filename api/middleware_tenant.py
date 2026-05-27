@@ -11,14 +11,37 @@ class TenantMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        # 1. Identifica o CNPJ no cabeçalho ou parâmetro de query
+        # 1. Identifica o CNPJ ou Schema no cabeçalho ou parâmetro de query
         cnpj = request.headers.get('X-Tenant-CNPJ') or request.GET.get('tenant_cnpj')
+        schema_name = request.headers.get('X-Tenant-Schema') or request.GET.get('tenant_schema') or request.GET.get('schema_name')
         
-        if cnpj:
-            cnpj = re.sub(r'\D', '', str(cnpj))
-            
-        if cnpj:
-            db_name = f"aperus_{cnpj}"
+        db_name = None
+        
+        if schema_name:
+            if schema_name == 'central':
+                db_name = 'aperus_central'
+            elif schema_name == 'testes':
+                db_name = 'aperus_testes'
+            else:
+                db_name = f"aperus_{schema_name}"
+        elif cnpj:
+            cnpj_limpo = re.sub(r'\D', '', str(cnpj))
+            try:
+                from api.models import SaaSCliente
+                cliente = SaaSCliente.objects.filter(cnpj=cnpj_limpo).first()
+                if cliente:
+                    if cliente.schema_name == 'central':
+                        db_name = 'aperus_central'
+                    elif cliente.schema_name == 'testes':
+                        db_name = 'aperus_testes'
+                    else:
+                        db_name = f"aperus_{cliente.schema_name}"
+                else:
+                    db_name = f"aperus_{cnpj_limpo}"
+            except Exception:
+                db_name = f"aperus_{cnpj_limpo}"
+                
+        if db_name:
             
             # 2. Adiciona a conexão ao pool do Django caso não exista (copiando todas as chaves)
             if db_name not in settings.DATABASES:

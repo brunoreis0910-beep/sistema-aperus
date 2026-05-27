@@ -3478,9 +3478,9 @@ def obter_nome_banco(cliente):
     if cliente.schema_name == 'central':
         candidatos = ['aperus_central']
     elif cliente.schema_name == 'testes':
-        candidatos = ['sistema_gerencial', 'aperus_testes', f"aperus_{cnpj_limpo}"]
+        candidatos = ['aperus_testes', 'sistema_gerencial', f"aperus_{cnpj_limpo}"]
     else:
-        candidatos = [f"aperus_{cnpj_limpo}", f"aperus_{cliente.schema_name}", 'sistema_gerencial']
+        candidatos = [f"aperus_{cliente.schema_name}", f"aperus_{cnpj_limpo}", 'sistema_gerencial']
         
     with connection.cursor() as cursor:
         cursor.execute("SHOW DATABASES")
@@ -3490,7 +3490,12 @@ def obter_nome_banco(cliente):
         if db in dbs_existentes:
             return db
             
-    return f"aperus_{cnpj_limpo}"
+    # Default fallback
+    if cliente.schema_name == 'central':
+        return 'aperus_central'
+    elif cliente.schema_name == 'testes':
+        return 'aperus_testes'
+    return f"aperus_{cliente.schema_name}"
 
 
 def realizar_backup_banco(cliente):
@@ -3610,15 +3615,105 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
             # 1. Cria o banco de dados físico no MySQL/SQL Server e roda as migrações
             self.provisionar_banco_cliente(cliente)
             
-            # 2. Gera a pasta de arquivos no Windows Server
+            # 2. Gera a pasta de arquivos no Windows Server copiando o template SistemaAperus e configurando .env/portas
             import os
             import re
-            cnpj_limpo = re.sub(r'\D', '', str(cliente.cnpj))
-            arquivos_dir = f"C:\\APERUS\\arquivos_clientes\\{cnpj_limpo}"
-            os.makedirs(arquivos_dir, exist_ok=True)
+            import shutil
+            from django.conf import settings
+            
+            default_db = settings.DATABASES['default']
+            if cliente.schema_name == 'central':
+                db_name = 'aperus_central'
+            elif cliente.schema_name == 'testes':
+                db_name = 'aperus_testes'
+            else:
+                db_name = f"aperus_{cliente.schema_name}"
+                
+            template_dir = r"C:\Projetos\SistemaGerencial\SistemaAperus"
+            arquivos_dir = f"C:\\APERUS\\arquivos_clientes\\{db_name}"
+            
+            # Remove a pasta existente (se houver tentativa anterior corrompida)
+            if os.path.exists(arquivos_dir):
+                try:
+                    shutil.rmtree(arquivos_dir)
+                except Exception:
+                    pass
+                    
+            # Copia o template completo
+            if os.path.exists(template_dir):
+                shutil.copytree(template_dir, arquivos_dir, dirs_exist_ok=True)
+            else:
+                os.makedirs(arquivos_dir, exist_ok=True)
+                
+            # Configura o .env do novo cliente
+            env_file = os.path.join(arquivos_dir, ".env")
+            env_example = os.path.join(arquivos_dir, ".env.example")
+            if not os.path.exists(env_file) and os.path.exists(env_example):
+                try:
+                    shutil.copy(env_example, env_file)
+                except Exception:
+                    pass
+                    
+            if os.path.exists(env_file):
+                try:
+                    with open(env_file, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                    
+                    new_lines = []
+                    for line in lines:
+                        if line.startswith("DB_NAME="):
+                            new_lines.append(f"DB_NAME={db_name}\n")
+                        elif line.startswith("DB_USER="):
+                            new_lines.append(f"DB_USER={default_db.get('USER', 'root')}\n")
+                        elif line.startswith("DB_PASSWORD="):
+                            new_lines.append(f"DB_PASSWORD={default_db.get('PASSWORD', '')}\n")
+                        elif line.startswith("DB_HOST="):
+                            new_lines.append(f"DB_HOST={cliente.db_host}\n")
+                        elif line.startswith("DB_PORT="):
+                            new_lines.append(f"DB_PORT={default_db.get('PORT', '3306')}\n")
+                        elif line.startswith("DEBUG="):
+                            new_lines.append("DEBUG=True\n")
+                        elif line.startswith("ALLOWED_HOSTS="):
+                            new_lines.append("ALLOWED_HOSTS=*\n")
+                        else:
+                            new_lines.append(line)
+                            
+                    with open(env_file, 'w', encoding='utf-8') as f:
+                        f.writelines(new_lines)
+                except Exception:
+                    pass
+
+            # Configura a porta no INICIAR.bat
+            iniciar_bat = os.path.join(arquivos_dir, "INICIAR.bat")
+            if os.path.exists(iniciar_bat):
+                try:
+                    with open(iniciar_bat, 'r', encoding='utf-8', errors='ignore') as f:
+                        bat_content = f.read()
+                    bat_content = re.sub(r':\d+', f':{cliente.db_port}', bat_content)
+                    with open(iniciar_bat, 'w', encoding='utf-8') as f:
+                        f.write(bat_content)
+                except Exception:
+                    pass
+
+            # Configura a porta no INICIAR_PRODUCAO.ps1
+            iniciar_ps1 = os.path.join(arquivos_dir, "INICIAR_PRODUCAO.ps1")
+            if os.path.exists(iniciar_ps1):
+                try:
+                    with open(iniciar_ps1, 'r', encoding='utf-8', errors='ignore') as f:
+                        ps1_content = f.read()
+                    ps1_content = re.sub(r'\$PORTA\s*=\s*"\d+"', f'$PORTA = "{cliente.db_port}"', ps1_content)
+                    with open(iniciar_ps1, 'w', encoding='utf-8') as f:
+                        f.write(ps1_content)
+                except Exception:
+                    pass
             
             # 3. Injeta os dados cadastrais da empresa no novo banco
-            db_name = f"aperus_{cnpj_limpo}"
+            if cliente.schema_name == 'central':
+                db_name = 'aperus_central'
+            elif cliente.schema_name == 'testes':
+                db_name = 'aperus_testes'
+            else:
+                db_name = f"aperus_{cliente.schema_name}"
             from api.models import EmpresaConfig, User
             from django.contrib.auth.hashers import make_password
             
@@ -3677,7 +3772,12 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         import subprocess
         
         cnpj = re.sub(r'\D', '', str(cliente.cnpj))
-        db_name = f"aperus_{cnpj}"
+        if cliente.schema_name == 'central':
+            db_name = 'aperus_central'
+        elif cliente.schema_name == 'testes':
+            db_name = 'aperus_testes'
+        else:
+            db_name = f"aperus_{cliente.schema_name}"
         
         # 1. Executa DROP e CREATE DATABASE na conexão central para limpar qualquer estado anterior corrompido
         with connection.cursor() as cursor:
