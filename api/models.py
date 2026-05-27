@@ -5764,6 +5764,7 @@ class SaaSCliente(models.Model):
     db_host = models.CharField(max_length=100, default='localhost')
     db_port = models.CharField(max_length=5, default='8005')
     is_test_environment = models.BooleanField(default=False, help_text="Marcador para saber se é um ambiente de teste")
+    banco_criado = models.BooleanField(default=False, verbose_name="Banco de Dados Criado")
 
     class Meta:
         managed = True

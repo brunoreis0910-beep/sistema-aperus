@@ -3588,20 +3588,79 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
     search_fields = ['cnpj', 'razao_social']
 
     def perform_create(self, serializer):
-        # 1. Salva o cliente centralmente
-        instance = serializer.save()
-        
-        # 2. Provisiona o novo banco de dados no MySQL para o cliente apenas se não for ambiente de teste
-        if not instance.is_test_environment:
-            try:
-                self.provisionar_banco_cliente(instance)
-            except Exception as e:
-                # Exclui o registro central em caso de falha para evitar inconsistência
-                instance.delete()
-                from rest_framework.exceptions import ValidationError
-                raise ValidationError({
-                    'cnpj': f'Erro ao provisionar banco de dados no MySQL para este cliente: {str(e)}'
-                })
+        # Salva o cliente apenas centralmente no banco mãe (sem criar banco físico ainda)
+        serializer.save(banco_criado=False)
+
+    @action(detail=True, methods=['post'])
+    def criar_banco_dados(self, request, pk=None):
+        """
+        Action para provisionar o banco de dados físico, gerar pasta de arquivos no Windows Server,
+        injetar dados da empresa e criar usuário ADMIN / _APERUS#.
+        """
+        cliente = self.get_object()
+        if cliente.banco_criado:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'error': 'O banco de dados para este cliente já foi criado.'})
+
+        try:
+            # 1. Cria o banco de dados físico no MySQL/SQL Server e roda as migrações
+            self.provisionar_banco_cliente(cliente)
+            
+            # 2. Gera a pasta de arquivos no Windows Server
+            import os
+            import re
+            cnpj_limpo = re.sub(r'\D', '', str(cliente.cnpj))
+            arquivos_dir = f"C:\\APERUS\\arquivos_clientes\\{cnpj_limpo}"
+            os.makedirs(arquivos_dir, exist_ok=True)
+            
+            # 3. Injeta os dados cadastrais da empresa no novo banco
+            db_name = f"aperus_{cnpj_limpo}"
+            from api.models import EmpresaConfig, User
+            from django.contrib.auth.hashers import make_password
+            
+            # Remove qualquer config pré-existente
+            EmpresaConfig.objects.using(db_name).all().delete()
+            
+            # Cria a nova EmpresaConfig
+            empresa = EmpresaConfig(
+                nome_razao_social=cliente.razao_social,
+                nome_fantasia=cliente.nome_fantasia or cliente.razao_social,
+                cpf_cnpj=cnpj_limpo,
+                endereco=cliente.endereco or "",
+                numero=cliente.numero or "",
+                bairro=cliente.bairro or "",
+                cidade=cliente.cidade or "",
+                estado=cliente.estado or "",
+                cep=cliente.cep or "",
+                telefone=cliente.telefone or "",
+                email=cliente.email or ""
+            )
+            empresa.save(using=db_name)
+            
+            # 4. Cria automaticamente o usuário administrador padrão: ADMIN / _APERUS#
+            User.objects.using(db_name).filter(username='ADMIN').delete()
+            
+            admin_user = User(
+                username='ADMIN',
+                password=make_password('_APERUS#'),
+                is_staff=True,
+                is_superuser=True,
+                is_active=True
+            )
+            admin_user.save(using=db_name)
+            
+            # 5. Altera o campo banco_criado para True
+            cliente.banco_criado = True
+            cliente.save()
+            
+            serializer = self.get_serializer(cliente)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({
+                'error': f'Erro ao criar banco de dados e provisionar dados para este cliente: {str(e)}'
+            })
 
     def provisionar_banco_cliente(self, cliente):
         from django.db import connection
@@ -3610,6 +3669,8 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         import re
         import copy
         import threading
+        import os
+        import subprocess
         
         cnpj = re.sub(r'\D', '', str(cliente.cnpj))
         db_name = f"aperus_{cnpj}"
@@ -3623,24 +3684,75 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         settings.DATABASES[db_name] = copy.deepcopy(default_db)
         settings.DATABASES[db_name]['NAME'] = db_name
         
-        # 3. Roda migrações do Django na nova base de dados isolada em uma thread separada
-        # para evitar conflito com a transação da requisição HTTP atual.
-        exception_holder = []
-        
-        def run_migration():
-            try:
-                call_command('migrate', database=db_name, interactive=False)
-            except Exception as e:
-                exception_holder.append(e)
+        # 3. Roda clonagem de schema se for MySQL, caso contrário roda migrações padrão
+        engine = default_db.get('ENGINE', '').lower()
+        if 'mysql' in engine:
+            mysqldump_bin = 'mysqldump'
+            mysql_bin = 'mysql'
+            candidatos_mysqldump = [
+                r"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe",
+                r"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqldump.exe",
+                r"C:\Program Files\MySQL\MySQL Server 8.1\bin\mysqldump.exe",
+                r"C:\Program Files\MySQL\MySQL Server 8.2\bin\mysqldump.exe",
+                r"C:\Program Files\MySQL\MySQL Server 8.3\bin\mysqldump.exe",
+                r"C:\xampp\mysql\bin\mysqldump.exe",
+            ]
+            for path in candidatos_mysqldump:
+                if os.path.exists(path):
+                    mysqldump_bin = f'"{path}"'
+                    mysql_bin = f'"{path.replace("mysqldump.exe", "mysql.exe")}"'
+                    break
+            
+            host = default_db.get('HOST', '127.0.0.1')
+            port = default_db.get('PORT', '3306')
+            user = default_db.get('USER', 'root')
+            password = default_db.get('PASSWORD', '')
+            central_db = default_db.get('NAME', 'aperus_central')
+            
+            schema_file = os.path.join(settings.BASE_DIR, 'scratch', f'temp_schema_{cnpj}.sql')
+            os.makedirs(os.path.dirname(schema_file), exist_ok=True)
+            
+            cmd_dump = f'{mysqldump_bin} -h {host} -P {port} -u {user} --no-data {central_db}'
+            env = os.environ.copy()
+            if password:
+                env['MYSQL_PWD'] = password
                 
-        thread = threading.Thread(target=run_migration)
-        thread.start()
-        thread.join()
-        
-        if exception_holder:
-            if db_name in settings.DATABASES:
-                del settings.DATABASES[db_name]
-            raise exception_holder[0]
+            try:
+                # Dump schema
+                with open(schema_file, 'w', encoding='utf-8') as f:
+                    res_dump = subprocess.run(cmd_dump, env=env, stdout=f, stderr=subprocess.PIPE, text=True, shell=True, timeout=60)
+                if res_dump.returncode != 0:
+                    raise Exception(f"Erro ao exportar schema do banco central: {res_dump.stderr}")
+                    
+                # Import schema
+                cmd_import = f'{mysql_bin} -h {host} -P {port} -u {user} {db_name}'
+                with open(schema_file, 'r', encoding='utf-8') as f:
+                    res_import = subprocess.run(cmd_import, env=env, stdin=f, stderr=subprocess.PIPE, text=True, shell=True, timeout=60)
+                if res_import.returncode != 0:
+                    raise Exception(f"Erro ao importar schema no banco do cliente: {res_import.stderr}")
+            finally:
+                if os.path.exists(schema_file):
+                    try:
+                        os.remove(schema_file)
+                    except Exception:
+                        pass
+        else:
+            exception_holder = []
+            
+            def run_migration():
+                try:
+                    call_command('migrate', database=db_name, interactive=False)
+                except Exception as e:
+                    exception_holder.append(e)
+                    
+            thread = threading.Thread(target=run_migration)
+            thread.start()
+            thread.join()
+            
+            if exception_holder:
+                if db_name in settings.DATABASES:
+                    del settings.DATABASES[db_name]
+                raise exception_holder[0]
 
     @action(detail=True, methods=['post'])
     def gerar_mensalidades(self, request, pk=None):
