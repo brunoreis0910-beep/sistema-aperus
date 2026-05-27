@@ -3729,11 +3729,17 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
                     raise Exception(f"Erro ao exportar schema do banco central: {res_dump.stderr}")
                     
                 # Import schema
-                cmd_import = f'{mysql_bin} -h {host} -P {port} -u {user} {db_name}'
-                with open(schema_file, 'r', encoding='utf-8') as f:
-                    res_import = subprocess.run(cmd_import, env=env, stdin=f, stderr=subprocess.PIPE, text=True, shell=True, timeout=60)
+                cmd_import = f'{mysql_bin} -h {host} -P {port} -u {user} --default-character-set=utf8mb4 {db_name}'
+                with open(schema_file, 'r', encoding='utf-8-sig') as f:
+                    sql_content = f.read()
+                
+                fixed_sql = "SET FOREIGN_KEY_CHECKS=0;\n" + sql_content + "\nSET FOREIGN_KEY_CHECKS=1;\n"
+                fixed_sql_bytes = fixed_sql.encode('utf-8')
+                
+                res_import = subprocess.run(cmd_import, env=env, input=fixed_sql_bytes, stderr=subprocess.PIPE, shell=True, timeout=60)
                 if res_import.returncode != 0:
-                    raise Exception(f"Erro ao importar schema no banco do cliente: {res_import.stderr}")
+                    err_msg = res_import.stderr.decode('utf-8', errors='replace')
+                    raise Exception(f"Erro ao importar schema no banco do cliente: {err_msg}")
             finally:
                 if os.path.exists(schema_file):
                     try:
