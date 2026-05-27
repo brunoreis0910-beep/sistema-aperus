@@ -3631,7 +3631,25 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
             else:
                 db_name = f"aperus_{cliente.schema_name}"
                 
-            template_dir = r"C:\Projetos\SistemaGerencial\SistemaAperus"
+            # Procura a pasta template do sistema em caminhos comuns e relativos
+            candidatos_template = [
+                os.path.abspath(os.path.join(settings.BASE_DIR, '..', 'SistemaAperus')),
+                r"C:\Projetos\SistemaGerencial\SistemaAperus",
+                r"C:\APERUS\SistemaAperus",
+                r"C:\aperus\SistemaAperus",
+            ]
+            template_dir = None
+            for path in candidatos_template:
+                if os.path.exists(path) and os.path.exists(os.path.join(path, "manage.py")):
+                    template_dir = path
+                    break
+                    
+            if not template_dir:
+                raise Exception(
+                    "Diretório de template 'SistemaAperus' não encontrado ou incompleto no servidor. "
+                    f"Caminhos verificados: {candidatos_template}"
+                )
+
             arquivos_dir = f"C:\\APERUS\\arquivos_clientes\\{db_name}"
             
             # Remove a pasta existente (se houver tentativa anterior corrompida)
@@ -3642,10 +3660,7 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
                     pass
                     
             # Copia o template completo
-            if os.path.exists(template_dir):
-                shutil.copytree(template_dir, arquivos_dir, dirs_exist_ok=True)
-            else:
-                os.makedirs(arquivos_dir, exist_ok=True)
+            shutil.copytree(template_dir, arquivos_dir, dirs_exist_ok=True)
                 
             # Configura o .env do novo cliente
             env_file = os.path.join(arquivos_dir, ".env")
