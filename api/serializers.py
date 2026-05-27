@@ -900,6 +900,10 @@ class UserPermissoesSerializer(serializers.ModelSerializer):
     contas_servicos_acessar = serializers.BooleanField(default=False)
     aut_desconto = serializers.BooleanField(default=False)
     aut_cancelar_venda = serializers.BooleanField(default=False)
+    pode_atualizar_cliente = serializers.BooleanField(default=False)
+    pode_criar_banco = serializers.BooleanField(default=False)
+    pode_gerenciar_agendamento = serializers.BooleanField(default=False)
+    pode_cadastrar_financeiro_saas = serializers.BooleanField(default=False)
 
     class Meta:
         model = UserPermissoes
@@ -944,7 +948,9 @@ class UserPermissoesSerializer(serializers.ModelSerializer):
             'balancas_acessar',
             'bancario_acessar', 'bancario_criar', 'bancario_editar',
             'contas_servicos_acessar',
-            'aut_desconto', 'aut_cancelar_venda'
+            'aut_desconto', 'aut_cancelar_venda',
+            'pode_atualizar_cliente', 'pode_criar_banco',
+            'pode_gerenciar_agendamento', 'pode_cadastrar_financeiro_saas'
         ]
 
 # Serializer Mestre (User)

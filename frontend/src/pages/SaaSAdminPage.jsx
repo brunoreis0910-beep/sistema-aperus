@@ -14,7 +14,7 @@ import {
   ContentCopy as CopyIcon, MonetizationOn as MoneyIcon, Business as ClientIcon,
   Warning as WarningIcon, Launch as LaunchIcon, Search as SearchIcon,
   SystemUpdate as UpdateIcon, Terminal as LogIcon, Delete as DeleteIcon,
-  Storage as StorageIcon
+  Storage as StorageIcon, Bolt as BoltIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
@@ -52,8 +52,13 @@ const StatusPagamentoChip = ({ status }) => {
 };
 
 const SaaSAdminPage = () => {
-  const { axiosInstance } = useAuth();
+  const { axiosInstance, user, permissions } = useAuth();
   const { showToast } = useToast();
+  
+  const temPermissao = useCallback((permName) => {
+    if (user?.is_superuser) return true;
+    return !!permissions?.[permName];
+  }, [user, permissions]);
   
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -146,6 +151,14 @@ const SaaSAdminPage = () => {
   useEffect(() => {
     carregarDados();
   }, [carregarDados]);
+
+  const tabs = [
+    { label: "Clientes SaaS", icon: <ClientIcon />, show: true },
+    { label: "Faturamento e Cobranças", icon: <InvoiceIcon />, show: temPermissao('pode_cadastrar_financeiro_saas') },
+    { label: "Atualizações do Sistema", icon: <UpdateIcon />, show: temPermissao('pode_atualizar_cliente') }
+  ].filter(t => t.show);
+
+  const activeTabName = tabs[tabValue]?.label || "Clientes SaaS";
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -518,13 +531,13 @@ const SaaSAdminPage = () => {
       {/* TABS CONTAINER */}
       <Paper sx={{ borderRadius: 4, overflow: 'hidden', mb: 3 }}>
         <Tabs value={tabValue} onChange={handleTabChange} indicatorColor="primary" textColor="primary" variant="fullWidth" sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Tab label="Clientes SaaS" icon={<ClientIcon />} iconPosition="start" />
-          <Tab label="Faturamento e Cobranças" icon={<InvoiceIcon />} iconPosition="start" />
-          <Tab label="Atualizações do Sistema" icon={<UpdateIcon />} iconPosition="start" />
+          {tabs.map((t, idx) => (
+            <Tab key={idx} label={t.label} icon={t.icon} iconPosition="start" />
+          ))}
         </Tabs>
 
         {/* TAB 0 - CLIENTES */}
-        {tabValue === 0 && (
+        {activeTabName === "Clientes SaaS" && (
           <Box sx={{ p: 3 }}>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
               <Typography variant="h6" fontWeight={700}>Lista de Contratantes</Typography>
@@ -558,23 +571,42 @@ const SaaSAdminPage = () => {
                         <Chip label={c.emite_nota ? 'Sim' : 'Não'} size="small" color={c.emite_nota ? 'primary' : 'default'} />
                       </TableCell>
                       <TableCell align="center">
-                        <StatusLicencaChip status={c.status_licenca} />
+                        <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center">
+                          <StatusLicencaChip status={c.status_licenca} />
+                          <Chip 
+                            label={c.banco_criado ? 'BD Ativo' : 'Sem BD'} 
+                            color={c.banco_criado ? 'success' : 'warning'} 
+                            size="small" 
+                            variant="filled" 
+                            sx={{ fontWeight: 'bold', fontSize: '0.7rem' }} 
+                          />
+                        </Stack>
                       </TableCell>
                       <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                         <Stack direction="row" spacing={1} justifyContent="center">
-                          {!c.banco_criado && (
+                          {!c.banco_criado && temPermissao('pode_criar_banco') && (
                             <Tooltip title="Criar Banco de Dados">
                               <IconButton 
                                 size="small" 
-                                color="success" 
-                                onClick={() => handleCriarBanco(c.id_saas_cliente)}
-                                disabled={loadingCriarBanco[c.id_saas_cliente]}
+                                color="warning" 
+                                onClick={async () => {
+                                  if (window.confirm(`Deseja realmente provisionar o banco de dados para ${c.razao_social}?`)) {
+                                    try {
+                                      setLoading(true);
+                                      await axiosInstance.post(`/saas-clientes/${c.id_saas_cliente}/criar_banco_dados/`);
+                                      showToast('Banco de dados provisionado com sucesso!', 'success');
+                                      carregarDados();
+                                    } catch (e) {
+                                      let msg = 'Erro ao provisionar banco de dados.';
+                                      if (e.response?.data?.error) msg = e.response.data.error;
+                                      showToast(msg, 'error');
+                                    } finally {
+                                      setLoading(false);
+                                    }
+                                  }
+                                }}
                               >
-                                {loadingCriarBanco[c.id_saas_cliente] ? (
-                                  <CircularProgress size={20} color="inherit" />
-                                ) : (
-                                  <StorageIcon fontSize="small" />
-                                )}
+                                <BoltIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
                           )}
@@ -583,7 +615,7 @@ const SaaSAdminPage = () => {
                               <EditIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
-                          {!c.is_test_environment && (
+                          {!c.is_test_environment && temPermissao('pode_cadastrar_financeiro_saas') && (
                             <Tooltip title="Gerar Lote de Cobranças">
                               <IconButton size="small" color="primary" onClick={() => setBillingModal({ open: true, clientId: c.id_saas_cliente, meses: 6 })}>
                                 <InvoiceIcon fontSize="small" />
@@ -708,7 +740,7 @@ const SaaSAdminPage = () => {
         )}
 
         {/* TAB 1 - GENERAL BILLING */}
-        {tabValue === 1 && (
+        {activeTabName === "Faturamento e Cobranças" && (
           <Box sx={{ p: 3 }}>
             <Typography variant="h6" fontWeight={700} mb={2}>Lançamentos de Cobranças Globais</Typography>
             
@@ -764,7 +796,7 @@ const SaaSAdminPage = () => {
         )}
 
         {/* TAB 2 - UPDATES */}
-        {tabValue === 2 && (
+        {activeTabName === "Atualizações do Sistema" && (
           <Box sx={{ p: 3 }}>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
               <Typography variant="h6" fontWeight={700}>Controle de Atualizações e Versões</Typography>
@@ -952,6 +984,7 @@ const SaaSAdminPage = () => {
                               handleSaveConfigAgendamento(updated);
                             }}
                             color="success"
+                            disabled={!temPermissao('pode_gerenciar_agendamento')}
                           />
                         </Box>
                       </Box>
@@ -969,12 +1002,12 @@ const SaaSAdminPage = () => {
                             }}
                             fullWidth
                             InputLabelProps={{ shrink: true }}
-                            disabled={!configAgendamento.agendamento_ativo}
+                            disabled={!configAgendamento.agendamento_ativo || !temPermissao('pode_gerenciar_agendamento')}
                           />
                         </Grid>
 
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" fontWeight={600} gutterBottom color={configAgendamento.agendamento_ativo ? "text.primary" : "text.disabled"}>
+                          <Typography variant="body2" fontWeight={600} gutterBottom color={configAgendamento.agendamento_ativo && temPermissao('pode_gerenciar_agendamento') ? "text.primary" : "text.disabled"}>
                             Dias da Semana:
                           </Typography>
                           <Box display="flex" flexWrap="wrap" gap={1}>
@@ -998,11 +1031,11 @@ const SaaSAdminPage = () => {
                                 <Chip
                                   key={dayStr}
                                   label={dayName}
-                                  clickable={configAgendamento.agendamento_ativo}
+                                  clickable={configAgendamento.agendamento_ativo && temPermissao('pode_gerenciar_agendamento')}
                                   color={isSelected ? "primary" : "default"}
                                   variant={isSelected ? "filled" : "outlined"}
-                                  onClick={configAgendamento.agendamento_ativo ? toggleDay : undefined}
-                                  disabled={!configAgendamento.agendamento_ativo}
+                                  onClick={configAgendamento.agendamento_ativo && temPermissao('pode_gerenciar_agendamento') ? toggleDay : undefined}
+                                  disabled={!configAgendamento.agendamento_ativo || !temPermissao('pode_gerenciar_agendamento')}
                                   sx={{ fontWeight: 'bold' }}
                                 />
                               );
@@ -1016,7 +1049,7 @@ const SaaSAdminPage = () => {
                             color="primary"
                             fullWidth
                             onClick={() => handleSaveConfigAgendamento(configAgendamento)}
-                            disabled={!configAgendamento.agendamento_ativo}
+                            disabled={!configAgendamento.agendamento_ativo || !temPermissao('pode_gerenciar_agendamento')}
                             sx={{ py: 1.5, borderRadius: 2, fontWeight: 'bold' }}
                           >
                             Salvar Configurações
@@ -1331,12 +1364,14 @@ const SaaSAdminPage = () => {
                 <TextField
                   label="Dia do Vencimento *" type="number" fullWidth size="small"
                   value={clientForm.dia_vencimento} onChange={(e) => setClientForm({ ...clientForm, dia_vencimento: parseInt(e.target.value) || 10 })}
+                  disabled={!temPermissao('pode_cadastrar_financeiro_saas')}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
                   label="Valor da Mensalidade (R$) *" type="number" fullWidth size="small"
                   value={clientForm.valor_mensalidade} onChange={(e) => setClientForm({ ...clientForm, valor_mensalidade: e.target.value })}
+                  disabled={!temPermissao('pode_cadastrar_financeiro_saas')}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -1357,10 +1392,11 @@ const SaaSAdminPage = () => {
                 <TextField
                   label="Próximo Reajuste" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }}
                   value={clientForm.data_reajuste} onChange={(e) => setClientForm({ ...clientForm, data_reajuste: e.target.value })}
+                  disabled={!temPermissao('pode_cadastrar_financeiro_saas')}
                 />
               </Grid>
               <Grid item xs={12}>
-                <FormControl fullWidth size="small">
+                <FormControl fullWidth size="small" disabled={!temPermissao('pode_cadastrar_financeiro_saas')}>
                   <InputLabel>Emite Notas Fiscais?</InputLabel>
                   <Select
                     value={clientForm.emite_nota}

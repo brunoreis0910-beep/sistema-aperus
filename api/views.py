@@ -3447,6 +3447,7 @@ def simular_desconto(request):
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from .permissions import check_user_permission, HasPermission
 from rest_framework.response import Response
 from django.utils import timezone
 from datetime import date, timedelta
@@ -3593,6 +3594,9 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def criar_banco_dados(self, request, pk=None):
+        if not check_user_permission(request.user, 'pode_criar_banco'):
+            return Response({'error': 'Você não tem permissão para criar banco de dados.'}, status=status.HTTP_403_FORBIDDEN)
+
         """
         Action para provisionar o banco de dados físico, gerar pasta de arquivos no Windows Server,
         injetar dados da empresa e criar usuário ADMIN / _APERUS#.
@@ -3756,6 +3760,9 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def gerar_mensalidades(self, request, pk=None):
+        if not check_user_permission(request.user, 'pode_cadastrar_financeiro_saas'):
+            return Response({'error': 'Você não tem permissão para gerenciar o faturamento SaaS.'}, status=status.HTTP_403_FORBIDDEN)
+
         """
         Gera mensalidades em lote para um cliente.
         Payload: {"meses": 6}
@@ -3807,6 +3814,9 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def disparar_atualizacao(self, request, pk=None):
+        if not check_user_permission(request.user, 'pode_atualizar_cliente'):
+            return Response({'error': 'Você não tem permissão para atualizar clientes.'}, status=status.HTTP_403_FORBIDDEN)
+
         """
         Dispara o script de atualização do cliente em background.
         """
@@ -3845,6 +3855,9 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def atualizar_em_lote(self, request):
+        if not check_user_permission(request.user, 'pode_atualizar_cliente'):
+            return Response({'error': 'Você não tem permissão para atualizar clientes.'}, status=status.HTTP_403_FORBIDDEN)
+
         """
         Dispara o script de atualização para todos os clientes ativos em background.
         """
@@ -3943,7 +3956,8 @@ class SaaSClienteMensalidadeViewSet(viewsets.ModelViewSet):
     """
     queryset = models.SaaSClienteMensalidade.objects.all().order_by('-data_vencimento')
     serializer_class = serializers.SaaSClienteMensalidadeSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasPermission]
+    permission_required = 'pode_cadastrar_financeiro_saas'
     filterset_fields = ['saas_cliente', 'status_pagamento']
     search_fields = ['nosso_numero']
 
@@ -3985,7 +3999,8 @@ class ConfiguracaoAgendamentoViewSet(viewsets.ModelViewSet):
     """
     queryset = models.ConfiguracaoAgendamento.objects.all()
     serializer_class = serializers.ConfiguracaoAgendamentoSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasPermission]
+    permission_required = 'pode_gerenciar_agendamento'
 
     def list(self, request, *args, **kwargs):
         config = models.ConfiguracaoAgendamento.objects.first()
