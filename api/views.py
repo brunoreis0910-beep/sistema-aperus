@@ -3709,6 +3709,25 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
                         f.write(ps1_content)
                 except Exception:
                     pass
+
+            # Substitui a porta de template '8005' em todos os arquivos de configuração e código fonte do cliente
+            extensions = ('.js', '.jsx', '.html', '.css', '.json', '.bat', '.ps1', '.txt')
+            for root, dirs, files in os.walk(arquivos_dir):
+                # Ignora pastas grandes e binárias como .venv, node_modules e .git
+                if any(x in root for x in ['.venv', 'node_modules', '.git']):
+                    continue
+                for file in files:
+                    if file.endswith(extensions):
+                        filepath = os.path.join(root, file)
+                        try:
+                            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read()
+                            if '8005' in content:
+                                new_content = content.replace('8005', str(cliente.db_port))
+                                with open(filepath, 'w', encoding='utf-8') as f:
+                                    f.write(new_content)
+                        except Exception:
+                            pass
             
             # 3. Injeta os dados cadastrais da empresa no novo banco
             if cliente.schema_name == 'central':
