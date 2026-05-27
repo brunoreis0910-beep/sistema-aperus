@@ -3679,9 +3679,10 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         cnpj = re.sub(r'\D', '', str(cliente.cnpj))
         db_name = f"aperus_{cnpj}"
         
-        # 1. Executa CREATE DATABASE na conexão central
+        # 1. Executa DROP e CREATE DATABASE na conexão central para limpar qualquer estado anterior corrompido
         with connection.cursor() as cursor:
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
+            cursor.execute(f"DROP DATABASE IF EXISTS {db_name};")
+            cursor.execute(f"CREATE DATABASE {db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
             
         # 2. Adiciona conexão dinamicamente no pool de DATABASES do settings (copiando todas as chaves)
         default_db = settings.DATABASES['default']
