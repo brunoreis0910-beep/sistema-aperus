@@ -1629,6 +1629,12 @@ class UserPermissoes(models.Model):
     # Autorizações
     aut_desconto = models.IntegerField(blank=True, null=True, default=0)
     aut_cancelar_venda = models.IntegerField(blank=True, null=True, default=0)
+
+    # Central SaaS
+    pode_atualizar_cliente = models.IntegerField(blank=True, null=True, default=0)
+    pode_criar_banco = models.IntegerField(blank=True, null=True, default=0)
+    pode_gerenciar_agendamento = models.IntegerField(blank=True, null=True, default=0)
+    pode_cadastrar_financeiro_saas = models.IntegerField(blank=True, null=True, default=0)
     
     class Meta:
         managed = False

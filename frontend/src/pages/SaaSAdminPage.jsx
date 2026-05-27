@@ -13,7 +13,8 @@ import {
   Description as ContractIcon, Fingerprint as SignIcon, QrCode as QrIcon,
   ContentCopy as CopyIcon, MonetizationOn as MoneyIcon, Business as ClientIcon,
   Warning as WarningIcon, Launch as LaunchIcon, Search as SearchIcon,
-  SystemUpdate as UpdateIcon, Terminal as LogIcon, Delete as DeleteIcon
+  SystemUpdate as UpdateIcon, Terminal as LogIcon, Delete as DeleteIcon,
+  Storage as StorageIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
@@ -88,6 +89,7 @@ const SaaSAdminPage = () => {
   const [modalTab, setModalTab] = useState(0);
   const [subTabValue, setSubTabValue] = useState(0);
   const [loadingLote, setLoadingLote] = useState(false);
+  const [loadingCriarBanco, setLoadingCriarBanco] = useState({});
   
   // Client forms
   const [clientForm, setClientForm] = useState({
@@ -356,6 +358,25 @@ const SaaSAdminPage = () => {
     }
   };
 
+  const handleCriarBanco = async (clientId) => {
+    setLoadingCriarBanco(prev => ({ ...prev, [clientId]: true }));
+    try {
+      await axiosInstance.post(`/saas-clientes/${clientId}/criar_banco_dados/`);
+      showToast('Banco de dados e pasta de arquivos provisionados com sucesso!', 'success');
+      carregarDados();
+    } catch (e) {
+      let msg = 'Erro ao criar banco de dados.';
+      if (e.response?.data?.error) {
+        msg = e.response.data.error;
+      } else if (e.response?.data?.detail) {
+        msg = e.response.data.detail;
+      }
+      showToast(msg, 'error');
+    } finally {
+      setLoadingCriarBanco(prev => ({ ...prev, [clientId]: false }));
+    }
+  };
+
   const handleDispararAtualizacaoLote = async () => {
     setLoadingLote(true);
     try {
@@ -541,6 +562,22 @@ const SaaSAdminPage = () => {
                       </TableCell>
                       <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                         <Stack direction="row" spacing={1} justifyContent="center">
+                          {!c.banco_criado && (
+                            <Tooltip title="Criar Banco de Dados">
+                              <IconButton 
+                                size="small" 
+                                color="success" 
+                                onClick={() => handleCriarBanco(c.id_saas_cliente)}
+                                disabled={loadingCriarBanco[c.id_saas_cliente]}
+                              >
+                                {loadingCriarBanco[c.id_saas_cliente] ? (
+                                  <CircularProgress size={20} color="inherit" />
+                                ) : (
+                                  <StorageIcon fontSize="small" />
+                                )}
+                              </IconButton>
+                            </Tooltip>
+                          )}
                           <Tooltip title="Editar Dados">
                             <IconButton size="small" onClick={() => handleOpenClientModal('edit', c)}>
                               <EditIcon fontSize="small" />
