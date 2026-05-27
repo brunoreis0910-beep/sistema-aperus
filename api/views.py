@@ -3692,6 +3692,7 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
                     with open(iniciar_bat, 'r', encoding='utf-8', errors='ignore') as f:
                         bat_content = f.read()
                     bat_content = re.sub(r':\d+', f':{cliente.db_port}', bat_content)
+                    bat_content = re.sub(r'porta \d+', f'porta {cliente.db_port}', bat_content, flags=re.IGNORECASE)
                     with open(iniciar_bat, 'w', encoding='utf-8') as f:
                         f.write(bat_content)
                 except Exception:
