@@ -3607,6 +3607,8 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         injetar dados da empresa e criar usuário ADMIN / _APERUS#.
         """
         cliente = self.get_object()
+        import re
+        cnpj_limpo = re.sub(r'\D', '', str(cliente.cnpj))
         if cliente.banco_criado:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'error': 'O banco de dados para este cliente já foi criado.'})
