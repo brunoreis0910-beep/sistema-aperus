@@ -3867,6 +3867,22 @@ class HistoricoAtualizacaoViewSet(viewsets.ModelViewSet):
     search_fields = ['cliente__razao_social', 'versao__versao']
 
 
+class ConfiguracaoAgendamentoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciamento da configuração de agendamento do SaaS.
+    """
+    queryset = models.ConfiguracaoAgendamento.objects.all()
+    serializer_class = serializers.ConfiguracaoAgendamentoSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def list(self, request, *args, **kwargs):
+        config = models.ConfiguracaoAgendamento.objects.first()
+        if not config:
+            config = models.ConfiguracaoAgendamento.objects.create()
+        serializer = self.get_serializer(config)
+        return Response(serializer.data)
+
+
 # ─── Public API Endpoints for Client Instances ────────────────────────────────
 
 @api_view(['GET'])

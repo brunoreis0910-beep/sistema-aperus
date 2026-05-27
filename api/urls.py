@@ -286,6 +286,7 @@ from .views import (
     SaaSClienteContratoViewSet,
     VersaoSistemaViewSet,
     HistoricoAtualizacaoViewSet,
+    ConfiguracaoAgendamentoViewSet,
     saas_verificar_licenca,
     saas_financeiro,
     saas_contrato_pendente,
@@ -377,6 +378,7 @@ router.register(r'saas-mensalidades', SaaSClienteMensalidadeViewSet, basename='s
 router.register(r'saas-contratos', SaaSClienteContratoViewSet, basename='saas-contrato')
 router.register(r'saas-versoes', VersaoSistemaViewSet, basename='saas-versao')
 router.register(r'saas-historico-atualizacoes', HistoricoAtualizacaoViewSet, basename='saas-historico-atualizacao')
+router.register(r'saas-agendamento', ConfiguracaoAgendamentoViewSet, basename='saas-agendamento')
 # PCP — Planejamento e Controle de Produção
 router.register(r'pcp/ordens', OrdemProducaoViewSet, basename='pcp-ordem')
 router.register(r'pcp/composicoes', ComposicaoProdutoViewSet, basename='pcp-composicao')

@@ -18,7 +18,7 @@ class TenantRouter:
     e redireciona as demais requisições para o banco do cliente ativo.
     """
     
-    CENTRAL_MODELS = {'saascliente', 'saasclientemensalidade', 'saasclientecontrato', 'versaosistema', 'historicoatualizacao'}
+    CENTRAL_MODELS = {'saascliente', 'saasclientemensalidade', 'saasclientecontrato', 'versaosistema', 'historicoatualizacao', 'configuracaoagendamento'}
 
     def db_for_read(self, model, **hints):
         if model._meta.model_name in self.CENTRAL_MODELS:

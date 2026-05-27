@@ -97,3 +97,85 @@ def enviar_mensagem_whatsapp_task(self, telefone, mensagem, id_fila=None, tipo_e
         # Retry com backoff exponencial
         # Se falhar 3 vezes, o Celery vai desistir e logar erro crítico
         raise self.retry(exc=exc)
+
+
+@shared_task
+def saas_executar_atualizacao_agendada_task():
+    """
+    Tarefa periódica que checa as regras de agendamento do SaaS
+    e dispara a atualização em lote se os critérios de dia/horário forem atendidos.
+    """
+    from api.models import ConfiguracaoAgendamento, SaaSCliente, VersaoSistema, HistoricoAtualizacao
+    from api.views import realizar_backup_banco
+    from django.utils import timezone
+    import os
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Checando agendamento inteligente de atualizações SaaS...")
+
+    config = ConfiguracaoAgendamento.objects.first()
+    if not config:
+        logger.info("Nenhuma configuração de agendamento encontrada.")
+        return
+
+    if not config.agendamento_ativo:
+        logger.info("Agendamento inteligente está inativo (sistema bloqueado para atualizações automáticas).")
+        return
+
+    # Validar dia da semana e horário aproximado (hora atual == hora programada)
+    now = timezone.localtime(timezone.now())
+    weekday = str(now.weekday()) # 0=Monday, ..., 6=Sunday
+    scheduled_time = config.horario_execucao
+
+    # Valida dia da semana
+    days = [d.strip() for d in config.dias_da_semana.split(',') if d.strip()]
+    if weekday not in days:
+        logger.info(f"Hoje (dia da semana {weekday}) não está configurado para atualizações: {days}")
+        return
+
+    # Valida hora aproximada (com tolerância de execução)
+    if now.hour != scheduled_time.hour:
+        logger.info(f"Hora atual {now.hour}h não coincide com a hora agendada {scheduled_time.hour}h.")
+        return
+
+    # Busca a versão mais recente cadastrada
+    versao = VersaoSistema.objects.all().order_by('-data_lancamento').first()
+    if not versao:
+        logger.warning("Nenhuma versão cadastrada no sistema. Cancelando agendamento.")
+        return
+
+    clientes_ativos = SaaSCliente.objects.filter(status_licenca='ATIVO')
+    if not clientes_ativos.exists():
+        logger.info("Nenhum cliente ativo encontrado para atualização agendada.")
+        return
+
+    # Executa a atualização para cada cliente ativo
+    logger.info(f"Iniciando atualizações agendadas para a versão {versao.versao}...")
+    for cliente in clientes_ativos:
+        # Determina o caminho do script
+        script_path = f"C:\\APERUS\\atualizar_{cliente.schema_name}.bat"
+        if not os.path.exists(script_path):
+            script_path = "C:\\APERUS\\atualizar_central.bat"
+
+        if not os.path.exists(script_path):
+            HistoricoAtualizacao.objects.create(
+                cliente=cliente,
+                versao=versao,
+                status='FALHA',
+                log_erro=f"Script de atualização não encontrado: {script_path} (Tarefa Agendada)"
+            )
+            logger.error(f"Script de atualização não encontrado para o cliente {cliente.razao_social}")
+        else:
+            # Cria histórico como PROCESSANDO e dispara a thread
+            historico = HistoricoAtualizacao.objects.create(
+                cliente=cliente,
+                versao=versao,
+                status='PROCESSANDO'
+            )
+            
+            # Executa a atualização
+            from api.views import SaaSClienteViewSet
+            viewset = SaaSClienteViewSet()
+            viewset.executar_script_background(historico.id_historico, script_path)
+            logger.info(f"Disparada atualização em background para o cliente {cliente.razao_social}")

@@ -5,7 +5,7 @@ import {
   CircularProgress, IconButton, Stack, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Alert,
   FormControl, InputLabel, Select, MenuItem, Tooltip, Tabs, Tab, Card, CardContent, Divider,
-  InputAdornment
+  InputAdornment, Switch
 } from '@mui/material';
 import {
   Add as AddIcon, Edit as EditIcon, Refresh as RefreshIcon,
@@ -62,6 +62,12 @@ const SaaSAdminPage = () => {
   const [mensalidades, setMensalidades] = useState([]);
   const [versoes, setVersoes] = useState([]);
   const [historicoAtualizacoes, setHistoricoAtualizacoes] = useState([]);
+  const [configAgendamento, setConfigAgendamento] = useState({
+    id_config: null,
+    horario_execucao: '02:00:00',
+    dias_da_semana: '0,1,2,3,4,5,6',
+    agendamento_ativo: true
+  });
   
   // KPI stats
   const [stats, setStats] = useState({ activeClients: 0, overduePayments: 0, mrr: 0 });
@@ -95,22 +101,25 @@ const SaaSAdminPage = () => {
   const carregarDados = useCallback(async () => {
     setLoading(true);
     try {
-      const [resCli, resMens, resVers, resHist] = await Promise.all([
+      const [resCli, resMens, resVers, resHist, resConfig] = await Promise.all([
         axiosInstance.get('/saas-clientes/'),
         axiosInstance.get('/saas-mensalidades/'),
         axiosInstance.get('/saas-versoes/'),
-        axiosInstance.get('/saas-historico-atualizacoes/')
+        axiosInstance.get('/saas-historico-atualizacoes/'),
+        axiosInstance.get('/saas-agendamento/')
       ]);
       
       const clientsData = resCli.data?.results ?? resCli.data ?? [];
       const billingData = resMens.data?.results ?? resMens.data ?? [];
       const versionsData = resVers.data?.results ?? resVers.data ?? [];
       const historyData = resHist.data?.results ?? resHist.data ?? [];
+      const configData = resConfig.data ?? { horario_execucao: '02:00:00', dias_da_semana: '0,1,2,3,4,5,6', agendamento_ativo: true };
       
       setClientes(clientsData);
       setMensalidades(billingData);
       setVersoes(versionsData);
       setHistoricoAtualizacoes(historyData);
+      setConfigAgendamento(configData);
       
       // Calculate Stats
       const active = clientsData.filter(c => c.status_licenca === 'ATIVO').length;
@@ -363,6 +372,23 @@ const SaaSAdminPage = () => {
       showToast(msg, 'error');
     } finally {
       setLoadingLote(false);
+    }
+  };
+
+  const handleSaveConfigAgendamento = async (updatedConfig) => {
+    try {
+      const configId = configAgendamento.id_config || updatedConfig.id_config;
+      if (configId) {
+        const res = await axiosInstance.put(`/saas-agendamento/${configId}/`, updatedConfig);
+        setConfigAgendamento(res.data);
+        showToast('Configuração de agendamento atualizada!', 'success');
+      } else {
+        const res = await axiosInstance.post('/saas-agendamento/', updatedConfig);
+        setConfigAgendamento(res.data);
+        showToast('Configuração de agendamento criada!', 'success');
+      }
+    } catch (e) {
+      showToast('Erro ao salvar as configurações de agendamento.', 'error');
     }
   };
 
@@ -809,61 +835,159 @@ const SaaSAdminPage = () => {
                 </Box>
 
                 {subTabValue === 0 && (
-                  <Card variant="outlined" sx={{ borderRadius: 3, p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, textAlign: 'center' }}>
-                    <Box sx={{ p: 2.5, borderRadius: '50%', bgcolor: 'primary.light', color: 'primary.contrastText', mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <UpdateIcon sx={{ fontSize: 52, animation: loadingLote ? 'spin-animation 2s linear infinite' : 'none' }} />
-                    </Box>
-                    <style>
-                      {`
-                        @keyframes spin-animation {
-                          from { transform: rotate(0deg); }
-                          to { transform: rotate(360deg); }
-                        }
-                      `}
-                    </style>
-                    <Typography variant="h5" fontWeight={700} gutterBottom>
-                      Atualização em Lote
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 520, mb: 4 }}>
-                      Esta ação executa a rotina de segurança (backup obrigatório) e atualiza todos os clientes ativos de uma só vez para a versão mais recente cadastrada ({versoes[0]?.versao || 'Nenhuma versão cadastrada'}).
-                    </Typography>
+                  <Stack spacing={3}>
+                    <Card variant="outlined" sx={{ borderRadius: 3, p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 300, textAlign: 'center' }}>
+                      <Box sx={{ p: 2.5, borderRadius: '50%', bgcolor: 'primary.light', color: 'primary.contrastText', mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <UpdateIcon sx={{ fontSize: 52, animation: loadingLote ? 'spin-animation 2s linear infinite' : 'none' }} />
+                      </Box>
+                      <style>
+                        {`
+                          @keyframes spin-animation {
+                            from { transform: rotate(0deg); }
+                            to { transform: rotate(360deg); }
+                          }
+                        `}
+                      </style>
+                      <Typography variant="h5" fontWeight={700} gutterBottom>
+                        Atualização em Lote
+                      </Typography>
+                      <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 520, mb: 4 }}>
+                        Esta ação executa a rotina de segurança (backup obrigatório) e atualiza todos os clientes ativos de uma só vez para a versão mais recente cadastrada ({versoes[0]?.versao || 'Nenhuma versão cadastrada'}).
+                      </Typography>
 
-                    {/* Stats */}
-                    <Grid container spacing={2} sx={{ maxWidth: 500, mb: 4 }}>
-                      <Grid item xs={6}>
-                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, textAlign: 'center' }}>
-                          <Typography variant="h5" fontWeight={700} color="primary">
-                            {clientes.filter(c => c.status_licenca === 'ATIVO').length}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Clientes Ativos
-                          </Typography>
-                        </Paper>
+                      {/* Stats */}
+                      <Grid container spacing={2} sx={{ maxWidth: 500, mb: 4 }}>
+                        <Grid item xs={6}>
+                          <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, textAlign: 'center' }}>
+                            <Typography variant="h5" fontWeight={700} color="primary">
+                              {clientes.filter(c => c.status_licenca === 'ATIVO').length}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Clientes Ativos
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={6}>
+                          <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, textAlign: 'center' }}>
+                            <Typography variant="h5" fontWeight={700} color="secondary">
+                              {versoes[0]?.versao || 'N/A'}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Última Versão
+                            </Typography>
+                          </Paper>
+                        </Grid>
                       </Grid>
-                      <Grid item xs={6}>
-                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, textAlign: 'center' }}>
-                          <Typography variant="h5" fontWeight={700} color="secondary">
-                            {versoes[0]?.versao || 'N/A'}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Última Versão
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                    </Grid>
 
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      size="large"
-                      disabled={loadingLote || clientes.filter(c => c.status_licenca === 'ATIVO').length === 0}
-                      onClick={handleDispararAtualizacaoLote}
-                      sx={{ py: 1.5, px: 5, borderRadius: 3, fontWeight: 'bold' }}
-                      startIcon={loadingLote ? <CircularProgress size={20} color="inherit" /> : <UpdateIcon />}
-                    >
-                      {loadingLote ? 'Atualizando Clientes...' : 'Disparar Atualização em Lote'}
-                    </Button>
-                  </Card>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="large"
+                        disabled={loadingLote || clientes.filter(c => c.status_licenca === 'ATIVO').length === 0}
+                        onClick={handleDispararAtualizacaoLote}
+                        sx={{ py: 1.5, px: 5, borderRadius: 3, fontWeight: 'bold' }}
+                        startIcon={loadingLote ? <CircularProgress size={20} color="inherit" /> : <UpdateIcon />}
+                      >
+                        {loadingLote ? 'Atualizando Clientes...' : 'Disparar Atualização em Lote'}
+                      </Button>
+                    </Card>
+
+                    {/* Scheduler Card */}
+                    <Card variant="outlined" sx={{ borderRadius: 3, p: 3 }}>
+                      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} flexWrap="wrap" gap={2}>
+                        <Box>
+                          <Typography variant="subtitle1" fontWeight={700}>
+                            Agendamento Inteligente com Trava de Segurança
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Configure o horário e os dias da semana para atualizações automáticas
+                          </Typography>
+                        </Box>
+                        <Box display="flex" alignItems="center" gap={1}>
+                          <Typography variant="body2" fontWeight={600} color={configAgendamento.agendamento_ativo ? "success.main" : "text.secondary"}>
+                            {configAgendamento.agendamento_ativo ? "AGENDAMENTO ATIVO" : "TRAVADO / INATIVO"}
+                          </Typography>
+                          <Switch
+                            checked={configAgendamento.agendamento_ativo}
+                            onChange={(e) => {
+                              const updated = { ...configAgendamento, agendamento_ativo: e.target.checked };
+                              setConfigAgendamento(updated);
+                              handleSaveConfigAgendamento(updated);
+                            }}
+                            color="success"
+                          />
+                        </Box>
+                      </Box>
+                      <Divider sx={{ mb: 3 }} />
+
+                      <Grid container spacing={3} alignItems="center">
+                        <Grid item xs={12} md={3}>
+                          <TextField
+                            label="Horário de Execução"
+                            type="time"
+                            value={configAgendamento.horario_execucao ? configAgendamento.horario_execucao.substring(0, 5) : '02:00'}
+                            onChange={(e) => {
+                              const timeVal = e.target.value + ":00";
+                              setConfigAgendamento({ ...configAgendamento, horario_execucao: timeVal });
+                            }}
+                            fullWidth
+                            InputLabelProps={{ shrink: true }}
+                            disabled={!configAgendamento.agendamento_ativo}
+                          />
+                        </Grid>
+
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" fontWeight={600} gutterBottom color={configAgendamento.agendamento_ativo ? "text.primary" : "text.disabled"}>
+                            Dias da Semana:
+                          </Typography>
+                          <Box display="flex" flexWrap="wrap" gap={1}>
+                            {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((dayName, idx) => {
+                              const dayStr = String(idx);
+                              const selectedDays = configAgendamento.dias_da_semana ? configAgendamento.dias_da_semana.split(',').map(d => d.trim()) : [];
+                              const isSelected = selectedDays.includes(dayStr);
+
+                              const toggleDay = () => {
+                                let newDays = [...selectedDays];
+                                if (isSelected) {
+                                  newDays = newDays.filter(d => d !== dayStr);
+                                } else {
+                                  newDays.push(dayStr);
+                                }
+                                newDays.sort();
+                                setConfigAgendamento({ ...configAgendamento, dias_da_semana: newDays.join(',') });
+                              };
+
+                              return (
+                                <Chip
+                                  key={dayStr}
+                                  label={dayName}
+                                  clickable={configAgendamento.agendamento_ativo}
+                                  color={isSelected ? "primary" : "default"}
+                                  variant={isSelected ? "filled" : "outlined"}
+                                  onClick={configAgendamento.agendamento_ativo ? toggleDay : undefined}
+                                  disabled={!configAgendamento.agendamento_ativo}
+                                  sx={{ fontWeight: 'bold' }}
+                                />
+                              );
+                            })}
+                          </Box>
+                        </Grid>
+
+                        <Grid item xs={12} md={3}>
+                          <Button
+                            variant="outlined"
+                            color="primary"
+                            fullWidth
+                            onClick={() => handleSaveConfigAgendamento(configAgendamento)}
+                            disabled={!configAgendamento.agendamento_ativo}
+                            sx={{ py: 1.5, borderRadius: 2, fontWeight: 'bold' }}
+                          >
+                            Salvar Configurações
+                          </Button>
+                        </Grid>
+                      </Grid>
+                    </Card>
+                  </Stack>
                 )}
 
                 {subTabValue === 1 && (

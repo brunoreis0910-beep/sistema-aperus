@@ -5860,3 +5860,20 @@ class HistoricoAtualizacao(models.Model):
         return f"{self.cliente.razao_social} -> {self.versao.versao} ({self.status})"
 
 
+class ConfiguracaoAgendamento(models.Model):
+    id_config = models.AutoField(primary_key=True)
+    horario_execucao = models.TimeField(verbose_name="Horário de Execução", default="02:00:00")
+    dias_da_semana = models.CharField(max_length=50, verbose_name="Dias da Semana (0-6)", default="0,1,2,3,4,5,6")
+    agendamento_ativo = models.BooleanField(default=True, verbose_name="Agendamento Ativo")
+
+    class Meta:
+        managed = True
+        db_table = 'saas_configuracao_agendamento'
+        verbose_name = 'Configuração de Agendamento'
+        verbose_name_plural = 'Configurações de Agendamento'
+
+    def __str__(self):
+        status = "Ativo" if self.agendamento_ativo else "Inativo"
+        return f"Agendamento {self.horario_execucao} ({status})"
+
+

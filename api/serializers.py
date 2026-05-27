@@ -2296,6 +2296,13 @@ class SaaSClienteSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ConfiguracaoAgendamentoSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import ConfiguracaoAgendamento
+        model = ConfiguracaoAgendamento
+        fields = '__all__'
+
+
 
 
 
