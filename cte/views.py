@@ -26,7 +26,7 @@ class CTeCreateView(CreateView):
               'cst_icms', 'p_icms', 'v_bc_icms', 'v_icms',
               'resp_seguro', 'nome_seguradora', 'numero_apolice',
               'placa_veiculo', 'veiculo_uf', 'rntrc', 'veiculo_renavam',
-              'condutor_nome', 'condutor_cpf']
+              'condutor_nome', 'condutor_cpf', 'ciot', 'ciot_cpf_cnpj']
     success_url = reverse_lazy('cte_list')
 
     def get_context_data(self, **kwargs):
@@ -62,7 +62,7 @@ class CTeUpdateView(UpdateView):
               'cst_icms', 'p_icms', 'v_bc_icms', 'v_icms',
               'resp_seguro', 'nome_seguradora', 'numero_apolice',
               'placa_veiculo', 'veiculo_uf', 'rntrc', 'veiculo_renavam',
-              'condutor_nome', 'condutor_cpf']
+              'condutor_nome', 'condutor_cpf', 'ciot', 'ciot_cpf_cnpj']
     success_url = reverse_lazy('cte_list')
 
     def get_context_data(self, **kwargs):

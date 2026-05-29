@@ -519,7 +519,33 @@ class CTeService:
         else:
             rntrc_clean = rntrc_clean.zfill(8)
             
-        self._tag(rodo, 'RNTRC', rntrc_clean)
+        infANTT = etree.SubElement(rodo, 'infANTT')
+        self._tag(infANTT, 'RNTRC', rntrc_clean)
+
+        # Adicionar grupo infCIOT se o ciot estiver preenchido (Passo 1 do Módulo 3)
+        if getattr(cte, 'ciot', None):
+            infCIOT = etree.SubElement(infANTT, 'infCIOT')
+            self._tag(infCIOT, 'CIOT', ''.join(filter(str.isdigit, cte.ciot)).zfill(12)[:12])
+            
+            # Buscar documento do responsável pelo CIOT
+            resp_doc = ''.join(filter(str.isdigit, getattr(cte, 'ciot_cpf_cnpj', '') or ''))
+            if not resp_doc:
+                # Fallback to tomador's CNPJ/CPF
+                tomador = None
+                if cte.tomador_servico == 0:
+                    tomador = cte.remetente
+                elif cte.tomador_servico == 3:
+                    tomador = cte.destinatario
+                elif cte.tomador_servico == 4:
+                    tomador = cte.tomador_outros
+                
+                if tomador:
+                    resp_doc = ''.join(filter(str.isdigit, getattr(tomador, 'cpf_cnpj', '') or ''))
+            
+            if len(resp_doc) > 11:
+                self._tag(infCIOT, 'CNPJ', resp_doc.zfill(14)[:14])
+            else:
+                self._tag(infCIOT, 'CPF', resp_doc.zfill(11)[:11])
 
         # Adicionar infRespTec (Obrigatorio em MG e outros estados na 4.00)
         # Deve ser filho de infCte, APÓS infCTeNorm

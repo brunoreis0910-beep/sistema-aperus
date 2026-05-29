@@ -73,6 +73,10 @@ class ConhecimentoTransporte(models.Model):
     condutor_nome = models.CharField(max_length=60, blank=True, null=True)
     condutor_cpf = models.CharField(max_length=14, blank=True, null=True)
 
+    # CIOT (Passo 1 de Atualizações Fiscais 2026)
+    ciot = models.CharField(max_length=12, blank=True, null=True)
+    ciot_cpf_cnpj = models.CharField(max_length=14, blank=True, null=True)
+
     # Local de Coleta/Origem
     cidade_origem_nome = models.CharField(max_length=60, blank=True, null=True)
     cidade_origem_uf = models.CharField(max_length=2, blank=True, null=True)

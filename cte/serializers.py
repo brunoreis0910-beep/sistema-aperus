@@ -41,6 +41,22 @@ class ConhecimentoTransporteSerializer(serializers.ModelSerializer):
             'tomador_outros': {'required': False, 'allow_null': True},
         }
 
+    def validate_ciot(self, value):
+        if value:
+            clean_value = ''.join(filter(str.isdigit, value))
+            if len(clean_value) != 12:
+                raise serializers.ValidationError("O CIOT deve conter exatamente 12 dígitos numéricos.")
+            return clean_value
+        return value
+
+    def validate_ciot_cpf_cnpj(self, value):
+        if value:
+            clean_value = ''.join(filter(str.isdigit, value))
+            if len(clean_value) not in [11, 14]:
+                raise serializers.ValidationError("O CPF/CNPJ do responsável pelo CIOT deve conter 11 (CPF) ou 14 (CNPJ) dígitos.")
+            return clean_value
+        return value
+
     def get_xml_url(self, obj):
         if obj.xml_cte:
             return f"/api/ctes/{obj.pk}/baixar_xml/"

@@ -81,6 +81,8 @@ const CTeForm = ({ onClose, onSaveSuccess }) => {
         veiculo_uf: '',
         condutor_nome: '',
         condutor_cpf: '',
+        ciot: '',
+        ciot_cpf_cnpj: '',
         
         cep_origem: '',
         cidade_origem_nome: '',
@@ -478,9 +480,29 @@ const CTeForm = ({ onClose, onSaveSuccess }) => {
                  <TextField fullWidth label="UF Veículo" name="veiculo_uf" value={formData.veiculo_uf} onChange={handleChange} />
             </Grid>
              <Grid item xs={6} md={3}>
-                 <TextField fullWidth label="RNTRC" name="rntrc" value={formData.rntrc} onChange={handleChange} />
-            </Grid>
-             <Grid item xs={12} md={12}>
+                  <TextField fullWidth label="RNTRC" name="rntrc" value={formData.rntrc} onChange={handleChange} />
+             </Grid>
+             <Grid item xs={6} md={3}>
+                  <TextField 
+                      fullWidth 
+                      label="CIOT" 
+                      name="ciot" 
+                      value={formData.ciot || ''} 
+                      onChange={(e) => setFormData(prev => ({ ...prev, ciot: e.target.value.replace(/\D/g, '').slice(0, 12) }))}
+                      helperText="Código de 12 dígitos"
+                  />
+             </Grid>
+             <Grid item xs={12} md={4}>
+                  <TextField 
+                      fullWidth 
+                      label="CPF/CNPJ Resp. CIOT" 
+                      name="ciot_cpf_cnpj" 
+                      value={formData.ciot_cpf_cnpj || ''} 
+                      onChange={(e) => setFormData(prev => ({ ...prev, ciot_cpf_cnpj: e.target.value.replace(/\D/g, '').slice(0, 14) }))}
+                      helperText="Se vazio, assume o Tomador"
+                  />
+             </Grid>
+             <Grid item xs={12} md={8}>
                 <Autocomplete
                     id="condutor-autocomplete"
                     freeSolo

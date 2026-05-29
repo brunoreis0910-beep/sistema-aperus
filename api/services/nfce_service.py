@@ -442,67 +442,61 @@ class NFCeService:
         try:
             logger.info("Gerando XML em Contingência Off-line...")
             
-            # 1. Modificar XML para tpEmis=9 e adicionar dhCont/xJust
-            # O XML ainda não está assinado, então podemos manipular strings simples
-            # Estrutura esperada: <ide>...<tpEmis>1</tpEmis>...</ide>
-            # Nova estrutura: <ide>...<tpEmis>9</tpEmis><dhCont>AAAA-MM-DDTHH:MM:SS-03:00</dhCont><xJust>...</xJust>...</ide>
+            # Set status to CONTINGENCIA so builder uses tpEmis = 9 and adds dhCont/xJust and QR Code v3 Offline
+            venda.status_nfe = 'CONTINGENCIA'
             
-            dh_cont = datetime.now().strftime('%Y-%m-%dT%H:%M:%S-03:00')
-            justificativa = "Falha de comunicacao com a SEFAZ"
+            from .nfe_xml_builder import NfeXmlBuilder
+            builder = NfeXmlBuilder(venda, empresa)
+            xml_unsigned_offline = builder.build_xml()
             
-            replacement = f"<tpEmis>9</tpEmis><dhCont>{dh_cont}</dhCont><xJust>{justificativa}</xJust>"
-            
-            if "<tpEmis>1</tpEmis>" in xml_unsigned:
-                xml_offline = xml_unsigned.replace("<tpEmis>1</tpEmis>", replacement)
-            else:
-                return {"sucesso": False, "mensagem": "Falha na Contingência: Tag tpEmis não encontrada no XML."}
-
-            # 2. Assinar XML Off-line com SIGNER V2
+            # Assinar XML Off-line (usando Java por padrão ou Python fallback)
+            xml_signed = None
             try:
-                # Import local
-                from .signer_service_v2 import XMLSignerV2
+                from api.services.java_signer_bridge import JavaXmlSigner
+                signer_java = JavaXmlSigner(empresa.certificado_digital, empresa.senha_certificado)
+                xml_signed = signer_java.sign_xml(xml_unsigned_offline)
+                logger.info("Assinatura de Contingência realizada com Java")
+            except Exception as e_java:
+                logger.warning(f"Java signer não disponível para Contingência: {e_java}. Usando Python fallback.")
+                from api.services.signer_service_v2 import XMLSignerV2
                 signer_v2 = XMLSignerV2(empresa.certificado_digital, empresa.senha_certificado)
-                xml_signed = signer_v2.sign_xml(xml_offline, parent_tag='infNFe')
-            except Exception as e:
-                return {"sucesso": False, "mensagem": f"Erro ao assinar Contingência: {e}"}
+                xml_signed = signer_v2.sign_xml(xml_unsigned_offline, parent_tag='infNFe')
 
-            # 3. Salvar Venda (QR Code V2.0 NÃO usa CDATA)
-            # Extrair QR Code
+            # Extrair QR Code do XML gerado no builder
             qrcode = ""
-            qr_match = re.search(r'<qrCode>(https://[^<]+)</qrCode>', xml_signed)
+            import re
+            qr_match = re.search(r'<qrCode>([^<]+)</qrCode>', xml_signed)
             if qr_match:
                 qrcode = qr_match.group(1)
 
-            # Extrair Chave (está no atributo ID da tag infNFe)
+            # Extrair Chave
             chave = ""
-            try:
-                # ID="NFe312..."
-                id_match = re.search(r'Id="NFe([0-9]+)"', xml_signed)
-                if id_match:
-                    chave = id_match.group(1)
-            except: pass
+            id_match = re.search(r'Id="NFe([0-9]+)"', xml_signed)
+            if id_match:
+                chave = id_match.group(1)
 
-            venda.status_nfe = 'CONTINGENCIA' # Novo Status
             venda.chave_nfe = chave
             venda.xml_nfe = xml_signed
             venda.qrcode_nfe = qrcode
-            venda.protocolo_nfe = "" # Em contingência não tem protocolo imediato
+            venda.protocolo_nfe = "" # Não tem protocolo em contingência offline
+            venda.mensagem_nfe = f"Emitida em Contingência. Erro conexão: {error_msg}"[:500]
             
-            # Incrementa sequencial da operacao (pois consumiu um numero)
+            # Incrementa sequencial da operação
             if venda.id_operacao:
                  try:
                      op = venda.id_operacao
                      if op.proximo_numero_nf == venda.numero_nfe: 
-                         op.proximo_numero_nf += 1
-                         op.save()
+                          op.proximo_numero_nf += 1
+                          op.save()
                      if op.id_numeracao_id:
-                         try:
-                             num_obj = op.id_numeracao
-                             num_obj.numeracao = str(int(num_obj.numeracao) + 1)
-                             num_obj.save()
-                         except Exception as e_num:
-                             logger.error(f"Erro ao incrementar numeracao: {e_num}")
-                 except: pass
+                          try:
+                              num_obj = op.id_numeracao
+                              num_obj.numeracao = str(int(num_obj.numeracao) + 1)
+                              num_obj.save()
+                          except Exception as e_num:
+                              logger.error(f"Erro ao incrementar numeração: {e_num}")
+                 except Exception as e_inc:
+                     logger.error(f"Erro ao incrementar operação na contingência: {e_inc}")
 
             venda.save()
 

@@ -343,7 +343,7 @@ class SefazService:
                     nProt = infProt.findtext('nProt')
                     chNFe = infProt.findtext('chNFe')
                     
-                    if cStatProt in ['100', '150']: # Autorizado
+                    if cStatProt in ['100', '150'] or (self.modelo == '65' and cStatProt == '120'): # Autorizado (120 = Autorizado com Alerta)
                         logger.info(f"[SEFAZ] NFC-e AUTORIZADA: cStat={cStatProt} | nProt={nProt} | chNFe={chNFe}")
                         return {
                             'sucesso': True,

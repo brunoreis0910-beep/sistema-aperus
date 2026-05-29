@@ -515,6 +515,22 @@ class DanfceGenerator:
         self.venda = venda
         self.c = None
         self.y = 0          # posição y corrente (decresce ao desenhar para baixo)
+        
+        # Dynamic geometry support for 56mm / 80mm
+        self.PAGE_W = 80 * mm
+        self.MX = 2 * mm
+        self.LH = 3.8 * mm
+        self.LH_SM = 3.0 * mm
+        
+        try:
+            from api.models import ConfiguracaoImpressao
+            config_imp = ConfiguracaoImpressao.objects.filter(modulo='vendas').first()
+            if config_imp and config_imp.largura_termica == '56mm':
+                self.PAGE_W = 56 * mm
+        except Exception:
+            pass
+            
+        self.CW = self.PAGE_W - 2 * self.MX
 
     # ------------------------------------------------------------------ helpers
 
@@ -601,6 +617,18 @@ class DanfceGenerator:
         h += (len(pagamentos) + 2) * self.LH + 10 * mm
         h += 44 * mm    # QR code
         h += 28 * mm    # chave + rodapé
+        
+        # Add extra height for Reforma Tributária (CNPJ client)
+        cliente = self.venda.id_cliente
+        if cliente and cliente.cpf_cnpj:
+            doc = re.sub(r'\D', '', cliente.cpf_cnpj)
+            if len(doc) == 14:
+                h += 4 * self.LH  # 4 lines extra height to prevent overlap
+                
+        # Contingency warning adds space
+        if self.venda.status_nfe == 'CONTINGENCIA':
+            h += 3 * self.LH
+            
         return max(h, 120 * mm)
 
     # ------------------------------------------------------------------ main
@@ -667,10 +695,14 @@ class DanfceGenerator:
         self._tline(cnpj_ie, size=6, align='center')
         self._sep()
 
-        titulo = 'CUPOM FISCAL ELETRÔNICO - NFC-e'
-        if is_homologacao:
-            titulo += ' [HOMOLOGAÇÃO]'
-        self._tline(titulo, size=7, bold=True, align='center')
+        if self.venda.status_nfe == 'CONTINGENCIA':
+            self._tline('NFC-e EMITIDA EM CONTINGENCIA', size=7, bold=True, align='center')
+            self._tline('VIA DO CONSUMIDOR - NAO TRANSMITIDA', size=6.5, align='center')
+        else:
+            titulo = 'CUPOM FISCAL ELETRÔNICO - NFC-e'
+            if is_homologacao:
+                titulo += ' [HOMOLOGAÇÃO]'
+            self._tline(titulo, size=7, bold=True, align='center')
 
         numero = self.venda.numero_nfe or self.venda.numero_documento or self.venda.pk
         serie  = getattr(self.venda, 'serie_nfe', 1) or 1
@@ -791,7 +823,7 @@ class DanfceGenerator:
             from reportlab.graphics.barcode.qr import QrCodeWidget
             from reportlab.graphics import renderPDF
 
-            qr_size   = 32 * mm
+            qr_size = 28 * mm if self.PAGE_W < 70 * mm else 32 * mm
             qr_widget = QrCodeWidget(qr_data)
             b = qr_widget.getBounds()
             w, h = b[2] - b[0], b[3] - b[1]
@@ -807,6 +839,45 @@ class DanfceGenerator:
 
     def _footer(self, is_homologacao):
         self._sep(gap=0.5)
+
+        # --- Reforma Tributária & Contingência Warning for CNPJ ---
+        cliente = self.venda.id_cliente
+        if cliente and cliente.cpf_cnpj:
+            doc = re.sub(r'\D', '', cliente.cpf_cnpj)
+            if len(doc) == 14:
+                from api.models import EmpresaConfig
+                empresa = EmpresaConfig.get_ativa()
+                crt = "1"
+                if empresa:
+                    if empresa.crt:
+                        crt = str(empresa.crt)
+                    elif empresa.regime_tributario and str(empresa.regime_tributario).upper() in ['NORMAL', 'LUCRO_PRESUMIDO', 'LUCRO_REAL']:
+                        crt = '3'
+                
+                if crt == "1":
+                    self._tline('Informacoes Complementares:', size=6.5, bold=True, align='center', lh=self.LH_SM)
+                    self._tline('DOCUMENTO EMITIDO POR ME OU EPP OPTANTE PELO SIMPLES NACIONAL. NAO GERA DIREITO A CREDITO FISCAL DE IBS E DE CBS.', size=5.5, align='center', lh=self.LH_SM)
+                    self.y -= 1 * mm
+                elif crt == "3":
+                    itens = self.venda.itens.all()
+                    total_ibs = sum(item.valor_ibs or Decimal('0.00') for item in itens)
+                    total_cbs = sum(item.valor_cbs or Decimal('0.00') for item in itens)
+                    total_is = sum(item.valor_is or Decimal('0.00') for item in itens)
+                    
+                    self._tline('TRIBUTOS DA REFORMA TRIBUTARIA', size=6.5, bold=True, align='center', lh=self.LH_SM)
+                    self._lr('Valor IBS Total:', f'R$ {total_ibs:.2f}', size=6.5)
+                    self._lr('Valor CBS Total:', f'R$ {total_cbs:.2f}', size=6.5)
+                    self._lr('Valor IS Total:', f'R$ {total_is:.2f}', size=6.5)
+                    self.y -= 1 * mm
+                self._sep(gap=0.5)
+
+        if self.venda.status_nfe == 'CONTINGENCIA':
+            self.y -= 1 * mm
+            self._txt('NFC-e EMITIDA EM CONTINGENCIA', size=7, bold=True,
+                      align='center', color=(0.8, 0, 0))
+            self._adv(self.LH)
+            self._tline('Nao Transmitida. Transmissao obrigatoria.', size=6, align='center')
+            self._sep(gap=0.5)
 
         chave     = self.venda.chave_nfe or ''
         chave_num = re.sub(r'\D', '', chave)

@@ -23,10 +23,70 @@ class NFeService:
         if not config:
             return {"sucesso": False, "mensagem": "Dados da empresa não configurados."}
 
-        # Validate Client for NFe (Model 55 requires identified client except for specific cases)
-        if not venda_obj.id_cliente:
-             # Em ambiente de homologacao as vezes passa, mas regra geral exige.
-             pass
+        # --- VALIDATION FOR PAA (Nota Técnica 2026.001 v1.01) ---
+        serie_val = venda_obj.serie_nfe or 1
+        if venda_obj.id_operacao and venda_obj.id_operacao.serie_nf:
+            serie_val = venda_obj.id_operacao.serie_nf
+
+        try:
+            serie_int = int(str(serie_val).strip())
+        except (ValueError, TypeError):
+            serie_int = 1
+
+        if 970 <= serie_int <= 979:
+            # Emitente CPF Check: PAA is specific for emitters with CPF
+            cnpj_cpf_clean = ''.join(filter(str.isdigit, config.cpf_cnpj or ''))
+            if len(cnpj_cpf_clean) != 11:
+                return {
+                    "sucesso": False,
+                    "mensagem": "Rejeição: Série de emissores (970 a 979) específica para Emitentes com CPF (Produtor Rural)."
+                }
+            
+            # Regra de Validação C21-20: PAA vedado para Regime Normal (CRT = 3)
+            crt_val = "1"
+            if config.crt:
+                crt_val = str(config.crt)
+            if config.regime_tributario and str(config.regime_tributario).upper() in ['NORMAL', 'LUCRO_PRESUMIDO', 'LUCRO_REAL']:
+                crt_val = '3'
+                
+            if crt_val == '3':
+                return {
+                    "sucesso": False,
+                    "mensagem": "Rejeição C21-20: Emissão de notas de Produtor Autorizado de Apoio (PAA) é vedada para Regime Normal (CRT=3)."
+                }
+
+        # --- VALIDATION FOR REGRA BA02-35 (NF-e de saída não pode referenciar chaves de NFC-e ou CF-e) ---
+        chaves_referenciadas = []
+        if getattr(venda_obj, 'chave_nfe_referenciada', None):
+            chaves_referenciadas.append(str(venda_obj.chave_nfe_referenciada).strip())
+        
+        if hasattr(venda_obj, 'vendas_faturadas'):
+            try:
+                for venda_origem in venda_obj.vendas_faturadas.all():
+                    if venda_origem.chave_nfe:
+                        chaves_referenciadas.append(str(venda_origem.chave_nfe).strip())
+            except Exception as e_ref:
+                logger.error(f"Erro ao obter chaves faturadas para validação BA02-35: {e_ref}")
+
+        if hasattr(venda_obj, 'notas_referenciadas'):
+            try:
+                for nota_ref in venda_obj.notas_referenciadas.all():
+                    if nota_ref.chave_acesso:
+                        chaves_referenciadas.append(str(nota_ref.chave_acesso).strip())
+            except Exception as e_ref:
+                logger.error(f"Erro ao obter notas_referenciadas para validação BA02-35: {e_ref}")
+
+        import re
+        for chave in chaves_referenciadas:
+            chave_clean = re.sub(r'\D', '', chave)
+            if len(chave_clean) == 44:
+                modelo_ref = chave_clean[20:22]
+                if modelo_ref in ['65', '59', '60']:
+                    doc_type = "NFC-e (modelo 65)" if modelo_ref == '65' else "CF-e (modelo 59/60)"
+                    return {
+                        "sucesso": False,
+                        "mensagem": f"Rejeição BA02-35: Uma NF-e de saída não pode referenciar chaves de acesso de {doc_type} (Chave: {chave})."
+                    }
 
         # Ensure Sequential Numbering (Assign before generating INI)
         if not venda_obj.numero_nfe and venda_obj.id_operacao:

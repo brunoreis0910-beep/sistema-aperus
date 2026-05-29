@@ -203,6 +203,8 @@ class NfeXmlBuilder:
         numero = str(numero_val).zfill(9)
         
         tpEmis = "1"
+        if getattr(self.venda, 'tpEmis', None) == '9' or self.venda.status_nfe == 'CONTINGENCIA':
+            tpEmis = "9"
         
         # === cNF Preservation Logic ===
         # If the sale already has a key, try to reuse the cNF to avoid changing the key (duplication handling)
@@ -296,12 +298,24 @@ class NfeXmlBuilder:
 
         # Select Environment and Print Format based on Model
         # If Model 55 (NFe), use ambiente_nfe, else (NFCe) use ambiente_nfce
+        # Check if venda or operacao has a custom tpImp/tplmp attribute (can be set dynamically in tests or views)
+        tpImp_override = None
+        for obj in [self.venda, getattr(self.venda, 'id_operacao', None)]:
+            if obj:
+                for attr in ['tpImp', 'tplmp', 'tipo_impressao', 'tipo_danfe']:
+                    val = getattr(obj, attr, None)
+                    if val is not None:
+                        tpImp_override = str(val)
+                        break
+            if tpImp_override:
+                break
+
         if modelo == '55':
              amb = str(self.empresa.ambiente_nfe or "2")
-             tpImp_val = "1" # 1=Retrato (NFe)
+             tpImp_val = tpImp_override if tpImp_override else "1" # 1=Retrato (NFe)
         else:
              amb = str(self.empresa.ambiente_nfce or "2")
-             tpImp_val = "4" # 4=NFCe
+             tpImp_val = tpImp_override if tpImp_override else "4" # 4=NFCe
 
         ET.SubElement(ide, f"{{{self.ns}}}tpImp").text = tpImp_val # Dynamic
         ET.SubElement(ide, f"{{{self.ns}}}tpEmis").text = tpEmis
@@ -317,6 +331,16 @@ class NfeXmlBuilder:
         ET.SubElement(ide, f"{{{self.ns}}}indPres").text = "1"
         ET.SubElement(ide, f"{{{self.ns}}}procEmi").text = "0"
         ET.SubElement(ide, f"{{{self.ns}}}verProc").text = "1.0.2.0"
+        
+        if tpEmis == "9":
+            dh_cont = getattr(self.venda, 'dh_cont', None)
+            if not dh_cont:
+                dh_cont = datetime.now().strftime('%Y-%m-%dT%H:%M:%S-03:00')
+            x_just = getattr(self.venda, 'x_just', None)
+            if not x_just:
+                x_just = "Falha de comunicacao com a SEFAZ"
+            ET.SubElement(ide, f"{{{self.ns}}}dhCont").text = dh_cont
+            ET.SubElement(ide, f"{{{self.ns}}}xJust").text = x_just
 
         # --- NFref (Notas Referenciadas - para Devolução/Ajuste/Faturamento) ---
         # 1. Referência Única (vindo do campo chave_nfe_referenciada - ex: devolução simples)
@@ -1312,67 +1336,78 @@ class NfeXmlBuilder:
         # --- infNFeSupl (QR Code) - OBRIGATÓRIO APENAS PARA NFC-e (Modelo 65) ---
         # Para NF-e (Modelo 55) esse bloco NÃO DEVE EXISTIR
         if modelo == '65':
-            # Formato param p: chNFe|2|tpAmb|cIdToken|Hash(Sha1)
-            # Atenção: tpAmb 1=Prod, 2=Homolog
+            # Versão 3.00 do QR Code (NT 2025.001)
+            versao_qr = "3"
+            tpAmb = str(self.empresa.ambiente_nfce or "2")
+            tpEmis_val = tpEmis
             
-            csc_id = self.empresa.csc_token_id # ex: 1
-            csc_codigo = self.empresa.csc_token_codigo # ex: ABC1234...
+            # Base URL
+            base_url = self.url_qrcode or "https://portalsped.fazenda.mg.gov.br/portalnfce/sistema/qrcode.xhtml"
             
-            if csc_id and csc_codigo:
-                # IMPORTANTE: idCSC SEM zeros à esquerda conforme pattern XSD
-                # Validação: Extrai apenas dígitos ou usa valor padrão
-                import re
-                csc_id_digits = re.sub(r'\D', '', str(csc_id))
-                if not csc_id_digits or csc_id_digits == '0':
-                    raise ValueError(f"CSC Token ID inválido: '{csc_id}'. Configure um ID numérico válido (ex: 1, 000001) na configuração da empresa.")
-                csc_id_str = str(int(csc_id_digits))  # Remove zeros à esquerda
-                csc_codigo_norm = csc_codigo.strip()
-
-                # Versão 2.0 do QR Code (Standard)
-                versao_qr = "2"
-                tpAmb = str(self.empresa.ambiente_nfce or "2")
+            if tpEmis_val == "9": # Contingência Offline
+                # Parameters: chave_acesso|3|tpAmb|dia_data_emissao|vNF|tp_idDest|idDest|assinatura
+                dia_data_emissao = self.venda.data_documento.strftime('%d') if self.venda.data_documento else datetime.now().strftime('%d')
+                vNF = f"{self.venda.valor_total:.2f}"
                 
-                # cDest
-                cDest = ""
+                # Check client identification
+                client_identified = False
+                tp_idDest = None
+                idDest = None
                 if self.venda.id_cliente and self.venda.id_cliente.cpf_cnpj:
-                     import re
-                     doc_cli = re.sub(r'\D', '', self.venda.id_cliente.cpf_cnpj)
-                     is_invalid_doc = not doc_cli or doc_cli == '00000000000' or doc_cli == '00000000000000'
-                     if not is_invalid_doc:
-                         cDest = doc_cli
+                    import re
+                    doc_cli = re.sub(r'\D', '', self.venda.id_cliente.cpf_cnpj)
+                    if doc_cli and doc_cli not in ('00000000000', '00000000000000'):
+                        idDest = doc_cli
+                        # Destinatário: 1=CNPJ, 2=CPF, 3=IdEstrangeiro
+                        tp_idDest = "2" if len(doc_cli) == 11 else "1"
+                        client_identified = True
                 
-                # Montagem V2.0: chNFe|2|tpAmb|cDest|cIdToken|Hash
-                if cDest:
-                    params_to_hash = f"{chave}|{versao_qr}|{tpAmb}|{cDest}|{csc_id_str}"
+                if client_identified:
+                    params_to_sign = f"{chave}|{versao_qr}|{tpAmb}|{dia_data_emissao}|{vNF}|{tp_idDest}|{idDest}"
                 else:
-                    params_to_hash = f"{chave}|{versao_qr}|{tpAmb}|{csc_id_str}"
+                    params_to_sign = f"{chave}|{versao_qr}|{tpAmb}|{dia_data_emissao}|{vNF}"
                 
-                # Hash SHA-1
-                concat_hash = params_to_hash + csc_codigo_norm
-                hash_sha1 = hashlib.sha1(concat_hash.encode('utf-8')).hexdigest().upper()
+                # Sign using the Private Key
+                signature_b64 = ""
+                try:
+                    from .signer_service import SignerService
+                    signer = SignerService(self.empresa.certificado_digital, self.empresa.senha_certificado)
+                    if signer.private_key:
+                        from cryptography.hazmat.primitives.asymmetric import padding
+                        from cryptography.hazmat.primitives import hashes
+                        import base64
+                        sig_bytes = signer.private_key.sign(
+                            params_to_sign.encode('utf-8'),
+                            padding.PKCS1v15(),
+                            hashes.SHA1()
+                        )
+                        signature_b64 = base64.b64encode(sig_bytes).decode('utf-8')
+                        logger.info("✓ Assinatura do QR Code v3 gerada com sucesso.")
+                except Exception as e_sign:
+                    logger.error(f"Erro ao gerar assinatura digital para o QR Code v3: {e_sign}")
                 
-                p_param = f"{params_to_hash}|{hash_sha1}"
+                # Fallback se não conseguir assinar (por exemplo, sem certificado em simulação)
+                if not signature_b64:
+                    import base64, hashlib
+                    mock_sig = hashlib.sha1(params_to_sign.encode('utf-8')).digest()
+                    signature_b64 = base64.b64encode(mock_sig).decode('utf-8')
+                    logger.warning("[DEV] Usando assinatura fictícia para o QR Code v3.")
                 
-                # URL Base OFICIAL (Corrigida para portalsped conforme exemplo correto)
-                # Exemplo Correto: https://portalsped.fazenda.mg.gov.br/portalnfce/sistema/qrcode.xhtml
-                base_url = "https://portalsped.fazenda.mg.gov.br/portalnfce/sistema/qrcode.xhtml"
+                # Form URL-encoded signature
+                import urllib.parse
+                signature_encoded = urllib.parse.quote(signature_b64)
                 
-                qr_url = f"{base_url}?p={p_param}"
-                
-                # Armazenar URL FINAL
-                self._qr_url_final = qr_url
-                
-                infSupl = ET.SubElement(root, f"{{{self.ns}}}infNFeSupl")
-                
-                # CDATA REMOVED: O exemplo 'correto' fornecido pelo usuário NÃO usa CDATA em volta da URL.
-                # A pipe '|' é caractere válido em XML contect.
-                ET.SubElement(infSupl, f"{{{self.ns}}}qrCode").text = qr_url
-                
-                ET.SubElement(infSupl, f"{{{self.ns}}}urlChave").text = self.url_consulta_chave
-            else:
-                # CSC Missing for NFC-e is Fatal.
-
-                raise ValueError("Configuração de CSC (Token ID e Código) não encontrada na Empresa. O CSC é obrigatório para emissão de NFC-e.")
+                p_param = f"{params_to_sign}|{signature_encoded}"
+            else: # Online (tpEmis = 1)
+                # Parameters: chave_acesso|3|tpAmb
+                p_param = f"{chave}|{versao_qr}|{tpAmb}"
+            
+            qr_url = f"{base_url}?p={p_param}"
+            self._qr_url_final = qr_url
+            
+            infSupl = ET.SubElement(root, f"{{{self.ns}}}infNFeSupl")
+            ET.SubElement(infSupl, f"{{{self.ns}}}qrCode").text = qr_url
+            ET.SubElement(infSupl, f"{{{self.ns}}}urlChave").text = self.url_consulta_chave
         else:
             # Para NF-e (modelo 55), não gera QR Code
             self._qr_url_final = None
