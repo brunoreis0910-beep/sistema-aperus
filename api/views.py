@@ -3607,6 +3607,10 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         injetar dados da empresa e criar usuário ADMIN / _APERUS#.
         """
         cliente = self.get_object()
+        if cliente.schema_name == 'central':
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'error': 'O banco de dados central não pode ser recriado.'})
+
         import re
         cnpj_limpo = re.sub(r'\D', '', str(cliente.cnpj))
         if cliente.banco_criado:
@@ -3699,9 +3703,9 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
                         elif line.startswith("DB_PASSWORD="):
                             new_lines.append(f"DB_PASSWORD={default_db.get('PASSWORD', '')}\n")
                         elif line.startswith("DB_HOST="):
-                            new_lines.append(f"DB_HOST={cliente.db_host}\n")
+                            new_lines.append(f"DB_HOST={default_db.get('HOST', '127.0.0.1')}\n")
                         elif line.startswith("DB_PORT="):
-                            new_lines.append(f"DB_PORT={cliente.db_port}\n")
+                            new_lines.append(f"DB_PORT={default_db.get('PORT', '3306')}\n")
                         elif line.startswith("DEBUG="):
                             new_lines.append("DEBUG=True\n")
                         elif line.startswith("ALLOWED_HOSTS="):
