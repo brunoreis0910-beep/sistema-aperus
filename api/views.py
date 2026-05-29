@@ -4318,3 +4318,69 @@ def saas_assinar_contrato(request):
     except models.SaaSClienteContrato.DoesNotExist:
         return Response({'error': 'Contrato não encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def saas_status_cliente(request):
+    """
+    Retorna o status consolidado de mensalidades abertas e contrato pendente do cliente.
+    URL: /api/saas/status-cliente/?cnpj=...&schema_name=...
+    """
+    cnpj = clean_cnpj(request.query_params.get('cnpj'))
+    if not cnpj:
+        return Response({'error': 'CNPJ é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        schema_name = request.query_params.get('schema_name')
+        if schema_name:
+            cliente = models.SaaSCliente.objects.get(cnpj=cnpj, schema_name=schema_name)
+        else:
+            cliente = models.SaaSCliente.objects.filter(cnpj=cnpj).order_by('is_test_environment').first()
+            if not cliente:
+                raise models.SaaSCliente.DoesNotExist
+                
+        # 1. Mensalidades abertas
+        mensalidades_abertas = models.SaaSClienteMensalidade.objects.filter(
+            saas_cliente=cliente,
+            status_pagamento='PENDENTE'
+        ).order_by('data_vencimento')
+        
+        mensalidades_list = []
+        for m in mensalidades_abertas:
+            mensalidades_list.append({
+                'id_mensalidade': m.id_mensalidade,
+                'data_vencimento': m.data_vencimento,
+                'valor': str(m.valor),
+                'nosso_numero': m.nosso_numero,
+                'url_boleto': m.url_boleto,
+                'linha_digitavel': m.linha_digitavel,
+                'pix_copia_cola': m.pix_copia_cola,
+            })
+            
+        # 2. Contrato pendente
+        contrato = models.SaaSClienteContrato.objects.filter(
+            saas_cliente=cliente,
+            assinado=False
+        ).order_by('-data_geracao').first()
+        
+        contrato_pendente = contrato is not None
+        contrato_data = None
+        if contrato_pendente:
+            contrato_data = {
+                'id_contrato': contrato.id_contrato,
+                'texto_contrato': contrato.texto_contrato,
+                'data_geracao': contrato.data_geracao,
+            }
+            
+        return Response({
+            'cnpj': cliente.cnpj,
+            'razao_social': cliente.razao_social,
+            'status_licenca': cliente.status_licenca,
+            'mensalidades_abertas': mensalidades_list,
+            'contrato_pendente': contrato_pendente,
+            'contrato': contrato_data,
+        })
+    except models.SaaSCliente.DoesNotExist:
+        return Response({'error': 'CNPJ ou Identificador não encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+

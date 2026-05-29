@@ -361,5 +361,8 @@ PASTA_PROJETO_CENTRAL = r"C:\aperus\aperus_mae"
 # Chave secreta para validação do Webhook do GitHub
 GITHUB_WEBHOOK_SECRET = config('GITHUB_WEBHOOK_SECRET', default='')
 
+SAAS_MOTHER_URL = config('SAAS_MOTHER_URL', default='http://localhost:8006')
+
+
 
 
