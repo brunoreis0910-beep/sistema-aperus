@@ -3633,6 +3633,7 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
                 
             # Procura a pasta template do sistema em caminhos comuns e relativos
             candidatos_template = [
+                r"C:\APERUS\arquivos_clientes\aperus_perm_cliente",
                 os.path.abspath(os.path.join(settings.BASE_DIR, '..', 'SistemaAperus')),
                 r"C:\Projetos\SistemaGerencial\SistemaAperus",
                 r"C:\APERUS\SistemaAperus",
@@ -3700,7 +3701,7 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
                         elif line.startswith("DB_HOST="):
                             new_lines.append(f"DB_HOST={cliente.db_host}\n")
                         elif line.startswith("DB_PORT="):
-                            new_lines.append(f"DB_PORT={default_db.get('PORT', '3306')}\n")
+                            new_lines.append(f"DB_PORT={cliente.db_port}\n")
                         elif line.startswith("DEBUG="):
                             new_lines.append("DEBUG=True\n")
                         elif line.startswith("ALLOWED_HOSTS="):
