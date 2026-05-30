@@ -54,7 +54,8 @@ import {
   MonetizationOn as MonetizationOnIcon,
   Payment as PaymentIcon,
   LocalShipping,
-  Description
+  Description,
+  Description as ContractIcon
   ,BusinessCenter as BusinessCenterIcon
   ,DirectionsCar as DirectionsCarIcon
   ,Agriculture as AgricultureIcon
