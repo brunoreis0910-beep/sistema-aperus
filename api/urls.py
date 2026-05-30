@@ -293,6 +293,9 @@ from .views import (
     saas_assinar_contrato,
     saas_assinar_contrato_etapas,
     saas_status_cliente,
+    buscar_contrato_atual,
+    salvar_edicao_contrato,
+    render_contrato_padrao,
 )
 
 from .viewsets_formapagamento import FormaPagamentoViewSet
@@ -691,6 +694,9 @@ urlpatterns = [
     path('saas/assinar-contrato/', saas_assinar_contrato, name='saas-assinar-contrato'),
     path('saas/assinar-contrato-etapas/', saas_assinar_contrato_etapas, name='saas-assinar-contrato-etapas'),
     path('saas/status-cliente/', saas_status_cliente, name='saas-status-cliente'),
+    path('saas/contrato-padrao/atual/', buscar_contrato_atual, name='saas-contrato-padrao-atual'),
+    path('saas/contrato-padrao/salvar/', salvar_edicao_contrato, name='saas-contrato-padrao-salvar'),
+    path('saas/contrato-padrao/render/', render_contrato_padrao, name='saas-contrato-padrao-render'),
     path('git-webhook-update/', github_webhook_update, name='git-webhook-update'),
     
     path('', include(router.urls)),

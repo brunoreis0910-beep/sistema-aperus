@@ -5832,6 +5832,23 @@ class SaaSClienteContrato(models.Model):
         return f"Contrato {self.id_contrato} - {self.saas_cliente.razao_social} - {'Assinado' if self.assinado else 'Pendente'}"
 
 
+class ContratoPadrao(models.Model):
+    titulo = models.CharField(max_length=150, default="Contrato Padrão de Prestação de Serviços - Aperus")
+    versao = models.CharField(max_length=10, default="1.0")
+    conteudo_html = models.TextField(help_text="Texto do contrato contendo tags como {{ cliente_razao_social }}")
+    atualizado_em = models.DateTimeField(auto_now=True)
+    ativo = models.BooleanField(default=True)
+
+    class Meta:
+        managed = True
+        db_table = 'saas_contrato_padrao'
+        verbose_name = "Contrato Padrão"
+        verbose_name_plural = "Contratos Padrão"
+
+    def __str__(self):
+        return f"{self.titulo} - V{self.versao}"
+
+
 class VersaoSistema(models.Model):
     id_versao = models.AutoField(primary_key=True)
     versao = models.CharField(max_length=20, unique=True, verbose_name="Versão")

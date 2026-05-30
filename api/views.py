@@ -4468,6 +4468,109 @@ def saas_assinar_contrato_etapas(request):
         return Response({'error': 'Etapa inválida.'}, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def buscar_contrato_atual(request):
+    """ Retorna o contrato ativo para carregar na tela de edição do React """
+    try:
+        contrato = models.ContratoPadrao.objects.filter(ativo=True).latest('atualizado_em')
+        return Response({
+            'status': 'sucesso',
+            'id': contrato.id,
+            'titulo': contrato.titulo,
+            'versao': contrato.versao,
+            'conteudo_html': contrato.conteudo_html
+        })
+    except models.ContratoPadrao.DoesNotExist:
+        return Response({
+            'status': 'sucesso',
+            'id': None,
+            'titulo': 'Contrato Padrão de Prestação de Serviços - Aperus',
+            'versao': '1.0',
+            'conteudo_html': '<p>Escreva o contrato aqui...</p>'
+        })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def salvar_edicao_contrato(request):
+    """ Salva o contrato editado vindo do painel do React """
+    conteudo = request.data.get('conteudo_html')
+    titulo = request.data.get('titulo', 'Contrato Padrão de Prestação de Serviços - Aperus')
+    nova_versao = request.data.get('versao', '1.0')
+    
+    if not conteudo:
+        return Response({'error': 'conteudo_html é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    contrato = models.ContratoPadrao.objects.filter(ativo=True).order_by('-atualizado_em').first()
+    if contrato:
+        contrato.conteudo_html = conteudo
+        contrato.titulo = titulo
+        contrato.versao = nova_versao
+        contrato.save()
+    else:
+        contrato = models.ContratoPadrao.objects.create(
+            titulo=titulo,
+            conteudo_html=conteudo,
+            versao=nova_versao,
+            ativo=True
+        )
+    
+    return Response({'status': 'sucesso', 'mensagem': 'Contrato padrão atualizado com sucesso!'})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def render_contrato_padrao(request):
+    """
+    Carrega o contrato padrão ativo e substitui as variáveis pelo cliente fornecido.
+    URL: /api/saas/contrato-padrao/render/?cliente_id=X
+    """
+    cliente_id = request.query_params.get('cliente_id')
+    if not cliente_id:
+        return Response({'error': 'cliente_id é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    try:
+        cliente = models.SaaSCliente.objects.get(id_saas_cliente=cliente_id)
+    except models.SaaSCliente.DoesNotExist:
+        return Response({'error': 'Cliente não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        
+    try:
+        contrato_padrao = models.ContratoPadrao.objects.filter(ativo=True).latest('atualizado_em')
+        conteudo_html = contrato_padrao.conteudo_html
+    except models.ContratoPadrao.DoesNotExist:
+        conteudo_html = "<p><strong>CONTRATO DE LICENCIAMENTO DE SOFTWARE</strong></p><p>Cliente: {{ cliente_razao_social }}</p>"
+        
+    data_vencimento = cliente.dia_vencimento or 10
+    valor_mensalidade = f"R$ {cliente.valor_mensalidade:.2f}".replace('.', ',') if cliente.valor_mensalidade else "R$ 0,00"
+    
+    cnpj = cliente.cnpj
+    cnpj_fmt = cnpj
+    if len(cnpj) == 14:
+        cnpj_fmt = f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:]}"
+        
+    replacements = {
+        '{{ cliente_razao_social }}': cliente.razao_social,
+        '{{ cliente_cnpj }}': cnpj_fmt,
+        '{{ cliente_endereco }}': f"{cliente.endereco or ''}, {cliente.numero or ''} {cliente.complemento or ''} - {cliente.bairro or ''}, {cliente.cidade or ''}/{cliente.estado or ''} - CEP {cliente.cep or ''}".strip(', '),
+        '{{ cliente_responsavel_nome }}': cliente.proprietario or '',
+        '{{ cliente_responsavel_cpf }}': '',
+        '{{ cliente_responsavel_email }}': cliente.email_responsavel or cliente.email or '',
+        '{{ cliente_valor_mensalidade }}': valor_mensalidade,
+        '{{ cliente_dia_vencimento }}': str(data_vencimento),
+        '{{ sua_empresa_razao }}': 'SUPREMA INFORMÁTICA',
+        '{{ sua_empresa_cnpj }}': '00.000.000/0000-00',
+    }
+    
+    rendered = conteudo_html
+    for tag, value in replacements.items():
+        rendered = rendered.replace(tag, str(value or ''))
+        
+    return Response({
+        'status': 'sucesso',
+        'rendered_html': rendered
+    })
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])

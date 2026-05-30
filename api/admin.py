@@ -16,6 +16,7 @@ from .models import (
     SaaSCliente,
     SaaSClienteMensalidade,
     SaaSClienteContrato,
+    ContratoPadrao,
 )
 
 # Configuração básica dos modelos
@@ -391,4 +392,12 @@ class SaaSClienteContratoAdmin(admin.ModelAdmin):
     list_filter = ('assinado', 'data_geracao')
     search_fields = ('saas_cliente__razao_social', 'saas_cliente__cnpj')
     ordering = ['-data_geracao']
+
+
+@admin.register(ContratoPadrao)
+class ContratoPadraoAdmin(admin.ModelAdmin):
+    list_display = ('titulo', 'versao', 'ativo', 'atualizado_em')
+    list_filter = ('ativo',)
+    search_fields = ('titulo', 'conteudo_html')
+    ordering = ['-atualizado_em']
 

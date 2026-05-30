@@ -124,6 +124,7 @@ const DashboardLayoutClean = () => {
     { key: 'home', label: 'Dashboard', icon: <DashboardIcon />, path: '/home', color: '#9C27B0', permission: null }, // Todos têm acesso
     { key: 'dashboard-bi', label: 'Dashboard BI', icon: <ConsultorIAIcon />, path: '/dashboard-bi', color: '#0D47A1', permission: null },
     { key: 'saas-central', label: 'Central SaaS', icon: <AdminIcon />, path: '/saas-central', color: '#1565C0', permission: 'config_acessar' },
+    { key: 'saas-contrato-config', label: 'Contrato Padrão', icon: <ContractIcon />, path: '/saas-contrato-config', color: '#1565C0', permission: 'config_acessar' },
     { key: 'vendas', label: 'Vendas', icon: <VendasIcon />, path: '/vendas', color: '#2196F3', permission: 'vendas_acessar' },
     { key: 'venda-rapida', label: 'Venda Rápida', icon: <VendaRapidaIcon />, path: '/venda-rapida', color: '#FF9800', permission: 'vendas_criar' },
     { key: 'entregas', label: 'Entregas', icon: <EntregasIcon />, path: '/entregas', color: '#1565C0', permission: null },
@@ -283,6 +284,7 @@ const DashboardLayoutClean = () => {
       '/agro/operacional': 'agro_acessar',
       '/devolucoes/nova': 'devolucoes_acessar',
       '/saas-central': 'config_acessar',
+      '/saas-contrato-config': 'config_acessar',
       '/trocas/nova': 'trocas_acessar',
       '/cadastro-turbo': 'produtos_acessar',
     });
@@ -424,7 +426,7 @@ const DashboardLayoutClean = () => {
     }
 
     // Páginas que são abas diretas
-    if (['clientes', 'produtos', 'cadastro-turbo', 'financeiro', 'vendas', 'venda-rapida', 'entregas', 'ordem-servico', 'mesas', 'hotel-pms', 'compras', 'catalogos', 'devolucoes', 'relatorios', 'graficos', 'fornecedores', 'aprovacoes', 'acesso-mobile', 'configuracoes', 'nfce', 'boletos', 'mapa-carga', 'producao', 'conciliacao', 'cartoes', 'agenda', 'balancas', 'cotacao', 'contas-servicos', 'bancario', 'minhas-solicitacoes', 'whatsapp', 'assistente-ia', 'consultor-negocios', 'dashboard-bi', 'documentos-fiscais', 'saas-central'].includes(path)) {
+    if (['clientes', 'produtos', 'cadastro-turbo', 'financeiro', 'vendas', 'venda-rapida', 'entregas', 'ordem-servico', 'mesas', 'hotel-pms', 'compras', 'catalogos', 'devolucoes', 'relatorios', 'graficos', 'fornecedores', 'aprovacoes', 'acesso-mobile', 'configuracoes', 'nfce', 'boletos', 'mapa-carga', 'producao', 'conciliacao', 'cartoes', 'agenda', 'balancas', 'cotacao', 'contas-servicos', 'bancario', 'minhas-solicitacoes', 'whatsapp', 'assistente-ia', 'consultor-negocios', 'dashboard-bi', 'documentos-fiscais', 'saas-central', 'saas-contrato-config'].includes(path)) {
       return path;
     }
 

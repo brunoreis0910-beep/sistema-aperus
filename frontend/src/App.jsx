@@ -131,6 +131,7 @@ import DashboardBI from './pages/DashboardBI'
 import ConsultaEstoquePage from './pages/ConsultaEstoquePage'
 import HotelPMSPage from './pages/HotelPMSPage'
 import SaaSAdminPage from './pages/SaaSAdminPage'
+import ConfigContratoPadraoPage from './pages/ConfigContratoPadraoPage'
 import { useEffect } from 'react'
 import { useAuth } from './context/AuthContext'
 import { useOfflineSync } from './context/OfflineSyncContext'
@@ -299,6 +300,7 @@ export default function App() {
                     <Route path='consulta-estoque' element={<ConsultaEstoquePage />} />
                     <Route path='hotel-pms' element={<HotelPMSPage />} />
                     <Route path='saas-central' element={<SaaSAdminPage />} />
+                    <Route path='saas-contrato-config' element={<ConfigContratoPadraoPage />} />
                   </Route>
 
                   <Route path='*' element={<Navigate to='/' replace />} />

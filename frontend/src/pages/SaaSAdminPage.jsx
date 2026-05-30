@@ -84,7 +84,7 @@ const SaaSAdminPage = () => {
   // Modals status
   const [clientModal, setClientModal] = useState({ open: false, mode: 'create', data: null });
   const [billingModal, setBillingModal] = useState({ open: false, clientId: null, meses: 6 });
-  const [contractModal, setContractModal] = useState({ open: false, clientId: null, texto: '' });
+  const [contractModal, setContractModal] = useState({ open: false, clientId: null, texto: '', loading: false });
   const [paymentModal, setPaymentModal] = useState({ open: false, payment: null });
   const [versionModal, setVersionModal] = useState({ open: false, versao: '', descricao: '' });
   const [logModal, setLogModal] = useState({ open: false, title: '', log: '' });
@@ -102,7 +102,8 @@ const SaaSAdminPage = () => {
     proprietario: '', telefone: '', email: '', vendedor: '',
     cep: '', endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
     dia_vencimento: 10, valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: '',
-    schema_name: '', db_host: 'localhost', db_port: '8005', is_test_environment: false
+    schema_name: '', db_host: 'localhost', db_port: '8005', is_test_environment: false,
+    email_responsavel: '', data_nascimento_responsavel: ''
   });
 
   const carregarDados = useCallback(async () => {
@@ -172,7 +173,8 @@ const SaaSAdminPage = () => {
         proprietario: '', telefone: '', email: '', vendedor: '',
         cep: '', endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
         dia_vencimento: 10, valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: '',
-        schema_name: '', db_host: 'localhost', db_port: '8005', is_test_environment: false
+        schema_name: '', db_host: 'localhost', db_port: '8005', is_test_environment: false,
+        email_responsavel: '', data_nascimento_responsavel: ''
       });
     } else {
       setClientForm({
@@ -199,7 +201,9 @@ const SaaSAdminPage = () => {
         schema_name: data.schema_name || '',
         db_host: data.db_host || 'localhost',
         db_port: data.db_port || '8005',
-        is_test_environment: data.is_test_environment || false
+        is_test_environment: data.is_test_environment || false,
+        email_responsavel: data.email_responsavel || '',
+        data_nascimento_responsavel: data.data_nascimento_responsavel || ''
       });
     }
     setClientModal({ open: true, mode, data });
@@ -333,6 +337,23 @@ const SaaSAdminPage = () => {
     }
   };
 
+  const handleAbrirModalContrato = async (clientId) => {
+    setContractModal({ open: true, clientId, texto: 'Carregando contrato padrão...', loading: true });
+    try {
+      const response = await axiosInstance.get(`/saas/contrato-padrao/render/?cliente_id=${clientId}`);
+      if (response.data.status === 'sucesso') {
+        setContractModal({ open: true, clientId, texto: response.data.rendered_html, loading: false });
+      } else {
+        setContractModal({ open: true, clientId, texto: '', loading: false });
+        showToast('Erro ao renderizar o contrato padrão.', 'warning');
+      }
+    } catch (e) {
+      console.error(e);
+      setContractModal({ open: true, clientId, texto: '', loading: false });
+      showToast('Erro ao carregar o contrato padrão do servidor.', 'error');
+    }
+  };
+
   const handleGerarContrato = async () => {
     if (!contractModal.texto) {
       showToast('Informe os termos do contrato.', 'warning');
@@ -345,7 +366,7 @@ const SaaSAdminPage = () => {
         assinado: false
       });
       showToast('Contrato gerado com sucesso!', 'success');
-      setContractModal({ open: false, clientId: null, texto: '' });
+      setContractModal({ open: false, clientId: null, texto: '', loading: false });
       carregarDados();
     } catch (e) {
       showToast('Erro ao gerar contrato.', 'error');
@@ -623,7 +644,7 @@ const SaaSAdminPage = () => {
                             </Tooltip>
                           )}
                           <Tooltip title="Gerar Termo/Contrato">
-                            <IconButton size="small" color="secondary" onClick={() => setContractModal({ open: true, clientId: c.id_saas_cliente, texto: '' })}>
+                            <IconButton size="small" color="secondary" onClick={() => handleAbrirModalContrato(c.id_saas_cliente)}>
                               <ContractIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
@@ -1253,6 +1274,19 @@ const SaaSAdminPage = () => {
                   value={clientForm.email} onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
                 />
               </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="E-mail do Responsável" fullWidth size="small"
+                  value={clientForm.email_responsavel} onChange={(e) => setClientForm({ ...clientForm, email_responsavel: e.target.value })}
+                  placeholder="Ex: responsavel@empresa.com"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Data Nasc. Responsável" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }}
+                  value={clientForm.data_nascimento_responsavel} onChange={(e) => setClientForm({ ...clientForm, data_nascimento_responsavel: e.target.value })}
+                />
+              </Grid>
             </Grid>
           )}
 
@@ -1445,25 +1479,33 @@ const SaaSAdminPage = () => {
       </Dialog>
 
       {/* 3. CONTRACT MODAL */}
-      <Dialog open={contractModal.open} onClose={() => setContractModal({ open: false, clientId: null, texto: '' })} maxWidth="sm" fullWidth>
+      <Dialog open={contractModal.open} onClose={() => setContractModal({ open: false, clientId: null, texto: '', loading: false })} maxWidth="sm" fullWidth>
         <DialogTitle>Gerar Contrato de Prestação de Serviços</DialogTitle>
         <DialogContent dividers>
-          <Typography variant="body2" mb={2}>
-            Insira o texto completo do termo ou contrato a ser aceito digitalmente pela instância do cliente.
-          </Typography>
-          <TextField
-            label="Conteúdo do Contrato"
-            multiline
-            rows={10}
-            fullWidth
-            value={contractModal.texto}
-            onChange={(e) => setContractModal({ ...contractModal, texto: e.target.value })}
-            placeholder="Cláusula 1ª: O presente termo de adesão rege a utilização do sistema Aperus..."
-          />
+          {contractModal.loading ? (
+            <Box display="flex" justifyContent="center" alignItems="center" py={4}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <>
+              <Typography variant="body2" mb={2}>
+                Revise os termos do contrato gerados automaticamente para o cliente antes de publicar.
+              </Typography>
+              <TextField
+                label="Conteúdo do Contrato"
+                multiline
+                rows={12}
+                fullWidth
+                value={contractModal.texto}
+                onChange={(e) => setContractModal({ ...contractModal, texto: e.target.value })}
+                placeholder="Cláusula 1ª: O presente termo de adesão rege a utilização do sistema Aperus..."
+              />
+            </>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setContractModal({ open: false, clientId: null, texto: '' })}>Cancelar</Button>
-          <Button variant="contained" onClick={handleGerarContrato}>Publicar Contrato</Button>
+          <Button onClick={() => setContractModal({ open: false, clientId: null, texto: '', loading: false })} disabled={contractModal.loading}>Cancelar</Button>
+          <Button variant="contained" onClick={handleGerarContrato} disabled={contractModal.loading}>Publicar Contrato</Button>
         </DialogActions>
       </Dialog>
 
