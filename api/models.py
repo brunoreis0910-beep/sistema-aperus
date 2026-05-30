@@ -5771,6 +5771,9 @@ class SaaSCliente(models.Model):
     db_port = models.CharField(max_length=5, default='8005')
     is_test_environment = models.BooleanField(default=False, help_text="Marcador para saber se é um ambiente de teste")
     banco_criado = models.BooleanField(default=False, verbose_name="Banco de Dados Criado")
+    contrato_pendente = models.BooleanField(default=False, verbose_name="Contrato Pendente")
+    email_responsavel = models.EmailField(max_length=100, blank=True, null=True, verbose_name="E-mail do Responsável")
+    data_nascimento_responsavel = models.DateField(blank=True, null=True, verbose_name="Data de Nascimento do Responsável")
 
     class Meta:
         managed = True
@@ -5814,6 +5817,10 @@ class SaaSClienteContrato(models.Model):
     data_assinatura = models.DateTimeField(blank=True, null=True)
     ip_assinatura = models.CharField(max_length=45, blank=True, null=True)
     usuario_assinou = models.CharField(max_length=100, blank=True, null=True)
+    token_validacao = models.CharField(max_length=6, blank=True, null=True, verbose_name="Token de Validação")
+    token_expira_em = models.DateTimeField(blank=True, null=True, verbose_name="Expira em")
+    user_agent = models.TextField(blank=True, null=True, verbose_name="User Agent")
+    assinado_em = models.DateTimeField(blank=True, null=True, verbose_name="Assinado em")
 
     class Meta:
         managed = True

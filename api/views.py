@@ -4319,6 +4319,156 @@ def saas_assinar_contrato(request):
         return Response({'error': 'Contrato não encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
 
+def enviar_email_token(destinatario_email, token):
+    from django.core.mail import send_mail
+    from django.conf import settings
+    
+    assunto = "Código de Assinatura de Contrato - Aperus"
+    mensagem = f"Seu código de assinatura de contrato de 6 dígitos é: {token}\nEste código é válido por 15 minutos."
+    
+    try:
+        from api.services_email import EmailService
+        service = EmailService(empresa_id=1)
+        service.send(
+            destinatario_email=destinatario_email,
+            assunto=assunto,
+            html_body=f"<p>Seu código de assinatura de contrato de 6 dígitos é: <strong>{token}</strong></p><p>Este código expira em 15 minutos.</p>",
+            text_body=mensagem
+        )
+        return True
+    except Exception as e:
+        try:
+            send_mail(
+                assunto,
+                mensagem,
+                settings.DEFAULT_FROM_EMAIL if hasattr(settings, 'DEFAULT_FROM_EMAIL') else 'no-reply@aperus.com.br',
+                [destinatario_email],
+                fail_silently=False,
+            )
+            return True
+        except Exception as e_fallback:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erro ao enviar e-mail OTP: {str(e)} | Fallback: {str(e_fallback)}")
+            return False
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def saas_assinar_contrato_etapas(request):
+    """
+    Gerencia a assinatura em duas etapas na Central Mãe.
+    URL: /api/saas/assinar-contrato-etapas/
+    """
+    id_contrato = request.data.get('id_contrato')
+    etapa = request.data.get('etapa') # 'validar_data' ou 'validar_token'
+    
+    if not id_contrato or not etapa:
+        return Response({'error': 'id_contrato e etapa são obrigatórios.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    try:
+        contrato = models.SaaSClienteContrato.objects.get(id_contrato=id_contrato)
+        cliente = contrato.saas_cliente
+    except models.SaaSClienteContrato.DoesNotExist:
+        return Response({'error': 'Contrato não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        
+    if etapa == 'validar_data':
+        data_nascimento = request.data.get('data_nascimento')
+        if not data_nascimento:
+            return Response({'error': 'data_nascimento é obrigatória.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        import datetime
+        try:
+            if isinstance(data_nascimento, str):
+                if '-' in data_nascimento:
+                    data_dt = datetime.datetime.strptime(data_nascimento, '%Y-%m-%d').date()
+                elif '/' in data_nascimento:
+                    data_dt = datetime.datetime.strptime(data_nascimento, '%d/%m/%Y').date()
+                else:
+                    return Response({'error': 'Formato de data inválido. Use YYYY-MM-DD ou DD/MM/YYYY.'}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({'error': 'data_nascimento deve ser uma string.'}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError:
+            return Response({'error': 'Data de nascimento inválida.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if not cliente.data_nascimento_responsavel:
+            return Response({'error': 'Data de nascimento do responsável não cadastrada na Central Mãe.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if cliente.data_nascimento_responsavel != data_dt:
+            return Response({'error': 'Data de nascimento incorreta.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Gera o token OTP de 6 dígitos
+        import random
+        token_otp = f"{random.randint(100000, 999999)}"
+        
+        contrato.token_validacao = token_otp
+        contrato.token_expira_em = timezone.now() + timezone.timedelta(minutes=15)
+        contrato.save()
+        
+        # Envia o e-mail
+        email_destino = cliente.email_responsavel or cliente.email
+        if not email_destino:
+            return Response({'error': 'E-mail do responsável não cadastrado na Central Mãe.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        enviou = enviar_email_token(email_destino, token_otp)
+        if not enviou:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"AVISO: Falha ao enviar e-mail com token OTP {token_otp} para {email_destino}. No entanto, a requisição prosseguirá devido ao ambiente de desenvolvimento/teste (DEBUG=True).")
+            from django.conf import settings
+            if not getattr(settings, 'DEBUG', False):
+                return Response({'error': 'Erro ao disparar o e-mail de validação. Contate o suporte.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        # Mascara o e-mail
+        partes = email_destino.split('@')
+        email_mascarado = f"{partes[0][:2]}***@{partes[1]}"
+        
+        return Response({
+            'status': 'sucesso',
+            'mensagem': f'Data confirmada! O token de validação foi enviado para o e-mail: {email_mascarado}'
+        })
+        
+    elif etapa == 'validar_token':
+        token = request.data.get('token')
+        usuario_assinou = request.data.get('usuario_assinou')
+        
+        if not token or not usuario_assinou:
+            return Response({'error': 'token e usuario_assinou são obrigatórios.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if contrato.assinado:
+            return Response({'error': 'Este contrato já está assinado.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if not contrato.token_expira_em or contrato.token_expira_em < timezone.now():
+            return Response({'error': 'Este token já expirou ou é inválido. Solicite o reenvio.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if contrato.token_validacao != token:
+            return Response({'error': 'Token inválido. Verifique o código enviado no seu e-mail.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Sucesso! Grava assinatura e auditoria
+        contrato.assinado = True
+        contrato.data_assinatura = timezone.now()
+        contrato.assinado_em = timezone.now()
+        contrato.ip_assinatura = get_client_ip(request)
+        contrato.user_agent = request.META.get('HTTP_USER_AGENT', '')
+        contrato.usuario_assinou = usuario_assinou
+        contrato.token_validacao = None # Consome o token
+        contrato.save()
+        
+        # Atualiza o cliente
+        cliente.contrato_pendente = False
+        cliente.save()
+        
+        serializer = serializers.SaaSClienteContratoSerializer(contrato)
+        return Response({
+            'status': 'sucesso',
+            'mensagem': 'Contrato assinado com sucesso!',
+            'contrato': serializer.data
+        })
+    else:
+        return Response({'error': 'Etapa inválida.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def saas_status_cliente(request):
