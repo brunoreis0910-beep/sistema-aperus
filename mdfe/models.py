@@ -2,6 +2,20 @@ from django.db import models
 from api.models import Cliente
 from django.contrib.auth.models import User
 
+TIPO_CARGA_CHOICES = [
+    ('01', 'Granel sólido'),
+    ('02', 'Granel líquido'),
+    ('03', 'Frigorificada'),
+    ('04', 'Conteinerizada'),
+    ('05', 'Carga Geral'),
+    ('06', 'Neogranel'),
+    ('07', 'Perigosa (Granel)'),
+    ('08', 'Perigosa (Frigorificada)'),
+    ('09', 'Perigosa (Carga Geral)'),
+    ('10', 'Outros'),
+    ('11', 'Carga Geral e Granel'),
+]
+
 
 class ManifestoEletronico(models.Model):
     """Model para MDF-e (Manifesto Eletrônico de Documentos Fiscais)"""
@@ -70,7 +84,16 @@ class ManifestoEletronico(models.Model):
     # Informações do Produto Predominante
     produto_predominante = models.CharField(max_length=120, default="Diversos", blank=True, null=True)
     produto_ncm = models.CharField(max_length=8, blank=True, null=True, help_text="NCM do Produto Predominante")
-    tipo_carga = models.CharField(max_length=2, blank=True, null=True, help_text="01-Granel sólido, 02-Granel líquido, 03-Frigorificada, 04-Conteinerizada, 05-Carga Geral, 06-Neogranel, 07-Perigosa (IMO)")
+    tipo_carga = models.CharField(
+        max_length=2, 
+        choices=TIPO_CARGA_CHOICES, 
+        blank=True, 
+        null=True, 
+        help_text="01-Granel sólido, 02-Granel líquido, 03-Frigorificada, 04-Conteinerizada, 05-Carga Geral, 06-Neogranel, 07-Perigosa (IMO)"
+    )
+    distancia_km = models.DecimalField(max_digits=8, decimal_places=2, blank=True, null=True, help_text="Distância percorrida em KM")
+    numero_ciot = models.CharField(max_length=12, blank=True, null=True, help_text="Código CIOT (12 dígitos)")
+    ciot_cpf_cnpj = models.CharField(max_length=14, blank=True, null=True, help_text="CPF/CNPJ do contratante do CIOT")
     cep_carregamento = models.CharField(max_length=8, blank=True, null=True)
     cep_descarregamento = models.CharField(max_length=8, blank=True, null=True)
     
@@ -122,6 +145,58 @@ class ManifestoEletronico(models.Model):
         verbose_name = 'MDF-e'
         verbose_name_plural = 'MDF-e'
     
+    def puxar_dados_dos_ctes(self):
+        """
+        Varre os CT-es vinculados a este MDF-e para:
+        1. Somar o valor total de prestação (vTPrest) e sugerir no total do frete (pagamentos).
+        2. Copiar o número do CIOT e o CPF/CNPJ se algum CT-e possuir preenchido.
+        """
+        if self.status_mdfe not in ['PENDENTE', 'ERRO']:
+            return
+            
+        chaves_cte = self.documentos_vinculados.filter(tipo_documento='CTE').values_list('chave_acesso', flat=True)
+        if not chaves_cte:
+            return
+            
+        from cte.models import ConhecimentoTransporte
+        ctes = ConhecimentoTransporte.objects.filter(chave_cte__in=chaves_cte)
+        
+        # 1. Somar o valor total de prestação (vTPrest) de todos os CT-es
+        total_prestacao = sum(cte.valor_total_servico for cte in ctes if cte.valor_total_servico)
+        
+        # 2. Varrer buscando numero_ciot e ciot_cpf_cnpj
+        numero_ciot = None
+        ciot_cpf_cnpj = None
+        for cte in ctes:
+            if cte.ciot:
+                numero_ciot = cte.ciot
+                ciot_cpf_cnpj = cte.ciot_cpf_cnpj
+                break  # Pega o primeiro encontrado
+        
+        # Atualizar os campos do MDF-e
+        updated = False
+        if numero_ciot and not self.numero_ciot:
+            self.numero_ciot = numero_ciot
+            updated = True
+        if ciot_cpf_cnpj and not self.ciot_cpf_cnpj:
+            self.ciot_cpf_cnpj = ciot_cpf_cnpj
+            updated = True
+            
+        if updated:
+            self.save(update_fields=['numero_ciot', 'ciot_cpf_cnpj'])
+            
+        # 3. Sugerir o valor total do frete da viagem na tabela de pagamentos se não houver pagamentos cadastrados
+        if total_prestacao > 0 and not self.pagamentos.exists():
+            from mdfe.models import MDFePagamento
+            MDFePagamento.objects.create(
+                mdfe=self,
+                tipo_pagamento='99',  # Outros
+                responsavel_pagamento='1',  # Emitente
+                componente='Frete da Viagem',
+                valor=total_prestacao,
+                descricao='Sugestão automática com base nos CT-es vinculados'
+            )
+
     def __str__(self):
         return f"MDF-e {self.numero_mdfe} - {self.status_mdfe}"
 

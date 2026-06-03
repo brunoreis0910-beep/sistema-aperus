@@ -254,6 +254,28 @@ class MDFeService:
         inf_modal = etree.SubElement(inf_mdfe, 'infModal', versaoModal='3.00')
         rodo = etree.SubElement(inf_modal, 'rodo')
         
+        # Grupo infANTT (CIOT e RNTRC)
+        if mdfe.numero_ciot:
+            inf_antt = etree.SubElement(rodo, 'infANTT')
+            
+            # RNTRC da ANTT do transportador (opcional na tag, mas importante de preencher se tiver)
+            rntrc_val = mdfe.rntrc_prestador or getattr(self.empresa, 'rntrc', '')
+            if rntrc_val:
+                rntrc_clean = ''.join(filter(str.isdigit, str(rntrc_val)))
+                if rntrc_clean:
+                    etree.SubElement(inf_antt, 'RNTRC').text = rntrc_clean.zfill(8)[:8]
+            
+            inf_ciot = etree.SubElement(inf_antt, 'infCIOT')
+            etree.SubElement(inf_ciot, 'CIOT').text = mdfe.numero_ciot
+            
+            # CPF ou CNPJ do contratante do CIOT
+            ciot_doc = mdfe.ciot_cpf_cnpj or getattr(self.empresa, 'cpf_cnpj', '')
+            ciot_doc = ''.join(filter(str.isdigit, str(ciot_doc)))
+            if len(ciot_doc) == 11:
+                etree.SubElement(inf_ciot, 'CPF').text = ciot_doc
+            else:
+                etree.SubElement(inf_ciot, 'CNPJ').text = ciot_doc.zfill(14)[:14]
+        
         # Veículo de tração
         veiculo_tracao = etree.SubElement(rodo, 'veicTracao')
         etree.SubElement(veiculo_tracao, 'cInt').text = '1'

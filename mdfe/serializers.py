@@ -147,6 +147,9 @@ class ManifestoEletronicoSerializer(serializers.ModelSerializer):
         for pag_data in pagamentos_data:
             MDFePagamento.objects.create(mdfe=mdfe, **pag_data)
         
+        # Puxar dados dos CT-es após vinculação de documentos
+        mdfe.puxar_dados_dos_ctes()
+        
         return mdfe
     
     def update(self, instance, validated_data):
@@ -218,5 +221,8 @@ class ManifestoEletronicoSerializer(serializers.ModelSerializer):
             instance.pagamentos.all().delete()
             for pag_data in pagamentos_data:
                 MDFePagamento.objects.create(mdfe=instance, **pag_data)
+        
+        # Puxar dados dos CT-es após vinculação de documentos
+        instance.puxar_dados_dos_ctes()
         
         return instance

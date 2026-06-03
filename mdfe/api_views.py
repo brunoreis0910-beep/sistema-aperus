@@ -373,3 +373,21 @@ class MDFeViewSet(viewsets.ModelViewSet):
                 'error': 'Veículo não encontrado',
                 'placa': placa
             }, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=['post'])
+    def puxar_dados_ctes(self, request, pk=None):
+        """
+        Força a execução da varredura e herança dos dados dos CT-es
+        """
+        mdfe = self.get_object()
+        if mdfe.status_mdfe not in ['PENDENTE', 'ERRO']:
+            return Response(
+                {'error': 'Apenas MDF-e PENDENTE/ERRO pode ter os dados atualizados.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        mdfe.puxar_dados_dos_ctes()
+        
+        # Recarregar e retornar objeto atualizado
+        mdfe.refresh_from_db()
+        return Response(self.get_serializer(mdfe).data)
