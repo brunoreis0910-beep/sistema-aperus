@@ -16,7 +16,7 @@ const isCapacitorApp = () => {
 
 // IP padrão do servidor na rede local
 const SERVIDOR_IP = '192.168.1.4';  // IP atual do servidor (atualizar se mudar)
-const SERVIDOR_PORTA = '8005';
+const SERVIDOR_PORTA = (window.location.port && !['3000', '5173', '8005', '8006'].includes(window.location.port)) ? window.location.port : '8005';
 
 // Testa se um IP está acessível (qualquer resposta HTTP = servidor rodando)
 const testarIP = async (ip) => {

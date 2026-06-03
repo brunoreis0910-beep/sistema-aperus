@@ -24,8 +24,11 @@ import { buscarCNPJ, buscarCEP } from '../utils/cnpjCepUtils';
 const fmtMoeda = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const fmtData = (d) =>
-  d ? new Date(d).toLocaleDateString('pt-BR') : '—';
+const fmtData = (d) => {
+  if (!d) return '—';
+  const dateStr = typeof d === 'string' && d.includes('-') && !d.includes('T') ? `${d}T12:00:00` : d;
+  return new Date(dateStr).toLocaleDateString('pt-BR');
+};
 
 const fmtDataHora = (d) =>
   d ? new Date(d).toLocaleString('pt-BR') : '—';

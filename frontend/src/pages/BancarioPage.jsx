@@ -110,7 +110,8 @@ function BancarioPage() {
 
       console.log('DEBUG - URL da requisi��o:', `/contas/${queryParams}`);
       const res = await axiosInstance.get(`/contas/${queryParams}`);
-      setMovimentos(res.data);
+      const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+      setMovimentos(data);
 
     } catch (error) {
       console.error("Erro ao buscar movimentos:", error);

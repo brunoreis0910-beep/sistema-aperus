@@ -132,6 +132,8 @@ import ConsultaEstoquePage from './pages/ConsultaEstoquePage'
 import HotelPMSPage from './pages/HotelPMSPage'
 import SaaSAdminPage from './pages/SaaSAdminPage'
 import ConfigContratoPadraoPage from './pages/ConfigContratoPadraoPage'
+import MeuContratoPage from './pages/MeuContratoPage'
+import GerenciadorBloqueioSaaS from './components/GerenciadorBloqueioSaaS'
 import { useEffect } from 'react'
 import { useAuth } from './context/AuthContext'
 import { useOfflineSync } from './context/OfflineSyncContext'
@@ -200,7 +202,9 @@ export default function App() {
                     path='/'
                     element={
                       <ProtectedRoute>
-                        <DashboardLayoutClean />
+                        <GerenciadorBloqueioSaaS>
+                          <DashboardLayoutClean />
+                        </GerenciadorBloqueioSaaS>
                       </ProtectedRoute>
                     }
                   >
@@ -301,6 +305,7 @@ export default function App() {
                     <Route path='hotel-pms' element={<HotelPMSPage />} />
                     <Route path='saas-central' element={<SaaSAdminPage />} />
                     <Route path='saas-contrato-config' element={<ConfigContratoPadraoPage />} />
+                    <Route path='meu-contrato' element={<MeuContratoPage />} />
                   </Route>
 
                   <Route path='*' element={<Navigate to='/' replace />} />

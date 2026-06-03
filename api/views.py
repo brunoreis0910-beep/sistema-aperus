@@ -4185,18 +4185,27 @@ def saas_verificar_licenca(request):
     if not cnpj:
         return Response({'error': 'CNPJ é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
     
+    # Certificar que a conexão com o banco central está configurada
+    from django.conf import settings
+    db_name = 'aperus_central'
+    if db_name not in settings.DATABASES:
+        import copy
+        default_db = settings.DATABASES['default']
+        settings.DATABASES[db_name] = copy.deepcopy(default_db)
+        settings.DATABASES[db_name]['NAME'] = db_name
+    
     try:
         schema_name = request.query_params.get('schema_name')
         if schema_name:
-            cliente = models.SaaSCliente.objects.get(cnpj=cnpj, schema_name=schema_name)
+            cliente = models.SaaSCliente.objects.using(db_name).get(cnpj=cnpj, schema_name=schema_name)
         else:
-            cliente = models.SaaSCliente.objects.filter(cnpj=cnpj).order_by('is_test_environment').first()
+            cliente = models.SaaSCliente.objects.using(db_name).filter(cnpj=cnpj).order_by('is_test_environment').first()
             if not cliente:
                 raise models.SaaSCliente.DoesNotExist
         
         # Bloqueio automático por mensalidades vencidas há mais de 5 dias
         cinco_dias_atras = timezone.now().date() - timedelta(days=5)
-        tem_financeiro_atrasado = models.SaaSClienteMensalidade.objects.filter(
+        tem_financeiro_atrasado = models.SaaSClienteMensalidade.objects.using(db_name).filter(
             saas_cliente=cliente,
             status_pagamento='PENDENTE',
             data_vencimento__lt=cinco_dias_atras
@@ -4236,16 +4245,25 @@ def saas_financeiro(request):
     if not cnpj:
         return Response({'error': 'CNPJ é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
     
+    # Certificar que a conexão com o banco central está configurada
+    from django.conf import settings
+    db_name = 'aperus_central'
+    if db_name not in settings.DATABASES:
+        import copy
+        default_db = settings.DATABASES['default']
+        settings.DATABASES[db_name] = copy.deepcopy(default_db)
+        settings.DATABASES[db_name]['NAME'] = db_name
+    
     try:
         schema_name = request.query_params.get('schema_name')
         if schema_name:
-            cliente = models.SaaSCliente.objects.get(cnpj=cnpj, schema_name=schema_name)
+            cliente = models.SaaSCliente.objects.using(db_name).get(cnpj=cnpj, schema_name=schema_name)
         else:
-            cliente = models.SaaSCliente.objects.filter(cnpj=cnpj).order_by('is_test_environment').first()
+            cliente = models.SaaSCliente.objects.using(db_name).filter(cnpj=cnpj).order_by('is_test_environment').first()
             if not cliente:
                 raise models.SaaSCliente.DoesNotExist
         
-        mensalidades = models.SaaSClienteMensalidade.objects.filter(
+        mensalidades = models.SaaSClienteMensalidade.objects.using(db_name).filter(
             saas_cliente=cliente
         ).order_by('-data_vencimento')
         
@@ -4253,6 +4271,35 @@ def saas_financeiro(request):
         return Response(serializer.data)
     except models.SaaSCliente.DoesNotExist:
         return Response({'error': 'CNPJ ou Identificador não encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+
+FALLBACK_CONTRATO_TEMPLATE = """CONTRATO DE PRESTAÇÃO DE SERVIÇOS SAAS
+
+CONTRATANTE: {{ cliente_razao_social }}, inscrito no CNPJ sob o nº {{ cliente_cnpj }}.
+CONTRATADA: APERUS SISTEMAS LTDA.
+
+CLÁUSULA PRIMEIRA - DO OBJETO E VALORES
+1.1. O presente contrato tem por objeto o licenciamento de uso do software APERUS, mediante o pagamento da mensalidade base de R$ {{ mensalidade_base }}.
+
+CLÁUSULA SEGUNDA - DA RESPONSABILIDADE DOS DADOS E USO DO SISTEMA
+2.1. A responsabilidade por todos os dados inseridos, cadastrados, vendidos ou emitidos no sistema (incluindo controle de estoque, movimentações financeiras e obrigações fiscais/impostos) é 100% da CONTRATANTE. A CONTRATANTE responde civil e criminalmente por toda e qualquer informação registrada no sistema.
+
+CLÁUSULA TERCEIRA - DA INSTALAÇÃO LOCAL
+3.1. Caso o software APERUS seja executado ou instalado localmente em servidores, computadores ou redes próprias da CONTRATANTE, a CONTRATADA fica integralmente isenta de qualquer responsabilidade por perdas de dados, quebras físicas de hardware, lentidão, oscilações de rede ou invasões de terceiros.
+
+CLÁUSULA QUARTA - DA POLÍTICA DE BACKUP
+4.1. A CONTRATADA somente realizará backups automatizados em nuvem caso a CONTRATANTE contrate especificamente o "Módulo de Backup Extra".
+4.2. Inexistindo a contratação do referido módulo, é dever exclusivo da CONTRATANTE gerar, armazenar, testar e garantir a segurança de suas próprias cópias de segurança (backups).
+
+CLÁUSULA QUINTA - DO SUPORTE TÉCNICO
+5.1. O suporte técnico prestado pela CONTRATADA restringe-se exclusivamente ao funcionamento lógico do software APERUS.
+5.2. O suporte será prestado dentro do horário comercial e não abrange problemas de infraestrutura física, hardware local, impressoras, redes internas ou instabilidade na conexão de internet da CONTRATANTE.
+
+CLÁUSULA SEXTA - DA CARÊNCIA MÍNIMA
+6.1. Fica estipulado um período mínimo de carência de 3 (três) meses de vigência deste contrato para fins de configuração inicial, treinamento e estabilização do sistema.
+
+CLÁUSULA SÉTIMA - DO FORO
+7.1. Para dirimir quaisquer dúvidas ou controvérsias decorrentes deste contrato, as partes elegem o foro da comarca de Patrocínio/MG, com renúncia expressa a qualquer outro, por mais privilegiado que seja."""
 
 
 @api_view(['GET'])
@@ -4266,25 +4313,56 @@ def saas_contrato_pendente(request):
     if not cnpj:
         return Response({'error': 'CNPJ é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
     
+    # Certificar que a conexão com o banco central está configurada
+    from django.conf import settings
+    db_name = 'aperus_central'
+    if db_name not in settings.DATABASES:
+        import copy
+        default_db = settings.DATABASES['default']
+        settings.DATABASES[db_name] = copy.deepcopy(default_db)
+        settings.DATABASES[db_name]['NAME'] = db_name
+    
     try:
         schema_name = request.query_params.get('schema_name')
         if schema_name:
-            cliente = models.SaaSCliente.objects.get(cnpj=cnpj, schema_name=schema_name)
+            cliente = models.SaaSCliente.objects.using(db_name).get(cnpj=cnpj, schema_name=schema_name)
         else:
-            cliente = models.SaaSCliente.objects.filter(cnpj=cnpj).order_by('is_test_environment').first()
+            cliente = models.SaaSCliente.objects.using(db_name).filter(cnpj=cnpj).order_by('is_test_environment').first()
             if not cliente:
                 raise models.SaaSCliente.DoesNotExist
         
-        contrato = models.SaaSClienteContrato.objects.filter(
-            saas_cliente=cliente,
+        clientes_cnpj = models.SaaSCliente.objects.using(db_name).filter(cnpj=cnpj)
+        contrato = models.SaaSClienteContrato.objects.using(db_name).filter(
+            saas_cliente__in=clientes_cnpj,
             assinado=False
         ).order_by('-data_geracao').first()
         
         if not contrato:
             return Response({'id_contrato': None, 'texto_contrato': None})
             
-        serializer = serializers.SaaSClienteContratoSerializer(contrato)
-        return Response(serializer.data)
+        texto_raw = contrato.texto_contrato
+        if not texto_raw or not texto_raw.strip():
+            template = models.TemplateContrato.objects.using(db_name).filter(ativo=True).first()
+            if template and template.texto_template:
+                texto_raw = template.texto_template
+            else:
+                texto_raw = FALLBACK_CONTRATO_TEMPLATE
+                
+        valor_mensalidade_str = "0,00"
+        if cliente.valor_mensalidade is not None:
+            try:
+                valor_mensalidade_str = f"{cliente.valor_mensalidade:.2f}".replace('.', ',')
+            except Exception:
+                valor_mensalidade_str = str(cliente.valor_mensalidade)
+                
+        texto_processado = texto_raw
+        texto_processado = texto_processado.replace('{{ cliente_razao_social }}', cliente.razao_social or '')
+        texto_processado = texto_processado.replace('{{ cliente_cnpj }}', cliente.cnpj or '')
+        texto_processado = texto_processado.replace('{{ mensalidade_base }}', valor_mensalidade_str)
+        
+        data = serializers.SaaSClienteContratoSerializer(contrato).data
+        data['texto_contrato'] = texto_processado
+        return Response(data)
     except models.SaaSCliente.DoesNotExist:
         return Response({'error': 'CNPJ ou Identificador não encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -4302,8 +4380,17 @@ def saas_assinar_contrato(request):
     if not id_contrato or not usuario_assinou:
         return Response({'error': 'id_contrato e usuario_assinou são obrigatórios'}, status=status.HTTP_400_BAD_REQUEST)
         
+    # Certificar que a conexão com o banco central está configurada
+    from django.conf import settings
+    db_name = 'aperus_central'
+    if db_name not in settings.DATABASES:
+        import copy
+        default_db = settings.DATABASES['default']
+        settings.DATABASES[db_name] = copy.deepcopy(default_db)
+        settings.DATABASES[db_name]['NAME'] = db_name
+        
     try:
-        contrato = models.SaaSClienteContrato.objects.get(id_contrato=id_contrato)
+        contrato = models.SaaSClienteContrato.objects.using(db_name).get(id_contrato=id_contrato)
         if contrato.assinado:
             return Response({'error': 'Este contrato já está assinado.'}, status=status.HTTP_400_BAD_REQUEST)
             
@@ -4311,7 +4398,7 @@ def saas_assinar_contrato(request):
         contrato.data_assinatura = timezone.now()
         contrato.ip_assinatura = get_client_ip(request)
         contrato.usuario_assinou = usuario_assinou
-        contrato.save()
+        contrato.save(using=db_name)
         
         serializer = serializers.SaaSClienteContratoSerializer(contrato)
         return Response(serializer.data)
@@ -4320,15 +4407,48 @@ def saas_assinar_contrato(request):
 
 
 def enviar_email_token(destinatario_email, token):
-    from django.core.mail import send_mail
     from django.conf import settings
+    import requests
+    import logging
     
+    logger = logging.getLogger(__name__)
+    is_mother = settings.DATABASES['default']['NAME'] == 'aperus_central'
+    
+    if not is_mother:
+        # Estamos no backend do cliente, delegamos o disparo para a Central Mãe via HTTP
+        url = f"{settings.SAAS_MOTHER_URL.rstrip('/')}/api/saas/disparar-email-token/"
+        try:
+            logger.info(f"Delegando envio de e-mail OTP para a Central Mãe: {url}")
+            response = requests.post(url, json={
+                'destinatario_email': destinatario_email,
+                'token': token
+            }, timeout=15)
+            if response.status_code == 200:
+                logger.info("Envio de e-mail OTP delegado com sucesso para a Central Mãe.")
+                return True
+            else:
+                logger.error(f"Erro ao delegar envio de e-mail para a mãe: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"Exceção ao delegar envio de e-mail para a mãe: {str(e)}")
+            
+    # Se formos a Central Mãe (ou fallback no cliente se delegação falhou):
     assunto = "Código de Assinatura de Contrato - Aperus"
     mensagem = f"Seu código de assinatura de contrato de 6 dígitos é: {token}\nEste código é válido por 15 minutos."
     
     try:
+        from api.models import EmpresaConfig
         from api.services_email import EmailService
-        service = EmailService(empresa_id=1)
+        
+        # Se for na mãe, usamos empresa_id = 7 (Mother)
+        # Se for no cliente fallback, tenta pegar a empresa local
+        if is_mother:
+            emp_id = 7
+        else:
+            empresa = EmpresaConfig.objects.exclude(cpf_cnpj='').first() or EmpresaConfig.objects.first()
+            emp_id = empresa.id_empresa if empresa else 1
+            
+        logger.info(f"Enviando e-mail OTP localmente via EmailService (empresa_id={emp_id}).")
+        service = EmailService(empresa_id=emp_id)
         service.send(
             destinatario_email=destinatario_email,
             assunto=assunto,
@@ -4337,20 +4457,70 @@ def enviar_email_token(destinatario_email, token):
         )
         return True
     except Exception as e:
+        logger.warning(f"Erro ao enviar e-mail OTP via EmailService: {str(e)}. Tentando send_mail padrão.")
         try:
+            from django.core.mail import send_mail
             send_mail(
                 assunto,
                 mensagem,
-                settings.DEFAULT_FROM_EMAIL if hasattr(settings, 'DEFAULT_FROM_EMAIL') else 'no-reply@aperus.com.br',
+                settings.DEFAULT_FROM_EMAIL if hasattr(settings, 'DEFAULT_FROM_EMAIL') else 'Aperussistema@gmail.com',
                 [destinatario_email],
                 fail_silently=False,
             )
             return True
         except Exception as e_fallback:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Erro ao enviar e-mail OTP: {str(e)} | Fallback: {str(e_fallback)}")
             return False
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def saas_disparar_email_token(request):
+    """
+    Dispara o e-mail OTP de validação de contrato usando as configurações de e-mail da Central Mãe.
+    Esta rota é chamada pelo backend do cliente para centralizar os envios na Central Mãe.
+    """
+    destinatario_email = request.data.get('destinatario_email')
+    token = request.data.get('token')
+    
+    if not destinatario_email or not token:
+        return Response({'error': 'destinatario_email e token são obrigatórios.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    assunto = "Código de Assinatura de Contrato - Aperus"
+    mensagem = f"Seu código de assinatura de contrato de 6 dígitos é: {token}\nEste código é válido por 15 minutos."
+    
+    try:
+        from api.services_email import EmailService
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"Central Mãe processando envio de e-mail OTP para {destinatario_email}")
+        service = EmailService(empresa_id=7)
+        service.send(
+            destinatario_email=destinatario_email,
+            assunto=assunto,
+            html_body=f"<p>Seu código de assinatura de contrato de 6 dígitos é: <strong>{token}</strong></p><p>Este código expira em 15 minutos.</p>",
+            text_body=mensagem
+        )
+        return Response({'status': 'sucesso', 'mensagem': 'E-mail disparado com sucesso pela Central Mãe.'})
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Erro ao disparar e-mail OTP na Central Mãe via EmailService: {str(e)}. Usando send_mail padrão.")
+        try:
+            from django.core.mail import send_mail
+            from django.conf import settings
+            send_mail(
+                assunto,
+                mensagem,
+                settings.DEFAULT_FROM_EMAIL if hasattr(settings, 'DEFAULT_FROM_EMAIL') else 'Aperussistema@gmail.com',
+                [destinatario_email],
+                fail_silently=False,
+            )
+            return Response({'status': 'sucesso', 'mensagem': 'E-mail disparado com sucesso pela Central Mãe (fallback django send_mail).'})
+        except Exception as e_fallback:
+            logger.error(f"Erro ao disparar e-mail OTP na Central Mãe: {str(e)} | Fallback: {str(e_fallback)}")
+            return Response({'error': f"Erro ao enviar e-mail: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -4367,10 +4537,20 @@ def saas_assinar_contrato_etapas(request):
         return Response({'error': 'id_contrato e etapa são obrigatórios.'}, status=status.HTTP_400_BAD_REQUEST)
         
     try:
-        contrato = models.SaaSClienteContrato.objects.get(id_contrato=id_contrato)
-        cliente = contrato.saas_cliente
+        from django.conf import settings
+        db_name = 'aperus_central'
+        if db_name not in settings.DATABASES:
+            import copy
+            default_db = settings.DATABASES['default']
+            settings.DATABASES[db_name] = copy.deepcopy(default_db)
+            settings.DATABASES[db_name]['NAME'] = db_name
+
+        contrato = models.SaaSClienteContrato.objects.using(db_name).get(id_contrato=id_contrato)
+        cliente = models.SaaSCliente.objects.using(db_name).get(id_saas_cliente=contrato.saas_cliente_id)
     except models.SaaSClienteContrato.DoesNotExist:
         return Response({'error': 'Contrato não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+    except models.SaaSCliente.DoesNotExist:
+        return Response({'error': 'Cliente não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         
     if etapa == 'validar_data':
         data_nascimento = request.data.get('data_nascimento')
@@ -4403,7 +4583,7 @@ def saas_assinar_contrato_etapas(request):
         
         contrato.token_validacao = token_otp
         contrato.token_expira_em = timezone.now() + timezone.timedelta(minutes=15)
-        contrato.save()
+        contrato.save(using=db_name)
         
         # Envia o e-mail
         email_destino = cliente.email_responsavel or cliente.email
@@ -4452,11 +4632,11 @@ def saas_assinar_contrato_etapas(request):
         contrato.user_agent = request.META.get('HTTP_USER_AGENT', '')
         contrato.usuario_assinou = usuario_assinou
         contrato.token_validacao = None # Consome o token
-        contrato.save()
+        contrato.save(using=db_name)
         
         # Atualiza o cliente
         cliente.contrato_pendente = False
-        cliente.save()
+        cliente.save(using=db_name)
         
         serializer = serializers.SaaSClienteContratoSerializer(contrato)
         return Response({
@@ -4570,8 +4750,6 @@ def render_contrato_padrao(request):
         'status': 'sucesso',
         'rendered_html': rendered
     })
-
-
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def saas_status_cliente(request):
@@ -4583,17 +4761,26 @@ def saas_status_cliente(request):
     if not cnpj:
         return Response({'error': 'CNPJ é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
     
+    # Certificar que a conexão com o banco central está configurada
+    from django.conf import settings
+    db_name = 'aperus_central'
+    if db_name not in settings.DATABASES:
+        import copy
+        default_db = settings.DATABASES['default']
+        settings.DATABASES[db_name] = copy.deepcopy(default_db)
+        settings.DATABASES[db_name]['NAME'] = db_name
+    
     try:
         schema_name = request.query_params.get('schema_name')
         if schema_name:
-            cliente = models.SaaSCliente.objects.get(cnpj=cnpj, schema_name=schema_name)
+            cliente = models.SaaSCliente.objects.using(db_name).get(cnpj=cnpj, schema_name=schema_name)
         else:
-            cliente = models.SaaSCliente.objects.filter(cnpj=cnpj).order_by('is_test_environment').first()
+            cliente = models.SaaSCliente.objects.using(db_name).filter(cnpj=cnpj).order_by('is_test_environment').first()
             if not cliente:
                 raise models.SaaSCliente.DoesNotExist
                 
         # 1. Mensalidades abertas
-        mensalidades_abertas = models.SaaSClienteMensalidade.objects.filter(
+        mensalidades_abertas = models.SaaSClienteMensalidade.objects.using(db_name).filter(
             saas_cliente=cliente,
             status_pagamento='PENDENTE'
         ).order_by('data_vencimento')
@@ -4611,17 +4798,38 @@ def saas_status_cliente(request):
             })
             
         # 2. Contrato pendente
-        contrato = models.SaaSClienteContrato.objects.filter(
-            saas_cliente=cliente,
+        clientes_cnpj = models.SaaSCliente.objects.using(db_name).filter(cnpj=cnpj)
+        contrato = models.SaaSClienteContrato.objects.using(db_name).filter(
+            saas_cliente__in=clientes_cnpj,
             assinado=False
         ).order_by('-data_geracao').first()
         
         contrato_pendente = contrato is not None
         contrato_data = None
         if contrato_pendente:
+            texto_raw = contrato.texto_contrato
+            if not texto_raw or not texto_raw.strip():
+                template = models.TemplateContrato.objects.using(db_name).filter(ativo=True).first()
+                if template and template.texto_template:
+                    texto_raw = template.texto_template
+                else:
+                    texto_raw = FALLBACK_CONTRATO_TEMPLATE
+            
+            valor_mensalidade_str = "0,00"
+            if cliente.valor_mensalidade is not None:
+                try:
+                    valor_mensalidade_str = f"{cliente.valor_mensalidade:.2f}".replace('.', ',')
+                except Exception:
+                    valor_mensalidade_str = str(cliente.valor_mensalidade)
+                    
+            texto_processado = texto_raw
+            texto_processado = texto_processado.replace('{{ cliente_razao_social }}', cliente.razao_social or '')
+            texto_processado = texto_processado.replace('{{ cliente_cnpj }}', cliente.cnpj or '')
+            texto_processado = texto_processado.replace('{{ mensalidade_base }}', valor_mensalidade_str)
+            
             contrato_data = {
                 'id_contrato': contrato.id_contrato,
-                'texto_contrato': contrato.texto_contrato,
+                'texto_contrato': texto_processado,
                 'data_geracao': contrato.data_geracao,
             }
             
@@ -4635,5 +4843,232 @@ def saas_status_cliente(request):
         })
     except models.SaaSCliente.DoesNotExist:
         return Response({'error': 'CNPJ ou Identificador não encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+def saas_meu_contrato(request):
+    """
+    Retorna o contrato assinado ativo do cliente logado, buscando pela empresa CNPJ na central.
+    """
+    from rest_framework.permissions import IsAuthenticated
+    from rest_framework.decorators import permission_classes
+    
+    db_name = 'aperus_central'
+    from django.conf import settings
+    if db_name not in settings.DATABASES:
+        import copy
+        default_db = settings.DATABASES['default']
+        settings.DATABASES[db_name] = copy.deepcopy(default_db)
+        settings.DATABASES[db_name]['NAME'] = db_name
+
+    # 1. Carrega CNPJ da empresa local
+    empresa = models.EmpresaConfig.objects.exclude(cpf_cnpj='').first() or models.EmpresaConfig.objects.first()
+    if not empresa or not empresa.cpf_cnpj:
+        return Response({'error': 'CNPJ da empresa não configurado localmente.'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    import re
+    cnpj_limpo = re.sub(r'\D', '', str(empresa.cpf_cnpj))
+    
+    # 2. Busca o cliente no banco central
+    try:
+        cliente_saas = models.SaaSCliente.objects.using(db_name).get(cnpj=cnpj_limpo)
+    except models.SaaSCliente.DoesNotExist:
+        return Response({'error': 'Cliente SaaS não localizado para este CNPJ.'}, status=status.HTTP_404_NOT_FOUND)
+        
+    # 3. Busca o último contrato assinado
+    contrato = models.SaaSClienteContrato.objects.using(db_name).filter(
+        saas_cliente=cliente_saas,
+        assinado=True
+    ).order_by('-data_assinatura').first()
+    
+    if not contrato:
+        return Response({'error': 'Nenhum contrato assinado encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        
+    serializer = serializers.SaaSClienteContratoSerializer(contrato)
+    return Response({
+        'status': 'sucesso',
+        'contrato': serializer.data
+    })
+
+
+@csrf_exempt
+@api_view(['POST', 'GET'])
+@permission_classes([AllowAny])
+def status_financeiro_saas(request):
+    """
+    Endpoint consultado pelas filiais para verificar faturamento,
+    alertas graduais e regras de bloqueio/carência com trava de fim de semana.
+    """
+    from django.http import JsonResponse
+    if request.method == "GET":
+        cnpj_cliente = request.query_params.get('cnpj')
+    else:
+        if hasattr(request, 'data') and request.data:
+            dados = request.data
+        else:
+            try:
+                dados = json.loads(request.body)
+            except Exception:
+                dados = {}
+        cnpj_cliente = dados.get('cnpj')
+
+    cnpj_cliente = clean_cnpj(cnpj_cliente)
+    if not cnpj_cliente:
+        return JsonResponse({'status': 'erro', 'mensagem': 'CNPJ não fornecido.'}, status=400)
+
+    cliente = models.SaaSCliente.objects.filter(cnpj=cnpj_cliente).first()
+    if not cliente:
+        return JsonResponse({
+            'bloqueio_manual': False,
+            'bloquear_sistema': False,
+            'alerta_estagio': 'isento',
+            'dias_atraso': 0,
+            'mensagem': 'Cliente não cadastrado no painel SaaS. Acesso liberado.',
+            'faturas': []
+        })
+
+    # 1. VERIFICAÇÃO DE BLOQUEIO MANUAL (FIM DE CONTRATO)
+    if getattr(cliente, 'status_licenca', 'ATIVO') in ['BLOQUEADO', 'CANCELADO', 'SUSPENSO', 'INATIVO']:
+        return JsonResponse({
+            'bloqueio_manual': True,
+            'bloquear_sistema': True,
+            'alerta_estagio': 'bloqueio_manual',
+            'dias_atraso': 0,
+            'dias_restantes_carencia': 0,
+            'mensagem': 'Acesso suspenso devido ao encerramento do contrato de prestação de serviços.'
+        })
+
+    faturas = models.SaaSClienteMensalidade.objects.filter(saas_cliente=cliente)
+    
+    if not faturas.exists() or getattr(cliente, 'is_test_environment', False):
+        return JsonResponse({
+            'bloqueio_manual': False,
+            'bloquear_sistema': False,
+            'alerta_estagio': 'isento',
+            'dias_atraso': 0,
+            'mensagem': 'Ambiente de teste ou sem faturamento gerado. Acesso liberado.',
+            'faturas': []
+        })
+
+    hoje = timezone.now().date()
+    faturas_atrasadas = faturas.filter(
+        status_pagamento='PENDENTE',
+        data_vencimento__lt=hoje
+    ).order_by('data_vencimento')
+    
+    if not faturas_atrasadas.exists():
+        return JsonResponse({
+            'bloqueio_manual': False,
+            'bloquear_sistema': False,
+            'alerta_estagio': 'em_dia',
+            'dias_atraso': 0,
+            'mensagem': 'Todas as faturas estão em dia.'
+        })
+
+    fatura_mais_antiga = faturas_atrasadas.first()
+    dias_atraso = (hoje - fatura_mais_antiga.data_vencimento).days
+
+    bloquear_sistema = False
+    alerta_estagio = 'suave'
+    dias_restantes = 11 - dias_atraso
+
+    if 1 <= dias_atraso <= 5:
+        alerta_estagio = 'suave'
+    elif 6 <= dias_atraso <= 10:
+        alerta_estagio = 'critico'
+    elif dias_atraso > 10:
+        dia_semana_atual = hoje.weekday()
+        
+        if dia_semana_atual in [5, 6]:
+            bloquear_sistema = False
+            alerta_estagio = 'fim_de_semana'
+        else:
+            bloquear_sistema = True
+
+    return JsonResponse({
+        'bloqueio_manual': False,
+        'bloquear_sistema': bloquear_sistema,
+        'alerta_estagio': alerta_estagio,
+        'dias_atraso': dias_atraso,
+        'dias_restantes_carencia': max(0, dias_restantes),
+        'fatura_pendente': {
+            'id_mensalidade': fatura_mais_antiga.id_mensalidade,
+            'valor': str(fatura_mais_antiga.valor),
+            'vencimento': fatura_mais_antiga.data_vencimento.strftime('%d/%m/%Y'),
+            'pix_copia_cola': fatura_mais_antiga.pix_copia_cola,
+            'url_boleto': fatura_mais_antiga.url_boleto,
+            'link_boleto': fatura_mais_antiga.url_boleto,
+            'linha_digitavel': fatura_mais_antiga.linha_digitavel,
+            'nosso_numero': fatura_mais_antiga.nosso_numero
+        }
+    })
+
+
+
+def enviar_nfse_mensalidade(fatura):
+    """
+    Função para estruturar e disparar a NFS-e para a Prefeitura de Patrocínio/MG
+    Utilizando o Código de Serviço 1.05.
+    """
+    cliente = fatura.saas_cliente 
+    
+    empresa = models.EmpresaConfig.objects.exclude(cpf_cnpj='').first() or models.EmpresaConfig.objects.first()
+    cnpj_prestador = re.sub(r'\D', '', str(empresa.cpf_cnpj)) if empresa and empresa.cpf_cnpj else "CNPJ_DA_SUPREMA_AQUI"
+    im_prestador = empresa.inscricao_municipal if empresa and empresa.inscricao_municipal else "IM_DA_SUPREMA_AQUI"
+
+    payload_nfse = {
+        "IdentificacaoRps": {
+            "Numero": str(fatura.id_mensalidade),
+            "Tipo": "1"
+        },
+        "DataEmissao": timezone.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "Status": "1",
+        "Servico": {
+            "Valores": {
+                "ValorServicos": float(fatura.valor),
+                "IssRetido": "2",
+                "ItemListaServico": "1.05",
+                "CodigoTributacaoMunicipio": "010500199",
+            },
+            "Discriminacao": f"PRESTACAO DE SERVICO DE LICENCIAMENTO E USO DO SISTEMA DE GESTAO EMPRESARIAL APERUS. REF. COMPETENCIA ATUAL. FATURA ID {fatura.id_mensalidade}.",
+            "CodigoMunicipio": "3148103"
+        },
+        "Prestador": {
+            "Cnpj": cnpj_prestador,
+            "InscricaoMunicipal": im_prestador
+        },
+        "Tomador": {
+            "CpfCnpj": {
+                "Cnpj": cliente.cnpj
+            },
+            "RazaoSocial": cliente.razao_social,
+            "Endereco": {
+                "Endereco": cliente.endereco or '',
+                "Numero": cliente.numero or '',
+                "Bairro": cliente.bairro or '',
+                "CodigoMunicipio": "3148103",
+                "Uf": cliente.estado or '',
+                "Cep": cliente.cep or ''
+            },
+            "Contato": {
+                "Email": cliente.email_responsavel or cliente.email or ''
+            }
+        }
+    }
+    
+    return payload_nfse
+
+
+@csrf_exempt
+@api_view(['POST', 'GET'])
+@permission_classes([AllowAny])
+def verificar_licenca_local(request):
+    """
+    Endpoint na filial local para verificar a licenca do SaaS.
+    """
+    from django.http import JsonResponse
+    from .licenciamento_service import sincronizar_e_verificar_licenca
+    return JsonResponse(sincronizar_e_verificar_licenca())
+
 
 

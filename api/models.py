@@ -1293,6 +1293,7 @@ class EmpresaConfig(models.Model):
     # Habilitação SPED
     sped_habilitar_icms = models.BooleanField(default=True, blank=True, null=True, help_text="Habilitar SPED ICMS/IPI")
     sped_habilitar_contrib = models.BooleanField(default=True, blank=True, null=True, help_text="Habilitar SPED Contribuições")
+    habilitar_central_saas = models.BooleanField(default=False)
 
     class Meta:
         managed = False
@@ -5906,5 +5907,19 @@ class ConfiguracaoAgendamento(models.Model):
     def __str__(self):
         status = "Ativo" if self.agendamento_ativo else "Inativo"
         return f"Agendamento {self.horario_execucao} ({status})"
+
+
+class Licenca(models.Model):
+    id_licenca = models.AutoField(primary_key=True)
+    chave_licenca = models.CharField(max_length=255, unique=True)
+    data_validade = models.DateField()
+    ultimo_check = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(max_length=20, default='Ativa')
+
+    class Meta:
+        managed = True
+        db_table = 'licenca'
+        verbose_name = 'Licença'
+        verbose_name_plural = 'Licenças'
 
 

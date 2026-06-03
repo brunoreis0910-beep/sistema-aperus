@@ -292,10 +292,14 @@ from .views import (
     saas_contrato_pendente,
     saas_assinar_contrato,
     saas_assinar_contrato_etapas,
-    saas_status_cliente,
+    saas_disparar_email_token,
+    saas_meu_contrato,
+    status_financeiro_saas,
     buscar_contrato_atual,
     salvar_edicao_contrato,
     render_contrato_padrao,
+    verificar_licenca_local,
+    saas_status_cliente,
 )
 
 from .viewsets_formapagamento import FormaPagamentoViewSet
@@ -693,7 +697,11 @@ urlpatterns = [
     path('saas/contrato-pendente/', saas_contrato_pendente, name='saas-contrato-pendente'),
     path('saas/assinar-contrato/', saas_assinar_contrato, name='saas-assinar-contrato'),
     path('saas/assinar-contrato-etapas/', saas_assinar_contrato_etapas, name='saas-assinar-contrato-etapas'),
+    path('saas/disparar-email-token/', saas_disparar_email_token, name='saas-disparar-email-token'),
     path('saas/status-cliente/', saas_status_cliente, name='saas-status-cliente'),
+    path('saas/meu-contrato/', saas_meu_contrato, name='saas-meu-contrato'),
+    path('saas/status-financeiro-saas/', status_financeiro_saas, name='saas-status-financeiro-saas'),
+    path('licenca/verificar/', verificar_licenca_local, name='verificar-licenca-local'),
     path('saas/contrato-padrao/atual/', buscar_contrato_atual, name='saas-contrato-padrao-atual'),
     path('saas/contrato-padrao/salvar/', salvar_edicao_contrato, name='saas-contrato-padrao-salvar'),
     path('saas/contrato-padrao/render/', render_contrato_padrao, name='saas-contrato-padrao-render'),

@@ -1,11 +1,11 @@
-﻿from rest_framework.views import APIView
+from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from datetime import date, timedelta
 from django.db.models import Sum, F, Q, Avg, Count
 from django.utils import timezone
 
-from api.models import FinanceiroConta, Estoque, Cashback, Cliente, VendaItem, Compra, Fornecedor
+from api.models import FinanceiroConta, Estoque, Cashback, Cliente, VendaItem, Compra, Fornecedor, SaaSCliente, SaaSClienteContrato, EmpresaConfig
 
 class NotificacoesIniciaisView(APIView):
     def get(self, request):
@@ -145,6 +145,63 @@ class NotificacoesIniciaisView(APIView):
                 _id += 1
         except Exception as e:
             print(f"Erro ao buscar cashbacks vencendo: {e}")
+            pass
+
+        # 5. Contrato SaaS Pendente
+        try:
+            empresa = EmpresaConfig.objects.exclude(cpf_cnpj='').first() or EmpresaConfig.objects.first()
+            if empresa and empresa.cpf_cnpj:
+                import re
+                cnpj_limpo = re.sub(r'\D', '', str(empresa.cpf_cnpj))
+                
+                # Certificar que a conexão com o banco central está configurada
+                from django.conf import settings
+                db_name = 'aperus_central'
+                if db_name not in settings.DATABASES:
+                    import copy
+                    default_db = settings.DATABASES['default']
+                    settings.DATABASES[db_name] = copy.deepcopy(default_db)
+                    settings.DATABASES[db_name]['NAME'] = db_name
+                
+                # Buscar se há cliente com este CNPJ no banco central
+                cliente_saas = SaaSCliente.objects.using(db_name).filter(cnpj=cnpj_limpo).first()
+                if cliente_saas:
+                    # Buscar se o ultimo contrato gerado esta pendente de assinatura
+                    ultimo_contrato = SaaSClienteContrato.objects.using(db_name).filter(
+                        saas_cliente=cliente_saas
+                    ).order_by('-data_geracao').first()
+                    
+                    if ultimo_contrato and not ultimo_contrato.assinado:
+                        notificacoes.append({
+                            'id': _id,
+                            'type': 'warning',
+                            'title': 'Contrato Pendente',
+                            'message': 'Você tem um contrato da Central SaaS pendente de assinatura.',
+                            'icon': 'WarningAmber',
+                            'link': '/saas-contrato-config'
+                        })
+                        _id += 1
+
+                    # Buscar se ha mensalidades pendentes de pagamento
+                    from api.models import SaaSClienteMensalidade
+                    mensalidades_pendentes = SaaSClienteMensalidade.objects.using(db_name).filter(
+                        saas_cliente=cliente_saas,
+                        status_pagamento='PENDENTE'
+                    ).order_by('data_vencimento')
+                    
+                    if mensalidades_pendentes.exists():
+                        qtd = mensalidades_pendentes.count()
+                        notificacoes.append({
+                            'id': _id,
+                            'type': 'error',
+                            'title': 'Mensalidade em Aberto',
+                            'message': f'Voce tem {qtd} mensalidade(s) da Central SaaS pendente(s) de pagamento.',
+                            'icon': 'Payment',
+                            'link': '/financeiro'
+                        })
+                        _id += 1
+        except Exception as e:
+            print(f"Erro ao buscar contrato pendente SaaS: {e}")
             pass
 
         return Response(notificacoes)

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Badge, 
   IconButton, 
@@ -18,12 +18,15 @@ import InfoIcon from '@mui/icons-material/Info';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import CakeIcon from '@mui/icons-material/Cake';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import PaymentIcon from '@mui/icons-material/Payment';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import CashbacksVencendoDialog from './CashbacksVencendoDialog';
 import InadimplenciaDialog from './InadimplenciaDialog';
 import EstoqueCriticoDialog from './EstoqueCriticoDialog';
 import FornecedoresCotacaoDialog from './FornecedoresCotacaoDialog';
+import ContratoPendenteDialog from './ContratoPendenteDialog';
+import MensalidadesPendenteDialog from './MensalidadesPendenteDialog';
 
 const iconMap = {
   MoneyOff: <MoneyOffIcon color="error" />,
@@ -31,7 +34,8 @@ const iconMap = {
   WarningAmber: <WarningAmberIcon color="error" />,
   Inventory: <InventoryIcon color="info" />,
   LocalOffer: <LocalOfferIcon color="success" />,
-  Cake: <CakeIcon color="secondary" />
+  Cake: <CakeIcon color="secondary" />,
+  Payment: <PaymentIcon color="error" />
 };
 
 export default function NotificationBell() {
@@ -41,6 +45,8 @@ export default function NotificationBell() {
   const [inadimplenciaDialogOpen, setInadimplenciaDialogOpen] = useState(false);
   const [estoqueCriticoDialogOpen, setEstoqueCriticoDialogOpen] = useState(false);
   const [fornecedoresDialogOpen, setFornecedoresDialogOpen] = useState(false);
+  const [contratoDialogOpen, setContratoDialogOpen] = useState(false);
+  const [mensalidadesDialogOpen, setMensalidadesDialogOpen] = useState(false);
   const navigate = useNavigate();
   const { axiosInstance } = useAuth();
 
@@ -77,6 +83,10 @@ export default function NotificationBell() {
       setInadimplenciaDialogOpen(true);
     } else if (notificacao.icon === 'Inventory' || notificacao.title?.includes('Estoque')) {
       setEstoqueCriticoDialogOpen(true);
+    } else if (notificacao.title === 'Contrato Pendente') {
+      setContratoDialogOpen(true);
+    } else if (notificacao.title === 'Mensalidade em Aberto') {
+      setMensalidadesDialogOpen(true);
     } else if (notificacao.link) {
       // Outras notificações navegam normalmente
       navigate(notificacao.link);
@@ -147,6 +157,36 @@ export default function NotificationBell() {
       <FornecedoresCotacaoDialog
         open={fornecedoresDialogOpen}
         onClose={() => setFornecedoresDialogOpen(false)}
+      />
+
+      {/* Dialog de Contrato Pendente */}
+      <ContratoPendenteDialog
+        open={contratoDialogOpen}
+        onClose={() => setContratoDialogOpen(false)}
+        onAssinadoSucesso={() => {
+          console.log('Contrato assinado, recarregando notificações...');
+          axiosInstance.get('/notificacoes/')
+            .then(res => {
+              if (Array.isArray(res.data)) {
+                setNotificacoes(res.data);
+              }
+            });
+        }}
+      />
+
+      {/* Dialog de Mensalidades da Central SaaS */}
+      <MensalidadesPendenteDialog
+        open={mensalidadesDialogOpen}
+        onClose={() => setMensalidadesDialogOpen(false)}
+        onRefreshNotificacoes={() => {
+          console.log('Mensalidades atualizadas, recarregando notificações...');
+          axiosInstance.get('/notificacoes/')
+            .then(res => {
+              if (Array.isArray(res.data)) {
+                setNotificacoes(res.data);
+              }
+            });
+        }}
       />
     </>
   );

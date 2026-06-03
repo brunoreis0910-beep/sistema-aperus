@@ -100,8 +100,25 @@ import NotificationBell from './NotificationBell';
 const DashboardLayoutClean = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, axiosInstance } = useAuth();
   const { can } = usePermissions();
+  const [empresaConfig, setEmpresaConfig] = React.useState(null);
+
+  React.useEffect(() => {
+    const fetchEmpresa = async () => {
+      try {
+        const response = await axiosInstance.get('/empresa/');
+        const configs = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+        const activeConfig = configs.find(c => c.cpf_cnpj) || configs[0];
+        if (activeConfig) {
+          setEmpresaConfig(activeConfig);
+        }
+      } catch (e) {
+        console.error("Erro ao carregar empresa config no layout", e);
+      }
+    };
+    fetchEmpresa();
+  }, [axiosInstance]);
   const theme = useTheme();
   const { isOnline, servidorOk, totalPendentes, sincronizando, sincronizar } = useOfflineSync();
   const pendentes = totalPendentes || 0;
@@ -171,11 +188,18 @@ const DashboardLayoutClean = () => {
 
     { key: 'opcoes', label: '+Opções', icon: <AddIcon />, hasSubmenu: true, color: '#FF5722', permission: null }, // Todos têm acesso
     { key: 'backup', label: 'Backup', icon: <BackupIcon />, path: '/backup', color: '#FF9800', permission: 'config_acessar' },
+    { key: 'meu-contrato', label: 'Meu Contrato', icon: <ContractIcon />, path: '/meu-contrato', color: '#1565C0', permission: 'config_acessar' },
     { key: 'configuracoes', label: 'Config', icon: <ConfigIcon />, path: '/configuracoes', color: '#9E9E9E', permission: 'config_acessar' }
   ];
 
-  // Filtra itens de menu baseado nas permissões
+  // Filtra itens de menu baseado nas permissões e configurações da Central SaaS
   const menuItems = allMenuItems.filter(item => {
+    // Esconder a Central SaaS e Contrato Padrão caso não esteja habilitado
+    if (['saas-central', 'saas-contrato-config'].includes(item.key)) {
+      if (!empresaConfig || !empresaConfig.habilitar_central_saas) {
+        return false;
+      }
+    }
     // Se não tem permissão definida, mostra para todos
     if (!item.permission) return true;
     // Usa o hook de permissões
@@ -295,7 +319,8 @@ const DashboardLayoutClean = () => {
   // Verifica se o usuário tem permissão para a rota atual
   const currentPath = location.pathname;
   const requiredPermission = routePermissions[currentPath];
-  const hasRouteAccess = !requiredPermission || can(requiredPermission);
+  const isSaasRoute = ['/saas-central', '/saas-contrato-config'].includes(currentPath);
+  const hasRouteAccess = (!requiredPermission || can(requiredPermission)) && (!isSaasRoute || (empresaConfig && empresaConfig.habilitar_central_saas));
   // Para rotas com parâmetros dinâmicos (ex: /alugueis/editar/:id)
   const hasRouteAccessDynamic = React.useMemo(() => {
     if (hasRouteAccess) return true;

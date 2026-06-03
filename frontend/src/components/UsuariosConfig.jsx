@@ -70,6 +70,11 @@ const UsuariosConfig = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [tabValue, setTabValue] = useState(0);
+  const [empresaConfig, setEmpresaConfig] = useState(null);
+  const [openSaasDialog, setOpenSaasDialog] = useState(false);
+  const [senhaSaas, setSenhaSaas] = useState('');
+  const [saasUnlocked, setSaasUnlocked] = useState(false);
+  const [erroSenhaSaas, setErroSenhaSaas] = useState(null);
   const [currentUsuario, setCurrentUsuario] = useState({
     id: null,
     username: '',
@@ -256,22 +261,28 @@ const UsuariosConfig = () => {
 
   const carregarDadosAuxiliares = async () => {
     try {
-      const [resClientes, resOperacoes, resVendedores, resGrupos] = await Promise.all([
+      const [resClientes, resOperacoes, resVendedores, resGrupos, resEmpresa] = await Promise.all([
         axiosInstance.get('/clientes/?page_size=1000').catch(() => ({ data: [] })),
         axiosInstance.get('/operacoes/').catch(() => ({ data: [] })),
         axiosInstance.get('/vendedores/').catch(() => ({ data: [] })),
-        axiosInstance.get('/grupos-produto/').catch(() => ({ data: [] }))
+        axiosInstance.get('/grupos-produto/').catch(() => ({ data: [] })),
+        axiosInstance.get('/empresa/').catch(() => ({ data: [] }))
       ]);
 
       const clientesData = Array.isArray(resClientes.data) ? resClientes.data : (resClientes.data?.results || []);
       const operacoesData = Array.isArray(resOperacoes.data) ? resOperacoes.data : (resOperacoes.data?.results || []);
       const vendedoresData = Array.isArray(resVendedores.data) ? resVendedores.data : (resVendedores.data?.results || []);
       const gruposData = Array.isArray(resGrupos.data) ? resGrupos.data : (resGrupos.data?.results || []);
+      const empresaData = Array.isArray(resEmpresa.data) ? resEmpresa.data : (resEmpresa.data?.results || []);
 
       setClientes(clientesData);
       setOperacoes(operacoesData);
       setVendedores(vendedoresData);
       setGrupos(gruposData);
+      const activeConfig = empresaData.find(c => c.cpf_cnpj) || empresaData[0];
+      if (activeConfig) {
+        setEmpresaConfig(activeConfig);
+      }
     } catch (err) {
       console.error('❌ Erro ao carregar dados auxiliares:', err);
     }
@@ -317,6 +328,30 @@ const UsuariosConfig = () => {
       setError('Erro ao carregar usuários');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+  };
+
+  const handleCloseSaasDialog = () => {
+    setOpenSaasDialog(false);
+    setSaasUnlocked(false);
+    setSenhaSaas('');
+    setErroSenhaSaas(null);
+  };
+
+  const handleUnlockSaas = () => {
+    if (!senhaSaas.trim()) {
+      setErroSenhaSaas('Preencha a senha.');
+      return;
+    }
+    if (senhaSaas === 'SaaSAdminMaster2026') {
+      setSaasUnlocked(true);
+      setErroSenhaSaas(null);
+    } else {
+      setErroSenhaSaas('Senha master incorreta.');
     }
   };
 
@@ -447,7 +482,7 @@ const UsuariosConfig = () => {
         console.log('💾 Novo usuário criado via API');
       }
 
-      setOpenDialog(false);
+      handleCloseDialog();
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
       setError(null);
@@ -1129,13 +1164,23 @@ const UsuariosConfig = () => {
           title="Gerenciamento de Usuários"
           subheader="Gerencie usuários e suas permissões"
           action={
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleNew}
-            >
-              Novo Usuário
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="outlined"
+                color="secondary"
+                startIcon={<AdminIcon />}
+                onClick={() => setOpenSaasDialog(true)}
+              >
+                Central SaaS
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={handleNew}
+              >
+                Novo Usuário
+              </Button>
+            </Box>
           }
         />
 
@@ -1204,8 +1249,7 @@ const UsuariosConfig = () => {
         </CardContent>
       </Card>
 
-      {/* Dialog para Editar/Criar Usuário */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="lg" fullWidth>
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="lg" fullWidth>
         <DialogTitle>
           {isEditing ? 'Editar Usuário' : 'Novo Usuário'}
         </DialogTitle>
@@ -1835,12 +1879,90 @@ const UsuariosConfig = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>
+          <Button onClick={handleCloseDialog}>
             Cancelar
           </Button>
           <Button onClick={handleSave} variant="contained" startIcon={<SaveIcon />}>
             Salvar
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog para Configuração da Central SaaS */}
+      <Dialog open={openSaasDialog} onClose={handleCloseSaasDialog} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <AdminIcon color="primary" />
+          <Typography variant="h6">Configuração - Central SaaS</Typography>
+        </DialogTitle>
+        <DialogContent>
+          {!saasUnlocked ? (
+            <Box sx={{ py: 2, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Informe a senha master de administração para gerenciar o acesso global da Central SaaS e Contrato Padrão.
+              </Typography>
+              <TextField
+                fullWidth
+                type="password"
+                label="Senha Master"
+                value={senhaSaas}
+                onChange={(e) => setSenhaSaas(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleUnlockSaas(); }}
+                size="small"
+                sx={{ mb: 2 }}
+              />
+              {erroSenhaSaas && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {erroSenhaSaas}
+                </Alert>
+              )}
+            </Box>
+          ) : (
+            <Box sx={{ py: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Ative ou desative a exibição global dos menus "Central SaaS" e "Contrato Padrão" para todos os usuários desta empresa.
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={empresaConfig?.habilitar_central_saas || false}
+                    onChange={async (e) => {
+                      const novoValor = e.target.checked;
+                      if (!empresaConfig) {
+                        setError('Configuração da empresa não encontrada.');
+                        return;
+                      }
+                      try {
+                        setLoading(true);
+                        const response = await axiosInstance.patch(`/empresa/${empresaConfig.id_empresa}/`, {
+                          habilitar_central_saas: novoValor
+                        });
+                        setEmpresaConfig(response.data);
+                        setShowSuccess(true);
+                        setTimeout(() => setShowSuccess(false), 3000);
+                      } catch (err) {
+                        console.error('Erro ao salvar configuração central', err);
+                        setError('Erro ao atualizar configuração central');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    color="primary"
+                  />
+                }
+                label="Habilitar Central SaaS e Contrato Padrão nos menus"
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseSaasDialog}>
+            {saasUnlocked ? 'Fechar' : 'Cancelar'}
+          </Button>
+          {!saasUnlocked && (
+            <Button onClick={handleUnlockSaas} variant="contained">
+              Desbloquear
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
