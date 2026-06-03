@@ -26,10 +26,14 @@ const LoginClean = () => {
     username: '',
     password: ''
   });
-  const [error, setError] = useState('');
+  const [error, setError] = useState(sessionStorage.getItem('licenca_erro') || '');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
+
+  React.useEffect(() => {
+    sessionStorage.removeItem('licenca_erro');
+  }, []);
 
   const handleChange = (e) => {
     setCredentials({
@@ -46,7 +50,11 @@ const LoginClean = () => {
     try {
       await login(credentials.username, credentials.password);
     } catch (err) {
-      setError('Erro ao fazer login. Verifique suas credenciais.');
+      setError(
+        err.response?.data?.detail ||
+        err.response?.data?.message ||
+        'Erro ao fazer login. Verifique suas credenciais.'
+      );
     } finally {
       setLoading(false);
     }

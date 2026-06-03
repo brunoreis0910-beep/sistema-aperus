@@ -77,7 +77,7 @@ const LoginPage = () => {
     username: '',
     password: ''
   });
-  const [error, setError] = useState('');
+  const [error, setError] = useState(sessionStorage.getItem('licenca_erro') || '');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -85,6 +85,10 @@ const LoginPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+
+  React.useEffect(() => {
+    sessionStorage.removeItem('licenca_erro');
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_BASE_URL, API_ENDPOINT } from '../config/api';
@@ -71,6 +71,15 @@ export const AuthProvider = ({ children }) => {
           message: error.message,
           data: error.response?.data
         });
+
+        // Intercepta erro de licença bloqueada para deslogar e exibir alerta
+        if (error.response?.status === 403 && error.response?.data?.error === 'licenca_bloqueada') {
+          logger.error('LICENÇA BLOQUEADA', 'Deslogando usuário...');
+          sessionStorage.setItem('licenca_erro', error.response.data.detail);
+          callbacksRef.current.logout();
+          return Promise.reject(error);
+        }
+
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
           try {

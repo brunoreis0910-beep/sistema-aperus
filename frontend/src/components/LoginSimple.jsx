@@ -21,9 +21,13 @@ const LoginSimple = () => {
     username: '',
     password: ''
   });
-  const [error, setError] = useState('');
+  const [error, setError] = useState(sessionStorage.getItem('licenca_erro') || '');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
+
+  React.useEffect(() => {
+    sessionStorage.removeItem('licenca_erro');
+  }, []);
 
   const handleChange = (e) => {
     setCredentials({
@@ -39,8 +43,12 @@ const LoginSimple = () => {
 
     try {
       await login(credentials.username, credentials.password);
-    } catch (error) {
-      setError('Credenciais inválidas. Use: admin / admin123');
+    } catch (err) {
+      setError(
+        err.response?.data?.detail ||
+        err.response?.data?.message ||
+        'Erro ao fazer login. Verifique suas credenciais.'
+      );
     } finally {
       setLoading(false);
     }
