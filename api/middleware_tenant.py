@@ -31,31 +31,54 @@ def verificar_licenca_ativa():
         
     # 2. Tenta buscar o status atualizado na central
     status_central = None
-    tem_atraso = False
     dia_vencimento = 10
+    bloquear_central = False
+    is_test_env = False
     
     try:
         with db_conn.cursor() as cursor:
             # Verifica se a base central está acessível e possui a tabela
             cursor.execute("SHOW TABLES FROM aperus_central LIKE 'saas_cliente'")
             if cursor.fetchone():
-                cursor.execute("SELECT status_licenca, dia_vencimento FROM aperus_central.saas_cliente WHERE cnpj = %s", [cnpj_limpo])
+                cursor.execute("SELECT status_licenca, dia_vencimento, is_test_environment FROM aperus_central.saas_cliente WHERE cnpj = %s", [cnpj_limpo])
                 row = cursor.fetchone()
                 if row:
                     status_central = row[0]
                     dia_vencimento = row[1]
+                    is_test_env = bool(row[2])
                     
-                    # Verifica mensalidades vencidas há mais de 5 dias
-                    agora_date = datetime.now().date()
-                    cinco_dias_atras = agora_date - timedelta(days=5)
-                    cursor.execute("""
-                        SELECT EXISTS(
-                            SELECT 1 FROM aperus_central.saas_cliente_mensalidade m
+                    # 1. Se for ambiente de testes, não bloqueia
+                    if is_test_env:
+                        bloquear_central = False
+                    # 2. Se a licença já estiver bloqueada administrativamente ou cancelada, bloqueia na hora
+                    elif status_central in ['BLOQUEADO', 'CANCELADO', 'SUSPENSO', 'INATIVO']:
+                        bloquear_central = True
+                    else:
+                        # 3. Busca a fatura vencida há mais tempo
+                        cursor.execute("""
+                            SELECT data_vencimento FROM aperus_central.saas_cliente_mensalidade m
                             JOIN aperus_central.saas_cliente c ON m.saas_cliente_id = c.id_saas_cliente
-                            WHERE c.cnpj = %s AND m.status_pagamento = 'PENDENTE' AND m.data_vencimento < %s
-                        )
-                    """, [cnpj_limpo, cinco_dias_atras])
-                    tem_atraso = cursor.fetchone()[0]
+                            WHERE c.cnpj = %s AND m.status_pagamento = 'PENDENTE'
+                            ORDER BY m.data_vencimento ASC LIMIT 1
+                        """, [cnpj_limpo])
+                        row_fatura = cursor.fetchone()
+                        if row_fatura:
+                            data_vencimento_fatura = row_fatura[0]
+                            agora_date = datetime.now().date()
+                            dias_atraso = (agora_date - data_vencimento_fatura).days
+                            
+                            # Bloqueia se o atraso for maior que 10 dias (10 dias de carência)
+                            if dias_atraso > 10:
+                                # Trava de fim de semana (não bloqueia aos sábados e domingos)
+                                dia_semana = agora_date.weekday() # 5 = Sábado, 6 = Domingo
+                                if dia_semana in [5, 6]:
+                                    bloquear_central = False
+                                else:
+                                    bloquear_central = True
+                            else:
+                                bloquear_central = False
+                        else:
+                            bloquear_central = False
     except Exception:
         # Silencia erros se a base central estiver inacessível (ambiente offline)
         pass
@@ -69,29 +92,13 @@ def verificar_licenca_ativa():
                 if cursor.fetchone():
                     # Determina novo status local e validade
                     novo_status = 'Ativa'
-                    if status_central == 'BLOQUEADO':
+                    if bloquear_central:
                         novo_status = 'Bloqueada'
-                    elif tem_atraso:
-                        novo_status = 'Vencida'
+                        nova_validade = agora.date() - timedelta(days=1)
+                    else:
+                        # Estende o prazo offline por 3 dias em caso de contingência
+                        nova_validade = agora.date() + timedelta(days=3)
                         
-                    # Calcula o vencimento
-                    import calendar
-                    ano, mes = agora.year, agora.month
-                    ultimo_dia = calendar.monthrange(ano, mes)[1]
-                    dia_venc = min(dia_vencimento, ultimo_dia)
-                    novo_vencimento = date(ano, mes, dia_venc)
-                    
-                    if agora.date() > novo_vencimento:
-                        mes += 1
-                        if mes > 12:
-                            mes = 1
-                            ano += 1
-                        ultimo_dia = calendar.monthrange(ano, mes)[1]
-                        dia_venc = min(dia_vencimento, ultimo_dia)
-                        novo_vencimento = date(ano, mes, dia_venc)
-                        
-                    nova_validade = novo_vencimento + timedelta(days=5)
-                    
                     # Atualiza ou insere na tabela licenca
                     cursor.execute("""
                         INSERT INTO licenca (id_licenca, chave_licenca, data_validade, ultimo_check, status)
@@ -117,11 +124,9 @@ def verificar_licenca_ativa():
                     if local_status == 'Bloqueada':
                         bloquear = True
                         motivo = 'Licença Suspensa administrativamente pelo painel central Aperus.'
-                    elif local_status == 'Vencida' or (data_validade and agora.date() > data_validade):
+                    elif data_validade and agora.date() > data_validade:
                         bloquear = True
-                        motivo = 'Licença Expirada por falta de pagamento da mensalidade.'
-                        if local_status != 'Vencida':
-                            cursor.execute("UPDATE licenca SET status = 'Vencida' WHERE id_licenca = 1")
+                        motivo = 'Licença Expirada. Conecte o servidor à internet para atualizar a licença.'
     except Exception:
         # Em caso de falha completa de acesso à tabela local, não bloqueamos para não quebrar a aplicação
         pass
