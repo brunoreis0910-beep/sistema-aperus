@@ -190,11 +190,14 @@ class TenantMiddleware:
         # Ignora verificação se for a base central ou testes
         is_central_db = real_db_name in ['aperus_central', 'sistema_gerencial', 'aperus_testes']
         
-        # Ignora verificação para rotas públicas e de suporte
+        # Só bloqueia rotas de API (começando com /api/)
         path = request.path
+        is_api_route = path.startswith('/api/')
+        
+        # Ignora verificação para rotas públicas e de suporte
         is_public_route = path.startswith('/api/health/') or path.startswith('/api/saas/') or path.startswith('/static/') or path.startswith('/media/')
         
-        if not is_central_db and not is_public_route:
+        if is_api_route and not is_central_db and not is_public_route:
             bloquear, motivo = verificar_licenca_ativa()
             if bloquear:
                 # Limpa a conexão antes de retornar
