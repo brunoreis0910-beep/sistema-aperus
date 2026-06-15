@@ -15,7 +15,7 @@ import {
   Warning as WarningIcon, Launch as LaunchIcon, Search as SearchIcon,
   SystemUpdate as UpdateIcon, Terminal as LogIcon, Delete as DeleteIcon,
   Storage as StorageIcon, Bolt as BoltIcon, Campaign as CampaignIcon,
-  Save as SaveIcon, Send as SendIcon, Link as LinkIcon
+  Save as SaveIcon, Send as SendIcon, Link as LinkIcon, WhatsApp as WhatsAppIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
@@ -2686,6 +2686,28 @@ const SaaSAdminPage = () => {
                 }}
                 fullWidth
               />
+
+              <Button
+                variant="contained"
+                startIcon={<WhatsAppIcon />}
+                onClick={() => {
+                  const phone = remoteInviteForm.whatsapp_cliente.replace(/\D/g, '');
+                  const msg = `Olá! Para darmos andamento à ativação do seu sistema Aperus, por favor, preencha seus dados cadastrais pelo link seguro:\n\n${generatedLinkData.url}\n\n_(Este link é válido por 48 horas)_`;
+                  const finalPhone = phone.length <= 11 ? `55${phone}` : phone;
+                  window.open(`https://api.whatsapp.com/send?phone=${finalPhone}&text=${encodeURIComponent(msg)}`, '_blank');
+                }}
+                sx={{
+                  bgcolor: '#25D366',
+                  '&:hover': { bgcolor: '#128C7E' },
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  textTransform: 'none',
+                  mt: 1
+                }}
+                fullWidth
+              >
+                Enviar pelo WhatsApp (Web/App)
+              </Button>
             </Stack>
           )}
         </DialogContent>
