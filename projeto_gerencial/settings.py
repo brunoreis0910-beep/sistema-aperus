@@ -303,6 +303,9 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # Diretórios adicionais de arquivos estáticos
 _frontend_assets_dist = BASE_DIR / 'frontend' / 'dist'
 _frontend_assets = BASE_DIR / 'frontend' / 'assets'

@@ -134,7 +134,7 @@ def simular_desconto_cliente(request):
             motivo = "Nenhum desconto aplicado"
 
         # Tratamento de grupo de exceção
-        if "grupo de exceção" in resultado_cliente["motivo"]:
+        if resultado_cliente.get("grupo_excecao") is not None:
             mensagem_tooltip = resultado_cliente["motivo"]
             preco_final = valor_tabela
             desconto_aplicado = Decimal('0.00')

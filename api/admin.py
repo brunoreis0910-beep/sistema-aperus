@@ -17,6 +17,7 @@ from .models import (
     SaaSClienteMensalidade,
     SaaSClienteContrato,
     ContratoPadrao,
+    ComunicadoSaaS,
 )
 
 # Configuração básica dos modelos
@@ -400,4 +401,12 @@ class ContratoPadraoAdmin(admin.ModelAdmin):
     list_filter = ('ativo',)
     search_fields = ('titulo', 'conteudo_html')
     ordering = ['-atualizado_em']
+
+
+@admin.register(ComunicadoSaaS)
+class ComunicadoSaaSAdmin(admin.ModelAdmin):
+    list_display = ('titulo', 'tipo', 'data_inicio', 'data_fim', 'ativo')
+    list_filter = ('tipo', 'ativo', 'data_inicio', 'data_fim')
+    search_fields = ('titulo', 'conteudo_texto')
+    ordering = ['-criado_em']
 

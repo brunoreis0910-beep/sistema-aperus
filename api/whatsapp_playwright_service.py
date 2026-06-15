@@ -9,8 +9,6 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from django.utils import timezone
 from playwright.sync_api import sync_playwright
-import pyperclip  # Clipboard para colar texto (mais confiável que digitação)
-import pyautogui  # Controle de mouse/teclado para WhatsApp Desktop
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +44,10 @@ class WhatsAppService:
         self.contador_envios = 0  # Contador de envios realizados
         self.envios_em_fila = 0  # Contador de mensagens aguardando na fila
         
+        # Decidir se usa modo Desktop ou modo Web Browser (Playwright Headless)
+        from decouple import config
+        self.use_desktop = config('WHATSAPP_USE_DESKTOP', default='False').lower() in ('true', '1', 'yes')
+
         # Start worker thread
         self.worker_thread = threading.Thread(target=self._worker, daemon=True)
         self.worker_thread.start()
@@ -53,7 +55,7 @@ class WhatsAppService:
     def enviar_mensagem(self, telefone, mensagem):
         """Enfileira uma mensagem para envio."""
         self.envios_em_fila += 1
-        logger.info(f"📨 [DEBUG] Nova mensagem enfileirada! Total na fila: {self.envios_em_fila}")
+        logger.info(f"? [DEBUG] Nova mensagem enfileirada! Total na fila: {self.envios_em_fila}")
         self.queue.put({'type': 'send', 'phone': telefone, 'message': mensagem})
         return True
 
@@ -90,13 +92,13 @@ class WhatsAppService:
                     # Formata como data URI para exibir direto no HTML
                     self.qr_code_base64 = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
                     
-                    logger.info(f"✅ [Playwright] QR Code capturado em memória (Base64).")
+                    logger.info(f"[OK] [Playwright] QR Code capturado em memória (Base64).")
                     return True
             except Exception:
                 pass
                 
         except Exception as e:
-            logger.error(f"❌ [Playwright] Erro ao capturar QR Code: {e}")
+            logger.error(f"[ERRO] [Playwright] Erro ao capturar QR Code: {e}")
         return False
 
     def _capturar_qr(self, page, nome_arquivo="qr_code.png"):
@@ -110,10 +112,10 @@ class WhatsAppService:
             elemento_qr = page.query_selector(qr_selector)
             if elemento_qr:
                 elemento_qr.screenshot(path=nome_arquivo)
-                print(f"✅ [Playwright] QR Code salvo em: {os.path.abspath(nome_arquivo)}")
+                print(f"[OK] [Playwright] QR Code salvo em: {os.path.abspath(nome_arquivo)}")
                 return True
         except Exception as e:
-            print(f"❌ [Playwright] Erro ao capturar QR Code: {e}")
+            print(f"[ERRO] [Playwright] Erro ao capturar QR Code: {e}")
         return False
 
     def _worker(self):
@@ -127,17 +129,19 @@ class WhatsAppService:
             pass
             
         logger.info("WhatsAppService Worker iniciado.")
-        logger.info("🖥️ MODO DESKTOP ATIVADO - Navegador Playwright DESABILITADO")
+        if self.use_desktop:
+            logger.info("?? MODO DESKTOP ATIVADO - Navegador Playwright DESABILITADO")
+        else:
+            logger.info("🌐 MODO WEB BROWSER ATIVADO - Usando Playwright Headless")
         
         while not self.stop_event.is_set():
             try:
-                # MODO DESKTOP: Navegador desabilitado - usa WhatsApp Desktop App
-                # if (not self.browser or not self.page) and self.status not in ("failed", "error"):
-                #     self._iniciar_navegador()
-                
-                # MODO DESKTOP: Não verifica QR Code (não usa navegador)
-                # if self.status == "waiting_qr" and self.page:
-                #     self._verificar_conexao()
+                if not self.use_desktop:
+                    if (not self.browser or not self.page) and self.status not in ("failed", "error"):
+                        self._iniciar_navegador()
+                    
+                    if self.status == "waiting_qr" and self.page:
+                        self._verificar_conexao()
                 
                 # Processa fila de mensagens
                 try:
@@ -145,16 +149,15 @@ class WhatsAppService:
                     if task['type'] == 'send':
                         self._processar_envio(task['phone'], task['message'])
                     elif task['type'] == 'connect':
-                        logger.info("📱 Tarefa de conexão recebida. Navegador será inicializado.")
-                        # Navegador será inicializado no próximo ciclo do while
+                        logger.info("? Tarefa de conexão recebida.")
                     self.queue.task_done()
                 except queue.Empty:
                     pass
 
-                # MODO DESKTOP: Não monitora chat via navegador
-                # if self.status == "connected" and time.time() - self.last_activity > 5:
-                #     self._monitorar_chat()
-                #     self.last_activity = time.time()
+                if not self.use_desktop:
+                    if self.status == "connected" and time.time() - self.last_activity > 5:
+                        self._monitorar_chat()
+                        self.last_activity = time.time()
                     
             except Exception as e:
                 logger.error(f"Erro no worker do WhatsApp: {e}", exc_info=True)
@@ -172,10 +175,10 @@ class WhatsAppService:
         try:
             if os.path.exists(cache_dir):
                 shutil.rmtree(cache_dir, ignore_errors=True)
-                logger.info("🧹 Cache corrompido removido: Default/Code Cache")
+                logger.info("? Cache corrompido removido: Default/Code Cache")
             if os.path.exists(local_state):
                 os.remove(local_state)
-                logger.info("🧹 Arquivo corrompido removido: Local State")
+                logger.info("? Arquivo corrompido removido: Local State")
         except Exception as e:
             logger.warning(f"Aviso ao limpar cache: {e}")
 
@@ -220,18 +223,18 @@ class WhatsAppService:
             
             self.page.goto("https://web.whatsapp.com", timeout=90000)  # 90 segundos para carregar
             
-            logger.info("✅ Página carregada, aguardando elementos do WhatsApp...")
+            logger.info("[OK] Página carregada, aguardando elementos do WhatsApp...")
             try:
                 # Tenta esperar o network ficar ocioso (página carregada) - Máximo 30s
                 try:
-                    logger.info("⏳ Aguardando network idle...")
+                    logger.info("[TEMPO] Aguardando network idle...")
                     self.page.wait_for_load_state("networkidle", timeout=30000)
-                    logger.info("✅ Network idle atingido!")
+                    logger.info("[OK] Network idle atingido!")
                 except Exception as e:
-                    logger.warning(f"⚠️ Timeout aguardando networkidle ({e}), mas continuando...")
+                    logger.warning(f"[AVISO] Timeout aguardando networkidle ({e}), mas continuando...")
 
                 # Espera pelo QR Code ou pela lista de chats (se já logado)
-                logger.info("🔍 Procurando por QR Code ou chat list...")
+                logger.info("[BUSCA] Procurando por QR Code ou chat list...")
                 
                 # Seletores comuns do WhatsApp Web (atualizados para 2026)
                 # Tenta encontrar QUALQUER um destes elementos
@@ -249,9 +252,9 @@ class WhatsAppService:
                 todos_seletores = seletores_qr + seletores_logado
                 seletores_css = ", ".join(todos_seletores)
                 
-                logger.info(f"🔍 Tentando seletores: {seletores_css[:100]}...")
+                logger.info(f"[BUSCA] Tentando seletores: {seletores_css[:100]}...")
                 self.page.wait_for_selector(seletores_css, timeout=90000)  # 90 segundos
-                logger.info("✅ Algum seletor foi encontrado!")
+                logger.info("[OK] Algum seletor foi encontrado!")
                 
                 # Verifica qual elemento apareceu
                 tem_qr = False
@@ -260,24 +263,24 @@ class WhatsAppService:
                 for sel in seletores_qr:
                     if self.page.query_selector(sel):
                         tem_qr = True
-                        logger.info(f"✅ QR Code encontrado com seletor: {sel}")
+                        logger.info(f"[OK] QR Code encontrado com seletor: {sel}")
                         break
                 
                 for sel in seletores_logado:
                     if self.page.query_selector(sel):
                         tem_chatlist = True
-                        logger.info(f"✅ Chat list encontrada com seletor: {sel}")
+                        logger.info(f"[OK] Chat list encontrada com seletor: {sel}")
                         break
                 
                 if tem_chatlist:
                     self.status = "connected"
-                    logger.info("🎉 WhatsApp conectado com sucesso (sessão salva)!")
+                    logger.info("? WhatsApp conectado com sucesso (sessão salva)!")
                 elif tem_qr:
                     self.status = "waiting_qr"
-                    logger.info("📱 Aguardando leitura do QR Code...")
+                    logger.info("? Aguardando leitura do QR Code...")
                     self.capturar_qr()
                 else:
-                    logger.warning("⚠️ Nenhum elemento esperado encontrado, tentando capturar QR mesmo assim...")
+                    logger.warning("[AVISO] Nenhum elemento esperado encontrado, tentando capturar QR mesmo assim...")
                     self.status = "waiting_qr"
                     self.capturar_qr()
                     
@@ -291,13 +294,13 @@ class WhatsAppService:
                         # Salva Screenshot
                         debug_path = os.path.join(base_dir, "debug_timeout.png")
                         self.page.screenshot(path=debug_path)
-                        logger.info(f"📸 Screenshot de debug salvo em: {debug_path}")
+                        logger.info(f"? Screenshot de debug salvo em: {debug_path}")
                         
                         # Salva HTML para análise
                         html_path = os.path.join(base_dir, "debug_page.html")
                         with open(html_path, "w", encoding="utf-8") as f:
                             f.write(self.page.content())
-                        logger.info(f"📄 HTML de debug salvo em: {html_path}")
+                        logger.info(f"? HTML de debug salvo em: {html_path}")
                         
                         # Tenta capturar QR code mesmo com timeout, caso o seletor específico tenha falhado mas o canvas esteja lá
                         if self.page.query_selector("canvas"):
@@ -314,7 +317,7 @@ class WhatsAppService:
                ("target page" in erro_msg.lower() and "has been closed" in erro_msg.lower()):
                 import os
                 user_data_dir = os.path.join(os.path.dirname(__file__), '..', 'whatsapp_session')
-                logger.warning("⚠️ Cache corrompido detectado. Limpando e tentando novamente...")
+                logger.warning("[AVISO] Cache corrompido detectado. Limpando e tentando novamente...")
                 self._limpar_cache_corrompido(user_data_dir)
                 self.status = "stopped"  # Força retry imediato (não "failed")
                 return
@@ -322,9 +325,9 @@ class WhatsAppService:
             # Se é erro de asyncio loop, marca como erro permanente
             if "asyncio loop" in erro_msg.lower() or "async api" in erro_msg.lower():
                 self.status = "error"  # Erro permanente, não "failed" temporário
-                logger.critical("🚫 ERRO CRÍTICO: Playwright Sync API não é compatível com o ambiente asyncio do Django.")
-                logger.critical("🚫 Serviço de WhatsApp via Playwright desabilitado permanentemente.")
-                logger.critical("💡 Use Evolution API ou WhatsApp Cloud API como alternativa.")
+                logger.critical("? ERRO CRÍTICO: Playwright Sync API não é compatível com o ambiente asyncio do Django.")
+                logger.critical("? Serviço de WhatsApp via Playwright desabilitado permanentemente.")
+                logger.critical("? Use Evolution API ou WhatsApp Cloud API como alternativa.")
             else:
                 self.status = "failed"
 
@@ -344,7 +347,7 @@ class WhatsAppService:
                 chat_list = self.page.query_selector("div[data-testid='chat-list']")
                 if chat_list:
                     self.status = "connected"
-                    logger.info("✅ QR Code escaneado! WhatsApp conectado com sucesso!")
+                    logger.info("[OK] QR Code escaneado! WhatsApp conectado com sucesso!")
                     
                     # Processa mensagens pendentes na fila
                     if not self.queue.empty():
@@ -358,33 +361,38 @@ class WhatsAppService:
         Garante que apenas UMA mensagem seja enviada por vez.
         """
         self.envios_em_fila -= 1
-        logger.info(f"📥 [DEBUG] Processando mensagem... Restantes na fila: {self.envios_em_fila}")
+        logger.info(f"? [DEBUG] Processando mensagem... Restantes na fila: {self.envios_em_fila}")
         
         # Tenta adquirir o lock (aguarda se outra mensagem está sendo enviada)
-        logger.info(f"🔒 [DEBUG] Tentando adquirir lock de envio...")
+        logger.info(f"[SEGURANCA] [DEBUG] Tentando adquirir lock de envio...")
         lock_acquired = self.envio_lock.acquire(blocking=True, timeout=120)
         
         if not lock_acquired:
-            logger.error(f"❌ [DEBUG] Timeout ao aguardar lock de envio (120s). Mensagem descartada.")
+            logger.error(f"[ERRO] [DEBUG] Timeout ao aguardar lock de envio (120s). Mensagem descartada.")
             return
         
         try:
-            logger.info(f"✅ [DEBUG] Lock de envio adquirido! Processando mensagem...")
+            logger.info(f"[OK] [DEBUG] Lock de envio adquirido! Processando mensagem...")
             
             # Verifica tempo desde última navegação
             tempo_decorrido = time.time() - self.ultima_navegacao
             if tempo_decorrido < 5:
                 delay_necessario = 5 - tempo_decorrido
-                logger.info(f"⏳ [DEBUG] Aguardando {delay_necessario:.1f}s para evitar sobreposição...")
+                logger.info(f"[TEMPO] [DEBUG] Aguardando {delay_necessario:.1f}s para evitar sobreposição...")
                 time.sleep(delay_necessario)
 
-            # MODO DESKTOP - Usa WhatsApp Desktop App ao invés de Web
-            logger.info(f"🖥️ [DESKTOP] Enviando via WhatsApp Desktop App...")
-            self._executar_envio_desktop(telefone, mensagem)
+            if self.use_desktop:
+                # MODO DESKTOP - Usa WhatsApp Desktop App ao invés de Web
+                logger.info(f"?? [DESKTOP] Enviando via WhatsApp Desktop App...")
+                self._executar_envio_desktop(telefone, mensagem)
+            else:
+                # MODO WEB BROWSER - Usa Playwright Browser
+                logger.info(f"🌐 [PLAYWRIGHT] Enviando via Playwright Browser...")
+                self._executar_envio(telefone, mensagem)
             
         finally:
             # SEMPRE libera o lock, mesmo em caso de erro
-            logger.info(f"🔓 [DEBUG] Liberando lock de envio...")
+            logger.info(f"? [DEBUG] Liberando lock de envio...")
             self.envio_lock.release()
     
     def _executar_envio(self, telefone, mensagem):
@@ -394,7 +402,7 @@ class WhatsAppService:
             self.ultima_navegacao = time.time()
             self.contador_envios += 1
             
-            logger.info(f"🚀 [DEBUG] INICIANDO ENVIO #{self.contador_envios}")
+            logger.info(f"[START] [DEBUG] INICIANDO ENVIO #{self.contador_envios}")
             
             # Formata telefone (remove 55 se duplicado, garante apenas numeros)
             phone = re.sub(r'[^0-9]', '', telefone)
@@ -402,18 +410,18 @@ class WhatsAppService:
             # ESTRATÉGIA CORRIGIDA: Abre o chat SEM o texto, digita manualmente
             link = f"https://web.whatsapp.com/send?phone={phone}"
             
-            logger.info(f"📤 [DEBUG] Abrindo chat vazio...")
-            logger.info(f"📱 [DEBUG] Telefone: {phone}")
-            logger.info(f"📝 [DEBUG] Mensagem ({len(mensagem)} chars): {mensagem[:100]}...")
-            logger.info(f"🔗 [DEBUG] URL: {link}")
+            logger.info(f"? [DEBUG] Abrindo chat vazio...")
+            logger.info(f"? [DEBUG] Telefone: {phone}")
+            logger.info(f"[INFO] [DEBUG] Mensagem ({len(mensagem)} chars): {mensagem[:100]}...")
+            logger.info(f"? [DEBUG] URL: {link}")
             
             # Navega para o chat
-            logger.info(f"🌐 [DEBUG] Navegando para o chat...")
+            logger.info(f"[WEB] [DEBUG] Navegando para o chat...")
             self.page.goto(link, wait_until="networkidle", timeout=60000)
-            logger.info(f"✅ [DEBUG] Página carregada (networkidle - sem tráfego de rede)!")
+            logger.info(f"[OK] [DEBUG] Página carregada (networkidle - sem tráfego de rede)!")
             
             # AGUARDA O CHAT ABRIR (6s para estabilizar - conforme análise do vídeo)
-            logger.info(f"⏳ [DEBUG] Aguardando 6s para chat estabilizar completamente...")
+            logger.info(f"[TEMPO] [DEBUG] Aguardando 6s para chat estabilizar completamente...")
             time.sleep(6)
             
             # PROCURA E DIGITA NA CAIXA DE TEXTO
@@ -427,81 +435,81 @@ class WhatsAppService:
             
             for i, selector in enumerate(input_selectors):
                 try:
-                    logger.info(f"🔍 [DEBUG] Tentando seletor {i+1}/{len(input_selectors)}: {selector}")
+                    logger.info(f"[BUSCA] [DEBUG] Tentando seletor {i+1}/{len(input_selectors)}: {selector}")
                     
                     # Timeout de 10s para campo aparecer (conforme vídeo - campo pode demorar)
                     if self.page.is_visible(selector, timeout=10000):
-                        logger.info(f"✅ [DEBUG] Campo de texto encontrado e visível!")
+                        logger.info(f"[OK] [DEBUG] Campo de texto encontrado e visível!")
                         
                         # FOCO NO CAMPO
-                        logger.info(f"🎯 [DEBUG] Focando e clicando no campo...")
+                        logger.info(f"? [DEBUG] Focando e clicando no campo...")
                         self.page.focus(selector)
                         self.page.click(selector)
                         time.sleep(1)  # Cursor piscar
                         
                         # ESTRATÉGIA CLIPBOARD: Mais confiável que digitação
                         # WhatsApp detecta digitação programática, mas colagem (Ctrl+V) funciona
-                        logger.info(f"📋 [DEBUG] Copiando mensagem para clipboard...")
+                        logger.info(f"? [DEBUG] Copiando mensagem para clipboard...")
                         pyperclip.copy(mensagem)
-                        logger.info(f"✅ [DEBUG] Mensagem copiada para área de transferência!")
+                        logger.info(f"[OK] [DEBUG] Mensagem copiada para área de transferência!")
                         
                         # COLA A MENSAGEM (Ctrl+V)
-                        logger.info(f"📋 [DEBUG] Colando mensagem com Ctrl+V...")
+                        logger.info(f"? [DEBUG] Colando mensagem com Ctrl+V...")
                         self.page.keyboard.down("Control")
                         self.page.keyboard.press("v")
                         self.page.keyboard.up("Control")
-                        logger.info(f"✅ [DEBUG] Mensagem colada com sucesso!")
+                        logger.info(f"[OK] [DEBUG] Mensagem colada com sucesso!")
                         
                         # AGUARDA PROCESSAMENTO
                         # Colagem ativa o botão de enviar automaticamente
-                        logger.info(f"⏳ [DEBUG] Aguardando 2s para botão de enviar ativar...")
+                        logger.info(f"[TEMPO] [DEBUG] Aguardando 2s para botão de enviar ativar...")
                         time.sleep(2)
                         
                         # TENTA ENTER (deve funcionar agora)
-                        logger.info(f"⌨️ [DEBUG] Enviando via Enter...")
+                        logger.info(f"?? [DEBUG] Enviando via Enter...")
                         self.page.keyboard.press("Enter")
-                        logger.info(f"✅ [DEBUG] Enter enviado!")
+                        logger.info(f"[OK] [DEBUG] Enter enviado!")
                         
                         # PAUSA ENTRE ENTER E BACKUP
                         time.sleep(1)
                         
                         # BACKUP: Clica no botão se Enter falhar
-                        logger.info(f"🔄 [DEBUG] Backup: Verificando botão de envio...")
+                        logger.info(f"? [DEBUG] Backup: Verificando botão de envio...")
                         try:
                             botao_enviar = 'span[data-icon="send"]'
                             if self.page.is_visible(botao_enviar, timeout=2000):
-                                logger.info(f"🖱️ [DEBUG] Clicando no botão de enviar...")
+                                logger.info(f"?? [DEBUG] Clicando no botão de enviar...")
                                 self.page.click(botao_enviar)
-                                logger.info("✅ [DEBUG] Clique no botão realizado!")
+                                logger.info("[OK] [DEBUG] Clique no botão realizado!")
                         except Exception as e:
-                            logger.debug(f"⚠️ [DEBUG] Botão de enviar não encontrado: {e}")
+                            logger.debug(f"[AVISO] [DEBUG] Botão de enviar não encontrado: {e}")
                         
                         input_encontrado = True
                         break
                         
                 except Exception as e:
-                    logger.debug(f"⚠️ [DEBUG] Seletor {i+1} falhou: {e}")
+                    logger.debug(f"[AVISO] [DEBUG] Seletor {i+1} falhou: {e}")
                     continue
             
             if not input_encontrado:
-                logger.error(f"❌ [DEBUG] Campo de texto não encontrado!")
+                logger.error(f"[ERRO] [DEBUG] Campo de texto não encontrado!")
                 
                 # Screenshot para análise
                 screenshot_path = f"debug_campo_nao_encontrado_{int(time.time())}.png"
                 self.page.screenshot(path=screenshot_path, full_page=True)
-                logger.error(f"📸 Screenshot salva em: {screenshot_path}")
-                logger.error(f"⚠️ Verifique se o WhatsApp Web carregou corretamente")
+                logger.error(f"? Screenshot salva em: {screenshot_path}")
+                logger.error(f"[AVISO] Verifique se o WhatsApp Web carregou corretamente")
             
             # Aguarda confirmação de envio (3s - tempo para reloginho virar check)
             if input_encontrado:
-                logger.info(f"⏳ [DEBUG] Aguardando 3s para confirmação de envio...")
+                logger.info(f"[TEMPO] [DEBUG] Aguardando 3s para confirmação de envio...")
                 time.sleep(3)
-                logger.info(f"🎉 Mensagem #{self.contador_envios} enviada para {phone}!")
+                logger.info(f"? Mensagem #{self.contador_envios} enviada para {phone}!")
             else:
-                logger.error(f"❌ FALHA TOTAL ao enviar para {phone}")
+                logger.error(f"[ERRO] FALHA TOTAL ao enviar para {phone}")
             
         except Exception as e:
-            logger.error(f"❌ Erro ao enviar mensagem para {telefone}: {e}", exc_info=True)
+            logger.error(f"[ERRO] Erro ao enviar mensagem para {telefone}: {e}", exc_info=True)
 
     def _executar_envio_desktop(self, telefone, mensagem):
         """
@@ -520,10 +528,12 @@ class WhatsAppService:
         - Computador desbloqueado
         """
         try:
+            import pyperclip
+            import pyautogui
             self.ultima_navegacao = time.time()
             self.contador_envios += 1
             
-            logger.info(f"🚀 [DESKTOP] INICIANDO ENVIO #{self.contador_envios}")
+            logger.info(f"[START] [DESKTOP] INICIANDO ENVIO #{self.contador_envios}")
             
             # Formata telefone
             phone = re.sub(r'[^0-9]', '', telefone)
@@ -532,24 +542,31 @@ class WhatsAppService:
             # whatsapp:// é um protocolo do Windows que chama o app instalado
             link = f"whatsapp://send?phone={phone}"
             
-            logger.info(f"📱 [DESKTOP] Abrindo WhatsApp Desktop...")
-            logger.info(f"📱 [DESKTOP] Telefone: {phone}")
-            logger.info(f"📝 [DESKTOP] Mensagem ({len(mensagem)} chars): {mensagem[:100]}...")
+            logger.info(f"? [DESKTOP] Abrindo WhatsApp Desktop...")
+            logger.info(f"? [DESKTOP] Telefone: {phone}")
+            logger.info(f"[INFO] [DESKTOP] Mensagem ({len(mensagem)} chars): {mensagem[:100]}...")
             
             # Abre o WhatsApp Desktop com o chat específico
             # os.startfile() é exclusivo Windows
             os.startfile(link)
-            logger.info(f"✅ [DESKTOP] Comando de abertura enviado!")
+            logger.info(f"[OK] [DESKTOP] Comando de abertura enviado!")
             
             # AGUARDA APP ABRIR E CARREGAR CHAT
             # WhatsApp Desktop é mais pesado que web, precisa mais tempo
-            logger.info(f"⏳ [DESKTOP] Aguardando 8s para app carregar...")
+            logger.info(f"[TEMPO] [DESKTOP] Aguardando 8s para app carregar...")
             time.sleep(8)
+            
+            # Limpa o campo de entrada do WhatsApp Desktop para evitar textos colados anteriores
+            logger.info(f"? [DESKTOP] Limpando o campo de entrada...")
+            pyautogui.hotkey('ctrl', 'a')
+            time.sleep(0.3)
+            pyautogui.press('backspace')
+            time.sleep(0.3)
             
             # Divide a mensagem em partes (separador §§ = mensagens separadas).
             # URLs isoladas em mensagem própria são sempre clicáveis no WhatsApp.
             partes = [p.strip() for p in mensagem.split('\n§§\n') if p.strip()]
-            logger.info(f"📋 [DESKTOP] Enviando {len(partes)} parte(s)...")
+            logger.info(f"? [DESKTOP] Enviando {len(partes)} parte(s)...")
 
             for idx, parte in enumerate(partes):
                 # ESTRATÉGIA LINK vs TEXTO:
@@ -557,7 +574,7 @@ class WhatsAppService:
                 # Texto: Colado (pyperclip) para preservar emojis e formatação
                 
                 if parte.strip().startswith('http'):
-                    logger.info(f"⌨️ [DESKTOP] Enviando Link {idx+1}: {parte}")
+                    logger.info(f"?? [DESKTOP] Enviando Link {idx+1}: {parte}")
                     
                     # LINK: Usa Clipboard + Espaço + Delay
                     # Copia e cola o link para evitar erros de caractere
@@ -568,36 +585,36 @@ class WhatsAppService:
                     time.sleep(0.3)
                     pyautogui.press('space') # Adiciona um espaço após o link
                     
-                    logger.info(f"⏳ [DESKTOP] Aguardando 1.2s para renderização do link...")
+                    logger.info(f"[TEMPO] [DESKTOP] Aguardando 1.2s para renderização do link...")
                     time.sleep(1.2)          # AGUARDA o WhatsApp processar a URL
                     pyautogui.press('enter')
                     
                 else:
-                    logger.info(f"📋 [DESKTOP] Enviando Texto {idx+1}...")
+                    logger.info(f"? [DESKTOP] Enviando Texto {idx+1}...")
                     pyperclip.copy(parte)
                     pyautogui.hotkey('ctrl', 'v')
                     time.sleep(0.5)
                     pyautogui.press('enter')
 
-                logger.info(f"✅ [DESKTOP] Parte {idx+1} enviada!")
+                logger.info(f"[OK] [DESKTOP] Parte {idx+1} enviada!")
 
                 if idx < len(partes) - 1:
-                    logger.info(f"⏳ [DESKTOP] Aguardando 0.8s antes da próxima parte...")
+                    logger.info(f"[TEMPO] [DESKTOP] Aguardando 0.8s antes da próxima parte...")
                     time.sleep(0.8)
 
             # AGUARDA CONFIRMAÇÃO FINAL
-            logger.info(f"⏳ [DESKTOP] Aguardando 2s para confirmação...")
+            logger.info(f"[TEMPO] [DESKTOP] Aguardando 2s para confirmação...")
             time.sleep(2)
 
-            logger.info(f"🎉 [DESKTOP] Mensagem #{self.contador_envios} enviada para {phone} ({len(partes)} parte(s))!")
+            logger.info(f"? [DESKTOP] Mensagem #{self.contador_envios} enviada para {phone} ({len(partes)} parte(s))!")
             
             # OPCIONAL: Minimiza ou fecha o WhatsApp Desktop
             # Descomente se quiser que o app não fique aberto
-            # logger.info(f"🪟 [DESKTOP] Minimizando WhatsApp...")
+            # logger.info(f"? [DESKTOP] Minimizando WhatsApp...")
             # pyautogui.hotkey('alt', 'f4')  # Fecha janela ativa
             
         except Exception as e:
-            logger.error(f"❌ [DESKTOP] Erro ao enviar via WhatsApp Desktop: {e}", exc_info=True)
+            logger.error(f"[ERRO] [DESKTOP] Erro ao enviar via WhatsApp Desktop: {e}", exc_info=True)
             raise  # Propaga erro para tentar fallback (Playwright)
 
     def _monitorar_chat(self):

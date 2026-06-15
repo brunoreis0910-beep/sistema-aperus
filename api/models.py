@@ -3,7 +3,8 @@
 
 from django.db import models
 from django.contrib.auth.models import User
-from django.utils import timezone 
+from django.utils import timezone
+import uuid 
 
 # --- Modelo de Cliente ---
 class Cliente(models.Model):
@@ -5239,6 +5240,7 @@ class ConfiguracaoImpressao(models.Model):
     TIPO_IMPRESSORA_CHOICES = [
         ('termica', 'Térmica (Cupom)'),
         ('a4', 'A4 (Folha)'),
+        ('personalizado', 'Gabarito Customizado'),
     ]
     LARGURA_TERMICA_CHOICES = [
         ('58mm', '58mm'),
@@ -5253,10 +5255,17 @@ class ConfiguracaoImpressao(models.Model):
         help_text='Módulo do sistema ao qual esta configuração se aplica',
     )
     tipo_impressora = models.CharField(
-        max_length=10,
+        max_length=20,
         choices=TIPO_IMPRESSORA_CHOICES,
         default='termica',
         help_text='Tipo de impressora a utilizar',
+    )
+    gabarito_customizado_nome = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        default=None,
+        help_text='Nome do gabarito customizado se selecionado',
     )
     largura_termica = models.CharField(
         max_length=5,
@@ -5921,5 +5930,91 @@ class Licenca(models.Model):
         db_table = 'licenca'
         verbose_name = 'Licença'
         verbose_name_plural = 'Licenças'
+
+
+class ComunicadoSaaS(models.Model):
+    TIPO_CHOICES = (
+        ('IMAGEM', 'Imagem/Arte'),
+        ('VIDEO', 'Vídeo do YouTube'),
+        ('TEXTO', 'Apenas Texto'),
+    )
+    titulo = models.CharField(max_length=200)
+    tipo = models.CharField(max_length=10, choices=TIPO_CHOICES, default='TEXTO')
+    conteudo_texto = models.TextField(blank=True, null=True)
+    url_midia = models.URLField(blank=True, null=True, help_text="Link da imagem ou do vídeo do YouTube")
+    imagem = models.ImageField(upload_to='comunicados/', blank=True, null=True, help_text="Upload direto do arquivo de imagem")
+    data_inicio = models.DateField()
+    data_fim = models.DateField()
+    ativo = models.BooleanField(default=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = 'saas_comunicado'
+        verbose_name = 'Comunicado SaaS'
+        verbose_name_plural = 'Comunicados SaaS'
+
+    def __str__(self):
+        return self.titulo
+
+
+class GabaritoCustomizado(models.Model):
+    TIPO_GABARITO_CHOICES = (
+        ('ETIQUETA', 'Etiqueta Térmica'),
+        ('A4_RETRATO', 'Relatório A4 Retrato'),
+        ('A4_PAISAGEM', 'Relatório A4 Paisagem'),
+        ('RECIBO', 'Recibo / Bobina 80mm'),
+    )
+
+    cliente = models.ForeignKey('SaaSCliente', on_delete=models.CASCADE, related_name='gabaritos')
+    nome_relatorio = models.CharField(max_length=100, help_text="Ex: nfe_gabarito_custom ou etiqueta_barra")
+    tipo_gabarito = models.CharField(max_length=20, choices=TIPO_GABARITO_CHOICES, default='A4_RETRATO')
+    layout_json = models.JSONField(help_text="Coordenadas e configurações dos campos do relatório")
+    largura_gabarito_mm = models.IntegerField(default=210, help_text="Largura total da página/etiqueta em milímetros")
+    altura_gabarito_mm = models.IntegerField(default=297, help_text="Altura total (use 0 ou 297 para A4 livre)")
+    ativo = models.BooleanField(default=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = 'saas_gabarito_customizado'
+        verbose_name = 'Gabarito Customizado'
+        verbose_name_plural = 'Gabaritos Customizados'
+
+    def __str__(self):
+        return f"{self.cliente.razao_social} - {self.nome_relatorio} ({self.tipo_gabarito})"
+
+
+class LinkCadastroRemoto(models.Model):
+    id_token = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    whatsapp_cliente = models.CharField(max_length=20, verbose_name="WhatsApp do Cliente")
+    usado = models.BooleanField(default=False)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    expira_em = models.DateTimeField()
+
+    # Parâmetros Comerciais Predefinidos
+    dia_vencimento = models.IntegerField(default=10)
+    valor_mensalidade = models.DecimalField(max_digits=10, decimal_places=2)
+    emite_nota = models.BooleanField(default=False)
+    vendedor = models.CharField(max_length=100, blank=True, null=True, verbose_name="Vendedor/Representante")
+    status_licenca = models.CharField(max_length=20, default='ATIVO')
+    schema_name = models.SlugField(max_length=50, blank=True, null=True, verbose_name="Slug / Schema")
+    db_host = models.CharField(max_length=100, default='localhost')
+    db_port = models.CharField(max_length=5, default='8005')
+    is_test_environment = models.BooleanField(default=False)
+
+    class Meta:
+        managed = True
+        db_table = 'saas_link_cadastro_remoto'
+        verbose_name = 'Link Cadastro Remoto'
+        verbose_name_plural = 'Links Cadastros Remotos'
+
+    def esta_valido(self):
+        from django.utils import timezone
+        return not self.usado and timezone.now() < self.expira_em
+
+    def __str__(self):
+        return f"Invite for {self.whatsapp_cliente} - {'Used' if self.usado else 'Pending'}"
+
 
 

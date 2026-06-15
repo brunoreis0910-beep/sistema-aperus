@@ -35,9 +35,9 @@ class GovAPIManager:
         for jar_path in self.jar_paths:
             jar_path_str = str(jar_path)
             if os.path.exists(jar_path_str):
-                logger.info(f"✅ JAR encontrado: {jar_path_str}")
+                logger.info(f"[OK] JAR encontrado: {jar_path_str}")
                 return jar_path_str
-        logger.error(f"❌ JAR não encontrado. Caminhos verificados: {self.jar_paths}")
+        logger.error(f"[ERRO] JAR não encontrado. Caminhos verificados: {self.jar_paths}")
         return None
     
     def is_running(self) -> bool:
@@ -72,7 +72,7 @@ class GovAPIManager:
         """
         # Verificar se já está rodando
         if self.is_running():
-            logger.info("✅ API do Governo já está rodando")
+            logger.info("[OK] API do Governo já está rodando")
             return {
                 'status': 'running',
                 'message': 'API do Governo já está ativa',
@@ -82,7 +82,7 @@ class GovAPIManager:
         # Encontrar o JAR
         jar_path = self._find_jar_path()
         if not jar_path:
-            logger.error("❌ JAR api-regime-geral.jar não encontrado em nenhum dos caminhos configurados.")
+            logger.error("[ERRO] JAR api-regime-geral.jar não encontrado em nenhum dos caminhos configurados.")
             return {
                 'status': 'error',
                 'message': 'Arquivo api-regime-geral.jar não encontrado',
@@ -96,14 +96,14 @@ class GovAPIManager:
                                        text=True, 
                                        timeout=5)
             if java_check.returncode != 0:
-                logger.error("❌ Java não encontrado ou erro ao executar java -version")
+                logger.error("[ERRO] Java não encontrado ou erro ao executar java -version")
                 return {
                     'status': 'error',
                     'message': 'Java não está instalado ou não está no PATH',
                     'details': 'Instale Java 17 ou superior'
                 }
         except Exception as e:
-            logger.error(f"❌ Erro ao verificar Java: {e}")
+            logger.error(f"[ERRO] Erro ao verificar Java: {e}")
             return {
                     'status': 'error',
                     'message': 'Erro ao verificar instalação do Java',
@@ -112,7 +112,7 @@ class GovAPIManager:
 
         # Iniciar processo
         try:
-            logger.info(f"🚀 Iniciando API do Governo: {jar_path}")
+            logger.info(f"[START] Iniciando API do Governo: {jar_path}")
             # Usar criação de janela oculta no Windows para não abrir terminal
             startupinfo = None
             if os.name == 'nt':
@@ -139,7 +139,7 @@ class GovAPIManager:
                 if self.process.poll() is not None:
                     # Processo morreu
                     stdout, stderr = self.process.communicate()
-                    logger.error(f"❌ Processo morreu imediatamente. Stderr: {stderr}")
+                    logger.error(f"[ERRO] Processo morreu imediatamente. Stderr: {stderr}")
                     return {
                         'status': 'error',
                         'message': 'API falhou ao iniciar',
@@ -147,7 +147,7 @@ class GovAPIManager:
                     }
                 
                 if self.is_running():
-                    logger.info("✅ API do Governo iniciada com sucesso!")
+                    logger.info("[OK] API do Governo iniciada com sucesso!")
                     return {
                         'status': 'started',
                         'message': 'API iniciada com sucesso',
@@ -160,7 +160,7 @@ class GovAPIManager:
             if self.process:
                 self.process.terminate()
             
-            logger.error("❌ Timeout aguardando API iniciar")
+            logger.error("[ERRO] Timeout aguardando API iniciar")
             return {
                 'status': 'timeout',
                 'message': 'Tempo limite esgotado ao iniciar API',
@@ -168,7 +168,7 @@ class GovAPIManager:
             }
             
         except Exception as e:
-            logger.exception(f"❌ Erro não tratado ao iniciar API: {e}")
+            logger.exception(f"[ERRO] Erro não tratado ao iniciar API: {e}")
             return {
                 'status': 'error',
                 'message': 'Erro interno ao iniciar API',
@@ -183,7 +183,7 @@ class GovAPIManager:
             proc = self._find_java_process()
             
             if proc:
-                logger.info(f"🛑 Parando API do Governo (PID: {proc.pid})")
+                logger.info(f"? Parando API do Governo (PID: {proc.pid})")
                 proc.terminate()
                 
                 # Aguardar até 5 segundos
@@ -192,7 +192,7 @@ class GovAPIManager:
                 except psutil.TimeoutExpired:
                     proc.kill()
                 
-                logger.info("✅ API do Governo parada")
+                logger.info("[OK] API do Governo parada")
                 return {
                     'status': 'stopped',
                     'message': 'API do Governo parada com sucesso'
@@ -204,7 +204,7 @@ class GovAPIManager:
                 }
                 
         except Exception as e:
-            logger.error(f"❌ Erro ao parar API: {e}")
+            logger.error(f"[ERRO] Erro ao parar API: {e}")
             return {
                 'status': 'error',
                 'message': f'Erro ao parar API: {str(e)}'

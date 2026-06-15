@@ -79,14 +79,14 @@ class CTeService:
                     from api.services.signer_service_v2 import XMLSignerV2
                     signer_v2 = XMLSignerV2(self.empresa.certificado_digital, self.empresa.senha_certificado)
                     xml_signed_str = signer_v2.sign_xml(xml_str, parent_tag='infCte')
-                    logger.info("[CTE_NATIVE] ✓ Assinatura realizada com Python V2")
+                    logger.info("[CTE_NATIVE] [OK] Assinatura realizada com Python V2")
                 except Exception as e_py:
                     logger.warning(f"[CTE_NATIVE] Falha Python V2: {e_py}. Tentando Nativo...")
                     try:
                         xml_signed_str = self.signer.sign_cte_xml(xml_str)
-                        logger.info("[CTE_NATIVE] ✓ Assinatura realizada com CTeSignerNative")
+                        logger.info("[CTE_NATIVE] [OK] Assinatura realizada com CTeSignerNative")
                     except Exception as e_native:
-                        logger.exception(f"[CTE_NATIVE] ❌ Erro total na assinatura: {e_native}")
+                        logger.exception(f"[CTE_NATIVE] [ERRO] Erro total na assinatura: {e_native}")
                         raise ValueError(f"Não foi possível assinar o XML: {e_native}")
 
             # TODO: Validar Schema aqui se possivel

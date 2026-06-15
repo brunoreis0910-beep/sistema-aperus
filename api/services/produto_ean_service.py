@@ -509,7 +509,7 @@ class ProdutoEANService:
                     for p in produtos_lista:
                         produtos_dict[p['ean']] = p
                     
-                    logger.info(f"✅ Carregados {len(produtos_dict)} produtos demo de {json_path}")
+                    logger.info(f"[OK] Carregados {len(produtos_dict)} produtos demo de {json_path}")
             except Exception as e:
                 logger.warning(f"Erro ao carregar {json_path}: {e}")
         else:

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -54,6 +54,7 @@ const DashboardHomeClean = () => {
   const [recentActivity, setRecentActivity] = useState([]);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [aniversariantesModalOpen, setAniversariantesModalOpen] = useState(false);
+  const [comunicado, setComunicado] = useState(null);
   const [metaMensal, setMetaMensal] = useState(() => {
     // Carregar meta do localStorage ou usar 50000 como padrão
     const savedMeta = localStorage.getItem('metaMensal');
@@ -145,10 +146,21 @@ const DashboardHomeClean = () => {
         }).catch(err => {
           console.error('Erro ao buscar fornecedores:', err);
           return { data: { results: [] } };
-        })
+        }),
+
+        // Comunicado SaaS Ativo
+        axiosInstance.get('/saas/comunicado-ativo/')
+          .then(response => {
+            console.log('✅ Comunicado carregado:', response.data);
+            return response;
+          })
+          .catch(err => {
+            console.error('❌ Erro ao buscar comunicado ativo:', err.response?.data || err.message);
+            return { data: { existe_comunicado: false } };
+          })
       ];
 
-      const [vendasMesRes, vendasHojeRes, clientesRes, produtosRes, fornecedoresRes] = await Promise.all(requests);
+      const [vendasMesRes, vendasHojeRes, clientesRes, produtosRes, fornecedoresRes, comunicadoRes] = await Promise.all(requests);
 
       // Processar dados usando utilitários de normalização
       const vendasMes = normalizeAPIResponse(vendasMesRes);
@@ -243,6 +255,19 @@ const DashboardHomeClean = () => {
         }
       });
 
+      // Verificar comunicado
+      const comunicadoData = comunicadoRes?.data;
+      if (comunicadoData && comunicadoData.existe_comunicado) {
+        const lidos = JSON.parse(localStorage.getItem('comunicados_lidos') || '[]');
+        if (!lidos.includes(comunicadoData.id)) {
+          setComunicado(comunicadoData);
+        } else {
+          setComunicado(null);
+        }
+      } else {
+        setComunicado(null);
+      }
+
       // Atividades recentes baseadas em dados reais
       const atividades = [
         ...(Array.isArray(vendasHoje) ? vendasHoje.slice(0, 5).map((v, index) => {
@@ -298,8 +323,37 @@ const DashboardHomeClean = () => {
         description: 'Verifique a conexéo com o banco de dados',
         time: 'Agora'
       }]);
+      setComunicado(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDismissComunicado = (id) => {
+    const lidos = JSON.parse(localStorage.getItem('comunicados_lidos') || '[]');
+    if (!lidos.includes(id)) {
+      lidos.push(id);
+      localStorage.setItem('comunicados_lidos', JSON.stringify(lidos));
+    }
+    setComunicado(null);
+  };
+
+  const getYouTubeEmbedUrl = (url) => {
+    if (!url) return '';
+    try {
+      let videoId = '';
+      if (url.includes('youtube.com/watch')) {
+        const urlObj = new URL(url);
+        videoId = urlObj.searchParams.get('v');
+      } else if (url.includes('youtu.be/')) {
+        videoId = url.split('youtu.be/')[1]?.split('?')[0];
+      } else if (url.includes('youtube.com/embed/')) {
+        return url;
+      }
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+    } catch (e) {
+      console.error('Erro ao parsear URL do YouTube:', e);
+      return url;
     }
   };
 
@@ -476,6 +530,169 @@ const DashboardHomeClean = () => {
         <Alert severity="warning" sx={{ mb: 3 }}>
           {error}
         </Alert>
+      )}
+
+      {/* Banner de Comunicado SaaS */}
+      {comunicado && (
+        <Card
+          sx={{
+            background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+            color: 'white',
+            mb: 4,
+            borderRadius: 3,
+            boxShadow: '0 10px 25px rgba(59, 130, 246, 0.3)',
+            position: 'relative',
+            overflow: 'hidden',
+            border: 'none'
+          }}
+        >
+          {/* Subtle background glow decorator */}
+          <Box
+            sx={{
+              position: 'absolute',
+              top: '-50%',
+              right: '-10%',
+              width: '300px',
+              height: '300px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '50%',
+              filter: 'blur(50px)',
+              pointerEvents: 'none'
+            }}
+          />
+          
+          <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+            <Grid container spacing={3} alignItems="center">
+              <Grid item xs={12} md={comunicado.tipo === 'TEXTO' ? 12 : 7}>
+                <Box sx={{ pr: { md: 4 } }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, gap: 1 }}>
+                    <Typography 
+                      variant="caption" 
+                      sx={{ 
+                        backgroundColor: 'rgba(255, 255, 255, 0.2)', 
+                        px: 1.5, 
+                        py: 0.5, 
+                        borderRadius: '10px',
+                        fontWeight: 'bold',
+                        textTransform: 'uppercase',
+                        letterSpacing: '1px'
+                      }}
+                    >
+                      Comunicado Oficial
+                    </Typography>
+                  </Box>
+                  <Typography 
+                    variant="h5" 
+                    component="h2" 
+                    sx={{ 
+                      fontWeight: 800, 
+                      mb: 2,
+                      letterSpacing: '-0.5px',
+                      textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    {comunicado.titulo}
+                  </Typography>
+                  <Typography 
+                    variant="body1" 
+                    sx={{ 
+                      opacity: 0.95, 
+                      lineHeight: 1.6,
+                      fontSize: '1.05rem',
+                      whiteSpace: 'pre-wrap'
+                    }}
+                  >
+                    {comunicado.texto}
+                  </Typography>
+                </Box>
+              </Grid>
+
+              {comunicado.tipo !== 'TEXTO' && (
+                <Grid item xs={12} md={5}>
+                  <Box 
+                    sx={{ 
+                      borderRadius: 2, 
+                      overflow: 'hidden', 
+                      boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
+                      backgroundColor: 'rgba(0,0,0,0.1)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      position: 'relative',
+                      minHeight: comunicado.tipo === 'VIDEO' ? '250px' : 'auto'
+                    }}
+                  >
+                    {comunicado.tipo === 'IMAGEM' && comunicado.url && (
+                      <Box
+                        component="img"
+                        src={comunicado.url}
+                        alt={comunicado.titulo}
+                        sx={{
+                          width: '100%',
+                          height: 'auto',
+                          maxHeight: '350px',
+                          objectFit: 'cover',
+                          display: 'block'
+                        }}
+                      />
+                    )}
+                    {comunicado.tipo === 'VIDEO' && comunicado.url && (
+                      <Box
+                        component="iframe"
+                        src={getYouTubeEmbedUrl(comunicado.url)}
+                        title="YouTube video player"
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                        sx={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          border: 'none'
+                        }}
+                      />
+                    )}
+                  </Box>
+                </Grid>
+              )}
+            </Grid>
+            
+            <Box 
+              sx={{ 
+                display: 'flex', 
+                justifyContent: 'flex-end', 
+                mt: 3, 
+                borderTop: '1px solid rgba(255, 255, 255, 0.15)', 
+                pt: 2 
+              }}
+            >
+              <Button
+                variant="contained"
+                onClick={() => handleDismissComunicado(comunicado.id)}
+                sx={{
+                  backgroundColor: 'white',
+                  color: '#3b82f6',
+                  fontWeight: 'bold',
+                  px: 3,
+                  py: 1,
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255,255,255,0.9)',
+                    transform: 'translateY(-1px)',
+                    boxShadow: '0 6px 12px rgba(0,0,0,0.1)'
+                  },
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Ciente, fechar
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
       )}
 
       {/* Cards de Estatísticas */}

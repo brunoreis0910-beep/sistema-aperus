@@ -4,21 +4,78 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   CircularProgress, IconButton, Stack, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Alert,
-  FormControl, InputLabel, Select, MenuItem, Tooltip, Tabs, Tab, Card, CardContent, Divider,
+  FormControl, FormControlLabel, InputLabel, Select, MenuItem, Tooltip, Tabs, Tab, Card, CardContent, Divider,
   InputAdornment, Switch
 } from '@mui/material';
 import {
   Add as AddIcon, Edit as EditIcon, Refresh as RefreshIcon,
-  CheckCircle as PaidIcon, Cancel as CancelIcon, ReceiptLong as InvoiceIcon,
+  CheckCircle as PaidIcon, CheckCircleOutline as CheckCircleOutlineIcon, Cancel as CancelIcon, ReceiptLong as InvoiceIcon,
   Description as ContractIcon, Fingerprint as SignIcon, QrCode as QrIcon,
   ContentCopy as CopyIcon, MonetizationOn as MoneyIcon, Business as ClientIcon,
   Warning as WarningIcon, Launch as LaunchIcon, Search as SearchIcon,
   SystemUpdate as UpdateIcon, Terminal as LogIcon, Delete as DeleteIcon,
-  Storage as StorageIcon, Bolt as BoltIcon
+  Storage as StorageIcon, Bolt as BoltIcon, Campaign as CampaignIcon,
+  Save as SaveIcon, Send as SendIcon, Link as LinkIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
-import { buscarCNPJ, buscarCEP } from '../utils/cnpjCepUtils';
+import { buscarCNPJ, buscarCEP, formatTelefone } from '../utils/cnpjCepUtils';
+import ReportBuilderDialog from '../components/ReportBuilderDialog';
+
+const DEFAULT_LAYOUTS = {
+    venda_recibo: [
+        { id: '_1', campo_origem: 'venda.numero', x: 10, y: 10, font_size: 12, largura: 150, label: 'Número da Venda' },
+        { id: '_2', campo_origem: 'venda.data', x: 180, y: 10, font_size: 12, largura: 100, label: 'Data da Venda' },
+        { id: '_3', campo_origem: 'cliente.nome', x: 10, y: 30, font_size: 12, largura: 220, label: 'Nome do Cliente' },
+        { id: '_4', campo_origem: 'produto.codigo', x: 10, y: 65, font_size: 11, largura: 50, label: 'Código do Produto' },
+        { id: '_5', campo_origem: 'produto.descricao', x: 65, y: 65, font_size: 11, largura: 150, label: 'Descrição do Produto' },
+        { id: '_6', campo_origem: 'produto.quantidade', x: 220, y: 65, font_size: 11, largura: 40, label: 'Quantidade' },
+        { id: '_7', campo_origem: 'produto.valor_unit', x: 265, y: 65, font_size: 11, largura: 60, label: 'Valor Unitário' },
+        { id: '_8', campo_origem: 'venda.total', x: 180, y: 105, font_size: 14, largura: 100, label: 'Total da Venda' }
+    ],
+    etiqueta_gondola: [
+        { id: '_1', campo_origem: 'produto.descricao', x: 10, y: 10, font_size: 14, largura: 260, label: 'Descrição do Produto' },
+        { id: '_2', campo_origem: 'produto.codigo', x: 10, y: 40, font_size: 11, largura: 100, label: 'Código do Produto' },
+        { id: '_3', campo_origem: 'produto.valor_unit', x: 10, y: 65, font_size: 20, largura: 150, label: 'Valor Unitário' },
+        { id: '_4', campo_origem: 'produto.codigo_barras', x: 10, y: 105, font_size: 12, largura: 200, label: 'Código de Barras' }
+    ],
+    relatorio_vendas: [
+        { id: '_1', campo_origem: 'cliente.nome', x: 30, y: 30, font_size: 12, largura: 200, label: 'Nome do Cliente' },
+        { id: '_2', campo_origem: 'venda.numero', x: 250, y: 30, font_size: 12, largura: 100, label: 'Número da Venda' },
+        { id: '_3', campo_origem: 'venda.total', x: 370, y: 30, font_size: 12, largura: 120, label: 'Total da Venda' }
+    ],
+    relatorio_inventario: [
+        { id: '_1', campo_origem: 'produto.codigo', x: 30, y: 30, font_size: 12, largura: 100, label: 'Código do Produto' },
+        { id: '_2', campo_origem: 'produto.descricao', x: 150, y: 30, font_size: 12, largura: 300, label: 'Descrição do Produto' },
+        { id: '_3', campo_origem: 'produto.quantidade', x: 470, y: 30, font_size: 12, largura: 100, label: 'Quantidade' }
+    ]
+};
+
+const RELATORIOS_PADRAO_SISTEMA = [
+    { id: 'vendas', titulo: 'Relatório de Vendas', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'estoque', titulo: 'Relatório de Estoque', baseKey: 'relatorio_inventario', tipo: 'A4_PAISAGEM', w: 297, h: 210 },
+    { id: 'compras', titulo: 'Relatório de Compras', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'financeiro', titulo: 'Relatório Financeiro', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'dre', titulo: 'DRE - Demonstração do Resultado', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'clientes', titulo: 'Relatório de Clientes', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'produtos', titulo: 'Relatório de Produtos', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'desempenho', titulo: 'Análise de Desempenho', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'consolidado', titulo: 'Relatório Consolidado', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'comissoes', titulo: 'Comissões por Vendedor', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'devolucoes', titulo: 'Relatório de Devoluções', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'trocas', titulo: 'Relatório de Trocas', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'cashback', titulo: 'Relatório de Cashback', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'lucratividade', titulo: 'Relatório de Lucratividade', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'projecao-compra', titulo: 'Projeção de Compras', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'inventario', titulo: 'Relatório de Inventário', baseKey: 'relatorio_inventario', tipo: 'A4_PAISAGEM', w: 297, h: 210 },
+    { id: 'inventario-retroativo', titulo: 'Inventário Retroativo', baseKey: 'relatorio_inventario', tipo: 'A4_PAISAGEM', w: 297, h: 210 },
+    { id: 'comandas', titulo: 'Relatório de Comandas', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'cte', titulo: 'Relatório de CT-e', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'mdfe', titulo: 'Relatório de MDF-e', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'contas-receber-pagar', titulo: 'Contas a Receber e Pagar', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'conferencia', titulo: 'Relatório de Conferência', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+    { id: 'hotelaria', titulo: 'Relatório de Hotelaria', baseKey: 'relatorio_vendas', tipo: 'A4_RETRATO', w: 210, h: 297 },
+];
 
 
 const fmtMoeda = (v) =>
@@ -84,6 +141,20 @@ const SaaSAdminPage = () => {
   // Selected customer for details
   const [selectedClient, setSelectedClient] = useState(null);
   
+  // Mural de Avisos (Comunicados)
+  const [comunicados, setComunicados] = useState([]);
+  const [comunicadoModal, setComunicadoModal] = useState({ open: false, mode: 'create', data: null });
+  const [comunicadoForm, setComunicadoForm] = useState({
+    titulo: '',
+    tipo: 'TEXTO',
+    conteudo_texto: '',
+    url_midia: '',
+    imagem_file: null,
+    data_inicio: new Date().toISOString().split('T')[0],
+    data_fim: new Date(new Date().setDate(new Date().getDate() + 7)).toISOString().split('T')[0],
+    ativo: true
+  });
+  
   // Modals status
   const [clientModal, setClientModal] = useState({ open: false, mode: 'create', data: null });
   const [billingModal, setBillingModal] = useState({ open: false, clientId: null, meses: 6 });
@@ -99,6 +170,53 @@ const SaaSAdminPage = () => {
   const [loadingLote, setLoadingLote] = useState(false);
   const [loadingCriarBanco, setLoadingCriarBanco] = useState({});
   
+  // Custom templates states
+  const [gabaritos, setGabaritos] = useState([]);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [elementosLayout, setElementosLayout] = useState([]);
+  const [elementoSelecionado, setElementoSelecionado] = useState(null);
+  const [baseReportModal, setBaseReportModal] = useState(false);
+  const [baseGabaritoModal, setBaseGabaritoModal] = useState(false);
+  
+  // Remote onboarding states
+  const [remoteInviteModal, setRemoteInviteModal] = useState(false);
+  const [loadingRemoteInvite, setLoadingRemoteInvite] = useState(false);
+  const [remoteInviteForm, setRemoteInviteForm] = useState({
+    whatsapp_cliente: '',
+    valor_mensalidade: '',
+    dia_vencimento: 10,
+    emite_nota: false,
+    vendedor: '',
+    status_licenca: 'ATIVO',
+    schema_name: '',
+    db_host: 'localhost',
+    db_port: '8005',
+    is_test_environment: false
+  });
+  const [generatedLinkData, setGeneratedLinkData] = useState(null);
+  
+  // Editor parameters
+  const [tipoGabarito, setTipoGabarito] = useState('A4_RETRATO');
+  const [nomeRelatorio, setNomeRelatorio] = useState('');
+  const [larguraMm, setLarguraMm] = useState(210);
+  const [alturaMm, setAlturaMm] = useState(297);
+  const [gridSnap, setGridSnap] = useState(true);
+  const [zoomScale, setZoomScale] = useState(1.0);
+
+  useEffect(() => {
+    if (selectedClient) {
+      axiosInstance.get(`/saas-gabaritos/?cliente=${selectedClient.id_saas_cliente}`)
+        .then(res => {
+          const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+          setGabaritos(list);
+        })
+        .catch(err => console.error(err));
+    } else {
+      setGabaritos([]);
+    }
+  }, [selectedClient, axiosInstance]);
+
   // Client forms
   const [clientForm, setClientForm] = useState({
     cnpj: '', razao_social: '', nome_fantasia: '', inscricao_estadual: '',
@@ -112,12 +230,13 @@ const SaaSAdminPage = () => {
   const carregarDados = useCallback(async () => {
     setLoading(true);
     try {
-      const [resCli, resMens, resVers, resHist, resConfig] = await Promise.all([
+      const [resCli, resMens, resVers, resHist, resConfig, resCom] = await Promise.all([
         axiosInstance.get('/saas-clientes/'),
         axiosInstance.get('/saas-mensalidades/'),
         axiosInstance.get('/saas-versoes/'),
         axiosInstance.get('/saas-historico-atualizacoes/'),
-        axiosInstance.get('/saas-agendamento/')
+        axiosInstance.get('/saas-agendamento/'),
+        axiosInstance.get('/saas-comunicados/')
       ]);
       
       const clientsData = resCli.data?.results ?? resCli.data ?? [];
@@ -125,12 +244,14 @@ const SaaSAdminPage = () => {
       const versionsData = resVers.data?.results ?? resVers.data ?? [];
       const historyData = resHist.data?.results ?? resHist.data ?? [];
       const configData = resConfig.data ?? { horario_execucao: '02:00:00', dias_da_semana: '0,1,2,3,4,5,6', agendamento_ativo: true };
+      const comunicadosData = resCom.data?.results ?? resCom.data ?? [];
       
       setClientes(clientsData);
       setMensalidades(billingData);
       setVersoes(versionsData);
       setHistoricoAtualizacoes(historyData);
       setConfigAgendamento(configData);
+      setComunicados(comunicadosData);
       
       // Calculate Stats
       const active = clientsData.filter(c => c.status_licenca === 'ATIVO').length;
@@ -159,7 +280,8 @@ const SaaSAdminPage = () => {
   const tabs = [
     { label: "Clientes SaaS", icon: <ClientIcon />, show: true },
     { label: "Faturamento e Cobranças", icon: <InvoiceIcon />, show: temPermissao('pode_cadastrar_financeiro_saas') },
-    { label: "Atualizações do Sistema", icon: <UpdateIcon />, show: temPermissao('pode_atualizar_cliente') }
+    { label: "Atualizações do Sistema", icon: <UpdateIcon />, show: temPermissao('pode_atualizar_cliente') },
+    { label: "Mural de Avisos", icon: <CampaignIcon />, show: true }
   ].filter(t => t.show);
 
   const activeTabName = tabs[tabValue]?.label || "Clientes SaaS";
@@ -167,6 +289,253 @@ const SaaSAdminPage = () => {
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
   };
+
+  const CAMPOS_DISPONIVEIS = [
+    // Empresa
+    { label: "Logomarca da Empresa", chave: "empresa.logomarca" },
+    { label: "Razão Social da Empresa", chave: "empresa.razao_social" },
+    { label: "Nome Fantasia da Empresa", chave: "empresa.nome_fantasia" },
+    { label: "CNPJ da Empresa", chave: "empresa.cnpj" },
+    { label: "Inscrição Estadual da Empresa", chave: "empresa.inscricao_estadual" },
+    { label: "Telefone da Empresa", chave: "empresa.telefone" },
+    { label: "E-mail da Empresa", chave: "empresa.email" },
+    { label: "Endereço da Empresa", chave: "empresa.endereco" },
+    { label: "CEP da Empresa", chave: "empresa.cep" },
+
+    // Cliente
+    { label: "Nome do Cliente", chave: "cliente.nome" },
+    { label: "CPF/CNPJ Cliente", chave: "cliente.doc" },
+    { label: "Telefone Cliente", chave: "cliente.telefone" },
+    { label: "Endereço Cliente", chave: "cliente.endereco" },
+    { label: "RG/IE do Cliente", chave: "cliente.rg_ie" },
+    { label: "E-mail do Cliente", chave: "cliente.email" },
+    { label: "Bairro do Cliente", chave: "cliente.bairro" },
+    { label: "Cidade do Cliente", chave: "cliente.cidade" },
+    { label: "UF do Cliente", chave: "cliente.uf" },
+    { label: "CEP do Cliente", chave: "cliente.cep" },
+    { label: "Complemento do Cliente", chave: "cliente.complemento" },
+
+    // Venda
+    { label: "Número da Venda", chave: "venda.numero" },
+    { label: "Data da Venda", chave: "venda.data" },
+    { label: "Total da Venda", chave: "venda.total" },
+    { label: "Subtotal Venda", chave: "venda.subtotal" },
+    { label: "Desconto Venda", chave: "venda.desconto" },
+    { label: "Forma de Pagamento", chave: "venda.forma_pagamento" },
+
+    // Produto
+    { label: "Código do Produto", chave: "produto.codigo" },
+    { label: "Descrição do Produto", chave: "produto.descricao" },
+    { label: "Valor Unitário", chave: "produto.valor_unit" },
+    { label: "Quantidade", chave: "produto.quantidade" },
+    { label: "Subtotal do Item", chave: "produto.subtotal" },
+    { label: "Código de Barras", chave: "produto.codigo_barras" },
+    { label: "Unidade do Produto", chave: "produto.unidade" },
+    { label: "NCM do Produto", chave: "produto.ncm" },
+    { label: "Grupo do Produto", chave: "produto.grupo" },
+    { label: "Marca do Produto", chave: "produto.marca" },
+    { label: "Preço de Custo", chave: "produto.preco_custo" },
+    { label: "Peso Líquido", chave: "produto.peso_liquido" },
+    { label: "Peso Bruto", chave: "produto.peso_bruto" },
+
+    // Ordem de Serviço
+    { label: "Número da OS", chave: "os.numero" },
+    { label: "Data Abertura OS", chave: "os.data_abertura" },
+    { label: "Previsão/Fechamento OS", chave: "os.data_fechamento" },
+    { label: "Status da OS", chave: "os.status" },
+    { label: "Técnico Responsável", chave: "os.tecnico" },
+    { label: "Defeitos OS", chave: "os.defeitos" },
+    { label: "Laudo Técnico OS", chave: "os.laudo_tecnico" },
+    { label: "Observações OS", chave: "os.observacoes" },
+    { label: "Solicitante OS", chave: "os.solicitante" },
+    { label: "Total Produtos OS", chave: "os.total_produtos" },
+    { label: "Total Serviços OS", chave: "os.total_servicos" },
+    { label: "Total Geral OS", chave: "os.total_geral" },
+    { label: "Desconto OS", chave: "os.desconto" },
+    { label: "Subtotal OS", chave: "os.subtotal" },
+    { label: "Tabela de Itens (OS/Venda)", chave: "os.itens_tabela" },
+
+    // Veículo
+    { label: "Placa do Veículo", chave: "veiculo.placa" },
+    { label: "Marca do Veículo", chave: "veiculo.marca" },
+    { label: "Modelo do Veículo", chave: "veiculo.modelo" },
+    { label: "Ano do Veículo", chave: "veiculo.ano" },
+    { label: "Cor do Veículo", chave: "veiculo.cor" },
+    { label: "Chassi do Veículo", chave: "veiculo.chassi" },
+    { label: "UF do Veículo", chave: "veiculo.uf" },
+    { label: "Observações do Veículo", chave: "veiculo.observacoes" },
+
+    // Equipamento
+    { label: "Código Equipamento", chave: "equipamento.codigo" },
+    { label: "Nome Equipamento", chave: "equipamento.nome" },
+    { label: "Descrição Equipamento", chave: "equipamento.descricao" },
+    { label: "Categoria Equipamento", chave: "equipamento.categoria" },
+    { label: "Marca Equipamento", chave: "equipamento.marca" },
+    { label: "Modelo Equipamento", chave: "equipamento.modelo" },
+    { label: "Série Equipamento", chave: "equipamento.numero_serie" },
+    { label: "Status Equipamento", chave: "equipamento.status" },
+    { label: "Observações Equipamento", chave: "equipamento.observacoes" },
+
+    // Animal / Pet
+    { label: "Nome do Pet/Animal", chave: "animal.nome" },
+    { label: "Raça do Pet/Animal", chave: "animal.raca" },
+    { label: "Sexo do Pet/Animal", chave: "animal.sexo" },
+    { label: "Peso do Pet/Animal", chave: "animal.peso" },
+    { label: "Cor do Pet/Animal", chave: "animal.cor" },
+    { label: "Observações do Pet/Animal", chave: "animal.observacoes" },
+  ];
+
+  const handleNovoGabarito = () => {
+    setBaseGabaritoModal(true);
+  };
+
+  const handleNovoRelatorioPersonalizado = () => {
+    setBaseReportModal(true);
+  };
+
+  const handleIniciarNovoGabaritoComBase = (baseKey) => {
+    setBaseGabaritoModal(false);
+    setEditingTemplate(null);
+    setNomeRelatorio(baseKey);
+    let tipo = 'RECIBO';
+    let w = 80, h = 0;
+    if (baseKey === 'etiqueta_gondola') {
+      tipo = 'ETIQUETA';
+      w = 100;
+      h = 50;
+    }
+    setTipoGabarito(tipo);
+    setLarguraMm(w);
+    setAlturaMm(h);
+    setElementosLayout(DEFAULT_LAYOUTS[baseKey] || []);
+    setElementoSelecionado(null);
+    setEditorOpen(true);
+  };
+
+  const handleIniciarNovoRelatorioComBase = (rep) => {
+    setBaseReportModal(false);
+    setEditingTemplate(null);
+    setNomeRelatorio(rep.id);
+    setTipoGabarito(rep.tipo);
+    setLarguraMm(rep.w);
+    setAlturaMm(rep.h);
+    setElementosLayout(DEFAULT_LAYOUTS[rep.baseKey] || []);
+    setElementoSelecionado(null);
+    setEditorOpen(true);
+  };
+
+  const handleEditarGabarito = (gabarito) => {
+    setEditingTemplate(gabarito);
+    setNomeRelatorio(gabarito.nome_relatorio);
+    setTipoGabarito(gabarito.tipo_gabarito);
+    setLarguraMm(gabarito.largura_gabarito_mm);
+    setAlturaMm(gabarito.altura_gabarito_mm);
+    setElementosLayout(gabarito.layout_json || []);
+    setElementoSelecionado(null);
+    setZoomScale(1.0);
+    setEditorOpen(true);
+  };
+
+  const handleSalvarGabarito = async (payload) => {
+    const fullPayload = {
+      cliente: selectedClient.id_saas_cliente,
+      nome_relatorio: payload.nome_relatorio,
+      tipo_gabarito: payload.tipo_gabarito,
+      largura_gabarito_mm: payload.largura_gabarito_mm,
+      altura_gabarito_mm: payload.altura_gabarito_mm,
+      layout_json: payload.layout_json,
+      ativo: editingTemplate ? editingTemplate.ativo : true
+    };
+
+    try {
+      setLoading(true);
+      if (editingTemplate) {
+        await axiosInstance.put(`/saas-gabaritos/${editingTemplate.id}/`, fullPayload);
+        showToast('Layout atualizado com sucesso!', 'success');
+      } else {
+        await axiosInstance.post('/saas-gabaritos/', fullPayload);
+        showToast('Layout criado com sucesso!', 'success');
+      }
+      setEditorOpen(false);
+      const res = await axiosInstance.get(`/saas-gabaritos/?cliente=${selectedClient.id_saas_cliente}`);
+      const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+      setGabaritos(list);
+    } catch (e) {
+      showToast('Erro ao salvar layout customizado.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExcluirGabarito = async (id) => {
+    if (!window.confirm('Deseja realmente excluir este layout customizado?')) return;
+    try {
+      setLoading(true);
+      await axiosInstance.delete(`/saas-gabaritos/${id}/`);
+      showToast('Layout excluído com sucesso!', 'success');
+      const res = await axiosInstance.get(`/saas-gabaritos/?cliente=${selectedClient.id_saas_cliente}`);
+      const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+      setGabaritos(list);
+    } catch (e) {
+      showToast('Erro ao excluir layout.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleAtivoGabarito = async (gabarito) => {
+    try {
+      await axiosInstance.patch(`/saas-gabaritos/${gabarito.id}/`, { ativo: !gabarito.ativo });
+      showToast('Status do layout atualizado!', 'success');
+      const res = await axiosInstance.get(`/saas-gabaritos/?cliente=${selectedClient.id_saas_cliente}`);
+      const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+      setGabaritos(list);
+    } catch (e) {
+      showToast('Erro ao atualizar status do layout.', 'error');
+    }
+  };
+
+  const handleGerarLinkCadastro = async () => {
+    if (!remoteInviteForm.whatsapp_cliente || !remoteInviteForm.valor_mensalidade) {
+      showToast('Por favor, preencha o WhatsApp e o Valor da Mensalidade.', 'warning');
+      return;
+    }
+
+    try {
+      setLoadingRemoteInvite(true);
+      const res = await axiosInstance.post('/saas/gerar-link-cadastro/', {
+        whatsapp_cliente: remoteInviteForm.whatsapp_cliente,
+        valor_mensalidade: remoteInviteForm.valor_mensalidade,
+        dia_vencimento: remoteInviteForm.dia_vencimento,
+        emite_nota: remoteInviteForm.emite_nota,
+        vendedor: remoteInviteForm.vendedor,
+        status_licenca: remoteInviteForm.status_licenca,
+        schema_name: remoteInviteForm.schema_name,
+        db_host: remoteInviteForm.db_host,
+        db_port: remoteInviteForm.db_port,
+        is_test_environment: remoteInviteForm.is_test_environment
+      });
+
+      if (res.data && res.data.success) {
+        setGeneratedLinkData(res.data);
+        showToast(
+          res.data.whatsapp_enviado 
+            ? 'Link gerado e enviado com sucesso via WhatsApp!' 
+            : 'Link gerado! (Porém não foi possível disparar o WhatsApp automático - copie o link abaixo)', 
+          res.data.whatsapp_enviado ? 'success' : 'info'
+        );
+      } else {
+        showToast('Erro ao gerar o link cadastral.', 'error');
+      }
+    } catch (e) {
+      const msg = e.response?.data?.error || 'Erro ao processar requisição.';
+      showToast(msg, 'error');
+    } finally {
+      setLoadingRemoteInvite(false);
+    }
+  };
+
+
 
   const handleOpenClientModal = (mode, data = null) => {
     setModalTab(0);
@@ -492,6 +861,86 @@ const SaaSAdminPage = () => {
     showToast('Pix Copia e Cola copiado!', 'success');
   };
 
+  const handleOpenComunicadoModal = (mode, data = null) => {
+    if (mode === 'create') {
+      setComunicadoForm({
+        titulo: '',
+        tipo: 'TEXTO',
+        conteudo_texto: '',
+        url_midia: '',
+        imagem_file: null,
+        data_inicio: new Date().toISOString().split('T')[0],
+        data_fim: new Date(new Date().setDate(new Date().getDate() + 7)).toISOString().split('T')[0],
+        ativo: true
+      });
+    } else {
+      setComunicadoForm({
+        titulo: data.titulo,
+        tipo: data.tipo,
+        conteudo_texto: data.conteudo_texto || '',
+        url_midia: data.url_midia || '',
+        imagem_file: null,
+        data_inicio: data.data_inicio,
+        data_fim: data.data_fim,
+        ativo: data.ativo
+      });
+    }
+    setComunicadoModal({ open: true, mode, data });
+  };
+
+  const handleSaveComunicado = async () => {
+    if (!comunicadoForm.titulo || !comunicadoForm.conteudo_texto || !comunicadoForm.data_inicio || !comunicadoForm.data_fim) {
+      showToast('Por favor, preencha todos os campos obrigatórios.', 'warning');
+      return;
+    }
+
+    const data = new FormData();
+    data.append('titulo', comunicadoForm.titulo);
+    data.append('tipo', comunicadoForm.tipo);
+    data.append('conteudo_texto', comunicadoForm.conteudo_texto);
+    data.append('data_inicio', comunicadoForm.data_inicio);
+    data.append('data_fim', comunicadoForm.data_fim);
+    data.append('ativo', comunicadoForm.ativo);
+
+    if (comunicadoForm.tipo === 'IMAGEM' && comunicadoForm.imagem_file) {
+      data.append('imagem', comunicadoForm.imagem_file);
+      data.append('url_midia', '');
+    } else {
+      data.append('url_midia', comunicadoForm.url_midia || '');
+    }
+
+    try {
+      if (comunicadoModal.mode === 'create') {
+        await axiosInstance.post('/saas-comunicados/', data, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        showToast('Comunicado criado com sucesso!', 'success');
+      } else {
+        await axiosInstance.put(`/saas-comunicados/${comunicadoModal.data.id}/`, data, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        showToast('Comunicado atualizado com sucesso!', 'success');
+      }
+      setComunicadoModal({ open: false, mode: 'create', data: null });
+      carregarDados();
+    } catch (e) {
+      console.error(e);
+      showToast('Erro ao salvar comunicado.', 'error');
+    }
+  };
+
+  const handleDeleteComunicado = async (id) => {
+    if (window.confirm('Deseja realmente excluir este comunicado?')) {
+      try {
+        await axiosInstance.delete(`/saas-comunicados/${id}/`);
+        showToast('Comunicado excluído com sucesso!', 'success');
+        carregarDados();
+      } catch (e) {
+        showToast('Erro ao excluir comunicado.', 'error');
+      }
+    }
+  };
+
   return (
     <Box sx={{ p: 3, minHeight: '85vh' }}>
       
@@ -565,9 +1014,34 @@ const SaaSAdminPage = () => {
           <Box sx={{ p: 3 }}>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
               <Typography variant="h6" fontWeight={700}>Lista de Contratantes</Typography>
-              <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenClientModal('create')}>
-                Novo Cliente
-              </Button>
+              <Stack direction="row" spacing={1.5}>
+                <Button 
+                  variant="outlined" 
+                  color="primary" 
+                  startIcon={<SendIcon />} 
+                  onClick={() => {
+                    setGeneratedLinkData(null);
+                    setRemoteInviteForm({
+                      whatsapp_cliente: '',
+                      valor_mensalidade: '',
+                      dia_vencimento: 10,
+                      emite_nota: false,
+                      vendedor: '',
+                      status_licenca: 'ATIVO',
+                      schema_name: '',
+                      db_host: 'localhost',
+                      db_port: '8005',
+                      is_test_environment: false
+                    });
+                    setRemoteInviteModal(true);
+                  }}
+                >
+                  Cadastro Remoto
+                </Button>
+                <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenClientModal('create')}>
+                  Novo Cliente
+                </Button>
+              </Stack>
             </Box>
 
             <TableContainer>
@@ -749,6 +1223,146 @@ const SaaSAdminPage = () => {
                               {(!selectedClient.contratos || selectedClient.contratos.length === 0) && (
                                 <TableRow>
                                   <TableCell colSpan={3} align="center">Nenhum contrato gerado.</TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
+                    <Card variant="outlined" sx={{ borderRadius: 2, height: '100%' }}>
+                      <CardContent>
+                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
+                          <Typography variant="subtitle2" fontWeight={700} color="text.secondary">Gabaritos de Impressão (Bobina / Etiquetas)</Typography>
+                          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleNovoGabarito} sx={{ textTransform: 'none' }}>
+                            Novo Gabarito
+                          </Button>
+                        </Box>
+                        <Divider sx={{ mb: 1.5 }} />
+                        <TableContainer sx={{ maxHeight: 300 }}>
+                          <Table size="small" stickyHeader>
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Identificador / Nome</TableCell>
+                                <TableCell align="center">Tipo</TableCell>
+                                <TableCell align="center">Dimensões (mm)</TableCell>
+                                <TableCell align="center">Ativo</TableCell>
+                                <TableCell align="center">Ações</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {gabaritos.filter(g => g.tipo_gabarito === 'RECIBO' || g.tipo_gabarito === 'ETIQUETA').map(g => (
+                                <TableRow key={g.id} hover>
+                                  <TableCell sx={{ fontWeight: 600 }}>{g.nome_relatorio}</TableCell>
+                                  <TableCell align="center">
+                                    {g.tipo_gabarito === 'ETIQUETA' ? 'Etiqueta' : 'Recibo (80mm)'}
+                                  </TableCell>
+                                  <TableCell align="center">{g.largura_gabarito_mm} x {g.altura_gabarito_mm}</TableCell>
+                                  <TableCell align="center">
+                                    <Switch size="small" checked={g.ativo} onChange={() => handleToggleAtivoGabarito(g)} />
+                                  </TableCell>
+                                  <TableCell align="center">
+                                    <Stack direction="row" spacing={1} justifyContent="center">
+                                      <Tooltip title="Visualizar Teste">
+                                        <IconButton 
+                                          size="small" 
+                                          color="info" 
+                                          component="a" 
+                                          href={`/api/saas/gabarito-preview/?nome_relatorio=${g.nome_relatorio}&cnpj=${selectedClient?.cnpj}`} 
+                                          target="_blank"
+                                        >
+                                          <LaunchIcon fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                      <IconButton size="small" color="primary" onClick={() => handleEditarGabarito(g)}>
+                                        <EditIcon fontSize="small" />
+                                      </IconButton>
+                                      <IconButton size="small" color="error" onClick={() => handleExcluirGabarito(g.id)}>
+                                        <DeleteIcon fontSize="small" />
+                                      </IconButton>
+                                    </Stack>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              {gabaritos.filter(g => g.tipo_gabarito === 'RECIBO' || g.tipo_gabarito === 'ETIQUETA').length === 0 && (
+                                <TableRow>
+                                  <TableCell colSpan={5} align="center" sx={{ py: 2 }}>
+                                    Nenhum gabarito de impressão cadastrado.
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
+                    <Card variant="outlined" sx={{ borderRadius: 2, height: '100%' }}>
+                      <CardContent>
+                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
+                          <Typography variant="subtitle2" fontWeight={700} color="text.secondary">Relatórios Personalizados (A4)</Typography>
+                          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleNovoRelatorioPersonalizado} sx={{ textTransform: 'none' }}>
+                            Novo Relatório
+                          </Button>
+                        </Box>
+                        <Divider sx={{ mb: 1.5 }} />
+                        <TableContainer sx={{ maxHeight: 300 }}>
+                          <Table size="small" stickyHeader>
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Relatório Base / Nome</TableCell>
+                                <TableCell align="center">Tipo</TableCell>
+                                <TableCell align="center">Dimensões (mm)</TableCell>
+                                <TableCell align="center">Ativo</TableCell>
+                                <TableCell align="center">Ações</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {gabaritos.filter(g => g.tipo_gabarito === 'A4_RETRATO' || g.tipo_gabarito === 'A4_PAISAGEM').map(g => (
+                                <TableRow key={g.id} hover>
+                                  <TableCell sx={{ fontWeight: 600 }}>
+                                    {RELATORIOS_PADRAO_SISTEMA.find(r => r.id === g.nome_relatorio)?.titulo || g.nome_relatorio}
+                                  </TableCell>
+                                  <TableCell align="center">
+                                    {g.tipo_gabarito === 'A4_PAISAGEM' ? 'A4 Paisagem' : 'A4 Retrato'}
+                                  </TableCell>
+                                  <TableCell align="center">{g.largura_gabarito_mm} x {g.altura_gabarito_mm}</TableCell>
+                                  <TableCell align="center">
+                                    <Switch size="small" checked={g.ativo} onChange={() => handleToggleAtivoGabarito(g)} />
+                                  </TableCell>
+                                  <TableCell align="center">
+                                    <Stack direction="row" spacing={1} justifyContent="center">
+                                      <Tooltip title="Visualizar Teste">
+                                        <IconButton 
+                                          size="small" 
+                                          color="info" 
+                                          component="a" 
+                                          href={`/api/saas/gabarito-preview/?nome_relatorio=${g.nome_relatorio}&cnpj=${selectedClient?.cnpj}`} 
+                                          target="_blank"
+                                        >
+                                          <LaunchIcon fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                      <IconButton size="small" color="primary" onClick={() => handleEditarGabarito(g)}>
+                                        <EditIcon fontSize="small" />
+                                      </IconButton>
+                                      <IconButton size="small" color="error" onClick={() => handleExcluirGabarito(g.id)}>
+                                        <DeleteIcon fontSize="small" />
+                                      </IconButton>
+                                    </Stack>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              {gabaritos.filter(g => g.tipo_gabarito === 'A4_RETRATO' || g.tipo_gabarito === 'A4_PAISAGEM').length === 0 && (
+                                <TableRow>
+                                  <TableCell colSpan={5} align="center" sx={{ py: 2 }}>
+                                    Nenhum relatório personalizado cadastrado.
+                                  </TableCell>
                                 </TableRow>
                               )}
                             </TableBody>
@@ -1191,6 +1805,95 @@ const SaaSAdminPage = () => {
                 )}
               </Grid>
             </Grid>
+          </Box>
+        )}
+
+        {/* TAB 3 - MURAL DE AVISOS */}
+        {activeTabName === "Mural de Avisos" && (
+          <Box sx={{ p: 3 }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+              <Typography variant="h6" fontWeight={700}>Mural de Avisos (Comunicados SaaS)</Typography>
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />} 
+                onClick={() => handleOpenComunicadoModal('create')}
+              >
+                Novo Comunicado
+              </Button>
+            </Box>
+
+            <TableContainer>
+              <Table size="medium">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'action.hover' }}>
+                    <TableCell fontWeight={600}>Título</TableCell>
+                    <TableCell align="center">Tipo</TableCell>
+                    <TableCell>Vigência</TableCell>
+                    <TableCell align="center">Situação</TableCell>
+                    <TableCell align="center">Ações</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {comunicados.map((com) => (
+                    <TableRow key={com.id} hover>
+                      <TableCell>
+                        <Typography fontWeight={600} variant="body2">{com.titulo}</Typography>
+                        <Typography 
+                          variant="caption" 
+                          color="text.secondary" 
+                          sx={{ 
+                            display: 'block', 
+                            maxWidth: '400px', 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis', 
+                            whiteSpace: 'nowrap' 
+                          }}
+                        >
+                          {com.conteudo_texto}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip 
+                          label={com.tipo} 
+                          size="small" 
+                          color={com.tipo === 'VIDEO' ? 'error' : com.tipo === 'IMAGEM' ? 'primary' : 'default'} 
+                          variant="outlined"
+                          sx={{ fontWeight: 'bold' }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        De {fmtData(com.data_inicio)} até {fmtData(com.data_fim)}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip 
+                          label={com.ativo ? 'Ativo' : 'Inativo'} 
+                          size="small" 
+                          color={com.ativo ? 'success' : 'default'} 
+                          sx={{ fontWeight: 'bold' }}
+                        />
+                      </TableCell>
+                      <TableCell align="center">
+                        <Stack direction="row" spacing={1} justifyContent="center">
+                          <IconButton size="small" onClick={() => handleOpenComunicadoModal('edit', com)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton size="small" color="error" onClick={() => handleDeleteComunicado(com.id)}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {comunicados.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                        Nenhum comunicado cadastrado no sistema.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </Box>
         )}
       </Paper>
@@ -1659,6 +2362,363 @@ const SaaSAdminPage = () => {
           <Button onClick={() => setLogModal({ open: false, title: '', log: '' })}>Fechar</Button>
         </DialogActions>
       </Dialog>
+
+      {/* 7. COMUNICADO MODAL */}
+      <Dialog open={comunicadoModal.open} onClose={() => setComunicadoModal({ ...comunicadoModal, open: false })} maxWidth="sm" fullWidth>
+        <DialogTitle>{comunicadoModal.mode === 'create' ? 'Novo Comunicado' : 'Editar Comunicado'}</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2.5}>
+            <TextField
+              label="Título *"
+              fullWidth
+              size="small"
+              value={comunicadoForm.titulo}
+              onChange={(e) => setComunicadoForm({ ...comunicadoForm, titulo: e.target.value })}
+              placeholder="Ex: Atualização programada do sistema"
+            />
+            
+            <FormControl fullWidth size="small">
+              <InputLabel>Tipo de Mídia *</InputLabel>
+              <Select
+                value={comunicadoForm.tipo}
+                onChange={(e) => setComunicadoForm({ ...comunicadoForm, tipo: e.target.value })}
+                label="Tipo de Mídia *"
+              >
+                <MenuItem value="TEXTO">Somente Texto</MenuItem>
+                <MenuItem value="IMAGEM">Imagem (Link/URL)</MenuItem>
+                <MenuItem value="VIDEO">Vídeo YouTube (Link/URL)</MenuItem>
+              </Select>
+            </FormControl>
+
+            {comunicadoForm.tipo === 'IMAGEM' && (
+              <Box sx={{ border: '1px dashed #ccc', p: 2, borderRadius: 1, textAlign: 'center', mt: 1 }}>
+                <Typography variant="body2" sx={{ mb: 1, color: 'text.secondary' }}>
+                  {comunicadoForm.imagem_file ? `Selecionado: ${comunicadoForm.imagem_file.name}` : 'Selecione uma Imagem do seu Computador'}
+                </Typography>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  size="small"
+                >
+                  Selecionar Imagem
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setComunicadoForm({ ...comunicadoForm, imagem_file: e.target.files[0] });
+                      }
+                    }}
+                  />
+                </Button>
+                {comunicadoModal.mode === 'edit' && comunicadoModal.data && comunicadoModal.data.imagem && !comunicadoForm.imagem_file && (
+                  <Typography variant="caption" display="block" sx={{ mt: 1, color: 'success.main' }}>
+                    ✓ Já possui uma imagem cadastrada (ou você pode selecionar outra acima).
+                  </Typography>
+                )}
+              </Box>
+            )}
+
+            {comunicadoForm.tipo === 'VIDEO' && (
+              <TextField
+                label="Link/URL do Vídeo YouTube *"
+                fullWidth
+                size="small"
+                value={comunicadoForm.url_midia}
+                onChange={(e) => setComunicadoForm({ ...comunicadoForm, url_midia: e.target.value })}
+                placeholder="Ex: https://youtube.com/watch?v=..."
+              />
+            )}
+
+            <TextField
+              label="Conteúdo do Comunicado *"
+              multiline
+              rows={5}
+              fullWidth
+              size="small"
+              value={comunicadoForm.conteudo_texto}
+              onChange={(e) => setComunicadoForm({ ...comunicadoForm, conteudo_texto: e.target.value })}
+              placeholder="Escreva a mensagem do aviso..."
+            />
+
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <TextField
+                  label="Data de Início *"
+                  type="date"
+                  fullWidth
+                  size="small"
+                  InputLabelProps={{ shrink: true }}
+                  value={comunicadoForm.data_inicio}
+                  onChange={(e) => setComunicadoForm({ ...comunicadoForm, data_inicio: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField
+                  label="Data de Término *"
+                  type="date"
+                  fullWidth
+                  size="small"
+                  InputLabelProps={{ shrink: true }}
+                  value={comunicadoForm.data_fim}
+                  onChange={(e) => setComunicadoForm({ ...comunicadoForm, data_fim: e.target.value })}
+                />
+              </Grid>
+            </Grid>
+
+            <Box display="flex" alignItems="center" gap={1}>
+              <Typography variant="body2" fontWeight={600}>Comunicado Ativo?</Typography>
+              <Switch
+                checked={comunicadoForm.ativo}
+                onChange={(e) => setComunicadoForm({ ...comunicadoForm, ativo: e.target.checked })}
+                color="success"
+              />
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setComunicadoModal({ ...comunicadoModal, open: false })}>Cancelar</Button>
+          <Button variant="contained" onClick={handleSaveComunicado}>Salvar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal para selecionar o gabarito base (etiqueta/bobina) */}
+      <Dialog 
+        open={baseGabaritoModal} 
+        onClose={() => setBaseGabaritoModal(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold' }}>Selecione o Gabarito de Impressão Base</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Selecione uma base de layout de impressão abaixo. Os campos e dimensões padrão serão carregados.
+          </Typography>
+          <Stack spacing={1.5}>
+            <Button 
+              variant="outlined" 
+              onClick={() => handleIniciarNovoGabaritoComBase('venda_recibo')}
+              sx={{ justifyContent: 'flex-start', textTransform: 'none', py: 1.5 }}
+            >
+              🎫 Recibo de Venda (Bobina 80mm)
+            </Button>
+            <Button 
+              variant="outlined" 
+              onClick={() => handleIniciarNovoGabaritoComBase('etiqueta_gondola')}
+              sx={{ justifyContent: 'flex-start', textTransform: 'none', py: 1.5 }}
+            >
+              🏷️ Etiqueta de Gôndola (100x50mm)
+            </Button>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBaseGabaritoModal(false)}>Cancelar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal para selecionar o relatório base (A4) */}
+      <Dialog 
+        open={baseReportModal} 
+        onClose={() => setBaseReportModal(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold' }}>Selecione o Relatório Base</DialogTitle>
+        <DialogContent dividers sx={{ maxHeight: 350, overflowY: 'auto' }}>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Selecione um relatório padrão do sistema para servir como base de layout customizado.
+          </Typography>
+          <Stack spacing={1.5}>
+            {RELATORIOS_PADRAO_SISTEMA.map(rep => (
+              <Button 
+                key={rep.id}
+                variant="outlined" 
+                onClick={() => handleIniciarNovoRelatorioComBase(rep)}
+                sx={{ justifyContent: 'flex-start', textTransform: 'none', py: 1.2 }}
+              >
+                📊 {rep.titulo}
+              </Button>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBaseReportModal(false)}>Cancelar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal para Cadastro Remoto (WhatsApp) */}
+      <Dialog
+        open={remoteInviteModal}
+        onClose={() => setRemoteInviteModal(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <SendIcon color="primary" /> Convite de Cadastro Remoto
+        </DialogTitle>
+        <DialogContent dividers>
+          {!generatedLinkData ? (
+            <Stack spacing={2.5} sx={{ mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                Preencha os dados comerciais da nova conta. Um link seguro será enviado para o WhatsApp do cliente para que ele complete as informações cadastrais e ative a conta.
+              </Typography>
+              <TextField
+                required
+                label="WhatsApp do Cliente (com DDD)"
+                value={remoteInviteForm.whatsapp_cliente}
+                onChange={(e) => setRemoteInviteForm({ ...remoteInviteForm, whatsapp_cliente: formatTelefone(e.target.value) })}
+                placeholder="(99) 99999-9999"
+                fullWidth
+              />
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <TextField
+                    required
+                    label="Valor Mensalidade"
+                    type="number"
+                    value={remoteInviteForm.valor_mensalidade}
+                    onChange={(e) => setRemoteInviteForm({ ...remoteInviteForm, valor_mensalidade: e.target.value })}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField
+                    label="Dia Vencimento"
+                    type="number"
+                    value={remoteInviteForm.dia_vencimento}
+                    onChange={(e) => setRemoteInviteForm({ ...remoteInviteForm, dia_vencimento: e.target.value })}
+                    fullWidth
+                  />
+                </Grid>
+              </Grid>
+              
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Status da Licença</InputLabel>
+                    <Select
+                      value={remoteInviteForm.status_licenca}
+                      label="Status da Licença"
+                      onChange={(e) => setRemoteInviteForm({ ...remoteInviteForm, status_licenca: e.target.value })}
+                    >
+                      <MenuItem value="ATIVO">Ativo</MenuItem>
+                      <MenuItem value="DEMO">Demonstração</MenuItem>
+                      <MenuItem value="BLOQUEADO">Bloqueado</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField
+                    label="Vendedor / Representante"
+                    value={remoteInviteForm.vendedor}
+                    onChange={(e) => setRemoteInviteForm({ ...remoteInviteForm, vendedor: e.target.value })}
+                    fullWidth
+                  />
+                </Grid>
+              </Grid>
+
+              <TextField
+                label="Schema Name (Pasta/DB opcional)"
+                value={remoteInviteForm.schema_name}
+                onChange={(e) => setRemoteInviteForm({ ...remoteInviteForm, schema_name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+                placeholder="ex: cliente_nome"
+                helperText="Se deixado em branco, será gerado automaticamente a partir da Razão Social."
+                fullWidth
+              />
+
+              <Stack direction="row" spacing={3} sx={{ mt: 1 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={remoteInviteForm.emite_nota}
+                      onChange={(e) => setRemoteInviteForm({ ...remoteInviteForm, emite_nota: e.target.checked })}
+                    />
+                  }
+                  label="Emite Notas Fiscais"
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={remoteInviteForm.is_test_environment}
+                      onChange={(e) => setRemoteInviteForm({ ...remoteInviteForm, is_test_environment: e.target.checked })}
+                    />
+                  }
+                  label="Ambiente de Testes"
+                />
+              </Stack>
+            </Stack>
+          ) : (
+            <Stack spacing={3} sx={{ py: 2, alignItems: 'center', textAlign: 'center' }}>
+              <Box sx={{ p: 1.5, borderRadius: '50%', bgcolor: 'success.light', color: 'success.dark', display: 'flex' }}>
+                <CheckCircleOutlineIcon sx={{ fontSize: 48 }} />
+              </Box>
+              <Box>
+                <Typography variant="h6" fontWeight={700} color="success.main">
+                  Link de Cadastro Gerado!
+                </Typography>
+                <Typography variant="body2" color="text.secondary" mt={1}>
+                  {generatedLinkData.whatsapp_enviado 
+                    ? `O link foi disparado com sucesso via WhatsApp para ${remoteInviteForm.whatsapp_cliente}.` 
+                    : `Não foi possível disparar via API automática do WhatsApp. Por favor, copie e envie manualmente.`
+                  }
+                </Typography>
+              </Box>
+
+              <TextField
+                label="Link de Cadastro Remoto"
+                value={generatedLinkData.url}
+                InputProps={{
+                  readOnly: true,
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        edge="end"
+                        onClick={() => {
+                          navigator.clipboard.writeText(generatedLinkData.url);
+                          showToast('Link copiado para a área de transferência!', 'success');
+                        }}
+                      >
+                        <CopyIcon />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                fullWidth
+              />
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRemoteInviteModal(false)}>
+            {generatedLinkData ? 'Fechar' : 'Cancelar'}
+          </Button>
+          {!generatedLinkData && (
+            <Button
+              variant="contained"
+              onClick={handleGerarLinkCadastro}
+              disabled={loadingRemoteInvite || !remoteInviteForm.whatsapp_cliente || !remoteInviteForm.valor_mensalidade}
+              startIcon={loadingRemoteInvite ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
+            >
+              {loadingRemoteInvite ? 'Gerando...' : 'Gerar e Enviar Link'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Visual Report Builder Dialog */}
+      <ReportBuilderDialog
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        onSave={handleSalvarGabarito}
+        initialData={{
+          nome_relatorio: nomeRelatorio,
+          tipo_gabarito: tipoGabarito,
+          largura_gabarito_mm: larguraMm,
+          altura_gabarito_mm: alturaMm,
+          layout_json: elementosLayout
+        }}
+      />
 
     </Box>
   );

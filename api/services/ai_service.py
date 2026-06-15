@@ -239,7 +239,7 @@ class AIService:
             # NOVO: Tenta resolver via Dispatcher (Agente de Execução)
             dispatcher = AIDispatcher(pergunta, usuario)
             if dispatcher.pode_executar():
-                logger.info(f"✅ Dispatcher identificou comando executável na pergunta: {pergunta[:50]}...")
+                logger.info(f"[OK] Dispatcher identificou comando executável na pergunta: {pergunta[:50]}...")
                 resultado = dispatcher.resolver()
                 
                 # Formata resposta no padrão do AIService
@@ -256,7 +256,7 @@ class AIService:
                 }
             
             # Se dispatcher não identificou comando, segue fluxo conversacional tradicional
-            logger.info(f"ℹ️ Dispatcher não identificou comando. Usando análise conversacional para: {pergunta[:50]}...")
+            logger.info(f"[INFO] Dispatcher não identificou comando. Usando análise conversacional para: {pergunta[:50]}...")
             # Analisa a intenção da pergunta
             intencao = self._analisar_intencao(pergunta)
 

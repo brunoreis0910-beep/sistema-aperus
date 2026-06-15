@@ -73,7 +73,7 @@ class SimplISSRestService:
             payload = {"xmlDPS": xml_gz_b64}
             endpoint = f"{self.base_url}/nfse"
 
-            logger.info(f"[SimplISS] Emitindo NFS-e OS#{ordem_servico.id_os} → {endpoint}")
+            logger.info(f"[SimplISS] Emitindo NFS-e OS#{ordem_servico.id_os} ? {endpoint}")
             response = self._post(endpoint, payload)
 
             if response.status_code in (200, 201):
@@ -554,7 +554,7 @@ class SimplISSRestService:
             payload = {"xmlDPS": xml_gz_b64}
             endpoint = f"{self.base_url}/nfse"
 
-            logger.info(f"[SimplISS] Emitindo NFS-e Venda#{venda.id_venda} → {endpoint}")
+            logger.info(f"[SimplISS] Emitindo NFS-e Venda#{venda.id_venda} ? {endpoint}")
             response = self._post(endpoint, payload)
 
             if response.status_code in (200, 201):

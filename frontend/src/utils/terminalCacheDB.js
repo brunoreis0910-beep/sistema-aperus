@@ -170,8 +170,13 @@ export const buscarProdutosCache = async (termo) => {
   if (!termo) return todos.slice(0, 50);
   const t = termo.toLowerCase();
   return todos.filter(p =>
+    (p.nome_produto && p.nome_produto.toLowerCase().includes(t)) ||
     (p.descricao  && p.descricao.toLowerCase().includes(t)) ||
+    (p.codigo_produto && String(p.codigo_produto).toLowerCase().includes(t)) ||
     (p.codigo     && String(p.codigo).toLowerCase().includes(t)) ||
+    (p.referencia && String(p.referencia).toLowerCase().includes(t)) ||
+    (p.localizacao && String(p.localizacao).toLowerCase().includes(t)) ||
+    (p.grupo_nome && String(p.grupo_nome).toLowerCase().includes(t)) ||
     (p.id_produto && String(p.id_produto) === t)
   ).slice(0, 50);
 };

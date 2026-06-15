@@ -384,7 +384,7 @@ def enviar_texto(telefone: str, mensagem: str) -> bool:
     try:
         resp = requests.post(url, json=payload, headers=headers, timeout=15)
         resp.raise_for_status()
-        logger.info("Cloud API: texto enviado → %s***", numero[:6])
+        logger.info("Cloud API: texto enviado ? %s***", numero[:6])
         return True
     except requests.HTTPError as exc:
         status_code = exc.response.status_code

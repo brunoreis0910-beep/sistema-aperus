@@ -539,13 +539,13 @@ class TaxAuditHelper:
                 add_candidates(self.search_ncm_by_desc(tokens_sorted[1]))
 
             if not candidates:
-                print(f"[TaxAudit] attempt_recovery '{product_desc}' → NENHUM candidato válido (tokens={tokens}, categories={list(product_categories.keys())})")
+                print(f"[TaxAudit] attempt_recovery '{product_desc}' ? NENHUM candidato válido (tokens={tokens}, categories={list(product_categories.keys())})")
                 return None
 
             # Retorna o NCM com maior pontuação
             best_ncm = max(candidates, key=lambda k: candidates[k][0])
             best_score, best_pos, best_cat, best_tokens = candidates[best_ncm]
-            print(f"[TaxAudit] attempt_recovery '{product_desc}' → {best_ncm} (score={best_score}, pos={best_pos}, cat={best_cat}, tokens={best_tokens})")
+            print(f"[TaxAudit] attempt_recovery '{product_desc}' ? {best_ncm} (score={best_score}, pos={best_pos}, cat={best_cat}, tokens={best_tokens})")
             return best_ncm
 
         except Exception as e:
@@ -680,6 +680,7 @@ class ProdutoComDepositosSerializer(serializers.ModelSerializer):
     valor_venda = serializers.SerializerMethodField()  # NOVO: Valor de venda principal
     tributacao_detalhada = serializers.SerializerMethodField()  # Dados do produto tributário
     tributacao_info = serializers.SerializerMethodField()  # Formato esperado pelo frontend
+    grupo_nome = serializers.CharField(source='id_grupo.nome_grupo', read_only=True, allow_null=True)
 
     # Campos Calculadora Construção
     id_produto_pai = serializers.IntegerField(source='produto_pai_id', allow_null=True, required=False)
@@ -790,13 +791,14 @@ class ProdutoComDepositosSerializer(serializers.ModelSerializer):
         # campos base usados pela UI/autocomplete + depositos
         # incluir id_grupo para permitir salvar/alterar o grupo do produto
         fields = [
-            'id_produto', 'codigo_produto', 'nome_produto', 'id_grupo', 
+            'id_produto', 'codigo_produto', 'nome_produto', 'id_grupo', 'grupo_nome',
             'depositos', 'estoque_total', 'estoque_por_deposito', 'valor_venda',
             'imagem_url', 'descricao', 'unidade_medida', 'marca', 'ncm', 'cest', 'gtin',
             'categoria', 'classificacao', 'observacoes', 'tributacao_detalhada', 'tributacao_info',
             'metragem_caixa', 'rendimento_m2', 'peso_unitario', 'id_produto_pai', 'variacao',
             'consumo_argamassa_m2', 'peso_saco_argamassa', 'tipo_aplicacao_argamassa',
-            'produtos_complementares', 'produtos_similares', 'controla_lote', 'genero'
+            'produtos_complementares', 'produtos_similares', 'controla_lote', 'genero',
+            'referencia', 'localizacao'
         ]
 
     def validate_nome_produto(self, value):
@@ -1017,7 +1019,13 @@ class ProdutoViewSetCustom(viewsets.ModelViewSet):
         qs = super().get_queryset()
         q = self.request.query_params.get('search') or self.request.query_params.get('q')
         if q:
-            return qs.filter(Q(nome_produto__icontains=q) | Q(codigo_produto__icontains=q))
+            return qs.filter(
+                Q(nome_produto__icontains=q) |
+                Q(codigo_produto__icontains=q) |
+                Q(referencia__icontains=q) |
+                Q(localizacao__icontains=q) |
+                Q(id_grupo__nome_grupo__icontains=q)
+            )
         # Guard: sem filtro de busca, limita a 5000 para proteger contra tabelas grandes.
         # IMPORTANTE: Querysets fatiados ([:N]) não podem ser filtrados — DRF converte
         # o TypeError em Http404 no get_object(). O slice só é seguro na ação 'list'.
@@ -2114,7 +2122,7 @@ class ProdutoViewSetCustom(viewsets.ModelViewSet):
         
         # DEBUG: Ver o que está chegando
         imagem_recebida = request.data.get('imagem_url')
-        print(f"\n🔍 DEBUG UPDATE - Produto ID {instance.id_produto}")
+        print(f"\n[BUSCA] DEBUG UPDATE - Produto ID {instance.id_produto}")
         print(f"  - imagem_url recebida: {imagem_recebida[:100] if imagem_recebida else 'None'}...")
         print(f"  - Tamanho: {len(imagem_recebida) if imagem_recebida else 0} caracteres")
         print(f"  - categoria recebida: [{request.data.get('categoria')}]")
@@ -2166,9 +2174,9 @@ class ProdutoViewSetCustom(viewsets.ModelViewSet):
                     from .models import Produto
                     pai = Produto.objects.get(id_produto=produto_pai_value)
                     instance.produto_pai = pai
-                    print(f"✅ produto_pai definido para: {pai.codigo_produto} (ID: {pai.id_produto})")
+                    print(f"[OK] produto_pai definido para: {pai.codigo_produto} (ID: {pai.id_produto})")
                 except Produto.DoesNotExist:
-                    print(f"⚠️ Produto pai ID {produto_pai_value} não encontrado")
+                    print(f"[AVISO] Produto pai ID {produto_pai_value} não encontrado")
                     pass  # Mantém o produto_pai atual se não encontrar
         
         # Atualizar apenas campos não-nulos

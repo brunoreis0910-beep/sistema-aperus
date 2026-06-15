@@ -1700,6 +1700,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       travado: travado, // Adicionar propriedade travado
       codigo_produto: produto.codigo_produto || produto.codigo || produto.code || produto.sku || `P${produto.id_produto || produto.id}`,
       nome_produto: produto.nome_produto || produto.nome || produto.name || produto.title,
+      referencia: produto.referencia || '',
+      localizacao: produto.localizacao || '',
       quantidade: parseFloat(quantidade),
       valor_unitario: parseFloat(valor_unitario || produto.valor_venda || produto.preco_venda || produto.preco || 0),
       desconto: descontoVal,
@@ -4162,6 +4164,44 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
       console.log('🖨️ Iniciando impressão da venda:', venda);
 
+      // Buscar configuração de impressão do módulo venda
+      let configImpressao = null;
+      try {
+        const resConfig = await axiosInstance.get('/configuracao-impressao/modulo/venda/');
+        configImpressao = resConfig.data;
+      } catch (errConfig) {
+        console.warn('⚠️ Erro ao buscar configuração de impressão:', errConfig);
+      }
+
+      const idVenda = venda.id || venda.id_venda;
+
+      if (configImpressao && configImpressao.tipo_impressora === 'personalizado') {
+        const gNome = configImpressao.gabarito_customizado_nome || 'venda_recibo';
+        let cnpj = '';
+        if (venda._offline && venda._dadosVenda) {
+          cnpj = (venda._dadosVenda?.empresa?.cpf_cnpj || '').replace(/\D/g, '');
+        } else {
+          const response = await axiosInstance.get(`/vendas/${idVenda}/`);
+          const vendaCompleta = response.data;
+          cnpj = (vendaCompleta.operacao?.empresa?.cpf_cnpj || vendaCompleta.empresa?.cpf_cnpj || '').replace(/\D/g, '');
+        }
+
+        if (!cnpj) {
+          try {
+            const resEmpresa = await axiosInstance.get('/empresa/');
+            const empData = Array.isArray(resEmpresa.data) ? resEmpresa.data[0] : (resEmpresa.data?.results?.[0] || resEmpresa.data);
+            cnpj = (empData?.cpf_cnpj || '').replace(/\D/g, '');
+          } catch (e) {
+            console.warn('⚠️ Erro ao buscar CNPJ da empresa:', e);
+          }
+        }
+
+        const url = `/api/saas/gabarito-gerar/?nome_relatorio=${gNome}&venda=${idVenda}&cnpj=${cnpj}`;
+        window.open(url, '_blank');
+        setLoading(false);
+        return;
+      }
+
       let dadosImpressao;
 
       // ── Modo offline: usa dados do IndexedDB sem chamada à API ─────────────
@@ -5385,6 +5425,11 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                               <Box sx={{ fontSize: '0.875rem', color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {nome || `Produto ${id}`}
                               </Box>
+                              <Box sx={{ fontSize: '0.75rem', color: 'text.secondary', display: 'flex', gap: 1.5, mt: 0.5, flexWrap: 'wrap' }}>
+                                <span>Ref: {option.referencia || '-'}</span>
+                                <span>Loc: {option.localizacao || '-'}</span>
+                                <span>Grupo: {option.grupo_nome || '-'}</span>
+                              </Box>
                               {promoAtiva && (
                                 <Box sx={{
                                   display: 'inline-flex',
@@ -5435,7 +5480,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                         <TextField
                           {...params}
                           label="Produto"
-                          placeholder="Digite código ou descrição..."
+                          placeholder="Digite código, descrição, referência, localização ou grupo..."
                           InputProps={{
                             ...params.InputProps,
                             startAdornment: (
@@ -5780,6 +5825,10 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                               <TableCell>
                                 <Box sx={{ fontWeight: 'bold' }}>{item.codigo_produto}</Box>
                                 <Box sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{item.nome_produto}</Box>
+                                <Box sx={{ fontSize: '0.75rem', color: 'text.secondary', display: 'flex', gap: 1.5, mt: 0.5 }}>
+                                  <span>Ref: {item.referencia || '-'}</span>
+                                  <span>Loc: {item.localizacao || '-'}</span>
+                                </Box>
                                 {item.tem_promocao && (
                                   <Box sx={{
                                     display: 'inline-flex',

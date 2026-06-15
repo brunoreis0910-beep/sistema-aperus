@@ -287,6 +287,7 @@ from .views import (
     VersaoSistemaViewSet,
     HistoricoAtualizacaoViewSet,
     ConfiguracaoAgendamentoViewSet,
+    ComunicadoSaaSViewSet,
     saas_verificar_licenca,
     saas_financeiro,
     saas_contrato_pendente,
@@ -295,11 +296,20 @@ from .views import (
     saas_disparar_email_token,
     saas_meu_contrato,
     status_financeiro_saas,
+    obter_comunicado_ativo,
     buscar_contrato_atual,
     salvar_edicao_contrato,
     render_contrato_padrao,
     verificar_licenca_local,
     saas_status_cliente,
+    GabaritoCustomizadoViewSet,
+    saas_obter_gabarito,
+    saas_gabarito_preview,
+    saas_gabarito_gerar,
+    saas_listar_gabaritos,
+    saas_gerar_link_cadastro,
+    saas_validar_token_cadastro,
+    saas_finalizar_cadastro_remoto,
 )
 
 from .viewsets_formapagamento import FormaPagamentoViewSet
@@ -383,11 +393,13 @@ router.register(r'email/campaigns', EmailCampaignViewSet, basename='email-campai
 router.register(r'email/logs', EmailLogViewSet, basename='email-log')
 router.register(r'intelligence', ProductIntelligenceViewSet, basename='intelligence')
 router.register(r'saas-clientes', SaaSClienteViewSet, basename='saas-cliente')
+router.register(r'saas-gabaritos', GabaritoCustomizadoViewSet, basename='saas-gabaritos')
 router.register(r'saas-mensalidades', SaaSClienteMensalidadeViewSet, basename='saas-mensalidade')
 router.register(r'saas-contratos', SaaSClienteContratoViewSet, basename='saas-contrato')
 router.register(r'saas-versoes', VersaoSistemaViewSet, basename='saas-versao')
 router.register(r'saas-historico-atualizacoes', HistoricoAtualizacaoViewSet, basename='saas-historico-atualizacao')
 router.register(r'saas-agendamento', ConfiguracaoAgendamentoViewSet, basename='saas-agendamento')
+router.register(r'saas-comunicados', ComunicadoSaaSViewSet, basename='saas-comunicados')
 # PCP — Planejamento e Controle de Produção
 router.register(r'pcp/ordens', OrdemProducaoViewSet, basename='pcp-ordem')
 router.register(r'pcp/composicoes', ComposicaoProdutoViewSet, basename='pcp-composicao')
@@ -701,6 +713,14 @@ urlpatterns = [
     path('saas/status-cliente/', saas_status_cliente, name='saas-status-cliente'),
     path('saas/meu-contrato/', saas_meu_contrato, name='saas-meu-contrato'),
     path('saas/status-financeiro-saas/', status_financeiro_saas, name='saas-status-financeiro-saas'),
+    path('saas/comunicado-ativo/', obter_comunicado_ativo, name='saas-comunicado-ativo'),
+    path('saas/obter-gabarito/', saas_obter_gabarito, name='saas-obter-gabarito'),
+    path('saas/gabarito-preview/', saas_gabarito_preview, name='saas-gabarito-preview'),
+    path('saas/gabarito-gerar/', saas_gabarito_gerar, name='saas-gabarito-gerar'),
+    path('saas/listar-gabaritos/', saas_listar_gabaritos, name='saas-listar-gabaritos'),
+    path('saas/gerar-link-cadastro/', saas_gerar_link_cadastro, name='saas-gerar-link-cadastro'),
+    path('saas/validar-token-cadastro/', saas_validar_token_cadastro, name='saas-validar-token-cadastro'),
+    path('saas/finalizar-cadastro-remoto/', saas_finalizar_cadastro_remoto, name='saas-finalizar-cadastro-remoto'),
     path('licenca/verificar/', verificar_licenca_local, name='verificar-licenca-local'),
     path('saas/contrato-padrao/atual/', buscar_contrato_atual, name='saas-contrato-padrao-atual'),
     path('saas/contrato-padrao/salvar/', salvar_edicao_contrato, name='saas-contrato-padrao-salvar'),

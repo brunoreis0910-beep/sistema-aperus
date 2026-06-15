@@ -29,12 +29,12 @@ class GraficosComparativosView(APIView):
                             status=403
                         )
                 except Exception as e:
-                    print(f"❌ Erro ao verificar permissões: {e}")
+                    print(f"[ERRO] Erro ao verificar permissões: {e}")
                     return Response({'error': 'Erro ao verificar permissões.'}, status=500)
             
             # Data atual
             hoje = datetime.now()
-            print(f"📊 Iniciando busca de dados comparativos para {hoje}")
+            print(f"[GRAFICOS] Iniciando busca de dados comparativos para {hoje}")
 
             # Permitir filtro por período via query params: ?inicio=YYYY-MM-DD&fim=YYYY-MM-DD
             inicio_param = request.query_params.get('inicio') or request.query_params.get('start')
@@ -51,7 +51,7 @@ class GraficosComparativosView(APIView):
                 # Normalizar início ao começo do dia e fim ao final do dia
                 mes_atual_inicio = inicio_dt.replace(hour=0, minute=0, second=0, microsecond=0)
                 mes_atual_fim = fim_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-                print(f"🔎 Usando período filtrado: {mes_atual_inicio} até {mes_atual_fim}")
+                print(f"[FILTRO] Usando período filtrado: {mes_atual_inicio} até {mes_atual_fim}")
             else:
                 # Períodos para comparação por padrão: mês atual
                 mes_atual_inicio = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -114,17 +114,17 @@ class GraficosComparativosView(APIView):
                 ano_passado_fim = ano_passado_inicio.replace(day=ultimo_dia_ano_passado, hour=23, minute=59, second=59)
             
             # Query para vendas
-            print(f"📅 Períodos: {mes_atual_inicio} a {mes_atual_fim}")
+            print(f"[PERIODO] Períodos: {mes_atual_inicio} a {mes_atual_fim}")
             with connection.cursor() as cursor:
                 # Vendas mês atual - usando DATE() para ignorar hora
-                print("🔍 Buscando vendas do mês atual...")
+                print("[BUSCA] Buscando vendas do mês atual...")
                 cursor.execute("""
                     SELECT COALESCE(SUM(valor_total), 0) as total, COUNT(*) as quantidade
                     FROM vendas
                     WHERE DATE(data_documento) >= DATE(%s) AND DATE(data_documento) <= DATE(%s)
                 """, [mes_atual_inicio, mes_atual_fim])
                 vendas_mes_atual = cursor.fetchone()
-                print(f"✅ Vendas mês atual: {vendas_mes_atual}")
+                print(f"[OK] Vendas mês atual: {vendas_mes_atual}")
                 
                 # Vendas mês anterior
                 cursor.execute("""
@@ -193,7 +193,7 @@ class GraficosComparativosView(APIView):
                 # Contas a receber - com ou sem filtro de período
                 if inicio_param and fim_param:
                     # Com filtro: buscar apenas do período selecionado
-                    print(f"🔍 Buscando contas a receber do período {mes_atual_inicio} até {mes_atual_fim}")
+                    print(f"[BUSCA] Buscando contas a receber do período {mes_atual_inicio} até {mes_atual_fim}")
                     cursor.execute("""
                         SELECT 
                             COUNT(*) as total_contas,
@@ -212,7 +212,7 @@ class GraficosComparativosView(APIView):
                     """, [mes_atual_inicio, mes_atual_fim, mes_atual_inicio, mes_atual_fim, mes_atual_inicio, mes_atual_fim])
                 else:
                     # Sem filtro: buscar TODAS as contas ativas
-                    print(f"🔍 Buscando TODAS as contas a receber (sem filtro de período)")
+                    print(f"[BUSCA] Buscando TODAS as contas a receber (sem filtro de período)")
                     cursor.execute("""
                         SELECT 
                             COUNT(*) as total_contas,
@@ -226,12 +226,12 @@ class GraficosComparativosView(APIView):
                     """)
                 
                 contas_receber_atual = cursor.fetchone()
-                print(f"✅ Resumo contas a receber: Total={contas_receber_atual[0]}, Valor Total={contas_receber_atual[1]}, Pago={contas_receber_atual[4]}/{contas_receber_atual[2]}, Pendente={contas_receber_atual[5]}/{contas_receber_atual[3]}")
+                print(f"[OK] Resumo contas a receber: Total={contas_receber_atual[0]}, Valor Total={contas_receber_atual[1]}, Pago={contas_receber_atual[4]}/{contas_receber_atual[2]}, Pendente={contas_receber_atual[5]}/{contas_receber_atual[3]}")
                 
                 # Contas a pagar - com ou sem filtro de período
                 if inicio_param and fim_param:
                     # Com filtro: buscar apenas do período selecionado
-                    print(f"🔍 Buscando contas a pagar do período {mes_atual_inicio} até {mes_atual_fim}")
+                    print(f"[BUSCA] Buscando contas a pagar do período {mes_atual_inicio} até {mes_atual_fim}")
                     cursor.execute("""
                         SELECT 
                             COUNT(*) as total_contas,
@@ -250,7 +250,7 @@ class GraficosComparativosView(APIView):
                     """, [mes_atual_inicio, mes_atual_fim, mes_atual_inicio, mes_atual_fim, mes_atual_inicio, mes_atual_fim])
                 else:
                     # Sem filtro: buscar TODAS as contas ativas
-                    print(f"🔍 Buscando TODAS as contas a pagar (sem filtro de período)")
+                    print(f"[BUSCA] Buscando TODAS as contas a pagar (sem filtro de período)")
                     cursor.execute("""
                         SELECT 
                             COUNT(*) as total_contas,
@@ -264,7 +264,7 @@ class GraficosComparativosView(APIView):
                     """)
                 
                 contas_pagar_atual = cursor.fetchone()
-                print(f"✅ Resumo contas a pagar: Total={contas_pagar_atual[0]}, Valor Total={contas_pagar_atual[1]}, Pago={contas_pagar_atual[4]}/{contas_pagar_atual[2]}, Pendente={contas_pagar_atual[5]}/{contas_pagar_atual[3]}")
+                print(f"[OK] Resumo contas a pagar: Total={contas_pagar_atual[0]}, Valor Total={contas_pagar_atual[1]}, Pago={contas_pagar_atual[4]}/{contas_pagar_atual[2]}, Pendente={contas_pagar_atual[5]}/{contas_pagar_atual[3]}")
             
             # Calcular variações percentuais
             def calcular_variacao(atual, anterior):
@@ -286,9 +286,9 @@ class GraficosComparativosView(APIView):
             def formatar_periodo(data):
                 return f"{meses_pt[data.month]}/{data.year}"
             
-            print(f"📊 Vendas atual: {vendas_mes_atual}")
-            print(f"📊 Compras atual: {compras_mes_atual}")
-            print(f"📊 Devoluções atual: {devolucoes_mes_atual}")
+            print(f"[GRAFICOS] Vendas atual: {vendas_mes_atual}")
+            print(f"[GRAFICOS] Compras atual: {compras_mes_atual}")
+            print(f"[GRAFICOS] Devoluções atual: {devolucoes_mes_atual}")
             
             resultado = {
                 'periodos': {
@@ -398,7 +398,7 @@ class GraficosComparativosView(APIView):
                 }
             }
             
-            print(f"✅ Resultado final:")
+            print(f"[OK] Resultado final:")
             print(f"   Vendas: Atual={resultado['vendas']['mes_atual']['total']}, Anterior={resultado['vendas']['mes_anterior']['total']}")
             print(f"   Compras: Atual={resultado['compras']['mes_atual']['total']}, Anterior={resultado['compras']['mes_anterior']['total']}")
             print(f"   Devoluções: Atual={resultado['devolucoes']['mes_atual']['total']}, Anterior={resultado['devolucoes']['mes_anterior']['total']}")
@@ -408,7 +408,7 @@ class GraficosComparativosView(APIView):
             return Response(resultado)
             
         except Exception as e:
-            print(f"❌ Erro ao buscar dados comparativos:")
+            print(f"[ERRO] Erro ao buscar dados comparativos:")
             print(traceback.format_exc())
             return Response({
                 'error': str(e),

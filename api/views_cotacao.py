@@ -17,7 +17,7 @@ try:
     )
     COTACAO_AVAILABLE = True
 except ImportError as e:
-    print(f"⚠️ Aviso: Cotacao e seus modelos não puderam ser importados: {e}")
+    print(f"[AVISO] Aviso: Cotacao e seus modelos não puderam ser importados: {e}")
     Cotacao = None
     CotacaoItem = None
     CotacaoFornecedor = None

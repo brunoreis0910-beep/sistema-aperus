@@ -105,6 +105,9 @@ export default function MDFePage() {
     contratante_cnpj: '',
     responsavel_seguro_cpf_cnpj: '',
     tipo_carga: '05', // 05=Carga geral
+    distancia_km: '',
+    numero_ciot: '',
+    ciot_cpf_cnpj: '',
     produto_ncm: '',
     averbacao: '',
     tomador_servico: '',
@@ -305,6 +308,9 @@ export default function MDFePage() {
       contratante_cnpj: '',
       responsavel_seguro_cpf_cnpj: '',
       tipo_carga: '05',
+      distancia_km: '',
+      numero_ciot: '',
+      ciot_cpf_cnpj: '',
       produto_ncm: '',
       averbacao: '',
       tomador_servico: '',
@@ -394,6 +400,9 @@ export default function MDFePage() {
       contratante_cnpj: mdfe.contratante_cnpj || '',
       responsavel_seguro_cpf_cnpj: mdfe.responsavel_seguro_cpf_cnpj || '',
       tipo_carga: mdfe.tipo_carga || '05',
+      distancia_km: mdfe.distancia_km || '',
+      numero_ciot: mdfe.numero_ciot || '',
+      ciot_cpf_cnpj: mdfe.ciot_cpf_cnpj || '',
       produto_ncm: mdfe.produto_ncm || '',
       averbacao: mdfe.averbacao || '',
       tomador_servico: String(mdfe.tomador_servico || ''),
@@ -800,6 +809,9 @@ export default function MDFePage() {
         contratante_cnpj: form.contratante_cnpj ? form.contratante_cnpj.replace(/\D/g, '') : null,
         responsavel_seguro_cpf_cnpj: form.responsavel_seguro_cpf_cnpj ? form.responsavel_seguro_cpf_cnpj.replace(/\D/g, '') : null,
         tipo_carga: form.tipo_carga,
+        distancia_km: form.distancia_km ? parseFloat(form.distancia_km) : null,
+        numero_ciot: form.numero_ciot || null,
+        ciot_cpf_cnpj: form.ciot_cpf_cnpj ? form.ciot_cpf_cnpj.replace(/\D/g, '') : null,
         produto_ncm: form.produto_ncm || null,
         averbacao: form.averbacao || null,
         tomador_servico: form.tipo_emitente === '1' ? parseInt(form.tomador_servico) : null,
@@ -1552,6 +1564,47 @@ export default function MDFePage() {
                     onChange={e => setForm({...form, averbacao: e.target.value})}
                     placeholder="123456789"
                     helperText="Se houver seguro"
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom sx={{ mt: 2 }}>🚚 Informações de CIOT e Percurso (Opcional)</Typography>
+                  <Divider sx={{ mb: 1 }} />
+                </Grid>
+
+                <Grid item xs={4}>
+                  <TextField
+                    fullWidth
+                    label="Número do CIOT"
+                    value={form.numero_ciot}
+                    onChange={e => setForm({...form, numero_ciot: e.target.value})}
+                    placeholder="123456789012"
+                    inputProps={{ maxLength: 12 }}
+                    helperText="CIOT de 12 dígitos"
+                  />
+                </Grid>
+
+                <Grid item xs={4}>
+                  <TextField
+                    fullWidth
+                    label="CPF/CNPJ Contratante CIOT"
+                    value={form.ciot_cpf_cnpj}
+                    onChange={e => setForm({...form, ciot_cpf_cnpj: e.target.value})}
+                    placeholder="00.000.000/0000-00"
+                    inputProps={{ maxLength: 18 }}
+                    helperText="CPF/CNPJ de quem pagará o frete"
+                  />
+                </Grid>
+
+                <Grid item xs={4}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Distância (KM)"
+                    value={form.distancia_km}
+                    onChange={e => setForm({...form, distancia_km: e.target.value})}
+                    placeholder="Ex: 350"
+                    helperText="Distância percorrida em KM"
                   />
                 </Grid>
 

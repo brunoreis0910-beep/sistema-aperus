@@ -23,11 +23,25 @@ export const formatCPF = (value) => {
 
 // função para formatar telefone
 export const formatTelefone = (value) => {
-  const v = cleanString(value);
-  if (v.length <= 10) {
-    return v.replace(/^(\d{2})(\d{4})(\d{4})$/, '($1) $2-$3');
+  if (!value) return '';
+  let v = cleanString(value);
+  
+  // Se tiver DDI 55 no início e for um número brasileiro completo (12 ou 13 dígitos)
+  if (v.startsWith('55') && (v.length === 12 || v.length === 13)) {
+    v = v.slice(2);
   }
-  return v.replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3');
+  
+  if (v.length === 0) return '';
+  if (v.length <= 2) {
+    return `(${v}`;
+  }
+  if (v.length <= 6) {
+    return `(${v.slice(0, 2)}) ${v.slice(2)}`;
+  }
+  if (v.length <= 10) {
+    return `(${v.slice(0, 2)}) ${v.slice(2, 6)}-${v.slice(6)}`;
+  }
+  return `(${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7, 11)}`;
 };
 
 // função para formatar CEP

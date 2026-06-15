@@ -141,11 +141,11 @@ class NfeXmlBuilder:
             elif modelo_raw == '99' or not modelo_raw.isdigit():
                 # Documentos não fiscais ou valores inválidos: usar NFCe por padrão
                 modelo = "65"
-                logger.warning(f"⚠️ modelo_documento inválido '{modelo_raw}' na operação {self.venda.id_operacao.nome_operacao}. Usando '65' (NFCe) como padrão.")
+                logger.warning(f"[AVISO] modelo_documento inválido '{modelo_raw}' na operação {self.venda.id_operacao.nome_operacao}. Usando '65' (NFCe) como padrão.")
             else:
                 modelo = modelo_raw
         
-        logger.info(f"📋 Modelo documento: {modelo}")
+        logger.info(f"? Modelo documento: {modelo}")
         
         # Logica para obter Serie e Numero da Operacao se disponivel
         serie_val = self.venda.serie_nfe or 1
@@ -179,7 +179,7 @@ class NfeXmlBuilder:
                     raise ValueError(f"Valor não numérico: '{serie_val}'")
                 serie_val = int(serie_str)
             except (ValueError, TypeError, AttributeError) as e:
-                logger.error(f"⚠️ ERRO: serie_val inválido! Valor recebido: '{serie_val}' | Venda ID: {self.venda.id_venda}")
+                logger.error(f"[AVISO] ERRO: serie_val inválido! Valor recebido: '{serie_val}' | Venda ID: {self.venda.id_venda}")
                 logger.error(f"   Operação: {self.venda.id_operacao.nome_operacao if self.venda.id_operacao else 'N/A'}")
                 logger.error(f"   Tipo: {type(serie_val)} | Erro: {e}")
                 serie_val = 1  # Fallback para série 1
@@ -194,7 +194,7 @@ class NfeXmlBuilder:
                     raise ValueError(f"Valor não numérico: '{numero_val}'")
                 numero_val = int(numero_str)
             except (ValueError, TypeError, AttributeError) as e:
-                logger.error(f"⚠️ ERRO: numero_val inválido! Valor recebido: '{numero_val}' | Venda ID: {self.venda.id_venda}")
+                logger.error(f"[AVISO] ERRO: numero_val inválido! Valor recebido: '{numero_val}' | Venda ID: {self.venda.id_venda}")
                 logger.error(f"   Operação: {self.venda.id_operacao.nome_operacao if self.venda.id_operacao else 'N/A'}")
                 logger.error(f"   Tipo: {type(numero_val)} | Erro: {e}")
                 numero_val = self.venda.id_venda  # Fallback para ID da venda
@@ -1382,7 +1382,7 @@ class NfeXmlBuilder:
                             hashes.SHA1()
                         )
                         signature_b64 = base64.b64encode(sig_bytes).decode('utf-8')
-                        logger.info("✓ Assinatura do QR Code v3 gerada com sucesso.")
+                        logger.info("[OK] Assinatura do QR Code v3 gerada com sucesso.")
                 except Exception as e_sign:
                     logger.error(f"Erro ao gerar assinatura digital para o QR Code v3: {e_sign}")
                 

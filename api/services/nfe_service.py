@@ -337,7 +337,7 @@ class NFeService:
                         f'<qrCode>{qr_url_found}</qrCode>',
                         f'<qrCode><![CDATA[{qr_url_found}]]></qrCode>'
                     )
-                    logger.info("✓ CDATA adicionado ao QR Code NFe ANTES da assinatura")
+                    logger.info("[OK] CDATA adicionado ao QR Code NFe ANTES da assinatura")
                 
                 # --- FORCE UPDATE OF XML KEY IF NUMBER CHANGED ---
                 # If builder forced number 1, but venda obj had 2, the ID tag might have changed.

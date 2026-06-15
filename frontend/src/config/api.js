@@ -96,12 +96,18 @@ const getApiUrl = () => {
     return defaultIP;
   }
 
-  // PRIORIDADE 4: Auto-detectar pelo hostname (navegador acessando pelo IP)
+  // PRIORIDADE 4: Auto-detectar pelo hostname (navegador acessando pelo IP ou domínio)
   const hostname = window.location.hostname;
   if (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname) {
-    const autoUrl = `http://${hostname}:${SERVIDOR_PORTA}`;
-    console.log('🔍 IP auto-detectado pelo hostname:', autoUrl);
-    return autoUrl;
+    const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(hostname);
+    if (isIP) {
+      const autoUrl = `http://${hostname}:${SERVIDOR_PORTA}`;
+      console.log('🔍 IP auto-detectado pelo hostname:', autoUrl);
+      return autoUrl;
+    } else {
+      console.log('🌐 Domínio público detectado - usando origem da página:', window.location.origin);
+      return window.location.origin;
+    }
   }
 
   // FALLBACK: localhost (dev local)

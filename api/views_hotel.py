@@ -395,6 +395,29 @@ class ReservaViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(reserva).data)
 
     @action(detail=True, methods=['post'])
+    def cancelar(self, request, pk=None):
+        """Cancela a reserva e libera o quarto."""
+        reserva = self.get_object()
+        
+        if reserva.status_reserva in ['finalizada', 'cancelada', 'noshow']:
+            return Response(
+                {"error": f"Não é possível cancelar uma reserva com status '{reserva.get_status_reserva_display()}'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        with transaction.atomic():
+            reserva.status_reserva = 'cancelada'
+            reserva.save()
+            
+            # Libera o quarto se ele estiver ocupado
+            quarto = reserva.quarto
+            if quarto.status_atual == 'ocupado':
+                quarto.status_atual = 'disponivel'
+                quarto.save()
+                
+        return Response(self.get_serializer(reserva).data)
+
+    @action(detail=True, methods=['post'])
     def checkout(self, request, pk=None):
         """Realiza o check-out, calcula valores e gera faturamento/venda no Aperus."""
         reserva = self.get_object()

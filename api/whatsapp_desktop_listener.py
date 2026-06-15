@@ -24,8 +24,6 @@ import re
 import time
 import logging
 import threading
-import pyperclip
-import pyautogui
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +38,6 @@ _ultima_mensagem_lock = threading.Lock()
 _listener_thread: threading.Thread | None = None
 _stop_event = threading.Event()
 _status = "stopped"   # stopped | running | error
-
-pyautogui.FAILSAFE = False  # Desativa failsafe (mover mouse ao canto pausa o bot)
-pyautogui.PAUSE = 0.1       # Pausa mínima entre ações
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -69,7 +64,7 @@ def iniciar_listener():
     )
     _listener_thread.start()
     _status = "running"
-    logger.info("✅ Listener WhatsApp Desktop iniciado.")
+    logger.info("[OK] Listener WhatsApp Desktop iniciado.")
 
 
 def parar_listener():
@@ -207,6 +202,11 @@ def _capturar_ultima_mensagem_recebida() -> str:
     Retorna o texto capturado (str) ou "" em caso de falha.
     """
     try:
+        import pyperclip
+        import pyautogui
+        pyautogui.FAILSAFE = False
+        pyautogui.PAUSE = 0.1
+
         # Salva o conteúdo atual do clipboard para restaurar depois
         clipboard_anterior = ""
         try:

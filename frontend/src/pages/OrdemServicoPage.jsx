@@ -2336,6 +2336,37 @@ const OrdemServicoPage = () => {
     const tipoImpressao = configImpressao.tipo_impressora;
     const usarTermica = tipoImpressao === 'termica';
     const usarFotosAssinatura = tipoImpressao === 'a4_fotos';
+
+    if (tipoImpressao === 'personalizado') {
+      try {
+        const response = await axiosInstance.get(`/ordem-servico/${ordem.id_os}/`);
+        const ordemCompleta = response.data;
+        
+        const gNome = configImpressao.gabarito_customizado_nome || 'ordem_servico';
+        let cnpj = (ordemCompleta.empresa_info?.cnpj || '').replace(/\D/g, '');
+        
+        if (!cnpj) {
+          try {
+            const resEmpresa = await axiosInstance.get('/empresa/');
+            const empData = Array.isArray(resEmpresa.data) ? resEmpresa.data[0] : (resEmpresa.data?.results?.[0] || resEmpresa.data);
+            cnpj = (empData?.cpf_cnpj || '').replace(/\D/g, '');
+          } catch (e) {
+            console.warn('⚠️ Erro ao buscar CNPJ da empresa:', e);
+          }
+        }
+
+        const url = `/api/saas/gabarito-gerar/?nome_relatorio=${gNome}&os=${ordem.id_os}&cnpj=${cnpj}`;
+        window.open(url, '_blank');
+        return;
+      } catch (err) {
+        console.error('Erro ao buscar dados para impressão personalizada:', err);
+        const gNome = configImpressao.gabarito_customizado_nome || 'ordem_servico';
+        const url = `/api/saas/gabarito-gerar/?nome_relatorio=${gNome}&os=${ordem.id_os}`;
+        window.open(url, '_blank');
+        return;
+      }
+    }
+
     try {
       // Buscar dados completos da ordem incluindo financeiro
       const response = await axiosInstance.get(`/ordem-servico/${ordem.id_os}/`);

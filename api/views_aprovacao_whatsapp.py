@@ -124,7 +124,7 @@ def _enviar_whatsapp(telefone: str, mensagem: str) -> bool:
         #     )
         #     return False
         
-        logger.info(f"🖥️ [DESKTOP MODE] Enviando mensagem via WhatsApp Desktop App...")
+        logger.info(f"?? [DESKTOP MODE] Enviando mensagem via WhatsApp Desktop App...")
         return service.enviar_mensagem(telefone, mensagem)
     except Exception as e:
         logger.error(f"[WhatsApp View] Falha ao enviar mensagem: {e}")
@@ -626,7 +626,7 @@ class SolicitarDescontoWhatsAppView(APIView):
                     return f'http://{candidatos[0]}:{porta}'
 
                 host = _detectar_ip_lan(_port)
-                logger.info(f"🌐 [HOST] IP detectado para links WhatsApp: {host}")
+                logger.info(f"[WEB] [HOST] IP detectado para links WhatsApp: {host}")
         except Exception:
             host = config('SERVER_HOST', default='http://localhost:8000')
 
@@ -1428,7 +1428,7 @@ class ResponderAprovacaoView(APIView):
         solicitacao.dados_solicitacao = json.dumps(dados, ensure_ascii=False)
         solicitacao.save()
 
-        logger.info("Solicitação #%s → %s via link WhatsApp", pk, novo_status)
+        logger.info("Solicitação #%s ? %s via link WhatsApp", pk, novo_status)
 
         cor      = "#4CAF50" if aprovado else "#f44336"
         emoji    = "✅" if aprovado else "❌"

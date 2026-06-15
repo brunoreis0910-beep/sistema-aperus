@@ -121,7 +121,7 @@ class CashbackViewSet(viewsets.ModelViewSet):
             'tem_cashback': saldo_total > 0
         }
         
-        print(f'💰 [CASHBACK] Saldo consultado: Cliente {cliente_id} = R$ {saldo_total}')
+        print(f'[FINANCEIRO] [CASHBACK] Saldo consultado: Cliente {cliente_id} = R$ {saldo_total}')
         
         return Response(resultado, status=status.HTTP_200_OK)
 
@@ -263,7 +263,7 @@ class CashbackViewSet(viewsets.ModelViewSet):
             
             valor_restante -= usar_deste
             
-            print(f'💳 [CASHBACK] Utilizado: R$ {usar_deste} do cashback #{cb.pk}')
+            print(f'[PAGAMENTO] [CASHBACK] Utilizado: R$ {usar_deste} do cashback #{cb.pk}')
         
         # Calcular saldo restante
         saldo_restante = sum(
@@ -283,7 +283,7 @@ class CashbackViewSet(viewsets.ModelViewSet):
             'venda_id': venda.pk
         }
         
-        print(f'✅ [CASHBACK] Utilização completa: R$ {valor_utilizar} aplicado na venda #{venda.pk}')
+        print(f'[OK] [CASHBACK] Utilização completa: R$ {valor_utilizar} aplicado na venda #{venda.pk}')
         
         return Response(resultado, status=status.HTTP_200_OK)
 
@@ -361,7 +361,7 @@ class CashbackViewSet(viewsets.ModelViewSet):
             cb.ativo = False
             cb.save()
             
-            print(f'⏰ [CASHBACK] Expirado: #{cb.pk} - Cliente {cb.id_cliente.pk} - R$ {cb.saldo}')
+            print(f'? [CASHBACK] Expirado: #{cb.pk} - Cliente {cb.id_cliente.pk} - R$ {cb.saldo}')
         
         return Response({
             'expirados': count,

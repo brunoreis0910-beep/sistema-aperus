@@ -186,7 +186,7 @@ class NotificacoesIniciaisView(APIView):
                     from api.models import SaaSClienteMensalidade
                     mensalidades_pendentes = SaaSClienteMensalidade.objects.using(db_name).filter(
                         saas_cliente=cliente_saas,
-                        status_pagamento='PENDENTE'
+                        status_pagamento__in=['PENDENTE', 'VENCIDO']
                     ).order_by('data_vencimento')
                     
                     if mensalidades_pendentes.exists():

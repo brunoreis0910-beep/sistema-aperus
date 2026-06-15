@@ -74,9 +74,9 @@ class ConfiguracaoProdutoViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         """Cria nova configuração"""
         print("=" * 60)
-        print("🆕 CRIAR CONFIGURAÇÃO DE PRODUTO")
+        print("? CRIAR CONFIGURAÇÃO DE PRODUTO")
         print("=" * 60)
-        print("📥 Dados recebidos:", request.data)
+        print("? Dados recebidos:", request.data)
         print("=" * 60)
         return super().create(request, *args, **kwargs)
     

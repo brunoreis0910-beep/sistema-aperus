@@ -119,6 +119,23 @@ const DashboardLayoutClean = () => {
     };
     fetchEmpresa();
   }, [axiosInstance]);
+
+  const [gabaritos, setGabaritos] = React.useState([]);
+
+  React.useEffect(() => {
+    const fetchGabaritos = async () => {
+      try {
+        const res = await axiosInstance.get('/saas-gabaritos/');
+        const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+        setGabaritos(list.filter(g => g.ativo));
+      } catch (err) {
+        console.error("Erro ao carregar gabaritos no layout", err);
+      }
+    };
+    if (user) {
+      fetchGabaritos();
+    }
+  }, [axiosInstance, user]);
   const theme = useTheme();
   const { isOnline, servidorOk, totalPendentes, sincronizando, sincronizar } = useOfflineSync();
   const pendentes = totalPendentes || 0;
@@ -208,59 +225,71 @@ const DashboardLayoutClean = () => {
   });
 
   // Sub-itens para menus expansíveis (usados no drawer mobile)
-  const subMenuItems = React.useMemo(() => ({
-    trocas: [
-      { label: 'Listar Trocas', path: '/trocas', icon: <TrocasIcon /> },
-      { label: 'Nova Troca', path: '/trocas/nova', icon: <TrocasIcon /> },
-    ],
-    relatorios: [
-      { label: 'Vendas', path: '/relatorios/vendas', icon: <VendasIcon sx={{ color: '#fff' }} /> },
-      { label: 'Estoque', path: '/relatorios?categoria=estoque', icon: <ProdutosIcon sx={{ color: '#fff' }} /> },
-      { label: 'Compras', path: '/relatorios?categoria=compras', icon: <ComprasIcon sx={{ color: '#fff' }} /> },
-      { label: 'Financeiro', path: '/relatorios?categoria=financeiro', icon: <FinanceiroIcon sx={{ color: '#fff' }} /> },
-      { label: 'DRE', path: '/relatorios/dre', icon: <AssessmentIcon sx={{ color: '#fff' }} /> },
-      { label: 'Clientes', path: '/relatorios/clientes', icon: <ClientesIcon sx={{ color: '#fff' }} /> },
-      { label: 'Produtos', path: '/relatorios/produtos', icon: <ProdutosIcon sx={{ color: '#fff' }} /> },
-      { label: 'Desempenho', path: '/relatorios?categoria=desempenho', icon: <GraficosIcon sx={{ color: '#fff' }} /> },
-      { label: 'Comissões', path: '/relatorios/comissoes', icon: <MonetizationOnIcon sx={{ color: '#fff' }} /> },
-      { label: 'Cashback', path: '/relatorios/cashback', icon: <MonetizationOnIcon sx={{ color: '#fff' }} /> },
-      { label: 'Lucratividade', path: '/relatorios/lucratividade', icon: <GraficosIcon sx={{ color: '#fff' }} /> },
-      { label: 'Projeção de Compras', path: '/relatorios/projecao-compra', icon: <ComprasIcon sx={{ color: '#fff' }} /> },
-      { label: 'Inventário', path: '/relatorios/inventario', icon: <ProdutosIcon sx={{ color: '#fff' }} /> },
-      { label: 'Comandas', path: '/relatorios?categoria=comandas', icon: <ReceiptIcon sx={{ color: '#fff' }} /> },
-      { label: 'CT-e', path: '/relatorios/cte', icon: <LocalShipping sx={{ color: '#fff' }} /> },
-      { label: 'MDF-e', path: '/relatorios/mdfe', icon: <Description sx={{ color: '#fff' }} /> },
-      { label: 'Ficha de Produto', path: '/relatorios/ficha-produto', icon: <AssessmentIcon sx={{ color: '#fff' }} /> },
-      { label: 'Ficha do Veículo', path: '/relatorios/ficha-veiculo', icon: <AssessmentIcon sx={{ color: '#fff' }} /> },
-      { label: 'Ficha do Cliente', path: '/relatorios/ficha-cliente', icon: <AssessmentIcon sx={{ color: '#fff' }} /> },
-    ],
-    opcoes: [
-      ...(can('produtos_acessar') ? [{ label: 'Etiquetas', path: '/etiquetas', icon: <EtiquetasIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('produtos_editar') ? [{ label: 'Ajustar Estoque', path: '/estoque-config', icon: <AjusteIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('produtos_acessar') ? [{ label: 'Consulta Estoque', path: '/consulta-estoque', icon: <InventoryIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('produtos_editar') ? [{ label: 'Tabela Comercial', path: '/tabela-comercial', icon: <MonetizationOnIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('produtos_acessar') ? [{ label: 'Veículos', path: '/veiculos', icon: <DirectionsCarIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('financeiro_acessar') ? [{ label: 'Cheques', path: '/cheques', icon: <PaymentIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('produtos_acessar') ? [{ label: 'Equipamentos', path: '/equipamentos', icon: <BusinessCenterIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('financeiro_acessar') ? [{ label: 'Aluguel', path: '/alugueis', icon: <BusinessCenterIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('config_acessar') ? [{ label: 'Config. Contrato', path: '/configuracao-contrato', icon: <BusinessCenterIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('nfe_acessar') ? [{ label: 'Manifestação NF-e', path: '/manifestacao-destinatario', icon: <ReceiptIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('whatsapp_acessar') ? [{ label: 'WhatsApp em Massa', path: '/whatsapp', icon: <WhatsAppIcon sx={{ color: '#fff' }} /> }] : []),
-      { label: 'Debug Conexão', path: '/debug-conexao', icon: <AssessmentIcon sx={{ color: '#fff' }} /> },
-      ...(can('mapa_promocao_acessar') ? [{ label: 'Mapa de Promoção', path: '/mapa-promocao', icon: <AddIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('relatorios_acessar') ? [{ label: 'Ficha de Produto', path: '/relatorios/ficha-produto', icon: <AssessmentIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('relatorios_acessar') ? [{ label: 'Ficha do Veículo', path: '/relatorios/ficha-veiculo', icon: <AssessmentIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('petshop_acessar') ? [{ label: 'Pet Shop - Banho e Tosa', path: '/pet-shop', icon: <PetIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('petshop_acessar') ? [{ label: 'Clínica Veterinária', path: '/clinica-veterinaria', icon: <PetIcon sx={{ color: '#fff' }} /> }] : []),
-      ...(can('ordens_acessar') ? [{ label: 'Status Ordem de Serviço', path: '/status-ordem-servico', icon: <OrdemServicoIcon sx={{ color: '#fff' }} /> }] : []),
-      { label: 'CRM — Pipeline', path: '/crm', icon: <CRMIcon sx={{ color: '#fff' }} /> },
-      { label: 'Recursos Humanos', path: '/rh', icon: <RHIcon sx={{ color: '#fff' }} /> },
-      { label: 'Terminal de Ponto', path: '/ponto', icon: <AccessTimeIcon sx={{ color: '#fff' }} /> },
-      { label: 'Pix Dinâmico', path: '/pix', icon: <QrCodeIcon sx={{ color: '#fff' }} /> },
-      { label: 'Contratos de Recorrência', path: '/recorrencia', icon: <RecorrenciaIcon sx={{ color: '#fff' }} /> },
-      { label: 'Análise de Churn', path: '/churn', icon: <ChurnIcon sx={{ color: '#fff' }} /> },
-    ],
-  }), [can]);
+  const subMenuItems = React.useMemo(() => {
+    const customReports = gabaritos.map(g => ({
+      label: g.nome_relatorio,
+      path: `/relatorios?tab=1&gabarito=${g.nome_relatorio}`,
+      icon: <AssessmentIcon sx={{ color: '#fff' }} />
+    }));
+
+    return {
+      trocas: [
+        { label: 'Listar Trocas', path: '/trocas', icon: <TrocasIcon /> },
+        { label: 'Nova Troca', path: '/trocas/nova', icon: <TrocasIcon /> },
+      ],
+      relatorios: [
+        { label: 'Vendas', path: '/relatorios/vendas', icon: <VendasIcon sx={{ color: '#fff' }} /> },
+        { label: 'Estoque', path: '/relatorios?categoria=estoque', icon: <ProdutosIcon sx={{ color: '#fff' }} /> },
+        { label: 'Compras', path: '/relatorios?categoria=compras', icon: <ComprasIcon sx={{ color: '#fff' }} /> },
+        { label: 'Financeiro', path: '/relatorios?categoria=financeiro', icon: <FinanceiroIcon sx={{ color: '#fff' }} /> },
+        { label: 'DRE', path: '/relatorios/dre', icon: <AssessmentIcon sx={{ color: '#fff' }} /> },
+        { label: 'Clientes', path: '/relatorios/clientes', icon: <ClientesIcon sx={{ color: '#fff' }} /> },
+        { label: 'Produtos', path: '/relatorios/produtos', icon: <ProdutosIcon sx={{ color: '#fff' }} /> },
+        { label: 'Desempenho', path: '/relatorios?categoria=desempenho', icon: <GraficosIcon sx={{ color: '#fff' }} /> },
+        { label: 'Comissões', path: '/relatorios/comissoes', icon: <MonetizationOnIcon sx={{ color: '#fff' }} /> },
+        { label: 'Cashback', path: '/relatorios/cashback', icon: <MonetizationOnIcon sx={{ color: '#fff' }} /> },
+        { label: 'Lucratividade', path: '/relatorios/lucratividade', icon: <GraficosIcon sx={{ color: '#fff' }} /> },
+        { label: 'Projeção de Compras', path: '/relatorios/projecao-compra', icon: <ComprasIcon sx={{ color: '#fff' }} /> },
+        { label: 'Inventário', path: '/relatorios/inventario', icon: <ProdutosIcon sx={{ color: '#fff' }} /> },
+        { label: 'Comandas', path: '/relatorios?categoria=comandas', icon: <ReceiptIcon sx={{ color: '#fff' }} /> },
+        { label: 'CT-e', path: '/relatorios/cte', icon: <LocalShipping sx={{ color: '#fff' }} /> },
+        { label: 'MDF-e', path: '/relatorios/mdfe', icon: <Description sx={{ color: '#fff' }} /> },
+        { label: 'Ficha de Produto', path: '/relatorios/ficha-produto', icon: <AssessmentIcon sx={{ color: '#fff' }} /> },
+        { label: 'Ficha do Veículo', path: '/relatorios/ficha-veiculo', icon: <AssessmentIcon sx={{ color: '#fff' }} /> },
+        { label: 'Ficha do Cliente', path: '/relatorios/ficha-cliente', icon: <AssessmentIcon sx={{ color: '#fff' }} /> },
+        ...(customReports.length > 0 ? [
+          { label: '--- Personalizados ---', path: '/relatorios?tab=1', icon: null, isDisabledHeader: true }
+        ] : []),
+        ...customReports
+      ],
+      opcoes: [
+        ...(can('produtos_acessar') ? [{ label: 'Etiquetas', path: '/etiquetas', icon: <EtiquetasIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('produtos_editar') ? [{ label: 'Ajustar Estoque', path: '/estoque-config', icon: <AjusteIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('produtos_acessar') ? [{ label: 'Consulta Estoque', path: '/consulta-estoque', icon: <InventoryIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('produtos_editar') ? [{ label: 'Tabela Comercial', path: '/tabela-comercial', icon: <MonetizationOnIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('produtos_acessar') ? [{ label: 'Veículos', path: '/veiculos', icon: <DirectionsCarIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('financeiro_acessar') ? [{ label: 'Cheques', path: '/cheques', icon: <PaymentIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('produtos_acessar') ? [{ label: 'Equipamentos', path: '/equipamentos', icon: <BusinessCenterIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('financeiro_acessar') ? [{ label: 'Aluguel', path: '/alugueis', icon: <BusinessCenterIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('config_acessar') ? [{ label: 'Config. Contrato', path: '/configuracao-contrato', icon: <BusinessCenterIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('nfe_acessar') ? [{ label: 'Manifestação NF-e', path: '/manifestacao-destinatario', icon: <ReceiptIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('whatsapp_acessar') ? [{ label: 'WhatsApp em Massa', path: '/whatsapp', icon: <WhatsAppIcon sx={{ color: '#fff' }} /> }] : []),
+        { label: 'Debug Conexão', path: '/debug-conexao', icon: <AssessmentIcon sx={{ color: '#fff' }} /> },
+        ...(can('mapa_promocao_acessar') ? [{ label: 'Mapa de Promoção', path: '/mapa-promocao', icon: <AddIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('relatorios_acessar') ? [{ label: 'Ficha de Produto', path: '/relatorios/ficha-produto', icon: <AssessmentIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('relatorios_acessar') ? [{ label: 'Ficha do Veículo', path: '/relatorios/ficha-veiculo', icon: <AssessmentIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('petshop_acessar') ? [{ label: 'Pet Shop - Banho e Tosa', path: '/pet-shop', icon: <PetIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('petshop_acessar') ? [{ label: 'Clínica Veterinária', path: '/clinica-veterinaria', icon: <PetIcon sx={{ color: '#fff' }} /> }] : []),
+        ...(can('ordens_acessar') ? [{ label: 'Status Ordem de Serviço', path: '/status-ordem-servico', icon: <OrdemServicoIcon sx={{ color: '#fff' }} /> }] : []),
+        { label: 'CRM — Pipeline', path: '/crm', icon: <CRMIcon sx={{ color: '#fff' }} /> },
+        { label: 'Recursos Humanos', path: '/rh', icon: <RHIcon sx={{ color: '#fff' }} /> },
+        { label: 'Terminal de Ponto', path: '/ponto', icon: <AccessTimeIcon sx={{ color: '#fff' }} /> },
+        { label: 'Pix Dinâmico', path: '/pix', icon: <QrCodeIcon sx={{ color: '#fff' }} /> },
+        { label: 'Contratos de Recorrência', path: '/recorrencia', icon: <RecorrenciaIcon sx={{ color: '#fff' }} /> },
+        { label: 'Análise de Churn', path: '/churn', icon: <ChurnIcon sx={{ color: '#fff' }} /> },
+      ],
+    };
+  }, [gabaritos, can]);
 
   // Mapa completo de rota → permissão (inclui rotas que não estão no menu)
   const routePermissions = React.useMemo(() => {
@@ -498,7 +527,7 @@ const DashboardLayoutClean = () => {
           <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box
               component="img"
-              src="/logos/aperus-logo.png?v=2"
+              src="/logos/LOGO APERUS.jpeg?v=1"
               alt="Logo Aperus"
               sx={{
                 height: 44,
@@ -838,10 +867,31 @@ const DashboardLayoutClean = () => {
                   <AssessmentIcon sx={{ mr: 1, color: '#1565c0' }} />
                   Ficha do Veículo
                 </MenuItem>
-                <MenuItem onClick={() => { setRelatoriosMenuAnchor(null); navigate('/relatorios/ficha-cliente'); }}>
+                 <MenuItem onClick={() => { setRelatoriosMenuAnchor(null); navigate('/relatorios/ficha-cliente'); }}>
                   <AssessmentIcon sx={{ mr: 1, color: '#2e7d32' }} />
                   Ficha do Cliente
                 </MenuItem>
+
+                {gabaritos.length > 0 && (
+                  <>
+                    <Divider />
+                    <MenuItem disabled sx={{ opacity: 1, fontWeight: 'bold', color: 'text.secondary', fontSize: '0.85rem' }}>
+                      Relatórios Personalizados
+                    </MenuItem>
+                    {gabaritos.map(g => (
+                      <MenuItem 
+                        key={g.id} 
+                        onClick={() => { 
+                          setRelatoriosMenuAnchor(null); 
+                          navigate(`/relatorios?tab=1&gabarito=${g.nome_relatorio}`); 
+                        }}
+                      >
+                        <AssessmentIcon sx={{ mr: 1, color: '#f57c00' }} />
+                        {g.nome_relatorio}
+                      </MenuItem>
+                    ))}
+                  </>
+                )}
               </Menu>
 
               {/* Submenu de +Opções */}

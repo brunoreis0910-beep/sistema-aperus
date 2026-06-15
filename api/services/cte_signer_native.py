@@ -361,7 +361,7 @@ def test_signer():
     
     empresa = EmpresaConfig.get_ativa()
     if not empresa:
-        print("❌ Empresa não configurada")
+        print("[ERRO] Empresa não configurada")
         return
     
     print("\n" + "=" * 70)
@@ -414,19 +414,19 @@ def test_signer():
     try:
         xml_signed = signer.sign_cte_xml(xml_test)
         
-        print("\n✅ TESTE CONCLUÍDO COM SUCESSO!")
+        print("\n[OK] TESTE CONCLUÍDO COM SUCESSO!")
         print(f"\nTamanho do XML assinado: {len(xml_signed)} caracteres")
         print("\nPrimeiros 500 caracteres:")
         print(xml_signed[:500])
         
         # Verificar se tem Signature
         if '<Signature' in xml_signed and '<DigestValue>' in xml_signed:
-            print("\n✓ Tags de assinatura encontradas")
+            print("\n[OK] Tags de assinatura encontradas")
         else:
-            print("\n❌ Tags de assinatura NÃO encontradas")
+            print("\n[ERRO] Tags de assinatura NÃO encontradas")
         
     except Exception as e:
-        print(f"\n❌ ERRO NO TESTE: {e}")
+        print(f"\n[ERRO] ERRO NO TESTE: {e}")
         import traceback
         traceback.print_exc()
 

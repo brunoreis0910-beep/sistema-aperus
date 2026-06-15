@@ -1367,7 +1367,7 @@ class CompraViewSet(viewsets.ModelViewSet):
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            print(f"❌ Erro ao excluir compra {pk}:")
+            print(f"[ERRO] Erro ao excluir compra {pk}:")
             print(error_details)
             return Response({
                 'error': 'Erro ao excluir compra',

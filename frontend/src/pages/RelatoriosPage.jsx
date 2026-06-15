@@ -9,6 +9,7 @@ import {
     CardContent,
     CardActions,
     Button,
+    IconButton,
     Divider,
     Chip,
     Dialog,
@@ -25,7 +26,17 @@ import {
     FormLabel,
     Checkbox,
     Alert,
-    CircularProgress
+    CircularProgress,
+    Tabs,
+    Tab,
+    TableContainer,
+    Table,
+    TableHead,
+    TableRow,
+    TableCell,
+    TableBody,
+    Switch,
+    Stack
 } from '@mui/material';
 import {
     PictureAsPdf as PdfIcon,
@@ -43,14 +54,163 @@ import {
     MonetizationOn as ComissaoIcon,
     ShoppingCart,
     Description as DescriptionIcon,
-    Hotel as HotelIcon
+    Hotel as HotelIcon,
+    Add as AddIcon,
+    Edit as EditIcon,
+    Delete as DeleteIcon,
+    Save as SaveIcon,
+    Launch as LaunchIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
+import ReportBuilderDialog from '../components/ReportBuilderDialog';
+
+const CAMPOS_DISPONIVEIS = [
+    // Empresa
+    { label: "Logomarca da Empresa", chave: "empresa.logomarca" },
+    { label: "Razão Social da Empresa", chave: "empresa.razao_social" },
+    { label: "Nome Fantasia da Empresa", chave: "empresa.nome_fantasia" },
+    { label: "CNPJ da Empresa", chave: "empresa.cnpj" },
+    { label: "Inscrição Estadual da Empresa", chave: "empresa.inscricao_estadual" },
+    { label: "Telefone da Empresa", chave: "empresa.telefone" },
+    { label: "E-mail da Empresa", chave: "empresa.email" },
+    { label: "Endereço da Empresa", chave: "empresa.endereco" },
+    { label: "CEP da Empresa", chave: "empresa.cep" },
+
+    // Cliente
+    { label: "Nome do Cliente", chave: "cliente.nome" },
+    { label: "CPF/CNPJ Cliente", chave: "cliente.doc" },
+    { label: "Telefone Cliente", chave: "cliente.telefone" },
+    { label: "Endereço Cliente", chave: "cliente.endereco" },
+    { label: "RG/IE do Cliente", chave: "cliente.rg_ie" },
+    { label: "E-mail do Cliente", chave: "cliente.email" },
+    { label: "Bairro do Cliente", chave: "cliente.bairro" },
+    { label: "Cidade do Cliente", chave: "cliente.cidade" },
+    { label: "UF do Cliente", chave: "cliente.uf" },
+    { label: "CEP do Cliente", chave: "cliente.cep" },
+    { label: "Complemento do Cliente", chave: "cliente.complemento" },
+
+    // Venda
+    { label: "Número da Venda", chave: "venda.numero" },
+    { label: "Data da Venda", chave: "venda.data" },
+    { label: "Total da Venda", chave: "venda.total" },
+    { label: "Subtotal Venda", chave: "venda.subtotal" },
+    { label: "Desconto Venda", chave: "venda.desconto" },
+    { label: "Forma de Pagamento", chave: "venda.forma_pagamento" },
+
+    // Produto
+    { label: "Código do Produto", chave: "produto.codigo" },
+    { label: "Descrição do Produto", chave: "produto.descricao" },
+    { label: "Valor Unitário", chave: "produto.valor_unit" },
+    { label: "Quantidade", chave: "produto.quantidade" },
+    { label: "Subtotal do Item", chave: "produto.subtotal" },
+    { label: "Código de Barras", chave: "produto.codigo_barras" },
+    { label: "Unidade do Produto", chave: "produto.unidade" },
+    { label: "NCM do Produto", chave: "produto.ncm" },
+    { label: "Grupo do Produto", chave: "produto.grupo" },
+    { label: "Marca do Produto", chave: "produto.marca" },
+    { label: "Preço de Custo", chave: "produto.preco_custo" },
+    { label: "Peso Líquido", chave: "produto.peso_liquido" },
+    { label: "Peso Bruto", chave: "produto.peso_bruto" },
+
+    // Ordem de Serviço
+    { label: "Número da OS", chave: "os.numero" },
+    { label: "Data Abertura OS", chave: "os.data_abertura" },
+    { label: "Previsão/Fechamento OS", chave: "os.data_fechamento" },
+    { label: "Status da OS", chave: "os.status" },
+    { label: "Técnico Responsável", chave: "os.tecnico" },
+    { label: "Defeitos OS", chave: "os.defeitos" },
+    { label: "Laudo Técnico OS", chave: "os.laudo_tecnico" },
+    { label: "Observações OS", chave: "os.observacoes" },
+    { label: "Solicitante OS", chave: "os.solicitante" },
+    { label: "Total Produtos OS", chave: "os.total_produtos" },
+    { label: "Total Serviços OS", chave: "os.total_servicos" },
+    { label: "Total Geral OS", chave: "os.total_geral" },
+    { label: "Desconto OS", chave: "os.desconto" },
+    { label: "Subtotal OS", chave: "os.subtotal" },
+    { label: "Tabela de Itens (OS/Venda)", chave: "os.itens_tabela" },
+
+    // Veículo
+    { label: "Placa do Veículo", chave: "veiculo.placa" },
+    { label: "Marca do Veículo", chave: "veiculo.marca" },
+    { label: "Modelo do Veículo", chave: "veiculo.modelo" },
+    { label: "Ano do Veículo", chave: "veiculo.ano" },
+    { label: "Cor do Veículo", chave: "veiculo.cor" },
+    { label: "Chassi do Veículo", chave: "veiculo.chassi" },
+    { label: "UF do Veículo", chave: "veiculo.uf" },
+    { label: "Observações do Veículo", chave: "veiculo.observacoes" },
+
+    // Equipamento
+    { label: "Código Equipamento", chave: "equipamento.codigo" },
+    { label: "Nome Equipamento", chave: "equipamento.nome" },
+    { label: "Descrição Equipamento", chave: "equipamento.descricao" },
+    { label: "Categoria Equipamento", chave: "equipamento.categoria" },
+    { label: "Marca Equipamento", chave: "equipamento.marca" },
+    { label: "Modelo Equipamento", chave: "equipamento.modelo" },
+    { label: "Série Equipamento", chave: "equipamento.numero_serie" },
+    { label: "Status Equipamento", chave: "equipamento.status" },
+    { label: "Observações Equipamento", chave: "equipamento.observacoes" },
+
+    // Animal / Pet
+    { label: "Nome do Pet/Animal", chave: "animal.nome" },
+    { label: "Raça do Pet/Animal", chave: "animal.raca" },
+    { label: "Sexo do Pet/Animal", chave: "animal.sexo" },
+    { label: "Peso do Pet/Animal", chave: "animal.peso" },
+    { label: "Cor do Pet/Animal", chave: "animal.cor" },
+    { label: "Observações do Pet/Animal", chave: "animal.observacoes" },
+];
+
+const DEFAULT_LAYOUTS = {
+    venda_recibo: [
+        { id: '_1', campo_origem: 'venda.numero', x: 10, y: 10, font_size: 12, largura: 150, label: 'Número da Venda' },
+        { id: '_2', campo_origem: 'venda.data', x: 180, y: 10, font_size: 12, largura: 100, label: 'Data da Venda' },
+        { id: '_3', campo_origem: 'cliente.nome', x: 10, y: 30, font_size: 12, largura: 220, label: 'Nome do Cliente' },
+        { id: '_4', campo_origem: 'produto.codigo', x: 10, y: 65, font_size: 11, largura: 50, label: 'Código do Produto' },
+        { id: '_5', campo_origem: 'produto.descricao', x: 65, y: 65, font_size: 11, largura: 150, label: 'Descrição do Produto' },
+        { id: '_6', campo_origem: 'produto.quantidade', x: 220, y: 65, font_size: 11, largura: 40, label: 'Quantidade' },
+        { id: '_7', campo_origem: 'produto.valor_unit', x: 265, y: 65, font_size: 11, largura: 60, label: 'Valor Unitário' },
+        { id: '_8', campo_origem: 'venda.total', x: 180, y: 105, font_size: 14, largura: 100, label: 'Total da Venda' }
+    ],
+    etiqueta_gondola: [
+        { id: '_1', campo_origem: 'produto.descricao', x: 10, y: 10, font_size: 14, largura: 260, label: 'Descrição do Produto' },
+        { id: '_2', campo_origem: 'produto.codigo', x: 10, y: 40, font_size: 11, largura: 100, label: 'Código do Produto' },
+        { id: '_3', campo_origem: 'produto.valor_unit', x: 10, y: 65, font_size: 20, largura: 150, label: 'Valor Unitário' },
+        { id: '_4', campo_origem: 'produto.codigo_barras', x: 10, y: 105, font_size: 12, largura: 200, label: 'Código de Barras' }
+    ],
+    relatorio_vendas: [
+        { id: '_1', campo_origem: 'cliente.nome', x: 30, y: 30, font_size: 12, largura: 200, label: 'Nome do Cliente' },
+        { id: '_2', campo_origem: 'venda.numero', x: 250, y: 30, font_size: 12, largura: 100, label: 'Número da Venda' },
+        { id: '_3', campo_origem: 'venda.total', x: 370, y: 30, font_size: 12, largura: 120, label: 'Total da Venda' }
+    ],
+    relatorio_inventario: [
+        { id: '_1', campo_origem: 'produto.codigo', x: 30, y: 30, font_size: 12, largura: 100, label: 'Código do Produto' },
+        { id: '_2', campo_origem: 'produto.descricao', x: 150, y: 30, font_size: 12, largura: 300, label: 'Descrição do Produto' },
+        { id: '_3', campo_origem: 'produto.quantidade', x: 470, y: 30, font_size: 12, largura: 100, label: 'Quantidade' }
+    ]
+};
 
 function RelatoriosPage() {
     const { axiosInstance, user, permissions, isLoading: authLoading } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+
+    // Custom reports tabs and editor states
+    const [tabRelatorio, setTabRelatorio] = useState(() => {
+        const tabParam = searchParams.get('tab');
+        return tabParam === '1' || tabParam === 'personalizado' ? 1 : 0;
+    });
+    const [gabaritos, setGabaritos] = useState([]);
+    const [loadingGabaritos, setLoadingGabaritos] = useState(false);
+    const [baseReportModal, setBaseReportModal] = useState(false);
+    const [editorOpen, setEditorOpen] = useState(false);
+    const [editingTemplate, setEditingTemplate] = useState(null);
+    const [elementosLayout, setElementosLayout] = useState([]);
+    const [elementoSelecionado, setElementoSelecionado] = useState(null);
+    const [nomeRelatorio, setNomeRelatorio] = useState('');
+    const [tipoGabarito, setTipoGabarito] = useState('A4_RETRATO');
+    const [larguraMm, setLarguraMm] = useState(210);
+    const [alturaMm, setAlturaMm] = useState(297);
+    const [gridSnap, setGridSnap] = useState(true);
+    const [zoomScale, setZoomScale] = useState(1.0);
     const [gerando, setGerando] = useState(null);
     const [modalAberto, setModalAberto] = useState(false);
     const [relatorioSelecionado, setRelatorioSelecionado] = useState(null);
@@ -80,6 +240,7 @@ function RelatoriosPage() {
         status: 'todos',
         formato: 'pdf'
     });
+    const [empresaCnpj, setEmpresaCnpj] = useState('');
     const [clientes, setClientes] = useState([]);
     const [produtos, setProdutos] = useState([]);
     const [fornecedores, setFornecedores] = useState([]);
@@ -327,9 +488,244 @@ function RelatoriosPage() {
         carregarDados();
     }, []);
 
+    useEffect(() => {
+        const tabParam = searchParams.get('tab');
+        if (tabParam === '1' || tabParam === 'personalizado') {
+            setTabRelatorio(1);
+        } else {
+            setTabRelatorio(0);
+        }
+    }, [searchParams]);
+
+    useEffect(() => {
+        if (tabRelatorio === 1) {
+            buscarGabaritos();
+        }
+    }, [tabRelatorio]);
+
+    const buscarGabaritos = async () => {
+        setLoadingGabaritos(true);
+        try {
+            const res = await axiosInstance.get('/saas-gabaritos/');
+            const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+            setGabaritos(list);
+
+            // Se houver um gabarito específico especificado na URL, abre automaticamente os filtros
+            const gParam = searchParams.get('gabarito');
+            if (gParam) {
+                const target = list.find(g => g.nome_relatorio === gParam);
+                if (target) {
+                    const isSales = target.nome_relatorio.toLowerCase().includes('venda') || target.nome_relatorio.toLowerCase().includes('recibo');
+                    const mockReport = {
+                        id: target.nome_relatorio,
+                        titulo: target.nome_relatorio,
+                        cor: isSales ? '#1976d2' : '#d32f2f',
+                        icone: isSales ? <SalesIcon /> : <InventoryIcon />,
+                        filtrosDisponiveis: isSales 
+                            ? ['dataInicio', 'dataFim', 'cliente', 'vendedor', 'status', 'ordenacao']
+                            : ['grupo', 'marca', 'produto', 'ordenacao'],
+                        isCustom: true
+                    };
+                    setRelatorioSelecionado(mockReport);
+                    setFiltros({
+                        dataInicio: '',
+                        dataFim: '',
+                        dataRetroativa: '',
+                        cliente: '',
+                        produto: '',
+                        fornecedor: '',
+                        deposito: '',
+                        grupo: '',
+                        vendedor: '',
+                        operacao: '',
+                        formaPagamento: '',
+                        centroCusto: '',
+                        contaBaixa: '',
+                        contaLancamento: '',
+                        tipoData: 'vencimento',
+                        ordenacao: isSales ? 'data' : 'codigo',
+                        resumoPor: [],
+                        resumosVendas: [],
+                        tipoRelatorio: 'todos',
+                        tipoValor: 'todos',
+                        tipoEstoque: 'todos',
+                        tipo: 'todos',
+                        status: 'todos',
+                        formato: 'pdf'
+                    });
+                    setModalAberto(true);
+                }
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoadingGabaritos(false);
+        }
+    };
+
+    const handleNovoGabarito = () => {
+        setBaseReportModal(true);
+    };
+
+    const handlePersonalizarRelatorioPadrao = (relatorio) => {
+        setEditingTemplate(null);
+        let baseKey = 'relatorio_vendas';
+        let tipo = 'A4_RETRATO';
+        let w = 210, h = 297;
+
+        if (relatorio.id === 'estoque' || relatorio.id === 'inventario') {
+            baseKey = 'relatorio_inventario';
+            tipo = 'A4_PAISAGEM';
+            w = 297;
+            h = 210;
+        } else if (relatorio.id === 'vendas') {
+            baseKey = 'relatorio_vendas';
+            tipo = 'A4_RETRATO';
+            w = 210;
+            h = 297;
+        } else {
+            baseKey = 'relatorio_vendas';
+            tipo = 'A4_RETRATO';
+            w = 210;
+            h = 297;
+        }
+
+        setNomeRelatorio(`Custom - ${relatorio.titulo}`);
+        setTipoGabarito(tipo);
+        setLarguraMm(w);
+        setAlturaMm(h);
+        setElementosLayout(DEFAULT_LAYOUTS[baseKey] || []);
+        setElementoSelecionado(null);
+        setEditorOpen(true);
+    };
+
+    const handleIniciarNovoGabaritoComBase = (baseKey) => {
+        setBaseReportModal(false);
+        setEditingTemplate(null);
+        setNomeRelatorio(baseKey);
+        let tipo = 'A4_RETRATO';
+        let w = 210, h = 297;
+        if (baseKey === 'venda_recibo') {
+            tipo = 'RECIBO';
+            w = 80;
+            h = 0;
+        } else if (baseKey === 'etiqueta_gondola') {
+            tipo = 'ETIQUETA';
+            w = 100;
+            h = 50;
+        } else if (baseKey === 'relatorio_vendas') {
+            tipo = 'A4_RETRATO';
+            w = 210;
+            h = 297;
+        } else if (baseKey === 'relatorio_inventario') {
+            tipo = 'A4_PAISAGEM';
+            w = 297;
+            h = 210;
+        }
+
+        setTipoGabarito(tipo);
+        setLarguraMm(w);
+        setAlturaMm(h);
+        setElementosLayout(DEFAULT_LAYOUTS[baseKey] || []);
+        setElementoSelecionado(null);
+        setEditorOpen(true);
+    };
+
+    const handleEditarGabarito = (gabarito) => {
+        setEditingTemplate(gabarito);
+        setNomeRelatorio(gabarito.nome_relatorio);
+        setTipoGabarito(gabarito.tipo_gabarito);
+        setLarguraMm(gabarito.largura_gabarito_mm);
+        setAlturaMm(gabarito.altura_gabarito_mm);
+        setElementosLayout(gabarito.layout_json || []);
+        setElementoSelecionado(null);
+        setEditorOpen(true);
+    };
+
+    const handleSalvarGabarito = async (payload) => {
+        try {
+            if (editingTemplate) {
+                await axiosInstance.put(`/saas-gabaritos/${editingTemplate.id}/`, payload);
+            } else {
+                await axiosInstance.post('/saas-gabaritos/', payload);
+            }
+            setEditorOpen(false);
+            buscarGabaritos();
+        } catch (err) {
+            console.error(err);
+            alert('Erro ao salvar o relatório personalizado.');
+        }
+    };
+
+    const handleExcluirGabarito = async (id) => {
+        if (!window.confirm('Deseja realmente excluir este relatório personalizado?')) return;
+        try {
+            await axiosInstance.delete(`/saas-gabaritos/${id}/`);
+            buscarGabaritos();
+        } catch (err) {
+            console.error(err);
+            alert('Erro ao excluir relatório.');
+        }
+    };
+
+    const handleToggleAtivoGabarito = async (gabarito) => {
+        try {
+            await axiosInstance.patch(`/saas-gabaritos/${gabarito.id}/`, { ativo: !gabarito.ativo });
+            buscarGabaritos();
+        } catch (err) {
+            console.error(err);
+            alert('Erro ao atualizar status do relatório.');
+        }
+    };
+
+    const adicionarCampoAoLayout = (campo) => {
+        const novoElemento = {
+            id: '_' + Math.random().toString(36).substr(2, 9),
+            campo_origem: campo.chave,
+            label: campo.label,
+            x: 30,
+            y: 30,
+            font_size: 14,
+            largura: 180
+        };
+        setElementosLayout([...elementosLayout, novoElemento]);
+        setElementoSelecionado(novoElemento);
+    };
+
+    const atualizarPosicao = (id, novaPosicao) => {
+        setElementosLayout(prev => prev.map(el => {
+            if (el.id === id) {
+                let x = novaPosicao.x;
+                let y = novaPosicao.y;
+                if (gridSnap) {
+                    x = Math.round(x / 10) * 10;
+                    y = Math.round(y / 10) * 10;
+                }
+                const maxW = larguraMm * 3;
+                const maxH = alturaMm > 0 ? alturaMm * 3 : 5000;
+                x = Math.max(0, Math.min(x, maxW - el.largura));
+                y = Math.max(0, Math.min(y, maxH - 25));
+                return { ...el, x, y };
+            }
+            return el;
+        }));
+    };
+
+    const atualizarPropriedades = (propriedade, valor) => {
+        if (!elementoSelecionado) return;
+        setElementosLayout(prev => prev.map(el => {
+            if (el.id === elementoSelecionado.id) {
+                const updated = { ...el, [propriedade]: valor };
+                setElementoSelecionado(updated);
+                return updated;
+            }
+            return el;
+        }));
+    };
+
     const carregarDados = async () => {
         try {
-            const [resClientes, resProdutos, resFornecedores, resDepositos, resGrupos, resVendedores, resOperacoes, resFormasPagamento, resCentrosCusto, resContasBancarias] = await Promise.all([
+            const [resClientes, resProdutos, resFornecedores, resDepositos, resGrupos, resVendedores, resOperacoes, resFormasPagamento, resCentrosCusto, resContasBancarias, resEmpresa] = await Promise.all([
                 axiosInstance.get('/clientes/?page_size=1000'),
                 axiosInstance.get('/produtos/?page_size=1000'),
                 axiosInstance.get('/fornecedores/?page_size=100'),
@@ -339,7 +735,8 @@ function RelatoriosPage() {
                 axiosInstance.get('/operacoes/?page_size=500').catch(() => ({ data: [] })),
                 axiosInstance.get('/formas-pagamento/?page_size=100').catch(() => ({ data: [] })),
                 axiosInstance.get('/centro-custo/?page_size=100').catch(() => ({ data: [] })),
-                axiosInstance.get('/contas-bancarias/?page_size=100').catch(() => ({ data: [] }))
+                axiosInstance.get('/contas-bancarias/?page_size=100').catch(() => ({ data: [] })),
+                axiosInstance.get('/empresa/').catch(() => ({ data: [] }))
             ]);
 
             // Verificar se é paginado ou array direto
@@ -353,6 +750,7 @@ function RelatoriosPage() {
             const formasPagamentoData = Array.isArray(resFormasPagamento.data) ? resFormasPagamento.data : (resFormasPagamento.data?.results || []);
             const centrosCustoData = Array.isArray(resCentrosCusto.data) ? resCentrosCusto.data : (resCentrosCusto.data?.results || []);
             const contasBancariasData = Array.isArray(resContasBancarias.data) ? resContasBancarias.data : (resContasBancarias.data?.results || []);
+            const empresaDataList = Array.isArray(resEmpresa.data) ? resEmpresa.data : (resEmpresa.data?.results || []);
 
             setClientes(clientesData);
             setProdutos(produtosData);
@@ -364,6 +762,9 @@ function RelatoriosPage() {
             setFormasPagamento(formasPagamentoData);
             setCentrosCusto(centrosCustoData);
             setContasBancarias(contasBancariasData);
+            if (empresaDataList.length > 0) {
+                setEmpresaCnpj(empresaDataList[0].cpf_cnpj || '');
+            }
         } catch (error) {
             console.error('Erro ao carregar dados:', error);
         }
@@ -415,6 +816,30 @@ function RelatoriosPage() {
             setModalAberto(false);
 
             console.log('Gerando relatório:', relatorioSelecionado.id, filtros);
+
+            if (relatorioSelecionado.isCustom) {
+                const params = new URLSearchParams({
+                    nome_relatorio: relatorioSelecionado.id,
+                });
+                if (filtros.dataInicio) params.append('data_inicio', filtros.dataInicio);
+                if (filtros.dataFim) params.append('data_fim', filtros.dataFim);
+                if (filtros.cliente) params.append('cliente', filtros.cliente);
+                if (filtros.vendedor) params.append('vendedor', filtros.vendedor);
+                if (filtros.status && filtros.status !== 'todos') params.append('status', filtros.status);
+                if (filtros.grupo) params.append('grupo', filtros.grupo);
+                if (filtros.marca) params.append('marca', filtros.marca);
+                if (filtros.produto) params.append('produto', filtros.produto);
+                if (filtros.ordenacao) params.append('ordenacao', filtros.ordenacao);
+                if (empresaCnpj) params.append('cnpj', empresaCnpj);
+
+                let targetUrl = `/api/saas/gabarito-gerar/?${params.toString()}`;
+                if (axiosInstance.defaults.baseURL && axiosInstance.defaults.baseURL.startsWith('http')) {
+                    targetUrl = `${axiosInstance.defaults.baseURL.replace(/\/$/, '')}/saas/gabarito-gerar/?${params.toString()}`;
+                }
+                window.open(targetUrl, '_blank');
+                setGerando(null);
+                return;
+            }
 
             // Relatório de Vendas Completo - novo endpoint com resumos
             if (relatorioSelecionado.id === 'vendas') {
@@ -579,87 +1004,247 @@ function RelatoriosPage() {
                 </Typography>
             </Box>
 
-            <Grid container spacing={2}>
-                {relatorios
-                    .filter(r => {
-                        const categoria = searchParams.get('categoria');
-                        return !categoria || r.categoria === categoria;
-                    })
-                    .map((relatorio) => (
-                    <Grid item xs={12} sm={6} md={4} xl={3} key={relatorio.id}>
-                        <Card
-                            sx={{
-                                height: '100%',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                transition: 'all 0.2s',
-                                opacity: relatorio.disponivel ? 1 : 0.6,
-                                '&:hover': {
-                                    transform: relatorio.disponivel ? 'translateY(-2px)' : 'none',
-                                    boxShadow: relatorio.disponivel ? 4 : 1
-                                }
-                            }}
-                        >
-                            <CardContent sx={{ flexGrow: 1, p: 2 }}>
-                                <Box sx={{
+            <Tabs 
+                value={tabRelatorio} 
+                onChange={(e, val) => setTabRelatorio(val)} 
+                sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            >
+                <Tab label="Relatórios Padrão" />
+                <Tab label="Personalizado" />
+            </Tabs>
+
+            {tabRelatorio === 0 ? (
+                <Grid container spacing={2}>
+                    {relatorios
+                        .filter(r => {
+                            const categoria = searchParams.get('categoria');
+                            return !categoria || r.categoria === categoria;
+                        })
+                        .map((relatorio) => (
+                        <Grid item xs={12} sm={6} md={4} xl={3} key={relatorio.id}>
+                            <Card
+                                sx={{
+                                    height: '100%',
                                     display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    mb: 1.5
-                                }}>
+                                    flexDirection: 'column',
+                                    transition: 'all 0.2s',
+                                    opacity: relatorio.disponivel ? 1 : 0.6,
+                                    '&:hover': {
+                                        transform: relatorio.disponivel ? 'translateY(-2px)' : 'none',
+                                        boxShadow: relatorio.disponivel ? 4 : 1
+                                    }
+                                }}
+                            >
+                                <CardContent sx={{ flexGrow: 1, p: 2 }}>
                                     <Box sx={{
                                         display: 'flex',
-                                        justifyContent: 'center',
                                         alignItems: 'center',
-                                        width: 48,
-                                        height: 48,
-                                        borderRadius: 1.5,
-                                        bgcolor: `${relatorio.cor}15`,
-                                        color: relatorio.cor,
+                                        justifyContent: 'space-between',
+                                        mb: 1.5
                                     }}>
-                                        {React.cloneElement(relatorio.icone, { sx: { fontSize: 28 } })}
+                                        <Box sx={{
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            width: 48,
+                                            height: 48,
+                                            borderRadius: 1.5,
+                                            bgcolor: `${relatorio.cor}15`,
+                                            color: relatorio.cor,
+                                        }}>
+                                            {React.cloneElement(relatorio.icone, { sx: { fontSize: 28 } })}
+                                        </Box>
+                                        {!relatorio.disponivel && (
+                                            <Chip
+                                                label="Em breve"
+                                                size="small"
+                                                color="default"
+                                            />
+                                        )}
                                     </Box>
-                                    {!relatorio.disponivel && (
-                                        <Chip
-                                            label="Em breve"
-                                            size="small"
-                                            color="default"
-                                        />
-                                    )}
-                                </Box>
-                                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, lineHeight: 1.3 }}>
-                                    {relatorio.titulo}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.4 }}>
-                                    {relatorio.descricao}
-                                </Typography>
-                            </CardContent>
-                            <Divider />
-                            <CardActions sx={{ p: 1.5 }}>
-                                <Button
-                                    fullWidth
-                                    size="small"
-                                    variant={relatorio.disponivel ? "contained" : "outlined"}
-                                    startIcon={<FilterIcon />}
-                                    onClick={() => abrirModalFiltros(relatorio)}
-                                    disabled={!relatorio.disponivel || gerando === relatorio.id}
-                                    sx={{
-                                        bgcolor: relatorio.disponivel ? relatorio.cor : 'transparent',
-                                        '&:hover': {
+                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, lineHeight: 1.3 }}>
+                                        {relatorio.titulo}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.4 }}>
+                                        {relatorio.descricao}
+                                    </Typography>
+                                </CardContent>
+                                <Divider />
+                                <CardActions sx={{ p: 1.5, display: 'flex', gap: 1 }}>
+                                    <Button
+                                        size="small"
+                                        variant={relatorio.disponivel ? "contained" : "outlined"}
+                                        startIcon={<FilterIcon />}
+                                        onClick={() => abrirModalFiltros(relatorio)}
+                                        disabled={!relatorio.disponivel || gerando === relatorio.id}
+                                        sx={{
+                                            flexGrow: 1,
                                             bgcolor: relatorio.disponivel ? relatorio.cor : 'transparent',
-                                            filter: 'brightness(0.9)'
-                                        },
-                                        textTransform: 'none',
-                                        fontWeight: 500
-                                    }}
-                                >
-                                    {gerando === relatorio.id ? 'Gerando...' : 'Filtros e Gerar'}
-                                </Button>
-                            </CardActions>
-                        </Card>
-                    </Grid>
-                ))}
-            </Grid>
+                                            '&:hover': {
+                                                bgcolor: relatorio.disponivel ? relatorio.cor : 'transparent',
+                                                filter: 'brightness(0.9)'
+                                            },
+                                            textTransform: 'none',
+                                            fontWeight: 500
+                                        }}
+                                    >
+                                        {gerando === relatorio.id ? 'Gerando...' : 'Filtros e Gerar'}
+                                    </Button>
+                                    {relatorio.disponivel && (
+                                        <Button
+                                            size="small"
+                                            variant="outlined"
+                                            color="secondary"
+                                            startIcon={<EditIcon />}
+                                            onClick={() => handlePersonalizarRelatorioPadrao(relatorio)}
+                                            sx={{ textTransform: 'none' }}
+                                        >
+                                            Editar
+                                        </Button>
+                                    )}
+                                </CardActions>
+                            </Card>
+                        </Grid>
+                    ))}
+                </Grid>
+            ) : (
+                <Box>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                        <Typography variant="subtitle1" fontWeight={700} color="text.secondary">
+                            Relatórios Personalizados
+                        </Typography>
+                    </Box>
+
+                    {loadingGabaritos ? (
+                        <Box display="flex" justifyContent="center" py={6}>
+                            <CircularProgress />
+                        </Box>
+                    ) : (
+                        <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                            <Table>
+                                <TableHead sx={{ bgcolor: 'grey.50' }}>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 700 }}>Identificador / Nome do Relatório</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 700 }}>Tipo de Gabarito</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 700 }}>Dimensões (Largura x Altura)</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 700 }}>Ativo no Sistema</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 700 }}>Ações</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {gabaritos.map(g => (
+                                         <TableRow key={g.id} hover>
+                                             <TableCell sx={{ fontWeight: 600 }}>{g.nome_relatorio}</TableCell>
+                                             <TableCell align="center">
+                                                 {g.tipo_gabarito === 'A4_RETRATO' && 'A4 Retrato'}
+                                                 {g.tipo_gabarito === 'A4_PAISAGEM' && 'A4 Paisagem'}
+                                                 {g.tipo_gabarito === 'RECIBO' && 'Recibo (Bobina 80mm)'}
+                                                 {g.tipo_gabarito === 'ETIQUETA' && 'Etiqueta (Gôndola)'}
+                                                 {!['A4_RETRATO', 'A4_PAISAGEM', 'RECIBO', 'ETIQUETA'].includes(g.tipo_gabarito) && g.tipo_gabarito}
+                                             </TableCell>
+                                             <TableCell align="center">{g.largura_gabarito_mm} x {g.altura_gabarito_mm} mm</TableCell>
+                                             <TableCell align="center">
+                                                 <Switch 
+                                                     size="small" 
+                                                     checked={g.ativo} 
+                                                     onChange={() => handleToggleAtivoGabarito(g)} 
+                                                     color="success"
+                                                 />
+                                             </TableCell>
+                                             <TableCell align="center">
+                                                 <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
+                                                     <Button
+                                                         size="small"
+                                                         variant="outlined"
+                                                         startIcon={<LaunchIcon />}
+                                                         onClick={() => {
+                                                             const params = new URLSearchParams({ nome_relatorio: g.nome_relatorio });
+                                                             if (empresaCnpj) params.append('cnpj', empresaCnpj);
+                                                             let targetUrl = `/api/saas/gabarito-preview/?${params.toString()}`;
+                                                             if (axiosInstance.defaults.baseURL && axiosInstance.defaults.baseURL.startsWith('http')) {
+                                                                 targetUrl = `${axiosInstance.defaults.baseURL.replace(/\/$/, '')}/saas/gabarito-preview/?${params.toString()}`;
+                                                             }
+                                                             window.open(targetUrl, '_blank');
+                                                         }}
+                                                         sx={{ textTransform: 'none' }}
+                                                     >
+                                                         Visualizar Teste
+                                                     </Button>
+                                                     <Button
+                                                         size="small"
+                                                         variant="contained"
+                                                         color="primary"
+                                                         startIcon={<FilterIcon />}
+                                                         onClick={() => {
+                                                             const isSales = g.nome_relatorio.toLowerCase().includes('venda') || g.nome_relatorio.toLowerCase().includes('recibo');
+                                                             const mockReport = {
+                                                                 id: g.nome_relatorio,
+                                                                 titulo: g.nome_relatorio,
+                                                                 cor: isSales ? '#1976d2' : '#d32f2f',
+                                                                 icone: isSales ? <SalesIcon /> : <InventoryIcon />,
+                                                                 filtrosDisponiveis: isSales 
+                                                                     ? ['dataInicio', 'dataFim', 'cliente', 'vendedor', 'status', 'ordenacao']
+                                                                     : ['grupo', 'marca', 'produto', 'ordenacao'],
+                                                                 isCustom: true
+                                                             };
+                                                             setRelatorioSelecionado(mockReport);
+                                                             setFiltros({
+                                                                 dataInicio: '',
+                                                                 dataFim: '',
+                                                                 dataRetroativa: '',
+                                                                 cliente: '',
+                                                                 produto: '',
+                                                                 fornecedor: '',
+                                                                 deposito: '',
+                                                                 grupo: '',
+                                                                 vendedor: '',
+                                                                 operacao: '',
+                                                                 formaPagamento: '',
+                                                                 centroCusto: '',
+                                                                 contaBaixa: '',
+                                                                 contaLancamento: '',
+                                                                 tipoData: 'vencimento',
+                                                                 ordenacao: isSales ? 'data' : 'codigo',
+                                                                 resumoPor: [],
+                                                                 resumosVendas: [],
+                                                                 tipoRelatorio: 'todos',
+                                                                 tipoValor: 'todos',
+                                                                 tipoEstoque: 'todos',
+                                                                 tipo: 'todos',
+                                                                 status: 'todos',
+                                                                 formato: 'pdf'
+                                                             });
+                                                             setModalAberto(true);
+                                                         }}
+                                                         sx={{ textTransform: 'none' }}
+                                                     >
+                                                         Filtros e Gerar
+                                                     </Button>
+                                                     <IconButton size="small" color="primary" onClick={() => handleEditarGabarito(g)}>
+                                                         <EditIcon fontSize="small" />
+                                                     </IconButton>
+                                                     <IconButton size="small" color="error" onClick={() => handleExcluirGabarito(g.id)}>
+                                                         <DeleteIcon fontSize="small" />
+                                                     </IconButton>
+                                                 </Stack>
+                                             </TableCell>
+                                         </TableRow>
+                                     ))}
+                                     {gabaritos.length === 0 && (
+                                         <TableRow>
+                                             <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                                                 <Typography variant="body2" color="text.secondary">
+                                                     Nenhum relatório personalizado cadastrado ainda. Use a aba "Relatórios Padrão" e clique em "Editar" em qualquer relatório para criar um personalizado!
+                                                 </Typography>
+                                             </TableCell>
+                                         </TableRow>
+                                     )}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+                </Box>
+            )}
 
             {/* Modal de Filtros */}
             <Dialog
@@ -1130,14 +1715,28 @@ function RelatoriosPage() {
                                 <FormControl fullWidth size="small">
                                     <InputLabel>Ordenar por</InputLabel>
                                     <Select
-                                        value={filtros.ordenacao || 'data_vencimento'}
+                                        value={filtros.ordenacao}
                                         onChange={(e) => setFiltros({ ...filtros, ordenacao: e.target.value })}
                                         label="Ordenar por"
                                     >
-                                        <MenuItem value="data_vencimento">Data de Vencimento</MenuItem>
-                                        <MenuItem value="cliente">Cliente / Fornecedor</MenuItem>
-                                        <MenuItem value="data_emissao">Data do Documento</MenuItem>
-                                        <MenuItem value="documento">Número do Documento</MenuItem>
+                                        {relatorioSelecionado?.isCustom ? (
+                                            (relatorioSelecionado.id.toLowerCase().includes('venda') || relatorioSelecionado.id.toLowerCase().includes('recibo')) ? [
+                                                <MenuItem key="data" value="data">📅 Data da Venda</MenuItem>,
+                                                <MenuItem key="documento" value="documento">🔢 Número da Venda</MenuItem>,
+                                                <MenuItem key="cliente" value="cliente">👤 Nome do Cliente</MenuItem>,
+                                                <MenuItem key="total" value="total">💵 Valor Total</MenuItem>
+                                            ] : [
+                                                <MenuItem key="codigo" value="codigo">🔢 Código do Produto</MenuItem>,
+                                                <MenuItem key="descricao" value="descricao">📋 Descrição do Produto</MenuItem>,
+                                                <MenuItem key="grupo" value="grupo">📦 Grupo do Produto</MenuItem>,
+                                                <MenuItem key="marca" value="marca">🏷️ Marca do Produto</MenuItem>
+                                            ]
+                                        ) : [
+                                            <MenuItem key="data_vencimento" value="data_vencimento">Data de Vencimento</MenuItem>,
+                                            <MenuItem key="cliente" value="cliente">Cliente / Fornecedor</MenuItem>,
+                                            <MenuItem key="data_emissao" value="data_emissao">Data do Documento</MenuItem>,
+                                            <MenuItem key="documento" value="documento">Número do Documento</MenuItem>
+                                        ]}
                                     </Select>
                                 </FormControl>
                             </Grid>
@@ -1308,6 +1907,68 @@ function RelatoriosPage() {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Modal para selecionar o relatório base */}
+            <Dialog 
+                open={baseReportModal} 
+                onClose={() => setBaseReportModal(false)}
+                maxWidth="xs"
+                fullWidth
+            >
+                <DialogTitle sx={{ fontWeight: 'bold' }}>Selecione o Relatório Base</DialogTitle>
+                <DialogContent dividers>
+                    <Typography variant="body2" color="text.secondary" mb={2}>
+                        Selecione um dos relatórios padrão abaixo para servir como base de layout. Os campos originais serão carregados automaticamente.
+                    </Typography>
+                    <Stack spacing={1.5}>
+                        <Button 
+                            variant="outlined" 
+                            onClick={() => handleIniciarNovoGabaritoComBase('venda_recibo')}
+                            sx={{ justifyContent: 'flex-start', textTransform: 'none', py: 1.5 }}
+                        >
+                            🎫 Recibo de Venda (Bobina 80mm)
+                        </Button>
+                        <Button 
+                            variant="outlined" 
+                            onClick={() => handleIniciarNovoGabaritoComBase('etiqueta_gondola')}
+                            sx={{ justifyContent: 'flex-start', textTransform: 'none', py: 1.5 }}
+                        >
+                            🏷️ Etiqueta de Gôndola (100x50mm)
+                        </Button>
+                        <Button 
+                            variant="outlined" 
+                            onClick={() => handleIniciarNovoGabaritoComBase('relatorio_vendas')}
+                            sx={{ justifyContent: 'flex-start', textTransform: 'none', py: 1.5 }}
+                        >
+                            📊 Relatório de Vendas (A4 Retrato)
+                        </Button>
+                        <Button 
+                            variant="outlined" 
+                            onClick={() => handleIniciarNovoGabaritoComBase('relatorio_inventario')}
+                            sx={{ justifyContent: 'flex-start', textTransform: 'none', py: 1.5 }}
+                        >
+                            📦 Relatório de Inventário (A4 Paisagem)
+                        </Button>
+                    </Stack>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setBaseReportModal(false)}>Cancelar</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Fullscreen visual report editor canvas */}
+            <ReportBuilderDialog
+                open={editorOpen}
+                onClose={() => setEditorOpen(false)}
+                onSave={handleSalvarGabarito}
+                initialData={{
+                    nome_relatorio: nomeRelatorio,
+                    tipo_gabarito: tipoGabarito,
+                    largura_gabarito_mm: larguraMm,
+                    altura_gabarito_mm: alturaMm,
+                    layout_json: elementosLayout
+                }}
+            />
 
             <Paper sx={{ p: 2, mt: 3, bgcolor: '#f5f5f5' }}>
                 <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>

@@ -22,7 +22,7 @@ class NFeSigner(XMLSigner):
         A SEFAZ ainda usa SHA-1 no schema da NF-e versão 4.00.
         """
         if "SHA1" in self.sign_alg.name or "SHA1" in self.digest_alg.name:
-            logger.warning("⚠ Usando SHA-1 conforme exigido pela SEFAZ (NF-e 4.00)")
+            logger.warning("[AVISO] Usando SHA-1 conforme exigido pela SEFAZ (NF-e 4.00)")
         # Não lança exceção - permite SHA-1
 
 
@@ -51,7 +51,7 @@ class SignerService:
                     try:
                         sample = pfx_bytes[:100].decode('ascii')
                         if any(c in sample for c in ['\n', '\r', ' ', '=']):
-                            logger.warning(f"⚠ ALERTA: Arquivo parece conter texto, não binário!")
+                            logger.warning(f"[AVISO] ALERTA: Arquivo parece conter texto, não binário!")
                             logger.warning(f"  Amostra: {sample[:50]}...")
                     except:
                         pass  # É binário, OK
@@ -60,7 +60,7 @@ class SignerService:
                 if len(pfx_bytes) >= 2:
                     header = pfx_bytes[:2].hex()
                     if not header.startswith('30'):
-                        logger.error(f"✗ ERRO: Header inválido para PKCS12: {header}")
+                        logger.error(f"? ERRO: Header inválido para PKCS12: {header}")
                         logger.error(f"  Esperado: 30xx (ASN.1 SEQUENCE)")
                         logger.error(f"  Arquivo: {path_or_data}")
                         logger.error(f"  Tamanho: {len(pfx_bytes)} bytes")
@@ -107,7 +107,7 @@ class SignerService:
                 valid_chars = string.ascii_letters + string.digits + '+/='
                 invalid_chars = [c for c in clean_b64[:100] if c not in valid_chars]
                 if invalid_chars:
-                    logger.warning(f"⚠ Caracteres inválidos no base64: {invalid_chars}")
+                    logger.warning(f"[AVISO] Caracteres inválidos no base64: {invalid_chars}")
                 
                 pfx_bytes = base64.b64decode(clean_b64)
                 logger.info(f"Certificado decodificado: {len(pfx_bytes)} bytes")
@@ -134,12 +134,12 @@ class SignerService:
                 return pfx_bytes
                 
             except base64.binascii.Error as e:
-                logger.error(f"✗ Falha ao decodificar base64: {e}")
+                logger.error(f"? Falha ao decodificar base64: {e}")
                 logger.error(f"  String recebida não é base64 válido")
                 logger.error(f"  Primeiros 100 chars: {path_or_data[:100]}")
                 raise ValueError(f"Certificado inválido: não é base64 válido - {e}")
             except Exception as e:
-                logger.error(f"✗ Erro ao processar certificado: {e}")
+                logger.error(f"? Erro ao processar certificado: {e}")
                 raise ValueError(f"Certificado inválido: não é arquivo nem base64 válido - {e}")
         
         # Caso 3: Já é bytes
@@ -169,7 +169,7 @@ class SignerService:
             else:
                 # Limpa qualquer config que bloqueie SHA-1
                 os.environ['OPENSSL_CONF'] = ''
-                logger.warning(f"⚠ Arquivo de config não encontrado: {config_path}")
+                logger.warning(f"[AVISO] Arquivo de config não encontrado: {config_path}")
             
             # Tenta carregar a DLL do OpenSSL
             lib = None
@@ -195,7 +195,7 @@ class SignerService:
                 if found:
                     try: 
                         lib = ctypes.CDLL(found)
-                        logger.info(f"✓ OpenSSL carregado: {found}")
+                        logger.info(f"[OK] OpenSSL carregado: {found}")
                     except: 
                         pass
             
@@ -212,7 +212,7 @@ class SignerService:
                     legacy = lib.OSSL_PROVIDER_load(None, b"legacy")
                     
                     if legacy and default:
-                        logger.info("✓ OpenSSL Legacy Provider carregado (SHA-1 habilitado)")
+                        logger.info("[OK] OpenSSL Legacy Provider carregado (SHA-1 habilitado)")
                         return True
                     else:
                         logger.warning("[WARN] Falha ao carregar OpenSSL Legacy Provider via OSSL_PROVIDER_load")
@@ -226,15 +226,15 @@ class SignerService:
                     legacy = lib.OSSL_PROVIDER_try_load(None, b"legacy")
                     
                     if legacy:
-                        logger.info("✓ OpenSSL Legacy Provider carregado (SHA-1 habilitado)")
+                        logger.info("[OK] OpenSSL Legacy Provider carregado (SHA-1 habilitado)")
                         return True
                     else:
-                        logger.warning("⚠ Falha ao carregar OpenSSL Legacy Provider via try_load")
+                        logger.warning("[AVISO] Falha ao carregar OpenSSL Legacy Provider via try_load")
                 else:
-                    logger.info("✓ OpenSSL 1.1 detectado (SHA-1 já suportado nativamente)")
+                    logger.info("[OK] OpenSSL 1.1 detectado (SHA-1 já suportado nativamente)")
                     return True
             else:
-                logger.warning("⚠ Biblioteca OpenSSL não encontrada - usando config file apenas")
+                logger.warning("[AVISO] Biblioteca OpenSSL não encontrada - usando config file apenas")
                     
         except Exception as e:
             logger.error(f"Erro ao habilitar Legacy Crypto: {e}", exc_info=True)
@@ -289,8 +289,8 @@ class SignerService:
                 self.certificate = p12[1]
                 self.additional_certs = p12[2]
                 
-                logger.info(f"✓ Certificado carregado com sucesso (sem senha)!")
-                logger.warning("⚠ O certificado não tem senha! Configure senha vazia no banco.")
+                logger.info(f"[OK] Certificado carregado com sucesso (sem senha)!")
+                logger.warning("[AVISO] O certificado não tem senha! Configure senha vazia no banco.")
                 return
             except Exception as e2:
                 erro_msg = f"Tentativa 2: {type(e2).__name__}: {str(e2)}"
@@ -315,7 +315,7 @@ class SignerService:
                     self.certificate = p12[1]
                     self.additional_certs = p12[2]
                     
-                    logger.info(f"✓ Certificado carregado com sucesso!")
+                    logger.info(f"[OK] Certificado carregado com sucesso!")
                     return
                 except Exception as e3:
                     erro_msg = f"Tentativa 3: {type(e3).__name__}: {str(e3)}"
@@ -611,7 +611,7 @@ class SignerService:
             etree.ElementTree(target_elem).write_c14n(buf_target, exclusive=False)
             c14n_target = buf_target.getvalue()
             
-            logger.info("✓ Digest calculado com write_c14n (Inclusive C14N)")
+            logger.info("[OK] Digest calculado com write_c14n (Inclusive C14N)")
 
             digest = hashes.Hash(hashes.SHA1())
             digest.update(c14n_target)

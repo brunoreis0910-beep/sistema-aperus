@@ -3058,6 +3058,17 @@ const VendaRapidaPage = () => {
     console.log('💳 Formas de pagamento:', dados.condicoesPagamento);
     console.log('💳 Primeira forma:', dados.condicoesPagamento?.[0]);
 
+    if (configImpressao.tipo_impressora === 'personalizado') {
+      const gNome = configImpressao.gabarito_customizado_nome || 'venda_recibo';
+      const cnpj = (dados.empresa?.cpf_cnpj || empresa?.cpf_cnpj || '').replace(/\D/g, '');
+      const url = `/api/saas/gabarito-gerar/?nome_relatorio=${gNome}&venda=${dados.id_venda}&cnpj=${cnpj}`;
+      window.open(url, '_blank');
+      setTimeout(() => {
+        limparVenda();
+      }, 500);
+      return;
+    }
+
     // Gerar conteúdo conforme tipo de impressora configurado
     const usarA4 = configImpressao.tipo_impressora === 'a4';
     const larguraJanela = usarA4 ? 'width=900,height=700' : 'width=300,height=600';
@@ -3162,6 +3173,16 @@ const VendaRapidaPage = () => {
       console.log('📋 Venda completa:', vendaCompleta);
       console.log('👥 Cliente da venda (raw):', vendaCompleta.cliente);
       console.log('👥 Tipo do cliente:', typeof vendaCompleta.cliente);
+
+      if (configImpressao.tipo_impressora === 'personalizado') {
+        const gNome = configImpressao.gabarito_customizado_nome || 'venda_recibo';
+        const cnpj = (vendaCompleta.empresa?.cpf_cnpj || empresa?.cpf_cnpj || '').replace(/\D/g, '');
+        const url = `/api/saas/gabarito-gerar/?nome_relatorio=${gNome}&venda=${vendaId}&cnpj=${cnpj}`;
+        window.open(url, '_blank');
+        setOpenReimprimir(false);
+        setLoading(false);
+        return;
+      }
 
       // Se o cliente vier como ID, buscar os dados completos
       let clienteCompleto = vendaCompleta.cliente;
@@ -4612,6 +4633,11 @@ const VendaRapidaPage = () => {
                         <Typography>
                           {produto.nome_produto || produto.descricao || 'Sem descrição'}
                         </Typography>
+                        <Box sx={{ fontSize: '0.75rem', color: 'text.secondary', display: 'flex', gap: 1.5, mt: 0.5, flexWrap: 'wrap' }}>
+                          <span>Ref: {produto.referencia || '-'}</span>
+                          <span>Loc: {produto.localizacao || '-'}</span>
+                          <span>Grupo: {produto.grupo_nome || '-'}</span>
+                        </Box>
                       </TableCell>
                       <TableCell align="right">
                         <Chip

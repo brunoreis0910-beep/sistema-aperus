@@ -109,8 +109,8 @@ class OrdemServicoViewSet(viewsets.ModelViewSet):
         try:
             serializer.save()
         except Exception as e:
-            print(f"❌ Erro ao criar ordem de serviço: {str(e)}")
-            print(f"📋 Dados recebidos: {self.request.data}")
+            print(f"[ERRO] Erro ao criar ordem de serviço: {str(e)}")
+            print(f"? Dados recebidos: {self.request.data}")
             raise
     
     def perform_update(self, serializer):

@@ -364,7 +364,7 @@ class OperacaoViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance)
         
         # Log detalhado dos valores
-        print(f"🔍 RETRIEVE Operacao ID {instance.id_operacao}:")
+        print(f"[BUSCA] RETRIEVE Operacao ID {instance.id_operacao}:")
         print(f"   - nome: {instance.nome_operacao}")
         print(f"   - validar_estoque (MODEL): {instance.validar_estoque}")
         print(f"   - acao_estoque (MODEL): {instance.acao_estoque}")
@@ -847,7 +847,7 @@ class EstoqueViewSet(viewsets.ModelViewSet):
         import logging
         logger = logging.getLogger(__name__)
         
-        logger.info(f'📦 Recebido request de ajuste: {request.data}')
+        logger.info(f'? Recebido request de ajuste: {request.data}')
         
         id_produto = request.data.get('id_produto')
         id_deposito = request.data.get('id_deposito')
@@ -928,12 +928,12 @@ class EstoqueViewSet(viewsets.ModelViewSet):
                 'diferenca': float(diferenca),
                 'tipo_movimentacao': tipo_mov
             }
-            logger.info(f'✅ Ajuste concluído: {response_data}')
+            logger.info(f'[OK] Ajuste concluído: {response_data}')
             
             return Response(response_data, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f'❌ Erro ao processar ajuste: {str(e)}', exc_info=True)
+            logger.error(f'[ERRO] Erro ao processar ajuste: {str(e)}', exc_info=True)
             return Response(
                 {'error': f'Erro ao processar ajuste: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1030,7 +1030,7 @@ def consultar_placa(request, placa):
                         'cilindradas': data.get('cilindradas', ''),
                         'fonte': 'Gemini + Google Search'
                     }
-                    print(f'✅ Dados via Gemini: {dados_veiculo}')
+                    print(f'[OK] Dados via Gemini: {dados_veiculo}')
             except Exception as e:
                 print(f'Erro no Gemini: {e}')
 
@@ -1060,7 +1060,7 @@ def consultar_placa(request, placa):
                             'cilindradas': data.get('cilindradas', ''),
                             'fonte': 'BrasilAPI (DENATRAN)'
                         }
-                        print(f'✅ Dados BrasilAPI: {dados_veiculo}')
+                        print(f'[OK] Dados BrasilAPI: {dados_veiculo}')
             except Exception as e:
                 print(f'Erro na BrasilAPI: {e}')
 
@@ -1097,7 +1097,7 @@ def consultar_placa(request, placa):
                             'cilindradas': data.get('Cilindradas', ''),
                             'fonte': 'FIPE API'
                         }
-                        print(f'✅ Dados FIPE API: {dados_veiculo}')
+                        print(f'[OK] Dados FIPE API: {dados_veiculo}')
             except Exception as e:
                 print(f'Erro na FIPE API: {e}')
 
@@ -1127,7 +1127,7 @@ def consultar_placa(request, placa):
                             'cilindradas': data.get('cilindradas', ''),
                             'fonte': 'WD API'
                         }
-                        print(f'✅ Dados WD API: {dados_veiculo}')
+                        print(f'[OK] Dados WD API: {dados_veiculo}')
             except Exception as e:
                 print(f'Erro na WD API: {e}')
         
@@ -1190,7 +1190,7 @@ def consultar_cnpj(request, cnpj):
 
         # Tentativa 1: ReceitaWS (Mais confiável para endereço completo)
         try:
-            print(f"🔍 Consultando CNPJ {cnpj_limpo} na ReceitaWS...")
+            print(f"[BUSCA] Consultando CNPJ {cnpj_limpo} na ReceitaWS...")
             url_receitaws = f'https://www.receitaws.com.br/v1/cnpj/{cnpj_limpo}'
             response = requests.get(url_receitaws, timeout=15)
             
@@ -1231,22 +1231,22 @@ def consultar_cnpj(request, cnpj):
                         'cnae_fiscal': '',
                         'fonte': 'ReceitaWS'
                     }
-                    print(f"✅ CNPJ encontrado na ReceitaWS: {dados_empresa.get('razao_social')}")
+                    print(f"[OK] CNPJ encontrado na ReceitaWS: {dados_empresa.get('razao_social')}")
                     
                     # ⚠️ IMPORTANTE: Se logradouro vier vazio, não considerar sucesso total
                     if not dados_empresa.get('logradouro'):
-                        print(f"⚠️ ReceitaWS retornou sem endereço, tentando outra API...")
+                        print(f"[AVISO] ReceitaWS retornou sem endereço, tentando outra API...")
                         dados_empresa = None  # Força fallback
                 else:
-                    print(f"⚠️ ReceitaWS retornou ERROR: {data.get('message')}")
+                    print(f"[AVISO] ReceitaWS retornou ERROR: {data.get('message')}")
         except Exception as e:
-            print(f"⚠️ Erro na ReceitaWS: {e}")
+            print(f"[AVISO] Erro na ReceitaWS: {e}")
             erro_ultima_tentativa = str(e)
 
         # Tentativa 2: Brasil API (Fallback - rápido mas pode ter rate limit)
         if not dados_empresa:
             try:
-                print(f"🔍 Consultando CNPJ {cnpj_limpo} na BrasilAPI...")
+                print(f"[BUSCA] Consultando CNPJ {cnpj_limpo} na BrasilAPI...")
                 url_brasilapi = f'https://brasilapi.com.br/api/cnpj/v1/{cnpj_limpo}'
                 response = requests.get(url_brasilapi, timeout=10)
                 
@@ -1281,20 +1281,20 @@ def consultar_cnpj(request, cnpj):
                         'cnae_fiscal': str(data.get('cnae_fiscal', '')),
                         'fonte': 'Brasil API'
                     }
-                    print(f"✅ CNPJ encontrado na BrasilAPI: {dados_empresa.get('razao_social')}")
+                    print(f"[OK] CNPJ encontrado na BrasilAPI: {dados_empresa.get('razao_social')}")
                     
                     # Se logradouro vier vazio, tentar próxima API
                     if not dados_empresa.get('logradouro'):
-                        print(f"⚠️ BrasilAPI retornou sem endereço, tentando Minha Receita...")
+                        print(f"[AVISO] BrasilAPI retornou sem endereço, tentando Minha Receita...")
                         dados_empresa = None
             except Exception as e:
-                print(f"⚠️ Erro na BrasilAPI: {e}")
+                print(f"[AVISO] Erro na BrasilAPI: {e}")
                 erro_ultima_tentativa = str(e)
         
         # Tentativa 3: Minha Receita (Outra API pública gratuita) - Fallback final
         if not dados_empresa:
             try:
-                print(f"🔍 Consultando CNPJ {cnpj_limpo} na Minha Receita...")
+                print(f"[BUSCA] Consultando CNPJ {cnpj_limpo} na Minha Receita...")
                 url_minhareceita = f'https://minhareceita.org/{cnpj_limpo}'
                 response = requests.get(url_minhareceita, timeout=10)
                 
@@ -1329,9 +1329,9 @@ def consultar_cnpj(request, cnpj):
                         'cnae_fiscal': str(data.get('cnae_fiscal', '')),
                         'fonte': 'Minha Receita'
                     }
-                    print(f"✅ CNPJ encontrado na Minha Receita: {dados_empresa.get('razao_social')}")
+                    print(f"[OK] CNPJ encontrado na Minha Receita: {dados_empresa.get('razao_social')}")
             except Exception as e:
-                print(f"⚠️ Erro na Minha Receita: {e}")
+                print(f"[AVISO] Erro na Minha Receita: {e}")
                 erro_ultima_tentativa = str(e)
 
         if dados_empresa:
@@ -4172,6 +4172,17 @@ class ConfiguracaoAgendamentoViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+class ComunicadoSaaSViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciamento dos comunicados do Mural de Avisos (SaaS).
+    """
+    queryset = models.ComunicadoSaaS.objects.all().order_by('-criado_em')
+    serializer_class = serializers.ComunicadoSaaSSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filterset_fields = ['ativo', 'tipo']
+    search_fields = ['titulo', 'conteudo_texto']
+
+
 # ─── Public API Endpoints for Client Instances ────────────────────────────────
 
 @api_view(['GET'])
@@ -4207,7 +4218,7 @@ def saas_verificar_licenca(request):
         cinco_dias_atras = timezone.now().date() - timedelta(days=5)
         tem_financeiro_atrasado = models.SaaSClienteMensalidade.objects.using(db_name).filter(
             saas_cliente=cliente,
-            status_pagamento='PENDENTE',
+            status_pagamento__in=['PENDENTE', 'VENCIDO'],
             data_vencimento__lt=cinco_dias_atras
         ).exists()
         
@@ -4782,7 +4793,7 @@ def saas_status_cliente(request):
         # 1. Mensalidades abertas
         mensalidades_abertas = models.SaaSClienteMensalidade.objects.using(db_name).filter(
             saas_cliente=cliente,
-            status_pagamento='PENDENTE'
+            status_pagamento__in=['PENDENTE', 'VENCIDO']
         ).order_by('data_vencimento')
         
         mensalidades_list = []
@@ -4952,7 +4963,7 @@ def status_financeiro_saas(request):
 
     hoje = timezone.now().date()
     faturas_atrasadas = faturas.filter(
-        status_pagamento='PENDENTE',
+        status_pagamento__in=['PENDENTE', 'VENCIDO'],
         data_vencimento__lt=hoje
     ).order_by('data_vencimento')
     
@@ -5003,6 +5014,36 @@ def status_financeiro_saas(request):
         }
     })
 
+
+def obter_comunicado_ativo(request):
+    """
+    Retorna o comunicado ativo vigente para o sistema central.
+    """
+    from django.http import JsonResponse
+    from django.utils import timezone
+    from api import models
+    
+    hoje = timezone.now().date()
+    comunicado = models.ComunicadoSaaS.objects.filter(
+        ativo=True, 
+        data_inicio__lte=hoje, 
+        data_fim__gte=hoje
+    ).order_by('-id').first()
+    
+    if comunicado:
+        url = comunicado.url_midia
+        if comunicado.tipo == 'IMAGEM' and comunicado.imagem:
+            url = comunicado.imagem.url
+            
+        return JsonResponse({
+            'existe_comunicado': True,
+            'id': comunicado.id,
+            'titulo': comunicado.titulo,
+            'tipo': comunicado.tipo,
+            'texto': comunicado.conteudo_texto,
+            'url': url
+        })
+    return JsonResponse({'existe_comunicado': False})
 
 
 def enviar_nfse_mensalidade(fatura):
@@ -5071,4 +5112,1672 @@ def verificar_licenca_local(request):
     return JsonResponse(sincronizar_e_verificar_licenca())
 
 
+class GabaritoCustomizadoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciar os gabaritos de relatórios customizados na central.
+    """
+    queryset = models.GabaritoCustomizado.objects.all().order_by('-atualizado_em')
+    serializer_class = serializers.GabaritoCustomizadoSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        queryset = self.queryset
+        cliente_id = self.request.query_params.get('cliente')
+        if cliente_id:
+            queryset = queryset.filter(cliente_id=cliente_id)
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Erro ao buscar gabaritos no banco central local, tentando fallback HTTP: {e}")
+            
+            import re
+            empresa = models.EmpresaConfig.objects.exclude(cpf_cnpj='').first() or models.EmpresaConfig.objects.first()
+            if not empresa or not empresa.cpf_cnpj:
+                return Response([], status=status.HTTP_200_OK)
+            
+            cnpj_limpo = re.sub(r'\D', '', str(empresa.cpf_cnpj))
+            
+            from django.conf import settings
+            import requests
+            
+            mother_url = getattr(settings, 'SAAS_MOTHER_URL', 'https://central.aperus.com.br')
+            if mother_url.endswith('/'):
+                mother_url = mother_url[:-1]
+                
+            try:
+                response = requests.get(
+                    f"{mother_url}/api/saas/listar-gabaritos/",
+                    params={'cnpj': cnpj_limpo},
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    return Response(response.json(), status=status.HTTP_200_OK)
+                else:
+                    logger.error(f"Erro na resposta do fallback HTTP: {response.status_code} - {response.text}")
+            except Exception as http_err:
+                logger.error(f"Falha de conexão com a Central mãe no fallback: {http_err}")
+                
+            return Response([], status=status.HTTP_200_OK)
+
+
+def _enviar_whatsapp_cadastro(telefone: str, mensagem: str) -> bool:
+    import logging
+    import requests
+    from decouple import config
+    from . import whatsapp_cloud_service as _cloud
+    from .whatsapp_playwright_service import WhatsAppService
+
+    logger = logging.getLogger(__name__)
+
+    # Limpar telefone (apenas números)
+    telefone_limpo = ''.join(filter(str.isdigit, str(telefone)))
+    if not telefone_limpo:
+        return False
+        
+    if len(telefone_limpo) <= 11:
+        telefone_limpo = f"55{telefone_limpo}"
+
+    # Para APIs de texto corrido (Cloud/Evolution), removemos o marcador §§ do desktop
+    mensagem_api = mensagem.replace('\n§§\n', '\n').replace('§§', '')
+
+    enviado = False
+
+    # 1. Tenta Cloud API
+    try:
+        if _cloud.is_configurado() and not _cloud.token_com_erro():
+            logger.info("Tentando enviar via WhatsApp Cloud API...")
+            enviado = _cloud.enviar_mensagem(telefone_limpo, mensagem_api)
+    except Exception as e:
+        logger.error(f"Erro ao enviar via Cloud API: {e}")
+
+    # 2. Tenta Evolution API
+    if not enviado:
+        try:
+            base_url = config('EVOLUTION_API_URL', default='').rstrip('/')
+            api_key  = config('EVOLUTION_API_KEY', default='')
+            instance = config('EVOLUTION_INSTANCE', default='default')
+            if base_url and api_key:
+                logger.info("Tentando enviar via Evolution API...")
+                url = f"{base_url}/message/sendText/{instance}"
+                headers = {'apikey': api_key, 'Content-Type': 'application/json'}
+                payload = {'number': telefone_limpo, 'text': mensagem_api}
+                resp = requests.post(url, json=payload, headers=headers, timeout=10)
+                resp.raise_for_status()
+                enviado = True
+        except Exception as e:
+            logger.error(f"Erro ao enviar via Evolution API: {e}")
+
+    # 3. Tenta Playwright
+    if not enviado:
+        try:
+            if config('WHATSAPP_PLAYWRIGHT_ENABLED', default='True').lower() in ('true', '1', 'yes'):
+                logger.warning("Tentando enviar via Playwright...")
+                service = WhatsAppService()
+                enviado = service.enviar_mensagem(telefone_limpo, mensagem)
+            else:
+                logger.info("Envio via Playwright/Desktop desabilitado nas configurações.")
+        except Exception as e:
+            logger.error(f"Erro ao enviar via Playwright: {e}")
+
+    return enviado
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def saas_gerar_link_cadastro(request):
+    """
+    Gera um convite/token temporário para o cliente preencher os próprios dados cadastrais.
+    Dispara o link via WhatsApp do cliente se possível.
+    """
+    from django.utils import timezone
+    import datetime
+    
+    whatsapp = request.data.get('whatsapp_cliente')
+    valor_mensalidade = request.data.get('valor_mensalidade')
+    
+    if not whatsapp or not valor_mensalidade:
+        return Response({'error': 'WhatsApp e Valor da Mensalidade são obrigatórios.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    # Limpa telefone
+    import re
+    whatsapp_limpo = re.sub(r'\D', '', str(whatsapp))
+    if not whatsapp_limpo:
+        return Response({'error': 'Telefone inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    try:
+        # Prazo de expiração: 48 horas
+        prazo = timezone.now() + datetime.timedelta(hours=48)
+        
+        # Criar convite
+        convite = models.LinkCadastroRemoto.objects.create(
+            whatsapp_cliente=whatsapp_limpo,
+            expira_em=prazo,
+            dia_vencimento=int(request.data.get('dia_vencimento', 10)),
+            valor_mensalidade=float(valor_mensalidade),
+            emite_nota=bool(request.data.get('emite_nota', False)),
+            vendedor=request.data.get('vendedor'),
+            status_licenca=request.data.get('status_licenca', 'ATIVO'),
+            schema_name=request.data.get('schema_name'),
+            db_host=request.data.get('db_host', 'localhost'),
+            db_port=request.data.get('db_port', '8005'),
+            is_test_environment=bool(request.data.get('is_test_environment', False))
+        )
+        
+        # Construir link
+        host = request.get_host()
+        is_local = 'localhost' in host or '127.0.0.1' in host or '192.168.' in host or '10.' in host
+        protocol = 'http' if is_local else 'https'
+        url_cadastro = f"{protocol}://{host}/cadastro-cliente/?token={convite.id_token}"
+        
+        # Enviar WhatsApp (usando §§ para isolar o link em mensagem própria no WhatsApp Desktop)
+        mensagem = (
+            f"Olá! Para darmos andamento à ativação do seu sistema Aperus, por favor, "
+            f"preencha seus dados cadastrais pelo link seguro:\n"
+            f"§§\n"
+            f"{url_cadastro}\n"
+            f"§§\n"
+            f"_(Este link é válido por 48 horas)_"
+        )
+        
+        whatsapp_enviado = _enviar_whatsapp_cadastro(whatsapp_limpo, mensagem)
+        
+        return Response({
+            'success': True,
+            'token': str(convite.id_token),
+            'url': url_cadastro,
+            'whatsapp_enviado': whatsapp_enviado
+        }, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def saas_validar_token_cadastro(request):
+    """
+    Verifica se um token de cadastro remoto é válido e retorna os parâmetros comerciais predefinidos.
+    """
+    token_str = request.query_params.get('token')
+    if not token_str:
+        return Response({'error': 'Token é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    try:
+        convite = models.LinkCadastroRemoto.objects.get(id_token=token_str)
+        if not convite.esta_valido():
+            return Response({'valido': False, 'error': 'Link expirado ou já utilizado.'}, status=status.HTTP_200_OK)
+            
+        return Response({
+            'valido': True,
+            'whatsapp_cliente': convite.whatsapp_cliente,
+            'preset': {
+                'dia_vencimento': convite.dia_vencimento,
+                'valor_mensalidade': str(convite.valor_mensalidade),
+                'emite_nota': convite.emite_nota,
+                'vendedor': convite.vendedor,
+                'status_licenca': convite.status_licenca,
+                'schema_name': convite.schema_name,
+                'db_host': convite.db_host,
+                'db_port': convite.db_port,
+                'is_test_environment': convite.is_test_environment,
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except models.LinkCadastroRemoto.DoesNotExist:
+        return Response({'valido': False, 'error': 'Token inválido.'}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def saas_finalizar_cadastro_remoto(request):
+    """
+    Finaliza o cadastro remoto do cliente.
+    Cria a conta em SaaSCliente, marca o token como usado e avisa o suporte.
+    """
+    token_str = request.data.get('token')
+    cnpj = request.data.get('cnpj')
+    razao_social = request.data.get('razao_social')
+    
+    if not token_str or not cnpj or not razao_social:
+        return Response({'error': 'Token, CNPJ e Razão Social são obrigatórios.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    try:
+        convite = models.LinkCadastroRemoto.objects.get(id_token=token_str)
+        if not convite.esta_valido():
+            return Response({'error': 'Link expirado ou já utilizado.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Limpar CNPJ
+        import re
+        cnpj_limpo = re.sub(r'\D', '', str(cnpj))
+        
+        # Validar se já existe cliente com esse CNPJ ou schema_name
+        schema_final = convite.schema_name
+        if not schema_final:
+            # Auto-gerar schema_name baseado na Razão Social
+            from django.utils.text import slugify
+            schema_final = slugify(razao_social).replace('-', '_')
+            
+        # Garantir unicidade do schema_name adicionando sufixo se necessário
+        base_schema = schema_final
+        counter = 1
+        while models.SaaSCliente.objects.filter(schema_name=schema_final).exists():
+            schema_final = f"{base_schema}_{counter}"
+            counter += 1
+            
+        # Criar SaaSCliente
+        cliente = models.SaaSCliente.objects.create(
+            cnpj=cnpj,
+            razao_social=razao_social,
+            nome_fantasia=request.data.get('nome_fantasia'),
+            inscricao_estadual=request.data.get('inscricao_estadual'),
+            proprietario=request.data.get('proprietario'),
+            telefone=request.data.get('telefone') or convite.whatsapp_cliente,
+            email=request.data.get('email'),
+            cep=request.data.get('cep'),
+            endereco=request.data.get('endereco'),
+            numero=request.data.get('numero'),
+            complemento=request.data.get('complemento'),
+            bairro=request.data.get('bairro'),
+            cidade=request.data.get('cidade'),
+            estado=request.data.get('estado'),
+            dia_vencimento=convite.dia_vencimento,
+            valor_mensalidade=convite.valor_mensalidade,
+            emite_nota=convite.emite_nota,
+            vendedor=convite.vendedor,
+            status_licenca=convite.status_licenca,
+            schema_name=schema_final,
+            db_host=convite.db_host,
+            db_port=convite.db_port,
+            is_test_environment=convite.is_test_environment,
+            banco_criado=False,
+            contrato_pendente=True,
+            email_responsavel=request.data.get('email_responsavel') or request.data.get('email'),
+            data_nascimento_responsavel=request.data.get('data_nascimento_responsavel')
+        )
+        
+        # Marcar convite como usado
+        convite.usado = True
+        convite.save()
+        
+        # Notificar equipe de suporte/vendas via WhatsApp
+        notificacao = (
+            f"🚀 *Novo Cadastro Remoto Concluído!*\n\n"
+            f"O cliente *{cliente.razao_social}* (CNPJ: {cliente.cnpj}) finalizou o seu preenchimento cadastral.\n"
+            f"• *Schema*: {cliente.schema_name}\n"
+            f"• *Vendedor*: {cliente.vendedor or 'Não informado'}\n"
+            f"• *Mensalidade*: R$ {cliente.valor_mensalidade}\n\n"
+            f"O banco de dados já pode ser provisionado no painel da Central SaaS."
+        )
+        
+        confirmacao_cliente = (
+            f"Olá *{cliente.razao_social}*!\n\n"
+            f"Recebemos seus dados cadastrais com sucesso. Nossa equipe de suporte já está "
+            f"provisionando o seu ambiente de banco de dados. Em instantes você receberá "
+            f"as suas credenciais de acesso por aqui!"
+        )
+        _enviar_whatsapp_cadastro(cliente.telefone, confirmacao_cliente)
+        
+        # Se o suporte/vendedor tiver um telefone configurado no .env, avisa lá
+        from decouple import config
+        suporte_fone = config('SUPORTE_WHATSAPP', default='')
+        if suporte_fone:
+            _enviar_whatsapp_cadastro(suporte_fone, notificacao)
+            
+        return Response({
+            'success': True,
+            'message': 'Cadastro finalizado com sucesso!',
+            'cliente_id': cliente.id_saas_cliente,
+            'schema_name': cliente.schema_name
+        }, status=status.HTTP_200_OK)
+        
+    except models.LinkCadastroRemoto.DoesNotExist:
+        return Response({'error': 'Token inválido.'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def saas_listar_gabaritos(request):
+    """
+    Retorna a lista de todos os gabaritos customizados de um cliente a partir de seu CNPJ.
+    Usado no fallback quando clientes locais não conseguem acessar o banco central.
+    """
+    cnpj = request.query_params.get('cnpj')
+    if not cnpj:
+        return Response({'error': 'CNPJ é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    import re
+    cnpj_limpo = re.sub(r'\D', '', str(cnpj))
+    
+    try:
+        clientes = models.SaaSCliente.objects.all()
+        cliente = None
+        for c in clientes:
+            if re.sub(r'\D', '', c.cnpj) == cnpj_limpo:
+                cliente = c
+                break
+
+        if not cliente:
+            return Response([], status=status.HTTP_200_OK)
+
+        gabaritos = models.GabaritoCustomizado.objects.filter(
+            cliente=cliente,
+            ativo=True
+        ).order_by('-atualizado_em')
+        
+        serializer = serializers.GabaritoCustomizadoSerializer(gabaritos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def saas_obter_gabarito(request):
+    """
+    Retorna o layout do gabarito customizado para a filial a partir do CNPJ e nome do relatório.
+    """
+    cnpj = request.data.get('cnpj') if request.method == 'POST' else request.query_params.get('cnpj')
+    nome_relatorio = request.data.get('nome_relatorio') if request.method == 'POST' else request.query_params.get('nome_relatorio')
+
+    if not cnpj or not nome_relatorio:
+        return Response({'error': 'Parâmetros cnpj e nome_relatorio são obrigatórios.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    import re
+    cnpj_limpo = re.sub(r'\D', '', str(cnpj))
+
+    try:
+        # Busca o cliente SaaS pelo CNPJ.
+        clientes = models.SaaSCliente.objects.all()
+        cliente = None
+        for c in clientes:
+            if re.sub(r'\D', '', c.cnpj) == cnpj_limpo:
+                cliente = c
+                break
+
+        if not cliente:
+            return Response({'error': 'Cliente SaaS não encontrado na central.'}, status=status.HTTP_404_NOT_FOUND)
+
+        gabarito = models.GabaritoCustomizado.objects.filter(
+            cliente=cliente,
+            nome_relatorio=nome_relatorio,
+            ativo=True
+        ).first()
+
+        if not gabarito:
+            return Response({'layout_json': None, 'mensagem': 'Nenhum gabarito customizado ativo encontrado.'}, status=status.HTTP_200_OK)
+
+        return Response({
+            'id': gabarito.id,
+            'nome_relatorio': gabarito.nome_relatorio,
+            'tipo_gabarito': gabarito.tipo_gabarito,
+            'layout_json': gabarito.layout_json,
+            'largura_gabarito_mm': gabarito.largura_gabarito_mm,
+            'altura_gabarito_mm': gabarito.altura_gabarito_mm,
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def saas_gabarito_preview(request):
+    """
+    Gera um preview HTML de teste com dados mockados de um gabarito de relatório customizado.
+    URL: /api/saas/gabarito-preview/?nome_relatorio=venda_recibo
+    """
+    from django.http import HttpResponse
+    from django.conf import settings
+    from api.logic.renderizador import montar_html_gabarito_customizado
+
+    nome_relatorio = request.query_params.get('nome_relatorio')
+    if not nome_relatorio:
+        return HttpResponse("O parâmetro nome_relatorio é obrigatório.", status=400)
+
+    # 1. Obter CNPJ (permite parâmetro da query ou local)
+    import re
+    cnpj_param = request.query_params.get('cnpj')
+    if cnpj_param:
+        cnpj_limpo = re.sub(r'\D', '', str(cnpj_param))
+    else:
+        empresa = models.EmpresaConfig.objects.exclude(cpf_cnpj='').first() or models.EmpresaConfig.objects.first()
+        cnpj_limpo = re.sub(r'\D', '', str(empresa.cpf_cnpj)) if empresa and empresa.cpf_cnpj else ""
+
+    # 2. Conectar e buscar da Central SaaS
+    db_name = 'aperus_central'
+    if db_name not in settings.DATABASES:
+        import copy
+        default_db = settings.DATABASES['default']
+        settings.DATABASES[db_name] = copy.deepcopy(default_db)
+        settings.DATABASES[db_name]['NAME'] = db_name
+
+    layout_json = None
+    largura_mm = 210
+    altura_mm = 297
+    tipo_gabarito = 'A4_RETRATO'
+
+    # Se tivermos CNPJ, tentamos obter da Central/Local
+    if cnpj_limpo:
+        try:
+            cliente = models.SaaSCliente.objects.using(db_name).filter(cnpj=cnpj_limpo).first()
+            if cliente:
+                gabarito = models.GabaritoCustomizado.objects.using(db_name).filter(
+                    cliente=cliente,
+                    nome_relatorio=nome_relatorio,
+                    ativo=True
+                ).first()
+                if gabarito:
+                    layout_json = gabarito.layout_json
+                    largura_mm = gabarito.largura_gabarito_mm
+                    altura_mm = gabarito.altura_gabarito_mm
+                    tipo_gabarito = gabarito.tipo_gabarito
+        except Exception as e:
+            pass
+
+    # Dicionário de templates de layout padrão (fallback caso o cliente não tenha customizado ainda)
+    DEFAULT_LAYOUTS = {
+        'venda_recibo': [
+            {'campo_origem': 'venda.numero', 'x': 10, 'y': 10, 'font_size': 12, 'largura': 150, 'label': 'Número da Venda'},
+            {'campo_origem': 'venda.data', 'x': 180, 'y': 10, 'font_size': 12, 'largura': 100, 'label': 'Data da Venda'},
+            {'campo_origem': 'cliente.nome', 'x': 10, 'y': 30, 'font_size': 12, 'largura': 220, 'label': 'Nome do Cliente'},
+            {'campo_origem': 'produto.codigo', 'x': 10, 'y': 65, 'font_size': 11, 'largura': 50, 'label': 'Código do Produto'},
+            {'campo_origem': 'produto.descricao', 'x': 65, 'y': 65, 'font_size': 11, 'largura': 150, 'label': 'Descrição do Produto'},
+            {'campo_origem': 'produto.quantidade', 'x': 220, 'y': 65, 'font_size': 11, 'largura': 40, 'label': 'Quantidade'},
+            {'campo_origem': 'produto.valor_unit', 'x': 265, 'y': 65, 'font_size': 11, 'largura': 60, 'label': 'Valor Unitário'},
+            {'campo_origem': 'venda.total', 'x': 180, 'y': 105, 'font_size': 14, 'largura': 100, 'label': 'Total da Venda'}
+        ],
+        'etiqueta_gondola': [
+            {'campo_origem': 'produto.descricao', 'x': 10, 'y': 10, 'font_size': 14, 'largura': 260, 'label': 'Descrição do Produto'},
+            {'campo_origem': 'produto.codigo', 'x': 10, 'y': 40, 'font_size': 11, 'largura': 100, 'label': 'Código do Produto'},
+            {'campo_origem': 'produto.valor_unit', 'x': 10, 'y': 65, 'font_size': 20, 'largura': 150, 'label': 'Valor Unitário'},
+            {'campo_origem': 'produto.codigo_barras', 'x': 10, 'y': 105, 'font_size': 12, 'largura': 200, 'label': 'Código de Barras'}
+        ],
+        'relatorio_vendas': [
+            {'campo_origem': 'cliente.nome', 'x': 30, 'y': 30, 'font_size': 12, 'largura': 200, 'label': 'Nome do Cliente'},
+            {'campo_origem': 'venda.numero', 'x': 250, 'y': 30, 'font_size': 12, 'largura': 100, 'label': 'Número da Venda'},
+            {'campo_origem': 'venda.total', 'x': 370, 'y': 30, 'font_size': 12, 'largura': 120, 'label': 'Total da Venda'}
+        ],
+        'relatorio_inventario': [
+            {'campo_origem': 'produto.codigo', 'x': 30, 'y': 30, 'font_size': 12, 'largura': 100, 'label': 'Código do Produto'},
+            {'campo_origem': 'produto.descricao', 'x': 150, 'y': 30, 'font_size': 12, 'largura': 300, 'label': 'Descrição do Produto'},
+            {'campo_origem': 'produto.quantidade', 'x': 470, 'y': 30, 'font_size': 12, 'largura': 100, 'label': 'Quantidade'}
+        ]
+    }
+
+    if not layout_json:
+        layout_json = DEFAULT_LAYOUTS.get(nome_relatorio, [])
+        if nome_relatorio == 'venda_recibo':
+            tipo_gabarito = 'RECIBO'
+            largura_mm = 80
+            altura_mm = 0
+        elif nome_relatorio == 'etiqueta_gondola':
+            tipo_gabarito = 'ETIQUETA'
+            largura_mm = 100
+            altura_mm = 50
+        elif nome_relatorio == 'relatorio_vendas':
+            tipo_gabarito = 'A4_RETRATO'
+            largura_mm = 210
+            altura_mm = 297
+        elif nome_relatorio == 'relatorio_inventario':
+            tipo_gabarito = 'A4_PAISAGEM'
+            largura_mm = 297
+            altura_mm = 210
+
+    # Dados mockados para visualização do teste
+    empresa_obj = models.EmpresaConfig.objects.exclude(cpf_cnpj='').first() or models.EmpresaConfig.objects.first()
+    logo_url = empresa_obj.logo_url if (empresa_obj and empresa_obj.logo_url) else ''
+    if logo_url:
+        if not logo_url.startswith('http'):
+            if logo_url.startswith('media/'):
+                logo_url = '/' + logo_url
+            elif logo_url.startswith('/media/'):
+                pass
+            else:
+                if logo_url.startswith('/logos/'):
+                    pass
+                elif logo_url.startswith('logos/'):
+                    logo_url = '/' + logo_url
+                else:
+                    logo_url = '/logos/' + logo_url.lstrip('/')
+            logo_url = request.build_absolute_uri(logo_url)
+    else:
+        logo_url = 'https://central.aperus.com.br/static/logo.png'
+
+    MOCK_DATA = {
+        # Empresa
+        'empresa.logomarca': logo_url,
+        'empresa.razao_social': 'Aperus Tec Informática S.A.',
+        'empresa.nome_fantasia': 'Sistema Aperus Central',
+        'empresa.cnpj': '99.888.777/0001-66',
+        'empresa.inscricao_estadual': '109.208.300.111',
+        'empresa.telefone': '(34) 3210-9999',
+        'empresa.email': 'contato@aperus.com.br',
+        'empresa.endereco': 'Rua Santo Antônio, 450 - Bairro Planalto, Uberlândia - MG',
+        'empresa.cep': '38400-112',
+        
+        # Cliente
+        'cliente.nome': 'Brunow e Associados S/S Ltda',
+        'cliente.doc': '12.345.678/0001-90',
+        'cliente.rg_ie': 'MG-15.890.301',
+        'cliente.telefone': '(34) 99999-1234',
+        'cliente.email': 'financeiro@brunow.com.br',
+        'cliente.endereco': 'Av. Faria Lima, 1000 - Centro',
+        'cliente.bairro': 'Jardins',
+        'cliente.cidade': 'São Paulo',
+        'cliente.uf': 'SP',
+        'cliente.cep': '01451-001',
+        'cliente.complemento': '15º Andar - Sala 152',
+        
+        # Venda
+        'venda.numero': '00004589',
+        'venda.data': '05/06/2026',
+        'venda.total': 'R$ 389,90',
+        'venda.subtotal': 'R$ 399,90',
+        'venda.desconto': 'R$ 10,00',
+        'venda.frete': 'R$ 15,00',
+        'venda.total_geral': 'R$ 389,90',
+        'venda.total_desconto': 'R$ 10,00',
+        'venda.total_frete': 'R$ 15,00',
+        'venda.forma_pagamento': 'Cartão de Crédito',
+        
+        # Produto
+        'produto.codigo': 'PROD0089',
+        'produto.descricao': 'Arroz Integral Prato Fino 5kg',
+        'produto.valor_unit': 'R$ 29,90',
+        'produto.quantidade': '3',
+        'produto.subtotal': 'R$ 89,70',
+        'produto.codigo_barras': '7891000200030',
+        'produto.unidade': 'UN',
+        'produto.ncm': '1006.30.21',
+        'produto.grupo': 'Alimentos Básicos',
+        'produto.marca': 'Prato Fino',
+        'produto.preco_custo': 'R$ 19,50',
+        'produto.peso_liquido': '5.00 kg',
+        'produto.peso_bruto': '5.05 kg',
+
+        # Ordem de Serviço
+        'os.numero': '00001024',
+        'os.data_abertura': '11/06/2026 09:00',
+        'os.data_previsao': '12/06/2026 18:00',
+        'os.data_fechamento': '11/06/2026 15:30',
+        'os.status': 'Finalizada',
+        'os.tecnico': 'João Técnico de Campo',
+        'os.defeitos': 'O aparelho não liga e emite bip intermitente.',
+        'os.laudo_tecnico': 'Substituição da fonte de alimentação queimada e limpeza geral.',
+        'os.observacoes': 'Garantia de 90 dias sobre a fonte trocada.',
+        'os.solicitante': 'Brunow Solicitante',
+        'os.total_produtos': 'R$ 150,00',
+        'os.total_servicos': 'R$ 120,00',
+        'os.total_geral': 'R$ 270,00',
+        'os.desconto': 'R$ 20,00',
+        'os.frete': 'R$ 0,00',
+        'os.subtotal': 'R$ 270,00',
+
+        # Veículo
+        'veiculo.placa': 'ABC-1234',
+        'veiculo.marca': 'Toyota',
+        'veiculo.modelo': 'Corolla XEI 2.0',
+        'veiculo.ano': '2022',
+        'veiculo.cor': 'Prata',
+        'veiculo.chassi': '9BWZZZ99Z99999999',
+        'veiculo.km': '45.000 km',
+        'veiculo.combustivel': 'Flex',
+        'veiculo.observacoes': 'Nenhuma observação.',
+
+        # Equipamento
+        'equipamento.codigo': 'EQP004',
+        'equipamento.nome': 'Ar Condicionado Split 12000 BTU',
+        'equipamento.marca': 'Springer Midea',
+        'equipamento.modelo': '42AGQA12M5',
+        'equipamento.numero_serie': '1234567890AB',
+        'equipamento.descricao': 'Ar condicionado split hi-wall inverter',
+        'equipamento.categoria': 'Climatização',
+        'equipamento.status': 'Ativo',
+        'equipamento.observacoes': 'Em bom estado.',
+
+        # Animal / Pet
+        'animal.nome': 'Max',
+        'animal.raca': 'Golden Retriever',
+        'animal.sexo': 'Macho',
+        'animal.idade': '3 anos',
+        'animal.peso': '32 kg',
+        'animal.cor': 'Dourado',
+        'animal.observacoes': 'Amigável.',
+        
+        'pet.nome': 'Max',
+        'pet.raca': 'Golden Retriever',
+        'pet.sexo': 'Macho',
+        'pet.peso': '32 kg',
+        'pet.cor': 'Dourado',
+        'pet.observacoes': 'Amigável.',
+    }
+
+    html = montar_html_gabarito_customizado(
+        layout_json=layout_json,
+        dados_reais_locais=MOCK_DATA,
+        largura_mm=largura_mm,
+        altura_mm=altura_mm,
+        tipo_gabarito=tipo_gabarito
+    )
+    return HttpResponse(html)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def saas_gabarito_gerar(request):
+    """
+    Gera o relatório com dados reais aplicando filtros e ordenação, retornando o HTML pronto para impressão.
+    """
+    from django.http import HttpResponse
+    from django.conf import settings
+    from django.db.models import Sum
+    from rest_framework.permissions import AllowAny
+    import re
+    
+    nome_relatorio = request.query_params.get('nome_relatorio')
+    if not nome_relatorio:
+        return HttpResponse("O parâmetro nome_relatorio é obrigatório.", status=400)
+
+    # 1. Tenant database routing
+    cnpj_param = request.query_params.get('cnpj')
+    db_alias = 'default'
+    if cnpj_param:
+        cnpj_limpo = re.sub(r'\D', '', str(cnpj_param))
+        # Mother node case: find SaaSCliente to resolve schema database
+        cliente_saas = models.SaaSCliente.objects.filter(cnpj=cnpj_limpo).first()
+        if cliente_saas and cliente_saas.schema_name:
+            schema_db = f"aperus_{cliente_saas.schema_name}"
+            if schema_db not in settings.DATABASES:
+                import copy
+                default_db = settings.DATABASES['default']
+                settings.DATABASES[schema_db] = copy.deepcopy(default_db)
+                settings.DATABASES[schema_db]['NAME'] = schema_db
+            db_alias = schema_db
+    else:
+        # Local filial case: get local CNPJ to fetch custom layouts
+        empresa = models.EmpresaConfig.objects.exclude(cpf_cnpj='').first() or models.EmpresaConfig.objects.first()
+        cnpj_limpo = re.sub(r'\D', '', str(empresa.cpf_cnpj)) if empresa and empresa.cpf_cnpj else ""
+
+    # 2. Fetch layout from central db
+    db_central = 'aperus_central'
+    if db_central not in settings.DATABASES:
+        import copy
+        default_db = settings.DATABASES['default']
+        settings.DATABASES[db_central] = copy.deepcopy(default_db)
+        settings.DATABASES[db_central]['NAME'] = db_central
+
+    layout_json = None
+    largura_mm = 210
+    altura_mm = 297
+    tipo_gabarito = 'A4_RETRATO'
+
+    if cnpj_limpo:
+        try:
+            cliente_saas = models.SaaSCliente.objects.using(db_central).filter(cnpj=cnpj_limpo).first()
+            if cliente_saas:
+                gabarito = models.GabaritoCustomizado.objects.using(db_central).filter(
+                    cliente=cliente_saas,
+                    nome_relatorio=nome_relatorio,
+                    ativo=True
+                ).first()
+                if gabarito:
+                    layout_json = gabarito.layout_json
+                    largura_mm = gabarito.largura_gabarito_mm
+                    altura_mm = gabarito.altura_gabarito_mm
+                    tipo_gabarito = gabarito.tipo_gabarito
+        except Exception as e:
+            pass
+
+    # Fallback to defaults
+    DEFAULT_LAYOUTS = {
+        'venda_recibo': [
+            {'campo_origem': 'venda.numero', 'x': 10, 'y': 10, 'font_size': 12, 'largura': 150, 'label': 'Número da Venda'},
+            {'campo_origem': 'venda.data', 'x': 180, 'y': 10, 'font_size': 12, 'largura': 100, 'label': 'Data da Venda'},
+            {'campo_origem': 'cliente.nome', 'x': 10, 'y': 30, 'font_size': 12, 'largura': 220, 'label': 'Nome do Cliente'},
+            {'campo_origem': 'produto.codigo', 'x': 10, 'y': 65, 'font_size': 11, 'largura': 50, 'label': 'Código do Produto'},
+            {'campo_origem': 'produto.descricao', 'x': 65, 'y': 65, 'font_size': 11, 'largura': 150, 'label': 'Descrição do Produto'},
+            {'campo_origem': 'produto.quantidade', 'x': 220, 'y': 65, 'font_size': 11, 'largura': 40, 'label': 'Quantidade'},
+            {'campo_origem': 'produto.valor_unit', 'x': 265, 'y': 65, 'font_size': 11, 'largura': 60, 'label': 'Valor Unitário'},
+            {'campo_origem': 'venda.total', 'x': 180, 'y': 105, 'font_size': 14, 'largura': 100, 'label': 'Total da Venda'}
+        ],
+        'etiqueta_gondola': [
+            {'campo_origem': 'produto.descricao', 'x': 10, 'y': 10, 'font_size': 14, 'largura': 260, 'label': 'Descrição do Produto'},
+            {'campo_origem': 'produto.codigo', 'x': 10, 'y': 40, 'font_size': 11, 'largura': 100, 'label': 'Código do Produto'},
+            {'campo_origem': 'produto.valor_unit', 'x': 10, 'y': 65, 'font_size': 20, 'largura': 150, 'label': 'Valor Unitário'},
+            {'campo_origem': 'produto.codigo_barras', 'x': 10, 'y': 105, 'font_size': 12, 'largura': 200, 'label': 'Código de Barras'}
+        ],
+        'relatorio_vendas': [
+            {'campo_origem': 'cliente.nome', 'x': 30, 'y': 30, 'font_size': 12, 'largura': 200, 'label': 'Nome do Cliente'},
+            {'campo_origem': 'venda.numero', 'x': 250, 'y': 30, 'font_size': 12, 'largura': 100, 'label': 'Número da Venda'},
+            {'campo_origem': 'venda.total', 'x': 370, 'y': 30, 'font_size': 12, 'largura': 120, 'label': 'Total da Venda'}
+        ],
+        'relatorio_inventario': [
+            {'campo_origem': 'produto.codigo', 'x': 30, 'y': 30, 'font_size': 12, 'largura': 100, 'label': 'Código do Produto'},
+            {'campo_origem': 'produto.descricao', 'x': 150, 'y': 30, 'font_size': 12, 'largura': 300, 'label': 'Descrição do Produto'},
+            {'campo_origem': 'produto.quantidade', 'x': 470, 'y': 30, 'font_size': 12, 'largura': 100, 'label': 'Quantidade'}
+        ]
+    }
+
+    if not layout_json:
+        layout_json = DEFAULT_LAYOUTS.get(nome_relatorio, [])
+        if nome_relatorio == 'venda_recibo':
+            tipo_gabarito = 'RECIBO'
+            largura_mm = 80
+            altura_mm = 0
+        elif nome_relatorio == 'etiqueta_gondola':
+            tipo_gabarito = 'ETIQUETA'
+            largura_mm = 100
+            altura_mm = 50
+        elif nome_relatorio == 'relatorio_vendas':
+            tipo_gabarito = 'A4_RETRATO'
+            largura_mm = 210
+            altura_mm = 297
+        elif nome_relatorio == 'relatorio_inventario':
+            tipo_gabarito = 'A4_PAISAGEM'
+            largura_mm = 297
+            altura_mm = 210
+
+    # 3. Load EmpresaConfig
+    empresa_obj = models.EmpresaConfig.objects.using(db_alias).exclude(cpf_cnpj='').first() or models.EmpresaConfig.objects.using(db_alias).first()
+    
+    logo_url = empresa_obj.logo_url if (empresa_obj and empresa_obj.logo_url) else ''
+    if logo_url:
+        if not logo_url.startswith('http'):
+            if logo_url.startswith('media/'):
+                logo_url = '/' + logo_url
+            elif logo_url.startswith('/media/'):
+                pass
+            else:
+                if logo_url.startswith('/logos/'):
+                    pass
+                elif logo_url.startswith('logos/'):
+                    logo_url = '/' + logo_url
+                else:
+                    logo_url = '/logos/' + logo_url.lstrip('/')
+            logo_url = request.build_absolute_uri(logo_url)
+    else:
+        logo_url = 'https://central.aperus.com.br/static/logo.png'
+
+    empresa_data = {
+        'empresa.logomarca': logo_url,
+        'empresa.razao_social': empresa_obj.nome_razao_social if empresa_obj else 'Aperus Tec Informática S.A.',
+        'empresa.nome_fantasia': empresa_obj.nome_fantasia if empresa_obj else 'Sistema Aperus Central',
+        'empresa.cnpj': empresa_obj.cpf_cnpj if empresa_obj else '99.888.777/0001-66',
+        'empresa.inscricao_estadual': empresa_obj.inscricao_estadual if empresa_obj else '',
+        'empresa.telefone': empresa_obj.telefone if empresa_obj else '',
+        'empresa.email': empresa_obj.email if empresa_obj else '',
+        'empresa.endereco': f"{empresa_obj.endereco or ''}, {empresa_obj.numero or ''} - {empresa_obj.bairro or ''}, {empresa_obj.cidade or ''} - {empresa_obj.estado or ''}" if empresa_obj else '',
+        'empresa.cep': empresa_obj.cep if empresa_obj else ''
+    }
+
+    # 4. Fetch list of data records based on report type
+    records_data = []
+
+    is_sales_report = False
+    is_os_report = False
+    
+    # Check elements list
+    elements_to_check = []
+    if isinstance(layout_json, dict) and 'elementos' in layout_json:
+        elements_to_check = layout_json['elementos']
+    elif isinstance(layout_json, list):
+        elements_to_check = layout_json
+        
+    if nome_relatorio in ['venda_recibo', 'relatorio_vendas']:
+        is_sales_report = True
+    elif nome_relatorio in ['etiqueta_gondola', 'relatorio_inventario']:
+        is_sales_report = False
+    elif nome_relatorio and any(kw in str(nome_relatorio).lower() for kw in ['ordem_servico', 'os']):
+        is_os_report = True
+    else:
+        if any(
+            str(el.get('campo_origem', '')).startswith('venda.') or 
+            str(el.get('campo_origem', '')).startswith('cliente.')
+            for el in elements_to_check
+        ):
+            is_sales_report = True
+            
+        if any(
+            str(el.get('campo_origem', '')).startswith('os.') or
+            str(el.get('campo_origem', '')).startswith('veiculo.') or
+            str(el.get('campo_origem', '')).startswith('equipamento.') or
+            str(el.get('campo_origem', '')).startswith('animal.') or
+            str(el.get('campo_origem', '')).startswith('pet.')
+            for el in elements_to_check
+        ):
+            is_os_report = True
+
+    if is_os_report:
+        # Fetch OrdemServico
+        qs = models.OrdemServico.objects.using(db_alias).all().select_related('id_cliente', 'id_tecnico', 'id_status')
+        
+        # Apply filters
+        os_id = request.query_params.get('os')
+        if os_id:
+            qs = qs.filter(id_os=os_id)
+            
+        data_inicio = request.query_params.get('data_inicio')
+        data_fim = request.query_params.get('data_fim')
+        if data_inicio:
+            qs = qs.filter(data_abertura__gte=data_inicio)
+        if data_fim:
+            qs = qs.filter(data_abertura__lte=data_fim)
+            
+        cliente_id = request.query_params.get('cliente')
+        if cliente_id:
+            qs = qs.filter(id_cliente=cliente_id)
+            
+        tecnico_id = request.query_params.get('tecnico')
+        if tecnico_id:
+            qs = qs.filter(id_tecnico=tecnico_id)
+            
+        status_id = request.query_params.get('status')
+        if status_id:
+            qs = qs.filter(id_status=status_id)
+
+        # Build list of dicts
+        for os_rec in qs:
+            veiculo = None
+            if os_rec.id_veiculo:
+                try:
+                    veiculo = models.Veiculo.objects.using(db_alias).filter(id_veiculo=os_rec.id_veiculo).first()
+                except Exception:
+                    pass
+            
+            equipamento = None
+            if os_rec.id_equipamento:
+                try:
+                    equipamento = models.Equipamento.objects.using(db_alias).filter(id_equipamento=os_rec.id_equipamento).first()
+                except Exception:
+                    pass
+                    
+            pet = None
+            if os_rec.id_animal:
+                try:
+                    pet = models.Pet.objects.using(db_alias).filter(id_pet=os_rec.id_animal).first()
+                except Exception:
+                    pass
+            
+            total_prod = os_rec.valor_total_produtos or 0
+            total_serv = os_rec.valor_total_servicos or 0
+            desc = os_rec.valor_desconto or 0
+            total_os = os_rec.valor_total_os or 0
+            
+            os_dict = {
+                **empresa_data,
+                
+                # Cliente
+                'cliente.nome': os_rec.id_cliente.nome_razao_social if os_rec.id_cliente else '',
+                'cliente.doc': os_rec.id_cliente.cpf_cnpj if os_rec.id_cliente else '',
+                'cliente.rg_ie': os_rec.id_cliente.inscricao_estadual if os_rec.id_cliente else '',
+                'cliente.telefone': os_rec.id_cliente.telefone or (os_rec.id_cliente.whatsapp if os_rec.id_cliente else '') or '',
+                'cliente.email': os_rec.id_cliente.email if os_rec.id_cliente else '',
+                'cliente.endereco': os_rec.id_cliente.endereco if os_rec.id_cliente else '',
+                'cliente.bairro': os_rec.id_cliente.bairro if os_rec.id_cliente else '',
+                'cliente.cidade': os_rec.id_cliente.cidade if os_rec.id_cliente else '',
+                'cliente.uf': os_rec.id_cliente.estado if os_rec.id_cliente else '',
+                'cliente.cep': os_rec.id_cliente.cep if os_rec.id_cliente else '',
+                'cliente.complemento': '',
+
+                # OS
+                'os.numero': str(os_rec.id_os),
+                'os.data_abertura': os_rec.data_abertura.strftime('%d/%m/%Y %H:%M') if os_rec.data_abertura else '',
+                'os.data_previsao': os_rec.data_finalizacao.strftime('%d/%m/%Y') if os_rec.data_finalizacao else '',
+                'os.data_fechamento': os_rec.data_finalizacao.strftime('%d/%m/%Y') if os_rec.data_finalizacao else '',
+                'os.status': os_rec.id_status.nome_status if os_rec.id_status else (os_rec.status_os or ''),
+                'os.tecnico': os_rec.id_tecnico.nome if os_rec.id_tecnico else '',
+                'os.defeitos': os_rec.descricao_problema or '',
+                'os.laudo_tecnico': os_rec.laudo_tecnico or '',
+                'os.observacoes': '',
+                'os.solicitante': os_rec.solicitante or '',
+                'os.total_produtos': f"R$ {total_prod:.2f}".replace('.', ','),
+                'os.total_servicos': f"R$ {total_serv:.2f}".replace('.', ','),
+                'os.desconto': f"R$ {desc:.2f}".replace('.', ','),
+                'os.subtotal': f"R$ {(total_prod + total_serv):.2f}".replace('.', ','),
+                'os.total_geral': f"R$ {total_os:.2f}".replace('.', ','),
+                'os.frete': 'R$ 0,00',
+                
+                # Veículo
+                'veiculo.placa': veiculo.placa if veiculo else '',
+                'veiculo.marca': veiculo.marca if veiculo else '',
+                'veiculo.modelo': veiculo.modelo if veiculo else '',
+                'veiculo.ano': str(veiculo.ano) if veiculo and veiculo.ano else '',
+                'veiculo.cor': veiculo.cor if veiculo else '',
+                'veiculo.chassi': veiculo.chassi if veiculo else '',
+                'veiculo.uf': veiculo.uf if veiculo else '',
+                'veiculo.observacoes': veiculo.observacoes if veiculo else '',
+                
+                # Equipamento
+                'equipamento.codigo': equipamento.codigo if equipamento else '',
+                'equipamento.nome': equipamento.nome if equipamento else '',
+                'equipamento.descricao': equipamento.descricao if equipamento else '',
+                'equipamento.categoria': equipamento.categoria if equipamento else '',
+                'equipamento.marca': equipamento.marca if equipamento else '',
+                'equipamento.modelo': equipamento.modelo if equipamento else '',
+                'equipamento.numero_serie': equipamento.numero_serie if equipamento else '',
+                'equipamento.status': equipamento.status if equipamento else '',
+                'equipamento.observacoes': equipamento.observacoes if equipamento else '',
+                
+                # Animal / Pet
+                'animal.nome': pet.nome_pet if pet else '',
+                'animal.raca': pet.raca if pet else '',
+                'animal.sexo': pet.sexo if pet else '',
+                'animal.idade': '',
+                'animal.peso': f"{pet.peso} kg" if pet and pet.peso else '',
+                'animal.cor': pet.cor if pet else '',
+                'animal.pelagem': '',
+                'animal.observacoes': pet.observacoes if pet else '',
+
+                'pet.nome': pet.nome_pet if pet else '',
+                'pet.raca': pet.raca if pet else '',
+                'pet.sexo': pet.sexo if pet else '',
+                'pet.peso': f"{pet.peso} kg" if pet and pet.peso else '',
+                'pet.cor': pet.cor if pet else '',
+                'pet.observacoes': pet.observacoes if pet else '',
+            }
+
+            itens_list = []
+            try:
+                os_produtos = models.OsItensProduto.objects.using(db_alias).filter(id_os=os_rec).select_related('id_produto')
+                for item in os_produtos:
+                    prod_data = {
+                        'produto.codigo': item.id_produto.codigo_produto if item.id_produto else '',
+                        'produto.descricao': item.id_produto.nome_produto or item.id_produto.descricao if item.id_produto else '',
+                        'produto.valor_unit': f"R$ {item.valor_unitario:.2f}".replace('.', ','),
+                        'produto.quantidade': str(item.quantidade),
+                        'produto.subtotal': f"R$ {item.valor_total:.2f}".replace('.', ','),
+                        'produto.codigo_barras': item.id_produto.gtin or item.id_produto.codigo_produto if item.id_produto else '',
+                        'produto.unidade': item.id_produto.unidade_medida if item.id_produto else '',
+                        'produto.ncm': item.id_produto.ncm if item.id_produto else '',
+                        'produto.grupo': item.id_produto.id_grupo.nome_grupo if (item.id_produto and item.id_produto.id_grupo) else '',
+                        'produto.marca': item.id_produto.marca if item.id_produto else '',
+                    }
+                    itens_list.append(prod_data)
+            except Exception:
+                pass
+                
+            try:
+                os_servicos = models.OsItensServico.objects.using(db_alias).filter(id_os=os_rec)
+                for item in os_servicos:
+                    srv_data = {
+                        'produto.codigo': 'SERV',
+                        'produto.descricao': item.descricao_servico or 'Prestação de Serviço',
+                        'produto.valor_unit': f"R$ {item.valor_unitario:.2f}".replace('.', ','),
+                        'produto.quantidade': str(item.quantidade),
+                        'produto.subtotal': f"R$ {item.valor_total:.2f}".replace('.', ','),
+                        'produto.codigo_barras': '',
+                        'produto.unidade': 'UN',
+                        'produto.ncm': '',
+                        'produto.grupo': 'Serviços',
+                        'produto.marca': '',
+                    }
+                    itens_list.append(srv_data)
+            except Exception:
+                pass
+                
+            os_dict['itens'] = itens_list
+            records_data.append(os_dict)
+
+    elif is_sales_report:
+        # Fetch Vendas
+        qs = models.Venda.objects.using(db_alias).all().select_related('id_cliente')
+        
+        # Apply filters
+        venda_id = request.query_params.get('venda')
+        if venda_id:
+            qs = qs.filter(id_venda=venda_id)
+            
+        data_inicio = request.query_params.get('data_inicio')
+        data_fim = request.query_params.get('data_fim')
+        if data_inicio:
+            qs = qs.filter(data_documento__gte=data_inicio)
+        if data_fim:
+            qs = qs.filter(data_documento__lte=data_fim)
+            
+        cliente_id = request.query_params.get('cliente')
+        if cliente_id:
+            qs = qs.filter(id_cliente=cliente_id)
+            
+        vendedor_id = request.query_params.get('vendedor')
+        if vendedor_id:
+            qs = qs.filter(id_vendedor1=vendedor_id)
+            
+        status_venda = request.query_params.get('status')
+        if status_venda:
+            qs = qs.filter(status_pagamento=status_venda)
+
+        # Apply ordering
+        ordenacao = request.query_params.get('ordenacao')
+        if ordenacao == 'documento':
+            from django.db.models import Case, When, F, CharField
+            from django.db.models.functions import Length, Cast
+            qs = qs.annotate(
+                doc_display=Case(
+                    When(numero_documento__isnull=False, numero_documento__gt='', then=F('numero_documento')),
+                    default=Cast('id_venda', CharField()),
+                    output_field=CharField()
+                )
+            ).order_by(Length('doc_display').asc(), 'doc_display')
+        else:
+            sort_map = {
+                'data': 'data_documento',
+                'cliente': 'id_cliente__nome_razao_social',
+                'total': 'valor_total'
+            }
+            sort_field = sort_map.get(ordenacao, 'id_venda')
+            qs = qs.order_by(sort_field)
+
+        # Build list of dicts
+        elements_to_check = []
+        if isinstance(layout_json, dict) and 'elementos' in layout_json:
+            elements_to_check = layout_json['elementos']
+        elif isinstance(layout_json, list):
+            elements_to_check = layout_json
+            
+        tem_campos_produto = any(str(el.get('campo_origem', '')).startswith('produto.') for el in elements_to_check)
+
+        for venda in qs:
+            # Get payment form
+            financeiro = models.FinanceiroConta.objects.using(db_alias).filter(id_venda_origem=venda.id_venda).first()
+            forma_pagamento = financeiro.forma_pagamento if financeiro else ''
+
+            venda_dict = {
+                **empresa_data,
+                'cliente.nome': venda.id_cliente.nome_razao_social if venda.id_cliente else '',
+                'cliente.doc': venda.id_cliente.cpf_cnpj if venda.id_cliente else '',
+                'cliente.rg_ie': venda.id_cliente.inscricao_estadual if venda.id_cliente else '',
+                'cliente.telefone': venda.id_cliente.telefone or (venda.id_cliente.whatsapp if venda.id_cliente else '') or '',
+                'cliente.email': venda.id_cliente.email if venda.id_cliente else '',
+                'cliente.endereco': venda.id_cliente.endereco if venda.id_cliente else '',
+                'cliente.bairro': venda.id_cliente.bairro if venda.id_cliente else '',
+                'cliente.cidade': venda.id_cliente.cidade if venda.id_cliente else '',
+                'cliente.uf': venda.id_cliente.estado if venda.id_cliente else '',
+                'cliente.cep': venda.id_cliente.cep if venda.id_cliente else '',
+                'cliente.complemento': '',
+
+                'venda.numero': venda.numero_documento or str(venda.id_venda),
+                'venda.data': venda.data_documento.strftime('%d/%m/%Y') if venda.data_documento else '',
+                'venda.total': f"R$ {venda.valor_total:.2f}".replace('.', ','),
+                'venda.subtotal': f"R$ {(venda.valor_total + (venda.valor_desconto or 0)):.2f}".replace('.', ','),
+                'venda.desconto': f"R$ {(venda.valor_desconto or 0):.2f}".replace('.', ','),
+                'venda.frete': f"R$ {(venda.taxa_entrega or 0):.2f}".replace('.', ','),
+                'venda.total_geral': f"R$ {venda.valor_total:.2f}".replace('.', ','),
+                'venda.total_desconto': f"R$ {(venda.valor_desconto or 0):.2f}".replace('.', ','),
+                'venda.total_frete': f"R$ {(venda.taxa_entrega or 0):.2f}".replace('.', ','),
+                'venda.forma_pagamento': forma_pagamento
+            }
+
+            if tem_campos_produto:
+                # Loop items of the sale
+                itens = models.VendaItem.objects.using(db_alias).filter(id_venda=venda).select_related('id_produto')
+                itens_list = []
+                for item in itens:
+                    item_data = {
+                        'produto.codigo': item.id_produto.codigo_produto if item.id_produto else '',
+                        'produto.descricao': item.id_produto.nome_produto or item.id_produto.descricao if item.id_produto else '',
+                        'produto.valor_unit': f"R$ {item.valor_unitario:.2f}".replace('.', ','),
+                        'produto.quantidade': str(item.quantidade),
+                        'produto.subtotal': f"R$ {item.valor_total:.2f}".replace('.', ','),
+                        'produto.codigo_barras': item.id_produto.gtin or item.id_produto.codigo_produto if item.id_produto else '',
+                        'produto.unidade': item.id_produto.unidade_medida if item.id_produto else '',
+                        'produto.ncm': item.id_produto.ncm if item.id_produto else '',
+                        'produto.grupo': item.id_produto.id_grupo.nome_grupo if (item.id_produto and item.id_produto.id_grupo) else '',
+                        'produto.marca': item.id_produto.marca if item.id_produto else '',
+                        'produto.preco_custo': '',
+                        'produto.peso_liquido': f"{item.id_produto.peso_unitario} kg" if (item.id_produto and item.id_produto.peso_unitario) else '',
+                        'produto.peso_bruto': ''
+                    }
+                    itens_list.append(item_data)
+                
+                venda_dict['itens'] = itens_list
+                records_data.append(venda_dict)
+            else:
+                records_data.append(venda_dict)
+
+    else:
+        # Fetch Produtos
+        qs = models.Produto.objects.using(db_alias).all().select_related('id_grupo')
+
+        # Apply filters
+        grupo_id = request.query_params.get('grupo')
+        if grupo_id:
+            qs = qs.filter(id_grupo=grupo_id)
+
+        marca = request.query_params.get('marca')
+        if marca:
+            qs = qs.filter(marca=marca)
+
+        produto_id = request.query_params.get('produto')
+        if produto_id:
+            qs = qs.filter(id_produto=produto_id)
+
+        # Apply ordering
+        ordenacao = request.query_params.get('ordenacao')
+        sort_map = {
+            'codigo': 'codigo_produto',
+            'descricao': 'nome_produto',
+            'grupo': 'id_grupo__nome_grupo',
+            'marca': 'marca'
+        }
+        sort_field = sort_map.get(ordenacao, 'id_produto')
+        qs = qs.order_by(sort_field)
+
+        for prod in qs:
+            # Get inventory quantity
+            qty_total = models.Estoque.objects.using(db_alias).filter(id_produto=prod).aggregate(total=Sum('quantidade'))['total'] or 0
+            
+            prod_dict = {
+                **empresa_data,
+                'produto.codigo': prod.codigo_produto,
+                'produto.descricao': prod.nome_produto or prod.descricao or '',
+                'produto.valor_unit': f"R$ {prod.preco_web:.2f}".replace('.', ',') if prod.preco_web is not None else 'R$ 0,00',
+                'produto.quantidade': str(qty_total),
+                'produto.subtotal': '',
+                'produto.codigo_barras': prod.gtin or prod.codigo_produto,
+                'produto.unidade': prod.unidade_medida or '',
+                'produto.ncm': prod.ncm or '',
+                'produto.grupo': prod.id_grupo.nome_grupo if prod.id_grupo else '',
+                'produto.marca': prod.marca or '',
+                'produto.preco_custo': '',
+                'produto.peso_liquido': f"{prod.peso_unitario} kg" if prod.peso_unitario else '',
+                'produto.peso_bruto': ''
+            }
+            records_data.append(prod_dict)
+
+    # Helper function for layout migration
+    def get_banded_layout(layout):
+        if not layout:
+            return {
+                'configuracao_faixas': {'header_height': 120, 'detail_height': 40, 'summary_height': 60, 'footer_height': 80},
+                'elementos': []
+            }
+        if isinstance(layout, dict) and 'configuracao_faixas' in layout and 'elementos' in layout:
+            return layout
+            
+        def infer_section(el):
+            sec = el.get('secao')
+            if sec in ['header', 'detail', 'summary', 'footer']:
+                return sec
+            chave = el.get('campo_origem', '')
+            if chave.startswith('produto.') or chave in ['venda.itens_tabela', 'os.itens_tabela']:
+                return 'detail'
+            if chave in ['venda.total', 'venda.subtotal', 'venda.desconto', 'venda.forma_pagamento',
+                         'os.total_produtos', 'os.total_servicos', 'os.desconto', 'os.subtotal', 'os.total_geral']:
+                return 'summary'
+            if (chave.startswith('empresa.') or chave.startswith('cliente.') or 
+                chave in ['venda.numero', 'venda.data'] or 
+                chave.startswith('os.') or chave.startswith('veiculo.') or 
+                chave.startswith('equipamento.') or chave.startswith('animal.') or 
+                chave.startswith('pet.')):
+                return 'header'
+            return 'header'
+
+        grouped = {'header': [], 'detail': [], 'summary': [], 'footer': []}
+        for el in layout:
+            sec = infer_section(el)
+            grouped[sec].append(el)
+
+        configuracao_faixas = {
+            'header_height': 120,
+            'detail_height': 40,
+            'summary_height': 60,
+            'footer_height': 80
+        }
+
+        elementos_novos = []
+
+        for sec in ['header', 'detail', 'summary', 'footer']:
+            els = grouped[sec]
+            if not els:
+                continue
+            min_y = min([e.get('y', 0) for e in els])
+            for el in els:
+                rel_y = max(0, el.get('y', 0) - min_y)
+                el_copy = dict(el)
+                el_copy['secao'] = sec
+                el_copy['y'] = rel_y
+                elementos_novos.append(el_copy)
+
+            max_rel_y_with_height = max([(e.get('y', 0) - min_y) + (e.get('altura') if e.get('altura') is not None else 30) for e in els])
+            default_height = 120 if sec == 'header' else (40 if sec == 'detail' else (60 if sec == 'summary' else 80))
+            configuracao_faixas[f'{sec}_height'] = max(default_height, max_rel_y_with_height + 10)
+
+        return {
+            'configuracao_faixas': configuracao_faixas,
+            'elementos': elementos_novos
+        }
+
+    # 5. Build HTML output
+    if tipo_gabarito == 'A4_RETRATO':
+        size_css = "A4 portrait"
+        width_css = "210mm"
+        height_css = "297mm"
+    elif tipo_gabarito == 'A4_PAISAGEM':
+        size_css = "A4 landscape"
+        width_css = "297mm"
+        height_css = "210mm"
+    elif tipo_gabarito == 'RECIBO':
+        size_css = "80mm auto"
+        width_css = "80mm"
+        height_css = "auto"
+    else:
+        width_css = f"{largura_mm}mm"
+        height_css = f"{altura_mm}mm" if altura_mm > 0 else "auto"
+        size_css = f"{width_css} {height_css}"
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Aperus Custom Report</title>
+    <style>
+        @page {{
+            size: {size_css};
+            margin: 0;
+        }}
+        html, body {{
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #ffffff;
+            -webkit-print-color-adjust: exact;
+        }}
+        .gabarito-container {{
+            position: relative;
+            width: {width_css};
+            min-height: {height_css};
+            box-sizing: border-box;
+            overflow: visible;
+            page-break-after: always;
+        }}
+        .gabarito-container:last-of-type {{
+            page-break-after: avoid;
+        }}
+        .band {{
+            position: relative;
+            width: 100%;
+            overflow: visible;
+            box-sizing: border-box;
+        }}
+        .elemento-impressao {{
+            position: absolute;
+            box-sizing: border-box;
+            white-space: normal;
+            word-break: break-word;
+        }}
+        @media print {{
+            .page-break {{
+                page-break-inside: avoid;
+            }}
+            .no-print {{
+                display: none !important;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="no-print" style="position: fixed; top: 15px; right: 15px; z-index: 99999;">
+        <button onclick="window.print()" style="background-color: #2e7d32; color: white; border: none; padding: 12px 24px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 8px; font-family: Arial, sans-serif;">
+            🖨️ Imprimir / Salvar PDF
+        </button>
+    </div>
+"""
+
+    if not records_data:
+        html += f"""
+    <div style="padding: 20px; font-family: sans-serif; color: #666; text-align: center;">
+        Nenhum registro encontrado para os filtros selecionados.
+    </div>
+"""
+    else:
+        # Determine if this is a listing report or a single master-detail doc
+        is_listing_report = True
+        if tipo_gabarito in ['ETIQUETA', 'RECIBO']:
+            is_listing_report = False
+        elif is_sales_report and tem_campos_produto:
+            is_listing_report = False
+        elif is_os_report and (request.query_params.get('os') or tem_campos_produto):
+            is_listing_report = False
+
+        if is_listing_report:
+            banded = get_banded_layout(layout_json)
+            alturas = banded['configuracao_faixas']
+            elementos = banded['elementos']
+            
+            header_elements = [el for el in elementos if el.get('secao') == 'header']
+            detail_elements = [el for el in elementos if el.get('secao') == 'detail']
+            summary_elements = [el for el in elementos if el.get('secao') == 'summary']
+            footer_elements = [el for el in elementos if el.get('secao') == 'footer']
+            
+            def render_band_elements(elements_list, data_context, item_context=None):
+                band_html = ""
+                for el in elements_list:
+                    chave_campo = el.get('campo_origem', '')
+                    is_shape = chave_campo.startswith('forma.')
+                    is_table = (chave_campo in ['venda.itens_tabela', 'os.itens_tabela'])
+                    
+                    x = el.get('x', 0)
+                    y = el.get('y', 0)
+                    bold = el.get('bold', False)
+                    color = el.get('color', '#000000') or '#000000'
+                    altura = el.get('altura')
+                    largura = el.get('largura', 150)
+                    font_size = el.get('font_size', 12) or 12
+                    
+                    font_weight_css = "font-weight: bold;" if bold else ""
+                    color_css = f"color: {color};"
+                    
+                    if is_table:
+                        itens_list = data_context.get('itens', []) if (is_sales_report or is_os_report) else []
+                        if not (is_sales_report or is_os_report):
+                            itens_list = [{
+                                'produto.codigo': data_context.get('produto.codigo', ''),
+                                'produto.descricao': data_context.get('produto.descricao', ''),
+                                'produto.quantidade': data_context.get('produto.quantidade', ''),
+                                'produto.valor_unit': data_context.get('produto.valor_unit', ''),
+                                'produto.subtotal': data_context.get('produto.subtotal', '')
+                            }]
+                            
+                        table_html = f'<table style="width: 100%; border-collapse: collapse; font-size: {font_size}px; color: {color};">'
+                        table_html += f'<tr style="background-color: #f2f2f2; font-weight: bold; border: 1px solid #ccc;">'
+                        table_html += f'<th style="border: 1px solid #ccc; padding: 4px; text-align: left;">Cód</th>'
+                        table_html += f'<th style="border: 1px solid #ccc; padding: 4px; text-align: left;">Descrição</th>'
+                        table_html += f'<th style="border: 1px solid #ccc; padding: 4px; text-align: right;">Qtd</th>'
+                        table_html += f'<th style="border: 1px solid #ccc; padding: 4px; text-align: right;">V.Unit</th>'
+                        table_html += f'<th style="border: 1px solid #ccc; padding: 4px; text-align: right;">Total</th>'
+                        table_html += f'</tr>'
+                        
+                        for it in itens_list:
+                            table_html += f'<tr style="border: 1px solid #ccc;">'
+                            table_html += f'<td style="border: 1px solid #ccc; padding: 4px;">{it.get("produto.codigo", "")}</td>'
+                            table_html += f'<td style="border: 1px solid #ccc; padding: 4px;">{it.get("produto.descricao", "")}</td>'
+                            table_html += f'<td style="border: 1px solid #ccc; padding: 4px; text-align: right;">{it.get("produto.quantidade", "")}</td>'
+                            table_html += f'<td style="border: 1px solid #ccc; padding: 4px; text-align: right;">{it.get("produto.valor_unit", "")}</td>'
+                            table_html += f'<td style="border: 1px solid #ccc; padding: 4px; text-align: right;">{it.get("produto.subtotal", "")}</td>'
+                            table_html += f'</tr>'
+                        table_html += f'</table>'
+                        
+                        h_css = f"height: {altura}px;" if altura is not None else ""
+                        band_html += f'        <div class="elemento-impressao" style="left: {x}px; top: {y}px; width: {largura}px; {h_css}">\n            {table_html}\n        </div>\n'
+                        continue
+                        
+                    if chave_campo == 'forma.retangulo':
+                        border_css = f"border: 1px solid {color};"
+                        h_css = f"height: {altura}px;" if altura is not None else "height: 50px;"
+                        band_html += f'        <div class="elemento-impressao" style="left: {x}px; top: {y}px; width: {largura}px; {h_css} {border_css}"></div>\n'
+                        continue
+                        
+                    if chave_campo == 'forma.linha_h':
+                        h_css = f"height: {altura}px;" if altura is not None else "height: 2px;"
+                        bg_css = f"background-color: {color};"
+                        band_html += f'        <div class="elemento-impressao" style="left: {x}px; top: {y}px; width: {largura}px; {h_css} {bg_css}"></div>\n'
+                        continue
+                    if chave_campo == 'forma.linha_v':
+                        h_css = f"height: {altura}px;" if altura is not None else "height: 100px;"
+                        bg_css = f"background-color: {color};"
+                        band_html += f'        <div class="elemento-impressao" style="left: {x}px; top: {y}px; width: {largura}px; {h_css} {bg_css}"></div>\n'
+                        continue
+                        
+                    if item_context and chave_campo.startswith('produto.'):
+                        valor_real = item_context.get(chave_campo, '')
+                    elif chave_campo == 'texto.livre':
+                        valor_real = el.get('valor_customizado', '')
+                        if valor_real:
+                            valor_real = str(valor_real).replace('\n', '<br />')
+                    else:
+                        valor_real = data_context.get(chave_campo, '')
+                        
+                    if valor_real is None:
+                        valor_real = ''
+                        
+                    if chave_campo and any(kw in chave_campo for kw in ['logomarca', 'logo', 'imagem']):
+                        conteudo = f'<img src="{valor_real}" style="max-width: 100%; height: auto; display: block;" />' if valor_real else ''
+                    else:
+                        conteudo = valor_real
+                        
+                    band_html += f'        <div class="elemento-impressao" style="left: {x}px; top: {y}px; font-size: {font_size}px; width: {largura}px; {font_weight_css} {color_css}">\n            {conteudo}\n        </div>\n'
+                return band_html
+
+            container_style = f"position: relative; width: {width_css}; min-height: {height_css}; box-sizing: border-box; overflow: visible; page-break-after: always;"
+            if tipo_gabarito not in ['A4_RETRATO', 'A4_PAISAGEM', 'RECIBO']:
+                container_style = f"position: relative; width: {width_css}; height: {height_css}; box-sizing: border-box; overflow: hidden; page-break-after: always;"
+                
+            html += f'    <div class="gabarito-container" style="{container_style}">\n'
+            
+            first_data = records_data[0] if records_data else {}
+            html += f'        <div class="band" style="height: {alturas.get("header_height", 120)}px;">\n'
+            html += render_band_elements(header_elements, data_context=first_data)
+            html += f'        </div>\n'
+            
+            detail_h = alturas.get("detail_height", 40)
+            for data in records_data:
+                html += f'        <div class="band page-break" style="height: {detail_h}px;">\n'
+                html += render_band_elements(detail_elements, data_context=data)
+                html += f'        </div>\n'
+                
+            summary_context = dict(first_data)
+            if is_sales_report:
+                total_sum = 0.0
+                subtotal_sum = 0.0
+                desconto_sum = 0.0
+                frete_sum = 0.0
+                for data in records_data:
+                    def parse_money(val):
+                        if not val: return 0.0
+                        cleaned = re.sub(r'[^\d,.-]', '', str(val)).replace(',', '.')
+                        try:
+                            return float(cleaned)
+                        except ValueError:
+                            return 0.0
+                    total_sum += parse_money(data.get('venda.total', '0'))
+                    subtotal_sum += parse_money(data.get('venda.subtotal', '0'))
+                    desconto_sum += parse_money(data.get('venda.desconto', '0'))
+                    frete_sum += parse_money(data.get('venda.frete', '0'))
+                summary_context['venda.total'] = f"R$ {total_sum:.2f}".replace('.', ',')
+                summary_context['venda.subtotal'] = f"R$ {subtotal_sum:.2f}".replace('.', ',')
+                summary_context['venda.desconto'] = f"R$ {desconto_sum:.2f}".replace('.', ',')
+                summary_context['venda.frete'] = f"R$ {frete_sum:.2f}".replace('.', ',')
+                summary_context['venda.total_geral'] = f"R$ {total_sum:.2f}".replace('.', ',')
+                summary_context['venda.total_desconto'] = f"R$ {desconto_sum:.2f}".replace('.', ',')
+                summary_context['venda.total_frete'] = f"R$ {frete_sum:.2f}".replace('.', ',')
+            elif is_os_report:
+                total_prod_sum = 0.0
+                total_serv_sum = 0.0
+                desconto_sum = 0.0
+                subtotal_sum = 0.0
+                total_os_sum = 0.0
+                for data in records_data:
+                    def parse_money(val):
+                        if not val: return 0.0
+                        cleaned = re.sub(r'[^\d,.-]', '', str(val)).replace(',', '.')
+                        try:
+                            return float(cleaned)
+                        except ValueError:
+                            return 0.0
+                    total_prod_sum += parse_money(data.get('os.total_produtos', '0'))
+                    total_serv_sum += parse_money(data.get('os.total_servicos', '0'))
+                    desconto_sum += parse_money(data.get('os.desconto', '0'))
+                    subtotal_sum += parse_money(data.get('os.subtotal', '0'))
+                    total_os_sum += parse_money(data.get('os.total_geral', '0'))
+                summary_context['os.total_produtos'] = f"R$ {total_prod_sum:.2f}".replace('.', ',')
+                summary_context['os.total_servicos'] = f"R$ {total_serv_sum:.2f}".replace('.', ',')
+                summary_context['os.desconto'] = f"R$ {desconto_sum:.2f}".replace('.', ',')
+                summary_context['os.subtotal'] = f"R$ {subtotal_sum:.2f}".replace('.', ',')
+                summary_context['os.total_geral'] = f"R$ {total_os_sum:.2f}".replace('.', ',')
+                
+            html += f'        <div class="band" style="height: {alturas.get("summary_height", 60)}px;">\n'
+            html += render_band_elements(summary_elements, data_context=summary_context)
+            html += f'        </div>\n'
+            
+            html += f'        <div class="band" style="height: {alturas.get("footer_height", 80)}px;">\n'
+            html += render_band_elements(footer_elements, data_context=summary_context)
+            html += f'        </div>\n'
+            
+            html += f'    </div>\n'
+            
+        else:
+            for data in records_data:
+                banded = get_banded_layout(layout_json)
+                alturas = banded['configuracao_faixas']
+                elementos = banded['elementos']
+                
+                header_elements = [el for el in elementos if el.get('secao') == 'header']
+                detail_elements = [el for el in elementos if el.get('secao') == 'detail']
+                summary_elements = [el for el in elementos if el.get('secao') == 'summary']
+                footer_elements = [el for el in elementos if el.get('secao') == 'footer']
+                
+                table_element = next((el for el in detail_elements if el.get('campo_origem') in ['venda.itens_tabela', 'os.itens_tabela']), None)
+                
+                itens = data.get('itens')
+                num_items = len(itens) if (itens is not None) else 0
+                
+                table_growth = 0
+                if table_element:
+                    designed_altura = table_element.get('altura', 150)
+                    font_size = table_element.get('font_size', 11) or 11
+                    row_height = max(20, int(font_size * 1.5))
+                    header_height = 25
+                    actual_height = header_height + num_items * row_height
+                    table_growth = max(0, actual_height - designed_altura)
+                    
+                def render_band_elements(elements_list, item_context=None):
+                    band_html = ""
+                    for el in elements_list:
+                        chave_campo = el.get('campo_origem', '')
+                        is_shape = chave_campo.startswith('forma.')
+                        is_table = (chave_campo in ['venda.itens_tabela', 'os.itens_tabela'])
+                        
+                        x = el.get('x', 0)
+                        y = el.get('y', 0)
+                        bold = el.get('bold', False)
+                        color = el.get('color', '#000000') or '#000000'
+                        altura = el.get('altura')
+                        largura = el.get('largura', 150)
+                        font_size = el.get('font_size', 12) or 12
+                        
+                        font_weight_css = "font-weight: bold;" if bold else ""
+                        color_css = f"color: {color};"
+                        
+                        if is_table:
+                            itens_list = data.get('itens', []) if (is_sales_report or is_os_report) else []
+                            if not (is_sales_report or is_os_report):
+                                itens_list = [{
+                                    'produto.codigo': data.get('produto.codigo', ''),
+                                    'produto.descricao': data.get('produto.descricao', ''),
+                                    'produto.quantidade': data.get('produto.quantidade', ''),
+                                    'produto.valor_unit': data.get('produto.valor_unit', ''),
+                                    'produto.subtotal': data.get('produto.subtotal', '')
+                                }]
+                                
+                            table_html = f'<table style="width: 100%; border-collapse: collapse; font-size: {font_size}px; color: {color};">'
+                            table_html += f'<tr style="background-color: #f2f2f2; font-weight: bold; border: 1px solid #ccc;">'
+                            table_html += f'<th style="border: 1px solid #ccc; padding: 4px; text-align: left;">Cód</th>'
+                            table_html += f'<th style="border: 1px solid #ccc; padding: 4px; text-align: left;">Descrição</th>'
+                            table_html += f'<th style="border: 1px solid #ccc; padding: 4px; text-align: right;">Qtd</th>'
+                            table_html += f'<th style="border: 1px solid #ccc; padding: 4px; text-align: right;">V.Unit</th>'
+                            table_html += f'<th style="border: 1px solid #ccc; padding: 4px; text-align: right;">Total</th>'
+                            table_html += f'</tr>'
+                            
+                            for it in itens_list:
+                                table_html += f'<tr style="border: 1px solid #ccc;">'
+                                table_html += f'<td style="border: 1px solid #ccc; padding: 4px;">{it.get("produto.codigo", "")}</td>'
+                                table_html += f'<td style="border: 1px solid #ccc; padding: 4px;">{it.get("produto.descricao", "")}</td>'
+                                table_html += f'<td style="border: 1px solid #ccc; padding: 4px; text-align: right;">{it.get("produto.quantidade", "")}</td>'
+                                table_html += f'<td style="border: 1px solid #ccc; padding: 4px; text-align: right;">{it.get("produto.valor_unit", "")}</td>'
+                                table_html += f'<td style="border: 1px solid #ccc; padding: 4px; text-align: right;">{it.get("produto.subtotal", "")}</td>'
+                                table_html += f'</tr>'
+                            table_html += f'</table>'
+                            
+                            h_css = f"height: {altura}px;" if altura is not None else ""
+                            band_html += f'        <div class="elemento-impressao" style="left: {x}px; top: {y}px; width: {largura}px; {h_css}">\n            {table_html}\n        </div>\n'
+                            continue
+                            
+                        if chave_campo == 'forma.retangulo':
+                            border_css = f"border: 1px solid {color};"
+                            h_css = f"height: {altura}px;" if altura is not None else "height: 50px;"
+                            band_html += f'        <div class="elemento-impressao" style="left: {x}px; top: {y}px; width: {largura}px; {h_css} {border_css}"></div>\n'
+                            continue
+                            
+                        if chave_campo == 'forma.linha_h':
+                            h_css = f"height: {altura}px;" if altura is not None else "height: 2px;"
+                            bg_css = f"background-color: {color};"
+                            band_html += f'        <div class="elemento-impressao" style="left: {x}px; top: {y}px; width: {largura}px; {h_css} {bg_css}"></div>\n'
+                            continue
+                        if chave_campo == 'forma.linha_v':
+                            h_css = f"height: {altura}px;" if altura is not None else "height: 100px;"
+                            bg_css = f"background-color: {color};"
+                            band_html += f'        <div class="elemento-impressao" style="left: {x}px; top: {y}px; width: {largura}px; {h_css} {bg_css}"></div>\n'
+                            continue
+                            
+                        if item_context and chave_campo.startswith('produto.'):
+                            valor_real = item_context.get(chave_campo, '')
+                        elif chave_campo == 'texto.livre':
+                            valor_real = el.get('valor_customizado', '')
+                            if valor_real:
+                                valor_real = str(valor_real).replace('\n', '<br />')
+                        else:
+                            valor_real = data.get(chave_campo, '')
+                            
+                        if valor_real is None:
+                            valor_real = ''
+                            
+                        if chave_campo and any(kw in chave_campo for kw in ['logomarca', 'logo', 'imagem']):
+                            conteudo = f'<img src="{valor_real}" style="max-width: 100%; height: auto; display: block;" />' if valor_real else ''
+                        else:
+                            conteudo = valor_real
+                            
+                        band_html += f'        <div class="elemento-impressao" style="left: {x}px; top: {y}px; font-size: {font_size}px; width: {largura}px; {font_weight_css} {color_css}">\n            {conteudo}\n        </div>\n'
+                    return band_html
+
+                container_style = f"position: relative; width: {width_css}; min-height: {height_css}; box-sizing: border-box; overflow: visible; page-break-after: always;"
+                if tipo_gabarito not in ['A4_RETRATO', 'A4_PAISAGEM', 'RECIBO']:
+                    container_style = f"position: relative; width: {width_css}; height: {height_css}; box-sizing: border-box; overflow: hidden; page-break-after: always;"
+                    
+                html += f'    <div class="gabarito-container" style="{container_style}">\n'
+                
+                html += f'        <div class="band" style="height: {alturas.get("header_height", 120)}px;">\n'
+                html += render_band_elements(header_elements)
+                html += f'        </div>\n'
+                
+                if detail_elements:
+                    if table_element:
+                        detail_h = alturas.get("detail_height", 40) + table_growth
+                        html += f'        <div class="band" style="height: {detail_h}px;">\n'
+                        html += render_band_elements(detail_elements)
+                        html += f'        </div>\n'
+                    else:
+                        detail_h = alturas.get("detail_height", 40)
+                        if itens:
+                            for item in itens:
+                                html += f'        <div class="band page-break" style="height: {detail_h}px;">\n'
+                                html += render_band_elements(detail_elements, item_context=item)
+                                html += f'        </div>\n'
+                        else:
+                            html += f'        <div class="band" style="height: {detail_h}px;">\n'
+                            html += render_band_elements(detail_elements)
+                            html += f'        </div>\n'
+                
+                html += f'        <div class="band" style="height: {alturas.get("summary_height", 60)}px;">\n'
+                html += render_band_elements(summary_elements)
+                html += f'        </div>\n'
+                
+                html += f'        <div class="band" style="height: {alturas.get("footer_height", 80)}px;">\n'
+                html += render_band_elements(footer_elements)
+                html += f'        </div>\n'
+                
+                html += f'    </div>\n'
+
+    html += """
+</body>
+</html>
+"""
+    return HttpResponse(html)

@@ -116,6 +116,7 @@ import RelatorioCTePage from './pages/RelatorioCTePage'
 import RelatorioMDFePage from './pages/RelatorioMDFePage'
 import RelatorioHotelariaPage from './pages/RelatorioHotelariaPage'
 import CotacaoRespostaPublica from './pages/CotacaoRespostaPublica'
+import CadastroClienteRemoto from './pages/CadastroClienteRemoto'
 import ProducaoPage from './pages/ProducaoPage'
 import BoletosPage from './pages/BoletosPage'
 import MapaCargaPage from './pages/MapaCargaPage'
@@ -184,6 +185,7 @@ export default function App() {
                   <Route path='/auto-login-dev' element={<AutoLoginDev />} />
                   <Route path='/configuracao-ip' element={<ConfiguracaoIP />} />
                   <Route path='/cotacao-resposta/:token' element={<CotacaoRespostaPublica />} />
+                  <Route path='/cadastro-cliente' element={<CadastroClienteRemoto />} />
 
                   {/* Rotas de Debug e Testes (desenvolvimento) */}
                   <Route path='/demo' element={<UltraWideDemo />} />

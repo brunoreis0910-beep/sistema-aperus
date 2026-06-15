@@ -223,9 +223,9 @@ class OrdemServicoSerializer(serializers.ModelSerializer):
         itens_produtos_data = self.initial_data.get('itens_produtos', [])
         itens_servicos_data = self.initial_data.get('itens_servicos', [])
         
-        print(f"📝 Criando ordem com dados: {validated_data}")
-        print(f"📦 Itens produtos: {len(itens_produtos_data)}")
-        print(f"🔧 Itens serviços: {len(itens_servicos_data)}")
+        print(f"[INFO] Criando ordem com dados: {validated_data}")
+        print(f"? Itens produtos: {len(itens_produtos_data)}")
+        print(f"[CONFIG] Itens serviços: {len(itens_servicos_data)}")
         
         # Remover campos de veículo/animal/equipamento se não foram fornecidos
         if 'id_veiculo' in validated_data and validated_data['id_veiculo'] is None:
@@ -235,12 +235,12 @@ class OrdemServicoSerializer(serializers.ModelSerializer):
         if 'id_animal' in validated_data and validated_data['id_animal'] is None:
             validated_data.pop('id_animal')
         
-        print(f"📝 Dados após limpeza: {validated_data}")
+        print(f"[INFO] Dados após limpeza: {validated_data}")
         
         # Criar a ordem
         try:
             ordem = OrdemServico.objects.create(**validated_data)
-            print(f"✅ Ordem criada: {ordem.id_os}")
+            print(f"[OK] Ordem criada: {ordem.id_os}")
             
             # Criar itens produtos
             for item_data in itens_produtos_data:
@@ -252,7 +252,7 @@ class OrdemServicoSerializer(serializers.ModelSerializer):
                     desconto=item_data.get('desconto', 0),
                     valor_total=item_data['valor_total']
                 )
-                print(f"  ✅ Item produto criado: {item_produto.id_os_item_produto} - Desconto: {item_data.get('desconto', 0)}")
+                print(f"  [OK] Item produto criado: {item_produto.id_os_item_produto} - Desconto: {item_data.get('desconto', 0)}")
             
             # Criar itens serviços
             for item_data in itens_servicos_data:
@@ -265,10 +265,10 @@ class OrdemServicoSerializer(serializers.ModelSerializer):
                     desconto=item_data.get('desconto', 0),
                     valor_total=item_data['valor_total']
                 )
-                print(f"  ✅ Item serviço criado: {item_servico.id_os_item_servico} - Desconto: {item_data.get('desconto', 0)}")
+                print(f"  [OK] Item serviço criado: {item_servico.id_os_item_servico} - Desconto: {item_data.get('desconto', 0)}")
                 
         except Exception as e:
-            print(f"❌ Erro ao criar ordem: {str(e)}")
+            print(f"[ERRO] Erro ao criar ordem: {str(e)}")
             import traceback
             traceback.print_exc()
             raise
@@ -276,7 +276,7 @@ class OrdemServicoSerializer(serializers.ModelSerializer):
         return ordem
     
     def update(self, instance, validated_data):
-        print(f"📝 Atualizando ordem {instance.id_os}")
+        print(f"[INFO] Atualizando ordem {instance.id_os}")
         
         # Atualizar campos da ordem
         for attr, value in validated_data.items():
@@ -287,7 +287,7 @@ class OrdemServicoSerializer(serializers.ModelSerializer):
         # Só atualizar itens se foram explicitamente enviados no request
         if 'itens_produtos' in self.initial_data:
             itens_produtos_data = self.initial_data.get('itens_produtos', [])
-            print(f"📦 Atualizando itens produtos: {len(itens_produtos_data)}")
+            print(f"? Atualizando itens produtos: {len(itens_produtos_data)}")
             
             # Remover itens produtos existentes
             OsItensProduto.objects.filter(id_os=instance.id_os).delete()
@@ -306,7 +306,7 @@ class OrdemServicoSerializer(serializers.ModelSerializer):
         # Só atualizar serviços se foram explicitamente enviados no request
         if 'itens_servicos' in self.initial_data:
             itens_servicos_data = self.initial_data.get('itens_servicos', [])
-            print(f"🔧 Atualizando itens serviços: {len(itens_servicos_data)}")
+            print(f"[CONFIG] Atualizando itens serviços: {len(itens_servicos_data)}")
             
             # Remover itens serviços existentes
             OsItensServico.objects.filter(id_os=instance.id_os).delete()
@@ -323,6 +323,6 @@ class OrdemServicoSerializer(serializers.ModelSerializer):
                     valor_total=item_data['valor_total']
                 )
         
-        print(f"✅ Ordem {instance.id_os} atualizada com sucesso")
+        print(f"[OK] Ordem {instance.id_os} atualizada com sucesso")
         
         return instance

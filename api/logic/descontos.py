@@ -44,14 +44,11 @@ def calcular_preco_final(produto, cliente, valor_tabela):
         grupo_exceto = produto.id_grupo
         grupo_nome = produto.id_grupo.nome_grupo if hasattr(produto.id_grupo, 'nome_grupo') else str(grupo_exceto)
         
-        # Travado se o cliente possui qualquer desconto configurado (mesmo estando na exceção)
-        cliente_tem_desconto = bool(cliente.valor_desconto and cliente.valor_desconto > 0)
-        
         return {
             "preco": valor_tabela,
             "desconto_aplicado": Decimal("0.00"),
             "desconto_percentual": Decimal("0.00"),
-            "travado": cliente_tem_desconto,
+            "travado": True,
             "motivo": f"Produto em grupo de exceção: {grupo_nome}",
             "grupo_excecao": grupo_nome
         }
@@ -162,6 +159,15 @@ def validar_desconto(cliente, produto, desconto_proposto):
     # Calcular desconto automático
     calc_automatico = calcular_preco_final(produto, cliente, Decimal("100.00"))
     desconto_automatico = calc_automatico["desconto_aplicado"]
+    
+    # Se o produto está em um grupo de exceção do cliente, o desconto proposto deve ser rejeitado (bloqueado)
+    if calc_automatico.get("grupo_excecao") is not None:
+        return {
+            "permitido": False,
+            "mensagem": f"Produto no grupo de exceção ({calc_automatico['grupo_excecao']}). Desconto não permitido.",
+            "desconto_maximo": Decimal("0.00"),
+            "requer_aprovacao": False
+        }
     
     # Se houver desconto automático e cliente tem prioridade, não permite alteração
     if desconto_automatico > 0 and cliente.priorizar_desconto_cliente:

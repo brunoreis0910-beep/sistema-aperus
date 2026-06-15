@@ -89,7 +89,7 @@ class GovAPIService:
         }
         
         try:
-            logger.debug(f"🔄 Consultando API Gov: NCM={ncm_clean}, CST={cst}, cClassTrib={c_class_trib}")
+            logger.debug(f"? Consultando API Gov: NCM={ncm_clean}, CST={cst}, cClassTrib={c_class_trib}")
             
             response = requests.post(
                 self.endpoint, 

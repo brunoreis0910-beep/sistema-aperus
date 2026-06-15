@@ -376,9 +376,9 @@ class NFCeService:
                 
                 if qr_match:
                     result['qrcode'] = qr_match.group(1)
-                    logger.info(f"✓ QR Code extraído com sucesso: {result['qrcode'][:80]}...")
+                    logger.info(f"[OK] QR Code extraído com sucesso: {result['qrcode'][:80]}...")
                 else:
-                    logger.warning("⚠ QR Code NÃO encontrado no XML assinado!")
+                    logger.warning("[AVISO] QR Code NÃO encontrado no XML assinado!")
                     # Salvar parte do XML para debug
                     if '<infNFeSupl' in xml_signed:
                         idx = xml_signed.find('<infNFeSupl')

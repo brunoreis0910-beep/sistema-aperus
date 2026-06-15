@@ -871,6 +871,24 @@ export default function HotelPMSPage() {
     }
   };
 
+  const handleCancelarReserva = async (bookingId) => {
+    if (!window.confirm('Deseja realmente cancelar esta hospedagem? O quarto associado será liberado.')) {
+      return;
+    }
+    try {
+      setLoading(true);
+      await api.post(`/api/hotel/reservas/${bookingId}/cancelar/`);
+      toast.success('Hospedagem cancelada com sucesso! O quarto foi liberado.');
+      setOpenManageModal(false);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || 'Erro ao cancelar hospedagem.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLancarConsumo = async (bookingId) => {
     if (!consumoForm.produto_id) {
       toast.warn('Selecione um produto.');
@@ -1987,6 +2005,18 @@ export default function HotelPMSPage() {
                     fullWidth
                   >
                     Realizar Check-out (Faturar)
+                  </Button>
+                )}
+                {(selectedBooking?.status_reserva === 'confirmada' || selectedBooking?.status_reserva === 'checkin') && (
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    startIcon={<Cancel />}
+                    onClick={() => handleCancelarReserva(selectedBooking.id_reserva)}
+                    fullWidth
+                    sx={{ mt: 1 }}
+                  >
+                    Cancelar Hospedagem / Reserva
                   </Button>
                 )}
               </Box>

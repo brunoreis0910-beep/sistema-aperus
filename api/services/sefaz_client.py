@@ -62,7 +62,7 @@ class SefazService:
         if not cert_content or cert_content.strip() == '':
             local_pfx = "certificado.pfx"
             if os.path.exists(local_pfx):
-                logger.info(f"✓ Usando certificado do arquivo local: {local_pfx}")
+                logger.info(f"[OK] Usando certificado do arquivo local: {local_pfx}")
                 self.signer = SignerService(local_pfx, cert_password)
                 self.cert_path, self.key_path = self.signer.get_cert_key_pem()
                 return
@@ -82,7 +82,7 @@ class SefazService:
         if is_file_path:
             logger.info(f"Certificado identificado como CAMINHO DE ARQUIVO: {cert_content}")
             if os.path.exists(cert_content):
-                logger.info(f"✓ Arquivo encontrado e será carregado: {cert_content}")
+                logger.info(f"[OK] Arquivo encontrado e será carregado: {cert_content}")
                 self.signer = SignerService(cert_content, cert_password)
                 self.cert_path, self.key_path = self.signer.get_cert_key_pem()
                 return

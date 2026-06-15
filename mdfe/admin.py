@@ -34,6 +34,9 @@ class ManifestoEletronicoAdmin(admin.ModelAdmin):
         ('Veículo e Condutor', {
             'fields': ('placa_veiculo', 'uf_veiculo', 'condutor_nome', 'condutor_cpf')
         }),
+        ('ANTT e CIOT', {
+            'fields': ('tipo_carga', 'distancia_km', 'numero_ciot', 'ciot_cpf_cnpj')
+        }),
         ('Totalizadores', {
             'fields': ('quantidade_cte', 'quantidade_nfe', 'valor_total_carga', 'peso_total_kg')
         }),

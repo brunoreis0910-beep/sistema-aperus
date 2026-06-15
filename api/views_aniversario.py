@@ -64,7 +64,7 @@ class AniversariantesView(APIView):
 
         except Exception as e:
             # Se der erro (ex: coluna não existe), retorna lista vazia
-            print(f"❌ Erro ao buscar aniversariantes: {str(e)}")
+            print(f"[ERRO] Erro ao buscar aniversariantes: {str(e)}")
             return Response({
                 'total': 0,
                 'aniversariantes': [],
@@ -117,7 +117,7 @@ Sua equipe"""
             mensagem_encoded = requests.utils.quote(mensagem_personalizada)
             whatsapp_url = f"https://wa.me/{telefone_limpo}?text={mensagem_encoded}"
 
-            print(f"📱 Mensagem de aniversário para {nome} ({telefone_limpo})")
+            print(f"? Mensagem de aniversário para {nome} ({telefone_limpo})")
             print(f"   URL: {whatsapp_url}")
 
             return Response({
@@ -128,7 +128,7 @@ Sua equipe"""
             })
 
         except Exception as e:
-            print(f"❌ Erro ao enviar mensagem: {str(e)}")
+            print(f"[ERRO] Erro ao enviar mensagem: {str(e)}")
             return Response({
                 'sucesso': False,
                 'mensagem': f'Erro ao enviar mensagem: {str(e)}'

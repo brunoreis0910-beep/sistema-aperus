@@ -473,13 +473,13 @@ _(Ou copie o link no navegador)_"""
             resultado = cloud_service.enviar_mensagem(telefone_supervisor, mensagem)
             
             if resultado.get('sucesso'):
-                print(f"[SPLIT PAYMENT] ✅ WhatsApp enviado via Cloud API para {telefone_supervisor}")
+                print(f"[SPLIT PAYMENT] [OK] WhatsApp enviado via Cloud API para {telefone_supervisor}")
                 return True
             else:
-                print(f"[SPLIT PAYMENT] ⚠️ Cloud API falhou: {resultado.get('erro')}")
+                print(f"[SPLIT PAYMENT] [AVISO] Cloud API falhou: {resultado.get('erro')}")
                 
         except Exception as e:
-            print(f"[SPLIT PAYMENT] ⚠️ Erro ao enviar via Cloud API: {e}")
+            print(f"[SPLIT PAYMENT] [AVISO] Erro ao enviar via Cloud API: {e}")
         
         # Fallback: Evolution API
         try:
@@ -487,11 +487,11 @@ _(Ou copie o link no navegador)_"""
             resultado = enviar_mensagem_evolution(telefone_supervisor, mensagem)
             
             if resultado:
-                print(f"[SPLIT PAYMENT] ✅ WhatsApp enviado via Evolution API")
+                print(f"[SPLIT PAYMENT] [OK] WhatsApp enviado via Evolution API")
                 return True
                 
         except Exception as e:
-            print(f"[SPLIT PAYMENT] ⚠️ Erro ao enviar via Evolution: {e}")
+            print(f"[SPLIT PAYMENT] [AVISO] Erro ao enviar via Evolution: {e}")
         
         # Último fallback: Playwright (Desktop)
         try:
@@ -501,17 +501,17 @@ _(Ou copie o link no navegador)_"""
             resultado = playwright_service.enviar_mensagem(telefone_supervisor, mensagem)
             
             if resultado:
-                print(f"[SPLIT PAYMENT] ✅ WhatsApp enviado via Playwright")
+                print(f"[SPLIT PAYMENT] [OK] WhatsApp enviado via Playwright")
                 return True
                 
         except Exception as e:
-            print(f"[SPLIT PAYMENT] ⚠️ Erro ao enviar via Playwright: {e}")
+            print(f"[SPLIT PAYMENT] [AVISO] Erro ao enviar via Playwright: {e}")
         
-        print("[SPLIT PAYMENT] ❌ Falha em todos os métodos de envio WhatsApp")
+        print("[SPLIT PAYMENT] [ERRO] Falha em todos os métodos de envio WhatsApp")
         return False
         
     except Exception as e:
-        print(f"[SPLIT PAYMENT] ❌ Erro geral: {e}")
+        print(f"[SPLIT PAYMENT] [ERRO] Erro geral: {e}")
         import traceback
         traceback.print_exc()
         return False

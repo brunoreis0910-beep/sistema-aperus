@@ -38,6 +38,14 @@ def serve_frontend(request, path=''):
     sys.stdout.write(f"--- SERVE_FRONTEND frontend_dist={repr(frontend_dist)} ---\n")
     sys.stdout.flush()
 
+    # Normaliza caminhos de assets estáticos e ícones resolvidos relativamente devido ao SPA Routing
+    for folder in ['assets/', 'icons/']:
+        if folder in path:
+            norm_path = path[path.find(folder):]
+            if os.path.isfile(os.path.join(frontend_dist, norm_path)):
+                path = norm_path
+                break
+
     # Se for um arquivo estático e existir, serve diretamente
     file_exists = path and os.path.isfile(os.path.join(frontend_dist, path))
     sys.stdout.write(f"--- SERVE_FRONTEND is_file={file_exists} ---\n")
@@ -133,6 +141,9 @@ urlpatterns = [
     
     # Lista de Relatórios Disponíveis (HTML standalone)
     path('relatorios-disponiveis/', lista_relatorios, name='lista_relatorios'),
+
+    # Servir arquivos de mídia (uploads)
+    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
 
     # Frontend React - deve ser o último
     re_path(r'^(?P<path>.*)$', serve_frontend, name='frontend'),

@@ -506,10 +506,10 @@ class ImprimirDanfceNFCeView(APIView):
     def get(self, request, id_venda):
         try:
             venda = get_object_or_404(Venda, pk=id_venda)
-            logger.info(f"Gerando DANFCE para venda ID: {id_venda}, N�mero NF-e: {venda.numero_nfe}")
+            logger.info(f"Gerando DANFCE para venda ID: {id_venda}, N?mero NF-e: {venda.numero_nfe}")
 
             if not venda.chave_nfe:
-                logger.warning(f"Venda {id_venda} n�o possui chave NFC-e")
+                logger.warning(f"Venda {id_venda} n?o possui chave NFC-e")
                 return Response({"erro": "Venda n�o possui Chave NFC-e (n�o emitida ou erro)."}, status=400)
 
             from api.services.danfe_service import DanfceGenerator
@@ -713,13 +713,13 @@ class SalvarVendaPDVNFCeView(APIView):
         
         # LOG DE DEBUG - Mostra qual opera��o foi selecionada
         print("=" * 80)
-        print("?? [NFC-e] SELE��O DE OPERA��O")
-        print(f"   Usu�rio: {usuario_identificado.username if usuario_identificado else 'An�nimo (sem autentica��o)'}")
-        print(f"   Opera��o selecionada: {operacao.nome_operacao} (ID: {operacao.id_operacao})")
+        print("?? [NFC-e] SELE??O DE OPERA??O")
+        print(f"   Usu?rio: {usuario_identificado.username if usuario_identificado else 'An?nimo (sem autentica??o)'}")
+        print(f"   Opera??o selecionada: {operacao.nome_operacao} (ID: {operacao.id_operacao})")
         print(f"   Origem: {operacao_origem}")
         print(f"   Payload id_operacao: {dados_venda.get('id_operacao')}")
         if user_params:
-            print(f"   Par�metro id_operacao_nfce: {user_params.id_operacao_nfce.id_operacao if user_params.id_operacao_nfce else 'N�o configurado'}")
+            print(f"   Par?metro id_operacao_nfce: {user_params.id_operacao_nfce.id_operacao if user_params.id_operacao_nfce else 'N?o configurado'}")
         print("=" * 80)
             
         # 2. Cliente (Prioridade: Payload > Parameter NFCE > Primeiro do Banco)
@@ -901,12 +901,12 @@ class SalvarVendaPDVNFCeView(APIView):
                     # Verificar baixa autom�tica: se operacao.baixa_automatica=True E data_vencimento == data_emissao
                     deve_baixar_automaticamente = operacao.baixa_automatica and (fin.data_vencimento == fin.data_emissao)
                     
-                    print(f"?? [PDV-NFCe] Verificando baixa autom�tica:")
-                    print(f"   Opera��o: {operacao.nome_operacao} (ID: {operacao.id_operacao})")
-                    print(f"   Baixa Autom�tica: {operacao.baixa_automatica}")
-                    print(f"   Data Emiss�o: {fin.data_emissao}")
+                    print(f"?? [PDV-NFCe] Verificando baixa autom?tica:")
+                    print(f"   Opera??o: {operacao.nome_operacao} (ID: {operacao.id_operacao})")
+                    print(f"   Baixa Autom?tica: {operacao.baixa_automatica}")
+                    print(f"   Data Emiss?o: {fin.data_emissao}")
                     print(f"   Data Vencimento: {fin.data_vencimento}")
-                    print(f"   S�o iguais: {fin.data_vencimento == fin.data_emissao}")
+                    print(f"   S?o iguais: {fin.data_vencimento == fin.data_emissao}")
                     print(f"   Deve baixar: {deve_baixar_automaticamente}")
                     
                     if deve_baixar_automaticamente:
@@ -915,7 +915,7 @@ class SalvarVendaPDVNFCeView(APIView):
                         fin.data_pagamento = fin.data_emissao
                         fin.valor_liquidado = fin.valor_parcela
                         fin.saldo_restante = Decimal('0.00')
-                        print(f"? [PDV-NFCe] Aplicando baixa autom�tica")
+                        print(f"? [PDV-NFCe] Aplicando baixa autom?tica")
                     else:
                         # A prazo - fica pendente
                         fin.status_conta = 'Pendente'
@@ -2071,7 +2071,7 @@ class VendaView(APIView):
                                 print(f'?? [ENTREGA FUTURA] Item sem produto vinculado')
                         
                         except VendaItem.DoesNotExist:
-                            print(f'?? [ENTREGA FUTURA] Item n�o encontrado na venda origem para produto ID={item_destino.id_produto.pk if item_destino.id_produto else "None"}')
+                            print(f'?? [ENTREGA FUTURA] Item n?o encontrado na venda origem para produto ID={item_destino.id_produto.pk if item_destino.id_produto else "None"}')
                         except Exception as e:
                             print(f'? [ENTREGA FUTURA] Erro ao processar item: {str(e)}')
                             import traceback
@@ -2092,13 +2092,13 @@ class VendaView(APIView):
                         venda_origem.save()
                         print(f'? [ENTREGA FUTURA] Pedido {venda_futura_origem_id} COMPLETAMENTE entregue')
                     else:
-                        print(f'?? [ENTREGA FUTURA] Pedido {venda_futura_origem_id} parcialmente entregue (ainda h� saldo pendente)')
+                        print(f'?? [ENTREGA FUTURA] Pedido {venda_futura_origem_id} parcialmente entregue (ainda h? saldo pendente)')
                     
                     venda.venda_futura_origem = venda_origem
                     venda.save()
                     print(f'?? [ENTREGA FUTURA] Venda {venda.pk} vinculada como entrega da venda origem {venda_futura_origem_id}')
                 except Venda.DoesNotExist:
-                    print(f'?? [ENTREGA FUTURA] Venda origem {venda_futura_origem_id} n�o encontrada')
+                    print(f'?? [ENTREGA FUTURA] Venda origem {venda_futura_origem_id} n?o encontrada')
                 except Exception as e:
                     print(f'? [ENTREGA FUTURA] Erro geral ao processar entrega futura: {str(e)}')
                     import traceback
@@ -2572,7 +2572,7 @@ class CartaCorrecaoNFeView(APIView):
             result = service.carta_correcao(venda, texto, usuario=request.user)
             logger.info(f"[CC-e] Resultado: sucesso={result.get('sucesso')}, msg={result.get('mensagem')}")
         except Exception as e:
-            logger.exception(f"[CC-e] Exce��o ao enviar: {e}")
+            logger.exception(f"[CC-e] Exce??o ao enviar: {e}")
             return Response(
                 {'sucesso': False, 'mensagem': f'Erro interno: {str(e)}'},
                 status=500
@@ -3091,7 +3091,7 @@ class EntregasView(APIView):
 
     def get(self, request):
         status_filtro = request.query_params.get('status_logistica')
-        qs = Venda.objects.select_related('id_cliente').order_by('-data_emissao')
+        qs = Venda.objects.select_related('id_cliente').order_by('-data_documento')
         if status_filtro:
             qs = qs.filter(status_logistica=status_filtro)
         data = []
@@ -3100,8 +3100,8 @@ class EntregasView(APIView):
             data.append({
                 'id_venda': v.id_venda,
                 'numero_documento': v.numero_documento,
-                'data_emissao': v.data_emissao,
-                'cliente_nome': cliente.nome if cliente else None,
+                'data_emissao': v.data_documento,
+                'cliente_nome': cliente.nome_razao_social if cliente else None,
                 'status_logistica': v.status_logistica,
                 'endereco_entrega': v.endereco_entrega,
                 'data_prevista_entrega': v.data_prevista_entrega,

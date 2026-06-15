@@ -124,29 +124,35 @@ const MobileMenuDrawer = ({ open, onClose, menuItems, currentTab, subMenuItems =
                 <List disablePadding sx={{ pl: 2 }}>
                   {subMenuItems[item.key].map((subItem, idx) => (
                     <ListItem key={idx} disablePadding sx={{ mb: 0.3 }}>
-                      <ListItemButton
-                        onClick={() => handleSubItemClick(subItem)}
-                        sx={{
-                          borderRadius: '10px',
-                          py: 1,
-                          px: 2,
-                          color: 'rgba(255, 255, 255, 0.75)',
-                          '&:hover': {
-                            backgroundColor: 'rgba(255, 255, 255, 0.12)',
-                            color: '#ffffff',
-                          }
-                        }}
-                      >
-                        {subItem.icon && (
-                          <ListItemIcon sx={{ color: 'inherit', minWidth: 40 }}>
-                            {subItem.icon}
-                          </ListItemIcon>
-                        )}
-                        <ListItemText
-                          primary={subItem.label}
-                          primaryTypographyProps={{ fontSize: '0.95rem' }}
-                        />
-                      </ListItemButton>
+                      {subItem.isDisabledHeader ? (
+                        <Box sx={{ py: 1, px: 2, color: 'rgba(255, 255, 255, 0.5)', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                          {subItem.label}
+                        </Box>
+                      ) : (
+                        <ListItemButton
+                          onClick={() => handleSubItemClick(subItem)}
+                          sx={{
+                            borderRadius: '10px',
+                            py: 1,
+                            px: 2,
+                            color: 'rgba(255, 255, 255, 0.75)',
+                            '&:hover': {
+                              backgroundColor: 'rgba(255, 255, 255, 0.12)',
+                              color: '#ffffff',
+                            }
+                          }}
+                        >
+                          {subItem.icon && (
+                            <ListItemIcon sx={{ color: 'inherit', minWidth: 40 }}>
+                              {subItem.icon}
+                            </ListItemIcon>
+                          )}
+                          <ListItemText
+                            primary={subItem.label}
+                            primaryTypographyProps={{ fontSize: '0.95rem' }}
+                          />
+                        </ListItemButton>
+                      )}
                     </ListItem>
                   ))}
                 </List>

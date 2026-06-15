@@ -2250,6 +2250,7 @@ class ConfiguracaoImpressaoSerializer(serializers.ModelSerializer):
             'modulo_display',
             'tipo_impressora',
             'tipo_impressora_display',
+            'gabarito_customizado_nome',
             'largura_termica',
             'imprimir_automatico',
             'mostrar_logo',
@@ -2307,6 +2308,21 @@ class ConfiguracaoAgendamentoSerializer(serializers.ModelSerializer):
         from .models import ConfiguracaoAgendamento
         model = ConfiguracaoAgendamento
         fields = '__all__'
+
+
+class ComunicadoSaaSSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import ComunicadoSaaS
+        model = ComunicadoSaaS
+        fields = '__all__'
+
+
+class GabaritoCustomizadoSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import GabaritoCustomizado
+        model = GabaritoCustomizado
+        fields = '__all__'
+
 
 
 

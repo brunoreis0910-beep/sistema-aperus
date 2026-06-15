@@ -31,7 +31,10 @@ class TenantRouter:
         return get_current_tenant_db()
 
     def allow_relation(self, obj1, obj2, **hints):
-        # Permite relações se ambos os objetos estiverem no mesmo banco
+        # Permite relações entre GabaritoCustomizado e SaaSCliente
+        if (obj1._meta.model_name == 'gabaritocustomizado' and obj2._meta.model_name == 'saascliente') or \
+           (obj1._meta.model_name == 'saascliente' and obj2._meta.model_name == 'gabaritocustomizado'):
+            return True
         return None
 
     def allow_migrate(self, db, app_label, model_name=None, **hints):
