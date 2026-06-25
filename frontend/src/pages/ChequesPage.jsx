@@ -46,12 +46,13 @@ import {
   TrendingUp as TrendingUpIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 import dayjs from 'dayjs';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8005') + '/api';
 
 const ChequesPage = () => {
+  const { axiosInstance } = useAuth();
   const [cheques, setCheques] = useState([]);
   const [filteredCheques, setFilteredCheques] = useState([]);
   const [dashboard, setDashboard] = useState(null);
@@ -105,11 +106,11 @@ const ChequesPage = () => {
     setLoading(true);
     try {
       const [chequesRes, dashRes, clientesRes, fornecedoresRes, contasRes] = await Promise.all([
-        axios.get(`${API_URL}/cheques/`),
-        axios.get(`${API_URL}/cheques/dashboard/`),
-        axios.get(`${API_URL}/clientes/`),
-        axios.get(`${API_URL}/fornecedores/`),
-        axios.get(`${API_URL}/contas-bancarias/`),
+        axiosInstance.get('/cheques/'),
+        axiosInstance.get('/cheques/dashboard/'),
+        axiosInstance.get('/clientes/'),
+        axiosInstance.get('/fornecedores/'),
+        axiosInstance.get('/contas-bancarias/'),
       ]);
       
       // Garantir que sempre sejam arrays, tratando resposta paginada
@@ -222,10 +223,10 @@ const ChequesPage = () => {
   const handleSave = async () => {
     try {
       if (currentCheque) {
-        await axios.put(`${API_URL}/cheques/${currentCheque.id_cheque}/`, formData);
+        await axiosInstance.put(`/cheques/${currentCheque.id_cheque}/`, formData);
         toast.success('Cheque atualizado com sucesso!');
       } else {
-        await axios.post(`${API_URL}/cheques/`, formData);
+        await axiosInstance.post('/cheques/', formData);
         toast.success('Cheque cadastrado com sucesso!');
       }
       handleCloseDialog();
@@ -261,7 +262,7 @@ const ChequesPage = () => {
         };
       }
       
-      await axios.post(`${API_URL}/cheques/${currentCheque.id_cheque}/${actionType}/`, data);
+      await axiosInstance.post(`/cheques/${currentCheque.id_cheque}/${actionType}/`, data);
       toast.success(`Cheque ${actionType} com sucesso!`);
       setOpenActionDialog(false);
       loadData();
