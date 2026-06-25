@@ -11,7 +11,7 @@ from rest_framework.decorators import api_view, permission_classes, parser_class
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 
-from api.models import SaaSCliente, Cliente, Produto, Deposito, Estoque, TributacaoProduto, ConfiguracaoProduto, GrupoProduto
+from api.models import SaaSCliente, Cliente, Produto, Deposito, Estoque, TributacaoProduto, ConfiguracaoProduto, GrupoProduto, Fornecedor
 from api.db_router import set_current_tenant_db, get_current_tenant_db
 
 def sincronizar_saldo_deposito(banco_tenant, produto_id, deposito_id, quantidade):
@@ -76,7 +76,7 @@ def importar_dados_para_tenant(request, tenant_id):
     if not arquivo_upload:
         return JsonResponse({'sucesso': False, 'mensagem': 'Nenhum arquivo enviado.'}, status=400)
         
-    if tipo_importacao not in ['CLIENTES', 'PRODUTOS']:
+    if tipo_importacao not in ['CLIENTES', 'PRODUTOS', 'FORNECEDORES']:
         return JsonResponse({'sucesso': False, 'mensagem': 'Tipo de importação inválido.'}, status=400)
         
     banco_tenant = f"aperus_{tenant.schema_name}"
@@ -144,7 +144,7 @@ def importar_dados_para_tenant(request, tenant_id):
         
         # Gera sugestões de mapeamento baseadas em sinônimos
         sugestoes = {}
-        mapeamento_sinonimos = MAPEA_COLUNAS_CLIENTES if tipo_importacao == 'CLIENTES' else MAPEA_COLUNAS_PRODUTOS
+        mapeamento_sinonimos = MAPEA_COLUNAS_CLIENTES if tipo_importacao in ['CLIENTES', 'FORNECEDORES'] else MAPEA_COLUNAS_PRODUTOS
         for campo, sinonimos in mapeamento_sinonimos.items():
             sugestoes[campo] = ""
             for sinonimo in sinonimos:
@@ -189,7 +189,7 @@ def importar_dados_para_tenant(request, tenant_id):
                 indices[campo] = idx
                 
         # Fallback de whatsapp específico para Clientes se automático
-        if tipo_importacao == 'CLIENTES' and not mapeamento_custom:
+        if tipo_importacao in ['CLIENTES', 'FORNECEDORES'] and not mapeamento_custom:
             if indices['whatsapp'] is None and indices['telefone'] is not None:
                 first_tel_idx = indices['telefone']
                 for idx, h in enumerate(headers_lower):
@@ -203,7 +203,7 @@ def importar_dados_para_tenant(request, tenant_id):
                 continue
                 
             try:
-                if tipo_importacao == 'CLIENTES':
+                if tipo_importacao in ['CLIENTES', 'FORNECEDORES']:
                     # Helper para obter o valor pelo índice mapeado
                     def get_val(campo, default=""):
                         idx = indices.get(campo)
@@ -266,26 +266,46 @@ def importar_dados_para_tenant(request, tenant_id):
                                 
                     # Cria ou atualiza
                     with transaction.atomic(using=banco_tenant):
-                        Cliente.objects.using(banco_tenant).update_or_create(
-                            cpf_cnpj=cpf_cnpj_raw,
-                            defaults={
-                                'nome_razao_social': nome_razao,
-                                'nome_fantasia': nome_fantasia if nome_fantasia else nome_razao,
-                                'inscricao_estadual': ie if ie else None,
-                                'telefone': tel if tel else None,
-                                'whatsapp': whatsapp_val if whatsapp_val else None,
-                                'email': mail if mail else None,
-                                'data_nascimento': data_nasc,
-                                'cep': cep_val if cep_val else None,
-                                'endereco': end_val if end_val else None,
-                                'numero': num_val if num_val else None,
-                                'bairro': bairro_val if bairro_val else None,
-                                'cidade': cidade_val if cidade_val else None,
-                                'estado': uf_val if uf_val else None,
-                                'motivo_inativacao': motivo_obs if motivo_obs else None,
-                                'ativo': True
-                            }
-                        )
+                        if tipo_importacao == 'CLIENTES':
+                            Cliente.objects.using(banco_tenant).update_or_create(
+                                cpf_cnpj=cpf_cnpj_raw,
+                                defaults={
+                                    'nome_razao_social': nome_razao,
+                                    'nome_fantasia': nome_fantasia if nome_fantasia else nome_razao,
+                                    'inscricao_estadual': ie if ie else None,
+                                    'telefone': tel if tel else None,
+                                    'whatsapp': whatsapp_val if whatsapp_val else None,
+                                    'email': mail if mail else None,
+                                    'data_nascimento': data_nasc,
+                                    'cep': cep_val if cep_val else None,
+                                    'endereco': end_val if end_val else None,
+                                    'numero': num_val if num_val else None,
+                                    'bairro': bairro_val if bairro_val else None,
+                                    'cidade': cidade_val if cidade_val else None,
+                                    'estado': uf_val if uf_val else None,
+                                    'motivo_inativacao': motivo_obs if motivo_obs else None,
+                                    'ativo': True
+                                }
+                            )
+                        else: # FORNECEDORES
+                            Fornecedor.objects.using(banco_tenant).update_or_create(
+                                cpf_cnpj=cpf_cnpj_raw,
+                                defaults={
+                                    'nome_razao_social': nome_razao,
+                                    'nome_fantasia': nome_fantasia if nome_fantasia else nome_razao,
+                                    'inscricao_estadual': ie if ie else None,
+                                    'telefone': tel if tel else None,
+                                    'whatsapp': whatsapp_val if whatsapp_val else None,
+                                    'email': mail if mail else None,
+                                    'data_nascimento': data_nasc,
+                                    'cep': cep_val if cep_val else None,
+                                    'endereco': end_val if end_val else None,
+                                    'numero': num_val if num_val else None,
+                                    'bairro': bairro_val if bairro_val else None,
+                                    'cidade': cidade_val if cidade_val else None,
+                                    'estado': uf_val if uf_val else None,
+                                }
+                            )
                     linhas_criadas += 1
                     
                 elif tipo_importacao == 'PRODUTOS':

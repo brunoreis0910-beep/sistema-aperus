@@ -46,6 +46,7 @@ from .views_importar_xml import (
     importar_xml_view,
     preparar_produto_xml_para_cadastro_turbo
 )
+from .views_importador_saas import importar_dados_para_tenant
 from .views_cotacao import CotacaoViewSet
 from .views_promocao import PromocaoViewSet
 from .views_proxy import proxy_image
@@ -721,6 +722,7 @@ urlpatterns = [
     path('saas/gerar-link-cadastro/', saas_gerar_link_cadastro, name='saas-gerar-link-cadastro'),
     path('saas/validar-token-cadastro/', saas_validar_token_cadastro, name='saas-validar-token-cadastro'),
     path('saas/finalizar-cadastro-remoto/', saas_finalizar_cadastro_remoto, name='saas-finalizar-cadastro-remoto'),
+    path('saas/importar-dados/<int:tenant_id>/', importar_dados_para_tenant, name='saas-importar-dados'),
     path('licenca/verificar/', verificar_licenca_local, name='verificar-licenca-local'),
     path('saas/contrato-padrao/atual/', buscar_contrato_atual, name='saas-contrato-padrao-atual'),
     path('saas/contrato-padrao/salvar/', salvar_edicao_contrato, name='saas-contrato-padrao-salvar'),
