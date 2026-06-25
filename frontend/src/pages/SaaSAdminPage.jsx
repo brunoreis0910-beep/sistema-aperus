@@ -3343,6 +3343,7 @@ const SaaSAdminPage = () => {
                           }}
                         >
                           <MenuItem value="CLIENTES">Clientes (Razão Social, CNPJ, Telefone, Email)</MenuItem>
+                          <MenuItem value="FORNECEDORES">Fornecedores (Razão Social, CNPJ, Telefone, Email)</MenuItem>
                           <MenuItem value="PRODUTOS">Produtos (Descrição, Preço de Venda, Código Barras, NCM)</MenuItem>
                         </Select>
                       </FormControl>
@@ -3460,7 +3461,7 @@ const SaaSAdminPage = () => {
                     {Object.entries(MAPPING_LABELS)
                       .filter(([campo]) => {
                         const isClienteField = ['nome_razao', 'cpf_cnpj', 'nome_fantasia', 'ie', 'telefone', 'whatsapp', 'email', 'data_nascimento', 'cep', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'observacao'].includes(campo);
-                        return importType === 'CLIENTES' ? isClienteField : !isClienteField;
+                         return (importType === 'CLIENTES' || importType === 'FORNECEDORES') ? isClienteField : !isClienteField;
                       })
                       .map(([campo, meta]) => (
                         <Grid item xs={12} sm={6} md={4} key={campo}>
@@ -3490,13 +3491,13 @@ const SaaSAdminPage = () => {
               {/* Tabela Exemplo da Planilha */}
               <Box sx={{ mt: 3, mb: 1 }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: 'text.secondary' }}>
-                  Layout Esperado da Planilha ({importType === 'CLIENTES' ? 'Clientes' : 'Produtos'}):
+                  Layout Esperado da Planilha ({importType === 'PRODUTOS' ? 'Produtos' : importType === 'FORNECEDORES' ? 'Fornecedores' : 'Clientes'}):
                 </Typography>
                 <TableContainer component={Paper} variant="outlined">
-                  <Table size="small" sx={{ minWidth: importType === 'CLIENTES' ? 1600 : 650 }}>
+                  <Table size="small" sx={{ minWidth: importType === 'PRODUTOS' ? 650 : 1600 }}>
                     <TableHead sx={{ backgroundColor: 'action.hover' }}>
                       <TableRow>
-                        {importType === 'CLIENTES' ? (
+                        {importType !== 'PRODUTOS' ? (
                           <>
                             <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna A (Razão Social)</TableCell>
                             <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna B (CNPJ/CPF)</TableCell>
@@ -3526,7 +3527,7 @@ const SaaSAdminPage = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {importType === 'CLIENTES' ? (
+                      {importType !== 'PRODUTOS' ? (
                         <TableRow>
                           <TableCell sx={{ fontSize: '0.75rem' }}>BRUNO DOS REIS NASCIMENTO</TableCell>
                           <TableCell sx={{ fontSize: '0.75rem' }}>123.456.789-00</TableCell>
