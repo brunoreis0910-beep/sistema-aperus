@@ -18,6 +18,7 @@ from .models import (
     SaaSClienteContrato,
     ContratoPadrao,
     ComunicadoSaaS,
+    PlanoSaaS,
 )
 
 # Configuração básica dos modelos
@@ -371,10 +372,17 @@ class ConsumoQuartoAdmin(admin.ModelAdmin):
     ordering = ['-data_lancamento']
 
 
+@admin.register(PlanoSaaS)
+class PlanoSaaSAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'valor_mensalidade', 'modulo_pdv', 'modulo_financeiro_avancado', 'modulo_producao_industria', 'modulo_transporte_cte', 'modulo_ciot_automatico', 'modulo_report_builder')
+    search_fields = ('nome',)
+    ordering = ['nome']
+
+
 @admin.register(SaaSCliente)
 class SaaSClienteAdmin(admin.ModelAdmin):
-    list_display = ('razao_social', 'cnpj', 'schema_name', 'db_host', 'db_port', 'is_test_environment', 'status_licenca')
-    list_filter = ('is_test_environment', 'status_licenca')
+    list_display = ('razao_social', 'cnpj', 'plano', 'upgrade_solicitado', 'schema_name', 'db_host', 'db_port', 'is_test_environment', 'status_licenca')
+    list_filter = ('plano', 'upgrade_solicitado', 'is_test_environment', 'status_licenca')
     search_fields = ('razao_social', 'cnpj', 'schema_name')
     ordering = ['razao_social']
 

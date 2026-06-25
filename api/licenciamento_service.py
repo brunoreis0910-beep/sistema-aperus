@@ -90,6 +90,8 @@ def sincronizar_e_verificar_licenca():
                 licenca_local.data_validade = hoje + datetime.timedelta(days=3)
                 licenca_local.ultimo_check = agora
                 licenca_local.status = 'Ativa'
+                # Salva os recursos do plano liberados
+                licenca_local.recursos_planos = dados.get('modulos_liberados', {})
                 licenca_local.save()
                 
                 logger.info(
@@ -163,7 +165,8 @@ def sincronizar_e_verificar_licenca():
             "bloquear_sistema": False,
             "alerta_estagio": "modo_offline",
             "dias_atraso": 0,
-            "mensagem": "Trabalhando em contingência offline."
+            "mensagem": "Trabalhando em contingência offline.",
+            "modulos_liberados": licenca_local.recursos_planos or {}
         }
 
     # 6. Sem internet e o prazo limite offline de 3 dias estourou: BLOQUEIA

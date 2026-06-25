@@ -10,6 +10,28 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [permissions, setPermissions] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+  const [modulosLiberados, setModulosLiberados] = useState(() => {
+    try {
+      const cached = localStorage.getItem('modulos_liberados');
+      return cached ? JSON.parse(cached) : {
+        pdv: true,
+        financeiro_avancado: true,
+        producao: true,
+        transporte: true,
+        ciot: true,
+        report_builder: true
+      };
+    } catch {
+      return {
+        pdv: true,
+        financeiro_avancado: true,
+        producao: true,
+        transporte: true,
+        ciot: true,
+        report_builder: true
+      };
+    }
+  });
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -294,7 +316,9 @@ export const AuthProvider = ({ children }) => {
     logout,
     fetchUser,
     refreshToken, // <-- Nova funcao de refresh
-    axiosInstance
+    axiosInstance,
+    modulosLiberados,
+    setModulosLiberados
   };
 
   return (

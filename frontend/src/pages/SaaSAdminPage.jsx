@@ -15,12 +15,50 @@ import {
   Warning as WarningIcon, Launch as LaunchIcon, Search as SearchIcon,
   SystemUpdate as UpdateIcon, Terminal as LogIcon, Delete as DeleteIcon,
   Storage as StorageIcon, Bolt as BoltIcon, Campaign as CampaignIcon,
-  Save as SaveIcon, Send as SendIcon, Link as LinkIcon, WhatsApp as WhatsAppIcon
+  Save as SaveIcon, Send as SendIcon, Link as LinkIcon, WhatsApp as WhatsAppIcon,
+  Settings as SettingsIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
 import { buscarCNPJ, buscarCEP, formatTelefone } from '../utils/cnpjCepUtils';
 import ReportBuilderDialog from '../components/ReportBuilderDialog';
+
+const MAPPING_LABELS = {
+  // Clientes
+  nome_razao: { label: "Nome / Razão Social", required: true },
+  cpf_cnpj: { label: "CPF / CNPJ", required: true },
+  nome_fantasia: { label: "Nome Fantasia" },
+  ie: { label: "Inscrição Estadual (IE)" },
+  telefone: { label: "Telefone / Contato" },
+  whatsapp: { label: "WhatsApp" },
+  email: { label: "E-mail" },
+  data_nascimento: { label: "Data de Nascimento" },
+  cep: { label: "CEP" },
+  endereco: { label: "Endereço / Logradouro" },
+  numero: { label: "Número" },
+  complemento: { label: "Complemento" },
+  bairro: { label: "Bairro" },
+  cidade: { label: "Cidade" },
+  estado: { label: "Estado (UF)" },
+  observacao: { label: "Observações Gerais" },
+  
+  // Produtos
+  descricao: { label: "Descrição / Nome do Produto", required: true },
+  preco_venda: { label: "Preço de Venda", required: true },
+  gtin: { label: "Código de Barras / GTIN" },
+  ncm: { label: "NCM" },
+  referencia: { label: "Referência" },
+  unidade: { label: "Unidade de Medida (ex: UN, KG)" },
+  marca: { label: "Marca / Fabricante" },
+  categoria: { label: "Categoria" },
+  grupo: { label: "Grupo" },
+  classificacao: { label: "Seção" },
+  preco_custo: { label: "Preço de Custo" },
+  estoque_loja: { label: "Estoque da Loja (Qtd)" },
+  estoque_deposito: { label: "Estoque do Depósito (Qtd)" },
+  estoque_geral: { label: "Estoque Geral / Saldo (Qtd)" },
+  localizacao: { label: "Localização / Prateleira" }
+};
 
 const DEFAULT_LAYOUTS = {
     venda_recibo: [
@@ -125,7 +163,15 @@ const SaaSAdminPage = () => {
   
   // Data lists
   const [clientes, setClientes] = useState([]);
+  const [configuracoesBancarias, setConfiguracoesBancarias] = useState([]);
+  const [contasBancarias, setContasBancarias] = useState([]);
   const [mensalidades, setMensalidades] = useState([]);
+  const [planos, setPlanos] = useState([]);
+
+  // Filtros de mensalidades
+  const [filtroContaBancaria, setFiltroContaBancaria] = useState('');
+  const [filtroDataInicio, setFiltroDataInicio] = useState('');
+  const [filtroDataFim, setFiltroDataFim] = useState('');
   const [versoes, setVersoes] = useState([]);
   const [historicoAtualizacoes, setHistoricoAtualizacoes] = useState([]);
   const [configAgendamento, setConfigAgendamento] = useState({
@@ -169,6 +215,15 @@ const SaaSAdminPage = () => {
   const [subTabValue, setSubTabValue] = useState(0);
   const [loadingLote, setLoadingLote] = useState(false);
   const [loadingCriarBanco, setLoadingCriarBanco] = useState({});
+
+  // Data Importer states
+  const [importType, setImportType] = useState('CLIENTES');
+  const [importFile, setImportFile] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const [importHeaders, setImportHeaders] = useState([]);
+  const [importMapping, setImportMapping] = useState({});
+  const [previewLoading, setPreviewLoading] = useState(false);
   
   // Custom templates states
   const [gabaritos, setGabaritos] = useState([]);
@@ -224,19 +279,114 @@ const SaaSAdminPage = () => {
     cep: '', endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
     dia_vencimento: 10, valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: '',
     schema_name: '', db_host: 'localhost', db_port: '8005', is_test_environment: false,
-    email_responsavel: '', data_nascimento_responsavel: ''
+    email_responsavel: '', data_nascimento_responsavel: '', limite_maquinas: 1,
+    plano: '', link_acesso: ''
   });
+
+  const [tempLinks, setTempLinks] = useState({});
+  const [savingLink, setSavingLink] = useState({});
+  const [searchTermLinks, setSearchTermLinks] = useState('');
+
+  // Estados e funções do Backup Local
+  const [backupConfig, setBackupConfig] = useState({
+    diretorio_destino: "G:\\Meu Drive\\BackupsAperus",
+    segunda: true, terca: true, quarta: true, quinta: true, sexta: true, sabado: true, domingo: true,
+    horarios_execucao: "02:00",
+    retencao_arquivos: 30,
+    ativo: true,
+    ultimo_backup_em: null,
+    status_ultimo_backup: "Pendente"
+  });
+  const [loadingBackup, setLoadingBackup] = useState(false);
+  const [forcingBackup, setForcingBackup] = useState(false);
+  const [quantidadeHorarios, setQuantidadeHorarios] = useState(1);
+  const [listaHorarios, setListaHorarios] = useState(['02:00']);
+
+  const carregarBackupConfig = useCallback(async () => {
+    setLoadingBackup(true);
+    try {
+      const res = await axiosInstance.get('/saas/backup-config/');
+      setBackupConfig(res.data);
+      const hrs = res.data.horarios_execucao ? res.data.horarios_execucao.split(',').map(h => h.trim()).filter(Boolean) : ['02:00'];
+      setListaHorarios(hrs);
+      setQuantidadeHorarios(hrs.length);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingBackup(false);
+    }
+  }, [axiosInstance]);
+
+  const handleSalvarBackupConfig = async () => {
+    setLoadingBackup(true);
+    try {
+      const payload = {
+        ...backupConfig,
+        horarios_execucao: listaHorarios.slice(0, quantidadeHorarios).join(',')
+      };
+      await axiosInstance.post('/saas/backup-config/salvar/', payload);
+      showToast('Configurações de backup salvas com sucesso!', 'success');
+      carregarBackupConfig();
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao salvar configurações de backup.', 'error');
+    } finally {
+      setLoadingBackup(false);
+    }
+  };
+
+  const handleForcarBackup = async () => {
+    if (!window.confirm("Deseja realmente forçar um backup agora? O processo de dump de todas as bases e compactação será iniciado.")) {
+      return;
+    }
+    setForcingBackup(true);
+    try {
+      const res = await axiosInstance.post('/saas/backup-config/forcar/');
+      showToast(res.data.mensagem || 'Backup realizado com sucesso!', 'success');
+      carregarBackupConfig();
+    } catch (err) {
+      console.error(err);
+      const errorMsg = err.response?.data?.error || 'Erro ao realizar o backup.';
+      showToast(`Falha no backup: ${errorMsg}`, 'error');
+    } finally {
+      setForcingBackup(false);
+    }
+  };
+
+  const handleQtdHorariosChange = (val) => {
+    const qtd = Math.min(10, Math.max(1, parseInt(val) || 1));
+    setQuantidadeHorarios(qtd);
+    setListaHorarios(prev => {
+      const novaLista = [...prev];
+      while (novaLista.length < qtd) {
+        novaLista.push("12:00");
+      }
+      return novaLista;
+    });
+  };
+
+  const handleHorarioChange = (index, val) => {
+    setListaHorarios(prev => {
+      const nova = [...prev];
+      nova[index] = val;
+      return nova;
+    });
+  };
+
 
   const carregarDados = useCallback(async () => {
     setLoading(true);
     try {
-      const [resCli, resMens, resVers, resHist, resConfig, resCom] = await Promise.all([
+      const [resCli, resMens, resVers, resHist, resConfig, resCom, resBancarias, resContas, resPlanos] = await Promise.all([
         axiosInstance.get('/saas-clientes/'),
         axiosInstance.get('/saas-mensalidades/'),
         axiosInstance.get('/saas-versoes/'),
         axiosInstance.get('/saas-historico-atualizacoes/'),
         axiosInstance.get('/saas-agendamento/'),
-        axiosInstance.get('/saas-comunicados/')
+        axiosInstance.get('/saas-comunicados/'),
+        axiosInstance.get('/configuracoes-bancarias/?ativo=true'),
+        axiosInstance.get('/contas-bancarias/'),
+        axiosInstance.get('/saas/planos/')
       ]);
       
       const clientsData = resCli.data?.results ?? resCli.data ?? [];
@@ -252,6 +402,9 @@ const SaaSAdminPage = () => {
       setHistoricoAtualizacoes(historyData);
       setConfigAgendamento(configData);
       setComunicados(comunicadosData);
+      setConfiguracoesBancarias(resBancarias.data?.results ?? resBancarias.data ?? []);
+      setContasBancarias(resContas.data?.results ?? resContas.data ?? []);
+      setPlanos(resPlanos.data ?? []);
       
       // Calculate Stats
       const active = clientsData.filter(c => c.status_licenca === 'ATIVO').length;
@@ -261,27 +414,63 @@ const SaaSAdminPage = () => {
       setStats({ activeClients: active, overduePayments: overdue, mrr: mrrVal });
       
       // Update selected client if open
-      if (selectedClient) {
-        const updated = clientsData.find(c => c.id_saas_cliente === selectedClient.id_saas_cliente);
-        if (updated) setSelectedClient(updated);
-      }
+      setSelectedClient(prev => {
+        if (!prev) return null;
+        const updated = clientsData.find(c => c.id_saas_cliente === prev.id_saas_cliente);
+        if (updated && JSON.stringify(updated) !== JSON.stringify(prev)) {
+          return updated;
+        }
+        return prev;
+      });
+      
+      // Carrega configurações do backup
+      carregarBackupConfig();
       
     } catch (e) {
       showToast('Erro ao carregar os dados do SaaS.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [axiosInstance, showToast, selectedClient]);
+  }, [axiosInstance, showToast]);
 
   useEffect(() => {
     carregarDados();
   }, [carregarDados]);
 
+  const consultarStatusMensalidade = async (m) => {
+    setLoadingUpdate(prev => ({ ...prev, [m.id_mensalidade]: true }));
+    try {
+      const res = await axiosInstance.get(`/saas/mensalidades/${m.id_mensalidade}/consultar_status/`);
+      showToast(res.data.mensagem || `Status da mensalidade: ${res.data.status}`, 'success');
+      
+      // Atualiza a mensalidade na lista local
+      setMensalidades(prev => prev.map(item => {
+        if (item.id_mensalidade === m.id_mensalidade) {
+          return {
+            ...item,
+            status_pagamento: res.data.status,
+            data_pagamento: res.data.data_pagamento
+          };
+        }
+        return item;
+      }));
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || 'Erro ao consultar status da mensalidade.';
+      showToast(errorMsg, 'error');
+    } finally {
+      setLoadingUpdate(prev => ({ ...prev, [m.id_mensalidade]: false }));
+    }
+  };
+
   const tabs = [
     { label: "Clientes SaaS", icon: <ClientIcon />, show: true },
     { label: "Faturamento e Cobranças", icon: <InvoiceIcon />, show: temPermissao('pode_cadastrar_financeiro_saas') },
     { label: "Atualizações do Sistema", icon: <UpdateIcon />, show: temPermissao('pode_atualizar_cliente') },
-    { label: "Mural de Avisos", icon: <CampaignIcon />, show: true }
+    { label: "Mural de Avisos", icon: <CampaignIcon />, show: true },
+    { label: "Planos SaaS", icon: <MoneyIcon />, show: true },
+    { label: "Terminais Ativos", icon: <LogIcon />, show: true },
+    { label: "Links de Acesso", icon: <LinkIcon />, show: true },
+    { label: "Backup Agendado", icon: <StorageIcon />, show: true }
   ].filter(t => t.show);
 
   const activeTabName = tabs[tabValue]?.label || "Clientes SaaS";
@@ -289,6 +478,55 @@ const SaaSAdminPage = () => {
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
   };
+
+  // Controlar o foco inicial de abas via URL (ex: ?tab=terminais)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'terminais') {
+      const idx = tabs.findIndex(t => t.label === "Terminais Ativos");
+      if (idx !== -1) setTabValue(idx);
+    } else if (tabParam) {
+      const tabIdx = parseInt(tabParam);
+      if (!isNaN(tabIdx) && tabIdx >= 0 && tabIdx < tabs.length) {
+        setTabValue(tabIdx);
+      }
+    }
+  }, [tabs.length]);
+
+  const handleDeleteTerminal = async (id_terminal) => {
+    if (!window.confirm("Deseja realmente remover este dispositivo ativo? Esta ação liberará limite para novas ativações.")) {
+      return;
+    }
+    setLoading(true);
+    try {
+      await axiosInstance.delete(`/saas-terminais/${id_terminal}/`);
+      showToast('Dispositivo removido com sucesso!', 'success');
+      carregarDados();
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao remover dispositivo.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const todosTerminais = React.useMemo(() => {
+    const list = [];
+    clientes.forEach(c => {
+      if (Array.isArray(c.terminais)) {
+        c.terminais.forEach(t => {
+          list.push({
+            ...t,
+            cliente_razao_social: c.razao_social,
+            cliente_schema: c.schema_name,
+            limite_maquinas: c.limite_maquinas
+          });
+        });
+      }
+    });
+    return list;
+  }, [clientes]);
 
   const CAMPOS_DISPONIVEIS = [
     // Empresa
@@ -539,6 +777,10 @@ const SaaSAdminPage = () => {
 
   const handleOpenClientModal = (mode, data = null) => {
     setModalTab(0);
+    setImportType('CLIENTES');
+    setImportFile(null);
+    setImporting(false);
+    setImportResult(null);
     if (mode === 'create') {
       setClientForm({
         cnpj: '', razao_social: '', nome_fantasia: '', inscricao_estadual: '',
@@ -546,7 +788,7 @@ const SaaSAdminPage = () => {
         cep: '', endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
         dia_vencimento: 10, valor_mensalidade: '', emite_nota: false, status_licenca: 'ATIVO', data_reajuste: '',
         schema_name: '', db_host: 'localhost', db_port: '8005', is_test_environment: false,
-        email_responsavel: '', data_nascimento_responsavel: ''
+        email_responsavel: '', data_nascimento_responsavel: '', limite_maquinas: 1, plano: ''
       });
     } else {
       setClientForm({
@@ -575,7 +817,9 @@ const SaaSAdminPage = () => {
         db_port: data.db_port || '8005',
         is_test_environment: data.is_test_environment || false,
         email_responsavel: data.email_responsavel || '',
-        data_nascimento_responsavel: data.data_nascimento_responsavel || ''
+        data_nascimento_responsavel: data.data_nascimento_responsavel || '',
+        limite_maquinas: data.limite_maquinas || 1,
+        plano: data.plano?.id || data.plano || ''
       });
     }
     setClientModal({ open: true, mode, data });
@@ -660,7 +904,8 @@ const SaaSAdminPage = () => {
       ...clientForm, 
       cnpj: clientForm.cnpj.replace(/\D/g, ''),
       schema_name: clientForm.schema_name.toLowerCase().replace(/[^a-z0-9_-]/g, ''),
-      valor_mensalidade: isTest ? (clientForm.valor_mensalidade || '0.00') : clientForm.valor_mensalidade
+      valor_mensalidade: isTest ? (clientForm.valor_mensalidade || '0.00') : clientForm.valor_mensalidade,
+      plano: clientForm.plano || null
     };
 
     try {
@@ -693,6 +938,121 @@ const SaaSAdminPage = () => {
         }
       }
       showToast(errorMsg, 'error');
+    }
+  };
+
+  const handleCarregarPreview = async (file, type) => {
+    if (!file) return;
+    setPreviewLoading(true);
+    setImportHeaders([]);
+    setImportMapping({});
+    setImportResult(null);
+
+    const formData = new FormData();
+    formData.append('tipo', type);
+    formData.append('arquivo', file);
+
+    try {
+      const response = await axiosInstance.post(
+        `/saas/importar-dados/${clientModal.data.id_saas_cliente}/?action=preview`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
+
+      if (response.data.sucesso) {
+        setImportHeaders(response.data.headers || []);
+        setImportMapping(response.data.sugestoes || {});
+        showToast('Colunas da planilha carregadas com sucesso!', 'success');
+      } else {
+        showToast(response.data.mensagem || 'Falha ao processar cabeçalhos da planilha.', 'error');
+      }
+    } catch (e) {
+      const errorMsg = e.response?.data?.mensagem || e.response?.data?.error || 'Erro ao carregar pré-visualização da planilha.';
+      showToast(errorMsg, 'error');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleExecutarImportacao = async () => {
+    if (!importFile) {
+      showToast('Por favor, selecione um arquivo Excel.', 'warning');
+      return;
+    }
+
+    setImporting(true);
+    setImportResult(null);
+
+    const formData = new FormData();
+    formData.append('tipo', importType);
+    formData.append('arquivo', importFile);
+    formData.append('mapeamento', JSON.stringify(importMapping));
+
+    try {
+      const response = await axiosInstance.post(
+        `/saas/importar-dados/${clientModal.data.id_saas_cliente}/`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
+
+      if (response.data.sucesso) {
+        setImportResult({
+          sucesso: true,
+          mensagem: response.data.mensagem,
+          erros: response.data.erros,
+        });
+        showToast('Importação concluída!', 'success');
+      } else {
+        setImportResult({
+          sucesso: false,
+          mensagem: response.data.mensagem || 'Falha na importação.',
+        });
+        showToast(response.data.mensagem || 'Falha na importação.', 'error');
+      }
+    } catch (e) {
+      const errorMsg = e.response?.data?.mensagem || e.response?.data?.error || 'Erro ao processar importação.';
+      setImportResult({
+        sucesso: false,
+        mensagem: errorMsg,
+      });
+      showToast(errorMsg, 'error');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleSaveLinkAcesso = async (cliente) => {
+    const link = tempLinks[cliente.id_saas_cliente] !== undefined 
+      ? tempLinks[cliente.id_saas_cliente] 
+      : (cliente.link_acesso || '');
+    
+    setSavingLink(prev => ({ ...prev, [cliente.id_saas_cliente]: true }));
+    try {
+      await axiosInstance.patch(`/saas-clientes/${cliente.id_saas_cliente}/`, {
+        link_acesso: link.trim() || null
+      });
+      showToast(`Link de acesso de ${cliente.razao_social} atualizado com sucesso!`, 'success');
+      carregarDados();
+    } catch (err) {
+      let errorMsg = 'Erro ao salvar link de acesso.';
+      if (err.response?.data) {
+        if (typeof err.response.data === 'string') {
+          errorMsg = err.response.data;
+        } else if (err.response.data.error) {
+          errorMsg = err.response.data.error;
+        }
+      }
+      showToast(errorMsg, 'error');
+    } finally {
+      setSavingLink(prev => ({ ...prev, [cliente.id_saas_cliente]: false }));
     }
   };
 
@@ -941,6 +1301,27 @@ const SaaSAdminPage = () => {
     }
   };
 
+  const handleSavePlano = async (plano) => {
+    try {
+      setLoading(true);
+      await axiosInstance.post(`/saas/planos/${plano.id}/editar/`, {
+        valor_mensalidade: plano.valor_mensalidade,
+        modulo_pdv: plano.modulo_pdv,
+        modulo_financeiro_avancado: plano.modulo_financeiro_avancado,
+        modulo_producao_industria: plano.modulo_producao_industria,
+        modulo_transporte_cte: plano.modulo_transporte_cte,
+        modulo_ciot_automatico: plano.modulo_ciot_automatico,
+        modulo_report_builder: plano.modulo_report_builder,
+      });
+      showToast(`Plano ${plano.nome} atualizado com sucesso!`, 'success');
+      carregarDados();
+    } catch (e) {
+      showToast('Erro ao atualizar plano.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Box sx={{ p: 3, minHeight: '85vh' }}>
       
@@ -1049,6 +1430,7 @@ const SaaSAdminPage = () => {
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'action.hover' }}>
                     <TableCell fontWeight={600}>Razão Social / CNPJ</TableCell>
+                    <TableCell align="center">Plano</TableCell>
                     <TableCell align="center">Vencimento (Dia)</TableCell>
                     <TableCell align="right">Valor Mensalidade</TableCell>
                     <TableCell align="center">Emissão NF</TableCell>
@@ -1062,6 +1444,19 @@ const SaaSAdminPage = () => {
                       <TableCell>
                         <Typography fontWeight={600} variant="body2">{c.razao_social}</Typography>
                         <Typography variant="caption" color="text.secondary">CNPJ: {c.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5")}</Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip 
+                          label={c.plano?.nome || 'Customizado'} 
+                          color={
+                            c.plano?.nome?.toLowerCase().includes('ouro') ? 'warning' :
+                            c.plano?.nome?.toLowerCase().includes('prata') ? 'secondary' :
+                            c.plano?.nome?.toLowerCase().includes('bronze') ? 'primary' : 'default'
+                          } 
+                          size="small" 
+                          variant={c.plano ? 'filled' : 'outlined'}
+                          sx={{ fontWeight: 'bold' }}
+                        />
                       </TableCell>
                       <TableCell align="center">Dia {c.dia_vencimento}</TableCell>
                       <TableCell align="right"><b>{fmtMoeda(c.valor_mensalidade)}</b></TableCell>
@@ -1378,60 +1773,158 @@ const SaaSAdminPage = () => {
         )}
 
         {/* TAB 1 - GENERAL BILLING */}
-        {activeTabName === "Faturamento e Cobranças" && (
-          <Box sx={{ p: 3 }}>
-            <Typography variant="h6" fontWeight={700} mb={2}>Lançamentos de Cobranças Globais</Typography>
-            
-            <TableContainer>
-              <Table size="medium">
-                <TableHead>
-                  <TableRow sx={{ bgcolor: 'action.hover' }}>
-                    <TableCell fontWeight={600}>Cliente</TableCell>
-                    <TableCell>Nosso Número</TableCell>
-                    <TableCell>Vencimento</TableCell>
-                    <TableCell align="right">Valor</TableCell>
-                    <TableCell align="center">Situação</TableCell>
-                    <TableCell align="center">Data Pagamento</TableCell>
-                    <TableCell align="center">Ações</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {mensalidades.map((m) => {
-                    const cli = clientes.find(c => c.id_saas_cliente === m.saas_cliente);
-                    return (
-                      <TableRow key={m.id_mensalidade} hover>
-                        <TableCell>
-                          <Typography fontWeight={600} variant="body2">{cli ? cli.razao_social : 'Carregando...'}</Typography>
-                        </TableCell>
-                        <TableCell sx={{ fontFamily: 'monospace' }}>{m.nosso_numero}</TableCell>
-                        <TableCell>{fmtData(m.data_vencimento)}</TableCell>
-                        <TableCell align="right"><b>{fmtMoeda(m.valor)}</b></TableCell>
-                        <TableCell align="center">
-                          <StatusPagamentoChip status={m.status_pagamento} />
-                        </TableCell>
-                        <TableCell align="center">{m.data_pagamento ? fmtData(m.data_pagamento) : '—'}</TableCell>
-                        <TableCell align="center">
-                          <Tooltip title="Detalhes do Pagamento / Baixa Manual">
-                            <IconButton size="small" color="primary" onClick={() => setPaymentModal({ open: true, payment: m })}>
-                              <MoneyIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+        {activeTabName === "Faturamento e Cobranças" && (() => {
+          const mensalidadesFiltradas = mensalidades.filter(m => {
+            if (filtroContaBancaria) {
+              const config = configuracoesBancarias.find(c => c.id_config === m.configuracao_bancaria);
+              if (!config || config.id_conta_bancaria !== filtroContaBancaria) {
+                return false;
+              }
+            }
+            if (filtroDataInicio && m.data_vencimento < filtroDataInicio) {
+              return false;
+            }
+            if (filtroDataFim && m.data_vencimento > filtroDataFim) {
+              return false;
+            }
+            return true;
+          });
+
+          return (
+            <Box sx={{ p: 3 }}>
+              <Typography variant="h6" fontWeight={700} mb={2}>Lançamentos de Cobranças Globais</Typography>
+              
+              {/* Barra de Filtros */}
+              <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      select
+                      fullWidth
+                      size="small"
+                      label="Conta Bancária"
+                      value={filtroContaBancaria}
+                      onChange={(e) => setFiltroContaBancaria(e.target.value)}
+                    >
+                      <MenuItem value="">Todas as Contas</MenuItem>
+                      {contasBancarias.map((conta) => (
+                        <MenuItem key={conta.id_conta_bancaria} value={conta.id_conta_bancaria}>
+                          {conta.nome_banco} - {conta.nome_conta} (Ag: {conta.agencia} / Cc: {conta.conta})
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      type="date"
+                      label="Vencimento Inicial"
+                      InputLabelProps={{ shrink: true }}
+                      value={filtroDataInicio}
+                      onChange={(e) => setFiltroDataInicio(e.target.value)}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      type="date"
+                      label="Vencimento Final"
+                      InputLabelProps={{ shrink: true }}
+                      value={filtroDataFim}
+                      onChange={(e) => setFiltroDataFim(e.target.value)}
+                    />
+                  </Grid>
+                  {(filtroContaBancaria || filtroDataInicio || filtroDataFim) && (
+                    <Grid item xs={12} sm={2}>
+                      <Button
+                        fullWidth
+                        size="small"
+                        variant="outlined"
+                        color="secondary"
+                        onClick={() => {
+                          setFiltroContaBancaria('');
+                          setFiltroDataInicio('');
+                          setFiltroDataFim('');
+                        }}
+                      >
+                        Limpar
+                      </Button>
+                    </Grid>
+                  )}
+                </Grid>
+              </Paper>
+
+              <TableContainer>
+                <Table size="medium">
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
+                      <TableCell fontWeight={600}>Cliente</TableCell>
+                      <TableCell>Nosso Número</TableCell>
+                      <TableCell>Vencimento</TableCell>
+                      <TableCell align="right">Valor</TableCell>
+                      <TableCell align="center">Situação</TableCell>
+                      <TableCell align="center">Data Pagamento</TableCell>
+                      <TableCell align="center">Ações</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {mensalidadesFiltradas.map((m) => {
+                      const cli = clientes.find(c => c.id_saas_cliente === m.saas_cliente);
+                      return (
+                        <TableRow key={m.id_mensalidade} hover>
+                          <TableCell>
+                            <Typography fontWeight={600} variant="body2">{cli ? cli.razao_social : 'Carregando...'}</Typography>
+                          </TableCell>
+                          <TableCell sx={{ fontFamily: 'monospace' }}>{m.nosso_numero}</TableCell>
+                          <TableCell>{fmtData(m.data_vencimento)}</TableCell>
+                          <TableCell align="right"><b>{fmtMoeda(m.valor)}</b></TableCell>
+                          <TableCell align="center">
+                            <StatusPagamentoChip status={m.status_pagamento} />
+                          </TableCell>
+                          <TableCell align="center">{m.data_pagamento ? fmtData(m.data_pagamento) : '—'}</TableCell>
+                          <TableCell align="center">
+                            <Stack direction="row" spacing={1} justifyContent="center">
+                              <Tooltip title="Detalhes do Pagamento / Baixa Manual">
+                                <IconButton size="small" color="primary" onClick={() => setPaymentModal({ open: true, payment: m })}>
+                                  <MoneyIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              {m.status_pagamento !== 'PAGO' && (
+                                <Tooltip title="Consultar status no banco">
+                                  <IconButton
+                                    size="small"
+                                    color="info"
+                                    disabled={loadingUpdate[m.id_mensalidade]}
+                                    onClick={() => consultarStatusMensalidade(m)}
+                                  >
+                                    {loadingUpdate[m.id_mensalidade] ? (
+                                      <CircularProgress size={20} />
+                                    ) : (
+                                      <RefreshIcon fontSize="small" />
+                                    )}
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {mensalidadesFiltradas.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                          Nenhuma cobrança registrada no sistema com os filtros selecionados.
                         </TableCell>
                       </TableRow>
-                    );
-                  })}
-                  {mensalidades.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                        Nenhuma cobrança registrada no sistema.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
-        )}
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          );
+        })()}
 
         {/* TAB 2 - UPDATES */}
         {activeTabName === "Atualizações do Sistema" && (
@@ -1459,7 +1952,7 @@ const SaaSAdminPage = () => {
                       </Typography>
                       <Divider sx={{ mb: 2 }} />
                       <Box sx={{ maxHeight: 200, overflowY: 'auto' }}>
-                        {versoes.map((v) => (
+                        {Array.isArray(versoes) && versoes.map((v) => (
                           <Paper 
                             key={v.id_versao} 
                             variant="outlined" 
@@ -1495,7 +1988,7 @@ const SaaSAdminPage = () => {
                       </Typography>
                       <Divider sx={{ mb: 2 }} />
                       <Box sx={{ maxHeight: 220, overflowY: 'auto' }}>
-                        {historicoAtualizacoes
+                        {Array.isArray(historicoAtualizacoes) && historicoAtualizacoes
                           .filter(h => h.status === 'FALHA')
                           .slice(0, 5)
                           .map((h) => (
@@ -1896,6 +2389,628 @@ const SaaSAdminPage = () => {
             </TableContainer>
           </Box>
         )}
+
+        {/* TAB 4 - PLANOS SAAS */}
+        {activeTabName === "Planos SaaS" && (
+          <Box sx={{ p: 3 }}>
+            <Box mb={3}>
+              <Typography variant="h6" fontWeight={700}>Planos SaaS e Recursos</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Configure os valores de mensalidade e selecione quais módulos/recursos estão liberados para cada plano.
+              </Typography>
+            </Box>
+
+            <Grid container spacing={3}>
+              {Array.isArray(planos) && planos.map((p) => (
+                <Grid item xs={12} md={4} key={p.id}>
+                  <Card sx={{ 
+                    borderRadius: 4, 
+                    border: '1px solid rgba(0,0,0,0.08)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+                    overflow: 'visible',
+                    position: 'relative'
+                  }}>
+                    {/* Badge do Nome do Plano */}
+                    <Box sx={{
+                      position: 'absolute',
+                      top: -12,
+                      left: 20,
+                      bgcolor: p.nome?.toUpperCase() === 'OURO' ? '#fbbf24' : p.nome?.toUpperCase() === 'PRATA' ? '#94a3b8' : '#b45309',
+                      color: '#fff',
+                      px: 2,
+                      py: 0.5,
+                      borderRadius: 2,
+                      fontWeight: 'bold',
+                      fontSize: '0.8rem',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                    }}>
+                      PLANO {p.nome}
+                    </Box>
+
+                    <CardContent sx={{ pt: 4 }}>
+                      <TextField
+                        label="Mensalidade"
+                        type="number"
+                        value={p.valor_mensalidade}
+                        onChange={(e) => {
+                          const newVal = e.target.value;
+                          setPlanos(prev => prev.map(item => item.id === p.id ? { ...item, valor_mensalidade: newVal } : item));
+                        }}
+                        InputProps={{
+                          startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                        }}
+                        variant="outlined"
+                        size="small"
+                        fullWidth
+                        sx={{ mb: 3 }}
+                      />
+
+                      <Divider sx={{ mb: 2 }}>
+                        <Chip label="Recursos Liberados" size="small" variant="outlined" />
+                      </Divider>
+
+                      <Stack spacing={1}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={p.modulo_pdv}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setPlanos(prev => prev.map(item => item.id === p.id ? { ...item, modulo_pdv: checked } : item));
+                              }}
+                              color="primary"
+                            />
+                          }
+                          label="Frente de Caixa / PDV / NFC-e"
+                          sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', ml: 0 }}
+                        />
+
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={p.modulo_financeiro_avancado}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setPlanos(prev => prev.map(item => item.id === p.id ? { ...item, modulo_financeiro_avancado: checked } : item));
+                              }}
+                              color="primary"
+                            />
+                          }
+                          label="Financeiro Avançado"
+                          sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', ml: 0 }}
+                        />
+
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={p.modulo_producao_industria}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setPlanos(prev => prev.map(item => item.id === p.id ? { ...item, modulo_producao_industria: checked } : item));
+                              }}
+                              color="primary"
+                            />
+                          }
+                          label="Controle de Produção / Indústria"
+                          sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', ml: 0 }}
+                        />
+
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={p.modulo_transporte_cte}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setPlanos(prev => prev.map(item => item.id === p.id ? { ...item, modulo_transporte_cte: checked } : item));
+                              }}
+                              color="primary"
+                            />
+                          }
+                          label="Emissão de CT-e / MDF-e"
+                          sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', ml: 0 }}
+                        />
+
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={p.modulo_ciot_automatico}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setPlanos(prev => prev.map(item => item.id === p.id ? { ...item, modulo_ciot_automatico: checked } : item));
+                              }}
+                              color="primary"
+                            />
+                          }
+                          label="Gestão de CIOT Automático"
+                          sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', ml: 0 }}
+                        />
+
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={p.modulo_report_builder}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setPlanos(prev => prev.map(item => item.id === p.id ? { ...item, modulo_report_builder: checked } : item));
+                              }}
+                              color="primary"
+                            />
+                          }
+                          label="Construtor de Relatórios"
+                          sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', ml: 0 }}
+                        />
+                      </Stack>
+
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<SaveIcon />}
+                        fullWidth
+                        onClick={() => handleSavePlano(p)}
+                        sx={{ mt: 3, borderRadius: 2 }}
+                      >
+                        Salvar Plano
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+        )}
+
+        {/* TAB 5 - TERMINAIS ATIVOS */}
+        {activeTabName === "Terminais Ativos" && (
+          <Box sx={{ p: 3 }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+              <Typography variant="h6" fontWeight={700}>Dispositivos e Terminais Ativos</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Total de dispositivos registrados em todas as licenças: <strong>{todosTerminais.length}</strong>
+              </Typography>
+            </Box>
+
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+              <Table size="medium">
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
+                  <TableRow>
+                    <TableCell fontWeight={600}>Cliente / Empresa</TableCell>
+                    <TableCell>Identificador (Schema)</TableCell>
+                    <TableCell>Nome do Computador</TableCell>
+                    <TableCell>Hardware ID</TableCell>
+                    <TableCell>Ativado Em</TableCell>
+                    <TableCell>Último Acesso</TableCell>
+                    <TableCell align="center">Limite Contratado</TableCell>
+                    <TableCell align="center">Ações</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {todosTerminais.map((t) => (
+                    <TableRow key={t.id_terminal} hover>
+                      <TableCell>
+                        <Typography fontWeight={600} variant="body2">{t.cliente_razao_social}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={t.cliente_schema} size="small" variant="outlined" />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{t.nome_computador || '—'}</Typography>
+                      </TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>
+                        {t.hardware_id}
+                      </TableCell>
+                      <TableCell>
+                        {fmtDataHora(t.ativado_em)}
+                      </TableCell>
+                      <TableCell>
+                        {fmtDataHora(t.ultimo_acesso)}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip label={`${t.limite_maquinas || 1} máquina(s)`} size="small" color="info" />
+                      </TableCell>
+                      <TableCell align="center">
+                        <Tooltip title="Excluir dispositivo para liberar licença">
+                          <IconButton size="small" color="error" onClick={() => handleDeleteTerminal(t.id_terminal)}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {todosTerminais.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8} align="center" sx={{ py: 4, color: 'text.secondary', fontStyle: 'italic' }}>
+                        Nenhum terminal ou dispositivo ativo registrado.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
+
+        {activeTabName === "Links de Acesso" && (
+          <Box p={3}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
+              <Box>
+                <Typography variant="h6" fontWeight={700}>
+                  Gerenciamento de Links de Acesso
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Configure manualmente o endereço de API customizado de cada cliente SaaS.
+                </Typography>
+              </Box>
+              <Stack direction="row" spacing={2}>
+                <TextField
+                  size="small"
+                  placeholder="Buscar cliente..."
+                  value={searchTermLinks}
+                  onChange={(e) => setSearchTermLinks(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  startIcon={<RefreshIcon />}
+                  onClick={carregarDados}
+                >
+                  Atualizar
+                </Button>
+              </Stack>
+            </Stack>
+
+            <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
+              Se um <strong>Link de Acesso Customizado</strong> estiver configurado para o cliente, o aplicativo móvel (APK)
+              irá obter este link ao consultar o CNPJ no primeiro acesso, salvá-lo no dispositivo e redirecionar
+              todas as comunicações diretamente para ele. Se deixado em branco, a conexão seguirá a URL padrão do subdomínio.
+            </Alert>
+
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+              <Table size="medium">
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
+                  <TableRow>
+                    <TableCell fontWeight={600} style={{ width: '40%' }}>Cliente / Empresa</TableCell>
+                    <TableCell fontWeight={600} style={{ width: '20%' }}>Identificador (Schema)</TableCell>
+                    <TableCell fontWeight={600} style={{ width: '40%' }}>Link de Acesso Customizado (API)</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {Array.isArray(clientes) && clientes
+                    .filter(c => {
+                      if (!searchTermLinks) return true;
+                      const term = searchTermLinks.toLowerCase();
+                      return c.razao_social?.toLowerCase().includes(term) ||
+                             c.cnpj?.includes(term) ||
+                             c.schema_name?.toLowerCase().includes(term);
+                    })
+                    .map((c) => {
+                      const isSaving = !!savingLink[c.id_saas_cliente];
+                      const currentLinkVal = tempLinks[c.id_saas_cliente] !== undefined 
+                        ? tempLinks[c.id_saas_cliente] 
+                        : (c.link_acesso || '');
+                      
+                      const hasChanges = currentLinkVal !== (c.link_acesso || '');
+
+                      return (
+                        <TableRow key={c.id_saas_cliente} hover>
+                          <TableCell>
+                            <Typography variant="subtitle2" fontWeight={600}>
+                              {c.razao_social}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              CNPJ: {c.cnpj ? c.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : '—'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip label={c.schema_name} size="small" variant="outlined" color="primary" sx={{ fontWeight: 600 }} />
+                          </TableCell>
+                          <TableCell>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <TextField
+                                size="small"
+                                fullWidth
+                                placeholder="Padrão (https://{schema}.aperus.com.br/api/)"
+                                value={currentLinkVal}
+                                onChange={(e) => setTempLinks({ ...tempLinks, [c.id_saas_cliente]: e.target.value })}
+                                InputProps={{
+                                  startAdornment: (
+                                    <InputAdornment position="start">
+                                      <LinkIcon fontSize="small" color="action" />
+                                    </InputAdornment>
+                                  ),
+                                }}
+                                sx={{
+                                  '& .MuiInputBase-input': {
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.85rem'
+                                  }
+                                }}
+                              />
+                              <Tooltip title="Salvar Link Customizado">
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color={hasChanges ? "primary" : "default"}
+                                    onClick={() => handleSaveLinkAcesso(c)}
+                                    disabled={isSaving}
+                                    sx={{
+                                      border: '1px solid',
+                                      borderColor: hasChanges ? 'primary.main' : 'divider',
+                                      bgcolor: hasChanges ? 'primary.lighter' : 'transparent',
+                                      '&:hover': {
+                                        bgcolor: hasChanges ? 'primary.light' : 'action.hover'
+                                      }
+                                    }}
+                                  >
+                                    {isSaving ? (
+                                      <CircularProgress size={20} color="inherit" />
+                                    ) : (
+                                      <SaveIcon fontSize="small" />
+                                    )}
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                              {c.link_acesso && (
+                                <Tooltip title="Restaurar Schema Padrão">
+                                  <span>
+                                    <IconButton
+                                      size="small"
+                                      color="error"
+                                      onClick={() => {
+                                        setTempLinks({ ...tempLinks, [c.id_saas_cliente]: '' });
+                                        // Executa o salvamento com valor vazio para limpar
+                                        handleSaveLinkAcesso({ ...c, link_acesso: '' });
+                                      }}
+                                      disabled={isSaving}
+                                      sx={{
+                                        border: '1px solid',
+                                        borderColor: 'error.light',
+                                        '&:hover': {
+                                          bgcolor: 'error.lighter'
+                                        }
+                                      }}
+                                    >
+                                      <DeleteIcon fontSize="small" />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                              )}
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  {clientes.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} align="center" sx={{ py: 4, color: 'text.secondary', fontStyle: 'italic' }}>
+                        Nenhum cliente registrado.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
+
+        {activeTabName === "Backup Agendado" && (
+          <Box p={3}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
+              <Box>
+                <Typography variant="h6" fontWeight={700}>
+                  Backup Agendado (Google Drive para Desktop)
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Configure a rotina automática para salvar cópias completas de todos os bancos de dados direto na sua unidade G:.
+                </Typography>
+              </Box>
+              <Button 
+                variant="outlined" 
+                size="small" 
+                startIcon={<RefreshIcon />}
+                onClick={carregarBackupConfig}
+                disabled={loadingBackup}
+              >
+                Atualizar Status
+              </Button>
+            </Stack>
+
+            {/* A. Status do Sistema */}
+            <Grid container spacing={3} mb={4}>
+              <Grid item xs={12} md={4}>
+                <Card variant="outlined" sx={{ borderRadius: 2, height: '100%', borderColor: backupConfig.status_ultimo_backup === 'Sucesso' ? 'success.light' : backupConfig.status_ultimo_backup?.startsWith('Falha') ? 'error.light' : 'divider' }}>
+                  <CardContent>
+                    <Typography color="text.secondary" variant="body2" gutterBottom>
+                      Status do Último Backup
+                    </Typography>
+                    <Box display="flex" alignItems="center" mt={1}>
+                      {backupConfig.status_ultimo_backup === 'Sucesso' ? (
+                        <Chip label="Sucesso" color="success" size="small" sx={{ fontWeight: 'bold', mr: 1 }} />
+                      ) : backupConfig.status_ultimo_backup?.startsWith('Falha') ? (
+                        <Chip label="Falha" color="error" size="small" sx={{ fontWeight: 'bold', mr: 1 }} />
+                      ) : (
+                        <Chip label={backupConfig.status_ultimo_backup || 'Pendente'} color="warning" size="small" sx={{ fontWeight: 'bold', mr: 1 }} />
+                      )}
+                      <Typography variant="caption" color="text.secondary">
+                        {backupConfig.ultimo_backup_em ? fmtDataHora(backupConfig.ultimo_backup_em) : 'Nunca executado'}
+                      </Typography>
+                    </Box>
+                    {backupConfig.status_ultimo_backup?.startsWith('Falha') && (
+                      <Typography variant="caption" color="error.main" display="block" mt={1} sx={{ wordBreak: 'break-all' }}>
+                        {backupConfig.status_ultimo_backup}
+                      </Typography>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} md={8}>
+                <Card variant="outlined" sx={{ borderRadius: 2, height: '100%' }}>
+                  <CardContent>
+                    <Typography color="text.secondary" variant="body2" gutterBottom>
+                      Diretório Ativo de Destino
+                    </Typography>
+                    <Stack direction="row" spacing={1} alignItems="center" mt={1}>
+                      <StorageIcon color="info" fontSize="small" />
+                      <Typography variant="body1" fontWeight={600} sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                        {backupConfig.diretorio_destino}
+                      </Typography>
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+                      Certifique-se de que o aplicativo Google Drive para Desktop está rodando e que a letra da unidade G: está montada.
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+
+            {/* B. Formulário de Configurações */}
+            <Paper variant="outlined" sx={{ p: 3, borderRadius: 2, mb: 3 }}>
+              <Typography variant="subtitle1" fontWeight={700} gutterBottom mb={3}>
+                Configurações da Rotina de Cópia
+              </Typography>
+              
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={8}>
+                  <TextField
+                    label="Caminho do Drive (diretorio_destino) *"
+                    fullWidth
+                    size="small"
+                    value={backupConfig.diretorio_destino}
+                    onChange={(e) => setBackupConfig({ ...backupConfig, diretorio_destino: e.target.value })}
+                    placeholder="G:\Meu Drive\BackupsAperus"
+                    helperText="Caminho físico local da pasta montada pelo aplicativo do Google Drive"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    label="Retenção (limite de arquivos) *"
+                    type="number"
+                    fullWidth
+                    size="small"
+                    value={backupConfig.retencao_arquivos}
+                    onChange={(e) => setBackupConfig({ ...backupConfig, retencao_arquivos: parseInt(e.target.value) || 30 })}
+                    helperText="Quantidade máxima de arquivos .sql.gz a manter na pasta"
+                  />
+                </Grid>
+
+                {/* Dias da semana */}
+                <Grid item xs={12}>
+                  <Typography variant="body2" fontWeight={600} color="text.secondary" gutterBottom>
+                    Dias da Semana para Execução
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" mt={1}>
+                    {[
+                      { key: 'segunda', label: 'Segunda' },
+                      { key: 'terca', label: 'Terça' },
+                      { key: 'quarta', label: 'Quarta' },
+                      { key: 'quinta', label: 'Quinta' },
+                      { key: 'sexta', label: 'Sexta' },
+                      { key: 'sabado', label: 'Sábado' },
+                      { key: 'domingo', label: 'Domingo' }
+                    ].map((d) => (
+                      <FormControlLabel
+                        key={d.key}
+                        control={
+                          <Switch
+                            checked={!!backupConfig[d.key]}
+                            onChange={(e) => setBackupConfig({ ...backupConfig, [d.key]: e.target.checked })}
+                            color="primary"
+                          />
+                        }
+                        label={d.label}
+                      />
+                    ))}
+                  </Stack>
+                </Grid>
+
+                {/* Seletor de quantidade e inputs dinâmicos de hora */}
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    label="Execuções por Dia"
+                    type="number"
+                    fullWidth
+                    size="small"
+                    value={quantidadeHorarios}
+                    onChange={(e) => handleQtdHorariosChange(e.target.value)}
+                    InputProps={{ inputProps: { min: 1, max: 10 } }}
+                    helperText="Número de backups executados diariamente"
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Divider sx={{ my: 1 }} />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography variant="body2" fontWeight={600} color="text.secondary" mb={2}>
+                    Definição dos Horários
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {Array.from({ length: quantidadeHorarios }).map((_, idx) => (
+                      <Grid item xs={6} sm={2} key={idx}>
+                        <TextField
+                          label={`Horário ${idx + 1}`}
+                          type="time"
+                          fullWidth
+                          size="small"
+                          value={listaHorarios[idx] || "02:00"}
+                          onChange={(e) => handleHorarioChange(idx, e.target.value)}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Grid>
+
+                {/* Ativo/Inativo */}
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={!!backupConfig.ativo}
+                        onChange={(e) => setBackupConfig({ ...backupConfig, ativo: e.target.checked })}
+                        color="primary"
+                      />
+                    }
+                    label="Agendamento Ativo (Habilitar rotina automática)"
+                  />
+                </Grid>
+
+                {/* Botões de Ação */}
+                <Grid item xs={12}>
+                  <Stack direction="row" spacing={2} justifyContent="flex-end">
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      startIcon={<SaveIcon />}
+                      onClick={handleSalvarBackupConfig}
+                      disabled={loadingBackup || forcingBackup}
+                    >
+                      {loadingBackup ? 'Salvando...' : 'Salvar Configurações'}
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="warning"
+                      startIcon={forcingBackup ? <CircularProgress size={20} color="inherit" /> : <BoltIcon />}
+                      onClick={handleForcarBackup}
+                      disabled={loadingBackup || forcingBackup}
+                    >
+                      {forcingBackup ? 'Executando...' : 'Forçar Backup Agora'}
+                    </Button>
+                  </Stack>
+                </Grid>
+
+              </Grid>
+            </Paper>
+          </Box>
+        )}
       </Paper>
 
       {/* DIALOGS */}
@@ -1908,6 +3023,7 @@ const SaaSAdminPage = () => {
             <Tab label="Dados Básicos" />
             <Tab label="Endereço" />
             <Tab label="Contrato & Conexão" />
+            {clientModal.mode === 'edit' && <Tab label="Importador de Dados" />}
           </Tabs>
         </Box>
         <DialogContent dividers sx={{ minHeight: '340px' }}>
@@ -2108,6 +3224,29 @@ const SaaSAdminPage = () => {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Plano Contratado</InputLabel>
+                  <Select
+                    value={clientForm.plano}
+                    onChange={(e) => {
+                      const selectedPlanoId = e.target.value;
+                      const selectedPlano = planos.find(p => p.id === selectedPlanoId);
+                      setClientForm({ 
+                        ...clientForm, 
+                        plano: selectedPlanoId,
+                        valor_mensalidade: selectedPlano ? selectedPlano.valor_mensalidade : clientForm.valor_mensalidade
+                      });
+                    }}
+                    label="Plano Contratado"
+                  >
+                    <MenuItem value=""><em>Nenhum plano (Customizado)</em></MenuItem>
+                    {planos.map((p) => (
+                      <MenuItem key={p.id} value={p.id}>{p.nome} (R$ {parseFloat(p.valor_mensalidade).toFixed(2).replace('.', ',')})</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   label="Valor da Mensalidade (R$) *" type="number" fullWidth size="small"
                   value={clientForm.valor_mensalidade} onChange={(e) => setClientForm({ ...clientForm, valor_mensalidade: e.target.value })}
@@ -2135,7 +3274,7 @@ const SaaSAdminPage = () => {
                   disabled={!temPermissao('pode_cadastrar_financeiro_saas')}
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <FormControl fullWidth size="small" disabled={!temPermissao('pode_cadastrar_financeiro_saas')}>
                   <InputLabel>Emite Notas Fiscais?</InputLabel>
                   <Select
@@ -2148,12 +3287,322 @@ const SaaSAdminPage = () => {
                   </Select>
                 </FormControl>
               </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Limite de Máquinas Contratadas *" type="number" fullWidth size="small"
+                  value={clientForm.limite_maquinas || 1} onChange={(e) => setClientForm({ ...clientForm, limite_maquinas: parseInt(e.target.value) || 1 })}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  label="Link de Acesso Customizado (API URL)" fullWidth size="small"
+                  value={clientForm.link_acesso || ''} onChange={(e) => setClientForm({ ...clientForm, link_acesso: e.target.value })}
+                  placeholder="ex: http://192.168.1.4:8005/api/"
+                  helperText="Se configurado, o APK móvel conectará a esta URL após a validação do CNPJ. Deixe em branco para usar o schema padrão (https://schema.aperus.com.br/api/)."
+                />
+              </Grid>
             </Grid>
+          )}
+
+          {modalTab === 3 && clientModal.mode === 'edit' && (
+            <Box sx={{ mt: 1, p: 1 }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <StorageIcon color="primary" /> Importador de Dados Centralizado
+              </Typography>
+              
+              <Alert severity="info" sx={{ mb: 3 }}>
+                Os dados serão injetados diretamente no banco de dados do tenant. Certifique-se de que a planilha Excel (.xlsx) segue a estrutura correta.
+              </Alert>
+
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <Card variant="outlined" sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <Box>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Banco de Dados Alvo
+                      </Typography>
+                      <Chip 
+                        label={`aperus_${clientForm.schema_name}`} 
+                        color="success" 
+                        variant="outlined" 
+                        sx={{ fontWeight: 'bold', fontSize: '0.95rem', px: 1, py: 2, mb: 3 }} 
+                      />
+
+                      <FormControl fullWidth size="small" sx={{ mb: 3 }}>
+                        <InputLabel>Tipo de Importação</InputLabel>
+                        <Select
+                          value={importType}
+                          label="Tipo de Importação"
+                          onChange={(e) => {
+                            const newType = e.target.value;
+                            setImportType(newType);
+                            setImportResult(null);
+                            if (importFile) {
+                              handleCarregarPreview(importFile, newType);
+                            }
+                          }}
+                        >
+                          <MenuItem value="CLIENTES">Clientes (Razão Social, CNPJ, Telefone, Email)</MenuItem>
+                          <MenuItem value="PRODUTOS">Produtos (Descrição, Preço de Venda, Código Barras, NCM)</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Box>
+
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      fullWidth
+                      disabled={!importFile || importing}
+                      onClick={handleExecutarImportacao}
+                      startIcon={importing ? <CircularProgress size={20} color="inherit" /> : <BoltIcon />}
+                      sx={{ py: 1.2, fontWeight: 'bold' }}
+                    >
+                      {importing ? 'Processando e Injetando...' : 'Processar e Injetar na Base'}
+                    </Button>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <Box 
+                    sx={{
+                      border: '2px dashed',
+                      borderColor: importFile ? 'primary.main' : 'divider',
+                      borderRadius: 2,
+                      p: 3,
+                      textAlign: 'center',
+                      backgroundColor: importFile ? 'rgba(25, 118, 210, 0.04)' : 'transparent',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        backgroundColor: 'rgba(25, 118, 210, 0.02)'
+                      }
+                    }}
+                    onClick={() => document.getElementById('excel-file-input').click()}
+                  >
+                    <input
+                      type="file"
+                      id="excel-file-input"
+                      accept=".xlsx, .xls"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          const file = e.target.files[0];
+                          setImportFile(file);
+                          setImportResult(null);
+                          handleCarregarPreview(file, importType);
+                        }
+                      }}
+                    />
+                    <StorageIcon sx={{ fontSize: 48, color: importFile ? 'primary.main' : 'text.disabled', mb: 2 }} />
+                    {importFile ? (
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight="bold" color="primary.main">
+                          {importFile.name}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {(importFile.size / 1024).toFixed(1)} KB
+                        </Typography>
+                        <Button 
+                          size="small" 
+                          color="error" 
+                          sx={{ mt: 1, fontWeight: 'bold' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setImportFile(null);
+                            setImportHeaders([]);
+                            setImportMapping({});
+                            setImportResult(null);
+                            document.getElementById('excel-file-input').value = '';
+                          }}
+                        >
+                          Remover Arquivo
+                        </Button>
+                      </Box>
+                    ) : (
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                          Selecione a planilha Excel (.xlsx)
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Clique aqui para escolher o arquivo
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                </Grid>
+              </Grid>
+
+              {previewLoading && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 4, mb: 2 }}>
+                  <CircularProgress size={30} />
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Analisando planilha e sugerindo colunas...
+                  </Typography>
+                </Box>
+              )}
+
+              {importHeaders.length > 0 && (
+                <Card variant="outlined" sx={{ mt: 3, p: 3, borderRadius: 2, bgcolor: 'action.hover' }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <SettingsIcon color="primary" /> Mapeamento de Colunas da Planilha
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    Associe as colunas encontradas na sua planilha com os campos do sistema. O sistema tentou mapear as colunas automaticamente por semelhança de nomes.
+                  </Typography>
+                  
+                  <Grid container spacing={2}>
+                    {Object.entries(MAPPING_LABELS)
+                      .filter(([campo]) => {
+                        const isClienteField = ['nome_razao', 'cpf_cnpj', 'nome_fantasia', 'ie', 'telefone', 'whatsapp', 'email', 'data_nascimento', 'cep', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'observacao'].includes(campo);
+                        return importType === 'CLIENTES' ? isClienteField : !isClienteField;
+                      })
+                      .map(([campo, meta]) => (
+                        <Grid item xs={12} sm={6} md={4} key={campo}>
+                          <FormControl fullWidth size="small" sx={{ bgcolor: 'background.paper', borderRadius: 1 }}>
+                            <InputLabel required={meta.required}>{meta.label}</InputLabel>
+                            <Select
+                              value={importMapping[campo] || ''}
+                              label={meta.label}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setImportMapping(prev => ({ ...prev, [campo]: val }));
+                              }}
+                            >
+                              <MenuItem value=""><em>(Não importar / Ignorar)</em></MenuItem>
+                              {importHeaders.map((header) => (
+                                <MenuItem key={header} value={header}>{header}</MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                      ))
+                    }
+                  </Grid>
+                </Card>
+              )}
+
+              {/* Tabela Exemplo da Planilha */}
+              <Box sx={{ mt: 3, mb: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: 'text.secondary' }}>
+                  Layout Esperado da Planilha ({importType === 'CLIENTES' ? 'Clientes' : 'Produtos'}):
+                </Typography>
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small" sx={{ minWidth: importType === 'CLIENTES' ? 1600 : 650 }}>
+                    <TableHead sx={{ backgroundColor: 'action.hover' }}>
+                      <TableRow>
+                        {importType === 'CLIENTES' ? (
+                          <>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna A (Razão Social)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna B (CNPJ/CPF)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna C (Nome Fantasia)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna D (Insc. Estadual)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna E (Telefone)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna F (WhatsApp)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna G (Email)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna H (Nascimento)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna I (CEP)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna J (Endereço)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna K (Número)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna L (Complemento)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna M (Bairro)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna N (Cidade)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna O (Estado)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna P (Observação)</TableCell>
+                          </>
+                        ) : (
+                          <>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna A (Descrição)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna B (Preço de Venda)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna C (Cód. Barras)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>Coluna D (NCM)</TableCell>
+                          </>
+                        )}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {importType === 'CLIENTES' ? (
+                        <TableRow>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>BRUNO DOS REIS NASCIMENTO</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>123.456.789-00</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>BRUNO SOFTWARE</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>ISENTO</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>(11) 99999-8888</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>(11) 99999-8888</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>bruno@email.com</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>23/06/1995</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>01001-000</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>Praça da Sé</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>100</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>Apto 12</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>Sé</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>São Paulo</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>SP</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>Cliente preferencial</TableCell>
+                        </TableRow>
+                      ) : (
+                        <TableRow>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>Martelo de Unha 20mm</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>45.90</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>7891234567890</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem' }}>82052000</TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+
+              {importResult && (
+                <Box sx={{ mt: 3 }}>
+                  {importResult.sucesso ? (
+                    <Alert severity={importResult.erros && importResult.erros.length > 0 ? 'warning' : 'success'} sx={{ mb: 2 }}>
+                      <Typography fontWeight="bold">{importResult.mensagem}</Typography>
+                      {importResult.erros && importResult.erros.length > 0 && (
+                        <Typography variant="body2" mt={0.5}>
+                          A importação foi concluída, mas {importResult.erros.length} linhas apresentaram falhas.
+                        </Typography>
+                      )}
+                    </Alert>
+                  ) : (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                      <Typography fontWeight="bold">Erro na Importação:</Typography>
+                      <Typography variant="body2">{importResult.mensagem}</Typography>
+                    </Alert>
+                  )}
+
+                  {importResult.erros && importResult.erros.length > 0 && (
+                    <Paper variant="outlined" sx={{ p: 2, maxHeight: 200, overflowY: 'auto', backgroundColor: '#fafafa' }}>
+                      <Typography variant="subtitle2" color="error" fontWeight="bold" mb={1} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <WarningIcon fontSize="small" /> Detalhes dos erros por linha ({importResult.erros.length})
+                      </Typography>
+                      <Divider sx={{ mb: 1 }} />
+                      <Stack spacing={0.5}>
+                        {importResult.erros.map((err, i) => (
+                          <Typography key={i} variant="caption" color="text.secondary" fontFamily="monospace">
+                            • {err}
+                          </Typography>
+                        ))}
+                      </Stack>
+                    </Paper>
+                  )}
+                </Box>
+              )}
+            </Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setClientModal({ ...clientModal, open: false })}>Cancelar</Button>
-          <Button variant="contained" onClick={handleSaveClient}>Salvar</Button>
+          <Button onClick={() => setClientModal({ ...clientModal, open: false })}>
+            {modalTab === 3 ? 'Fechar' : 'Cancelar'}
+          </Button>
+          {modalTab !== 3 && (
+            <Button variant="contained" onClick={handleSaveClient}>Salvar</Button>
+          )}
         </DialogActions>
       </Dialog>
 

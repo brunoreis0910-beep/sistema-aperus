@@ -2,6 +2,7 @@
 # (Código completo com os novos campos em FormaPagamento)
 
 from django.db import models
+from api.fields import EncryptedCharField, EncryptedTextField
 from django.contrib.auth.models import User
 from django.utils import timezone
 import uuid 
@@ -1638,6 +1639,94 @@ class UserPermissoes(models.Model):
     pode_gerenciar_agendamento = models.IntegerField(blank=True, null=True, default=0)
     pode_cadastrar_financeiro_saas = models.IntegerField(blank=True, null=True, default=0)
     
+    # Auto-generated missing fields
+    agro_contratos_acessar = models.IntegerField(blank=True, null=True, default=0)
+    agro_contratos_criar = models.IntegerField(blank=True, null=True, default=0)
+    agro_contratos_editar = models.IntegerField(blank=True, null=True, default=0)
+    agro_contratos_excluir = models.IntegerField(blank=True, null=True, default=0)
+    agro_conversoes_acessar = models.IntegerField(blank=True, null=True, default=0)
+    agro_conversoes_criar = models.IntegerField(blank=True, null=True, default=0)
+    agro_conversoes_editar = models.IntegerField(blank=True, null=True, default=0)
+    agro_conversoes_excluir = models.IntegerField(blank=True, null=True, default=0)
+    agro_operacional_acessar = models.IntegerField(blank=True, null=True, default=0)
+    agro_operacional_criar = models.IntegerField(blank=True, null=True, default=0)
+    agro_operacional_editar = models.IntegerField(blank=True, null=True, default=0)
+    agro_operacional_excluir = models.IntegerField(blank=True, null=True, default=0)
+    agro_safras_acessar = models.IntegerField(blank=True, null=True, default=0)
+    agro_safras_criar = models.IntegerField(blank=True, null=True, default=0)
+    agro_safras_editar = models.IntegerField(blank=True, null=True, default=0)
+    agro_safras_excluir = models.IntegerField(blank=True, null=True, default=0)
+    alterar_preco_venda = models.IntegerField(blank=True, null=True, default=0)
+    alugueis_acessar = models.IntegerField(blank=True, null=True, default=0)
+    alugueis_criar = models.IntegerField(blank=True, null=True, default=0)
+    alugueis_editar = models.IntegerField(blank=True, null=True, default=0)
+    alugueis_excluir = models.IntegerField(blank=True, null=True, default=0)
+    aprovacoes_acessar = models.IntegerField(blank=True, null=True, default=0)
+    aprovacoes_aprovar = models.IntegerField(blank=True, null=True, default=0)
+    aprovacoes_rejeitar = models.IntegerField(blank=True, null=True, default=0)
+    aprovacoes_visualizar = models.IntegerField(blank=True, null=True, default=0)
+    backup_acessar = models.IntegerField(blank=True, null=True, default=0)
+    backup_agendar = models.IntegerField(blank=True, null=True, default=0)
+    backup_criar = models.IntegerField(blank=True, null=True, default=0)
+    backup_restaurar = models.IntegerField(blank=True, null=True, default=0)
+    bancario_excluir = models.IntegerField(blank=True, null=True, default=0)
+    cheques_acessar = models.IntegerField(blank=True, null=True, default=0)
+    cheques_criar = models.IntegerField(blank=True, null=True, default=0)
+    cheques_editar = models.IntegerField(blank=True, null=True, default=0)
+    cheques_excluir = models.IntegerField(blank=True, null=True, default=0)
+    clinica_veterinaria_acessar = models.IntegerField(blank=True, null=True, default=0)
+    clinica_veterinaria_criar = models.IntegerField(blank=True, null=True, default=0)
+    clinica_veterinaria_editar = models.IntegerField(blank=True, null=True, default=0)
+    clinica_veterinaria_excluir = models.IntegerField(blank=True, null=True, default=0)
+    cte_cancelar = models.IntegerField(blank=True, null=True, default=0)
+    cte_emitir = models.IntegerField(blank=True, null=True, default=0)
+    cte_visualizar = models.IntegerField(blank=True, null=True, default=0)
+    dashboard_acessar = models.IntegerField(blank=True, null=True, default=0)
+    documentos_fiscais_acessar = models.IntegerField(blank=True, null=True, default=0)
+    documentos_fiscais_cancelar = models.IntegerField(blank=True, null=True, default=0)
+    documentos_fiscais_inutilizar = models.IntegerField(blank=True, null=True, default=0)
+    documentos_fiscais_visualizar = models.IntegerField(blank=True, null=True, default=0)
+    equipamentos_acessar = models.IntegerField(blank=True, null=True, default=0)
+    equipamentos_criar = models.IntegerField(blank=True, null=True, default=0)
+    equipamentos_editar = models.IntegerField(blank=True, null=True, default=0)
+    equipamentos_excluir = models.IntegerField(blank=True, null=True, default=0)
+    estoque_acessar = models.IntegerField(blank=True, null=True, default=0)
+    estoque_ajustar = models.IntegerField(blank=True, null=True, default=0)
+    estoque_editar = models.IntegerField(blank=True, null=True, default=0)
+    estoque_inventariar = models.IntegerField(blank=True, null=True, default=0)
+    estoque_transferir = models.IntegerField(blank=True, null=True, default=0)
+    fiscal_acessar = models.IntegerField(blank=True, null=True, default=0)
+    manifestacao_acessar = models.IntegerField(blank=True, null=True, default=0)
+    manifestacao_manifestar = models.IntegerField(blank=True, null=True, default=0)
+    manifestacao_visualizar = models.IntegerField(blank=True, null=True, default=0)
+    nfce_cancelar = models.IntegerField(blank=True, null=True, default=0)
+    nfce_emitir = models.IntegerField(blank=True, null=True, default=0)
+    nfce_visualizar = models.IntegerField(blank=True, null=True, default=0)
+    nfe_cancelar = models.IntegerField(blank=True, null=True, default=0)
+    nfe_emitir = models.IntegerField(blank=True, null=True, default=0)
+    nfe_inutilizar = models.IntegerField(blank=True, null=True, default=0)
+    nfe_visualizar = models.IntegerField(blank=True, null=True, default=0)
+    perm_auditoria_acessar = models.IntegerField(blank=True, null=True, default=0)
+    perm_auditoria_excluir = models.IntegerField(blank=True, null=True, default=0)
+    perm_auditoria_exportar = models.IntegerField(blank=True, null=True, default=0)
+    perm_auditoria_visualizar = models.IntegerField(blank=True, null=True, default=0)
+    sped_contribuicoes_exportar = models.IntegerField(blank=True, null=True, default=0)
+    sped_contribuicoes_gerar = models.IntegerField(blank=True, null=True, default=0)
+    sped_contribuicoes_visualizar = models.IntegerField(blank=True, null=True, default=0)
+    sped_exportar = models.IntegerField(blank=True, null=True, default=0)
+    sped_gerar = models.IntegerField(blank=True, null=True, default=0)
+    sped_visualizar = models.IntegerField(blank=True, null=True, default=0)
+    tabela_comercial_acessar = models.IntegerField(blank=True, null=True, default=0)
+    tabela_comercial_criar = models.IntegerField(blank=True, null=True, default=0)
+    tabela_comercial_editar = models.IntegerField(blank=True, null=True, default=0)
+    tabela_comercial_excluir = models.IntegerField(blank=True, null=True, default=0)
+    veiculos_acessar = models.IntegerField(blank=True, null=True, default=0)
+    veiculos_criar = models.IntegerField(blank=True, null=True, default=0)
+    veiculos_editar = models.IntegerField(blank=True, null=True, default=0)
+    veiculos_excluir = models.IntegerField(blank=True, null=True, default=0)
+    ver_custos = models.IntegerField(blank=True, null=True, default=0)
+    ver_valores_reais = models.IntegerField(blank=True, null=True, default=0)
+
     class Meta:
         managed = False
         db_table = 'user_permissoes'
@@ -3943,6 +4032,7 @@ class ConfiguracaoBancaria(models.Model):
         ('SICOOB', 'Sicoob'),
         ('SANTANDER', 'Santander'),
         ('CAIXA', 'Caixa Econômica'),
+        ('MERCADOPAGO', 'Mercado Pago'),
         ('OUTROS', 'Outros'),
     ]
     
@@ -3951,8 +4041,8 @@ class ConfiguracaoBancaria(models.Model):
     nome_configuracao = models.CharField(max_length=100, help_text="Nome para identificação")
     
     # Credenciais OAuth2
-    client_id = models.CharField(max_length=255, help_text="Client ID fornecido pelo banco")
-    client_secret = models.CharField(max_length=255, help_text="Client Secret fornecido pelo banco")
+    client_id = EncryptedCharField(max_length=255, help_text="Client ID fornecido pelo banco")
+    client_secret = EncryptedCharField(max_length=255, help_text="Client Secret fornecido pelo banco")
     
     # URLs da API
     url_autenticacao = models.URLField(max_length=500, help_text="URL para obter o token OAuth2")
@@ -3991,8 +4081,8 @@ class ConfiguracaoBancaria(models.Model):
     data_cadastro = models.DateTimeField(auto_now_add=True)
     
     # Tokens (armazenados após autenticação)
-    access_token = models.TextField(blank=True, null=True)
-    refresh_token = models.TextField(blank=True, null=True)
+    access_token = EncryptedTextField(blank=True, null=True)
+    refresh_token = EncryptedTextField(blank=True, null=True)
     token_expira_em = models.DateTimeField(null=True, blank=True)
     
     class Meta:
@@ -4020,8 +4110,8 @@ class Boleto(models.Model):
     ]
     
     id_boleto = models.AutoField(primary_key=True)
-    id_conta = models.ForeignKey('FinanceiroConta', on_delete=models.PROTECT, related_name='boletos')
-    id_config_bancaria = models.ForeignKey(ConfiguracaoBancaria, on_delete=models.PROTECT, related_name='boletos')
+    id_conta = models.ForeignKey('FinanceiroConta', on_delete=models.PROTECT, related_name='boletos', db_column='id_conta')
+    id_config_bancaria = models.ForeignKey(ConfiguracaoBancaria, on_delete=models.PROTECT, related_name='boletos', db_column='id_config')
     
     # Identificação
     nosso_numero = models.CharField(max_length=50, unique=True, help_text="Nosso número gerado pelo banco")
@@ -4036,7 +4126,7 @@ class Boleto(models.Model):
     pagador_cidade = models.CharField(max_length=100, blank=True, null=True)
     pagador_uf = models.CharField(max_length=2, blank=True, null=True)
     pagador_cep = models.CharField(max_length=10, blank=True, null=True)
-    pagador_codigo_ibge = models.CharField(max_length=10, blank=True, null=True, 
+    pagador_codigo_ibge = models.CharField(max_length=10, blank=True, null=True, db_column='codigo_ibge_cidade',
                                            help_text="Código IBGE da cidade (importante!)")
     
     # Valores
@@ -4054,22 +4144,24 @@ class Boleto(models.Model):
     
     # Status e Controle
     status = models.CharField(max_length=20, default='PENDENTE', choices=STATUS_CHOICES)
-    url_boleto = models.URLField(max_length=500, blank=True, null=True, help_text="URL para download do PDF")
+    url_boleto = models.URLField(max_length=500, blank=True, null=True, db_column='url_boleto_pdf', help_text="URL para download do PDF")
     
     # Baixa Automática
-    baixado_via_api = models.BooleanField(default=False, help_text="Foi baixado automaticamente via API")
-    data_baixa_api = models.DateTimeField(null=True, blank=True, help_text="Data/hora da baixa via API")
+    baixado_via_api = models.BooleanField(default=False, db_column='baixa_via_api', help_text="Foi baixado automaticamente via API")
+    data_baixa_api = models.DateTimeField(null=True, blank=True, db_column='baixa_realizada_em', help_text="Data/hora da baixa via API")
     usuario_baixa = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
                                      related_name='boletos_baixados', help_text="Usuário que executou a baixa (ou sistema)")
     
     # QR Code PIX (se disponível)
-    pix_qr_code = models.TextField(blank=True, null=True, help_text="Código QR Code PIX")
+    pix_qr_code = models.TextField(blank=True, null=True, db_column='qrcode_pix', help_text="Código QR Code PIX")
     pix_emv = models.TextField(blank=True, null=True, help_text="String EMV do PIX")
     pix_txid = models.CharField(max_length=100, blank=True, null=True, help_text="TXID da transação PIX")
     
     # Retorno do Banco
     mensagem_banco = models.TextField(blank=True, null=True, help_text="Mensagens/erros retornados pelo banco")
-    dados_retorno_json = models.JSONField(null=True, blank=True, help_text="JSON completo do retorno do banco")
+    dados_retorno_json = models.JSONField(null=True, blank=True, db_column='resposta_banco', help_text="JSON completo do retorno do banco")
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
     
     class Meta:
         managed = True
@@ -5748,6 +5840,28 @@ class TTSAudioCache(models.Model):
         return f"{self.provider} - {self.voice} - {self.text_hash}"
 
 
+class PlanoSaaS(models.Model):
+    nome = models.CharField(max_length=50, unique=True, verbose_name="Nome do Plano")
+    valor_mensalidade = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor Mensalidade")
+    
+    # Módulos / Permissões
+    modulo_pdv = models.BooleanField(default=True, verbose_name="Frente de Caixa / NFC-e")
+    modulo_financeiro_avancado = models.BooleanField(default=False, verbose_name="Financeiro Avançado")
+    modulo_producao_industria = models.BooleanField(default=False, verbose_name="Controle de Produção/Estoque Avançado")
+    modulo_transporte_cte = models.BooleanField(default=False, verbose_name="Emissão de CT-e e MDF-e")
+    modulo_ciot_automatico = models.BooleanField(default=False, verbose_name="Automação de CIOT")
+    modulo_report_builder = models.BooleanField(default=False, verbose_name="Editor de Relatórios Customizados")
+
+    class Meta:
+        managed = True
+        db_table = 'saas_plano'
+        verbose_name = 'Plano SaaS'
+        verbose_name_plural = 'Planos SaaS'
+
+    def __str__(self):
+        return f"{self.nome} - R$ {self.valor_mensalidade}"
+
+
 class SaaSCliente(models.Model):
     id_saas_cliente = models.AutoField(primary_key=True)
     cnpj = models.CharField(max_length=18, unique=False, help_text="CNPJ da empresa contratante")
@@ -5784,6 +5898,11 @@ class SaaSCliente(models.Model):
     contrato_pendente = models.BooleanField(default=False, verbose_name="Contrato Pendente")
     email_responsavel = models.EmailField(max_length=100, blank=True, null=True, verbose_name="E-mail do Responsável")
     data_nascimento_responsavel = models.DateField(blank=True, null=True, verbose_name="Data de Nascimento do Responsável")
+    limite_maquinas = models.IntegerField(default=1, verbose_name="Quantidade de Máquinas Contratadas")
+
+    plano = models.ForeignKey(PlanoSaaS, on_delete=models.SET_NULL, null=True, blank=True, related_name="clientes")
+    upgrade_solicitado = models.ForeignKey(PlanoSaaS, on_delete=models.SET_NULL, null=True, blank=True, related_name="clientes_solicitando_upgrade")
+    link_acesso = models.CharField(max_length=255, blank=True, null=True, verbose_name="Link de Acesso")
 
     class Meta:
         managed = True
@@ -5807,6 +5926,7 @@ class SaaSClienteMensalidade(models.Model):
     linha_digitavel = models.CharField(max_length=255, blank=True, null=True)
     pix_copia_cola = models.TextField(blank=True, null=True)
     data_pagamento = models.DateField(blank=True, null=True)
+    configuracao_bancaria = models.ForeignKey(ConfiguracaoBancaria, on_delete=models.SET_NULL, null=True, blank=True, db_column='id_config_bancaria', related_name='mensalidades')
 
     class Meta:
         managed = True
@@ -5816,6 +5936,24 @@ class SaaSClienteMensalidade(models.Model):
 
     def __str__(self):
         return f"Mensalidade {self.id_mensalidade} - {self.saas_cliente.razao_social} - {self.data_vencimento}"
+
+
+class TerminalAtivo(models.Model):
+    id_terminal = models.AutoField(primary_key=True)
+    cliente = models.ForeignKey(SaaSCliente, on_delete=models.CASCADE, related_name="terminais", db_column='saas_cliente_id')
+    hardware_id = models.CharField(max_length=255, unique=True)
+    nome_computador = models.CharField(max_length=100, help_text="Ex: CAIXA_01, ESCRITORIO")
+    ativado_em = models.DateTimeField(auto_now_add=True)
+    ultimo_acesso = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = 'saas_terminal_ativo'
+        verbose_name = 'Terminal Ativo'
+        verbose_name_plural = 'Terminais Ativos'
+
+    def __str__(self):
+        return f"{self.cliente.razao_social} - {self.nome_computador} ({self.hardware_id})"
 
 
 class SaaSClienteContrato(models.Model):
@@ -5924,6 +6062,7 @@ class Licenca(models.Model):
     data_validade = models.DateField()
     ultimo_check = models.DateTimeField(blank=True, null=True)
     status = models.CharField(max_length=20, default='Ativa')
+    recursos_planos = models.JSONField(blank=True, null=True, default=dict, verbose_name="Módulos / Recursos do Plano")
 
     class Meta:
         managed = True
@@ -6002,6 +6141,7 @@ class LinkCadastroRemoto(models.Model):
     db_host = models.CharField(max_length=100, default='localhost')
     db_port = models.CharField(max_length=5, default='8005')
     is_test_environment = models.BooleanField(default=False)
+    plano = models.ForeignKey(PlanoSaaS, on_delete=models.SET_NULL, null=True, blank=True, related_name="links_cadastro")
 
     class Meta:
         managed = True
@@ -6015,6 +6155,49 @@ class LinkCadastroRemoto(models.Model):
 
     def __str__(self):
         return f"Invite for {self.whatsapp_cliente} - {'Used' if self.usado else 'Pending'}"
+
+
+class AgendamentoBackupLocal(models.Model):
+    id_agendamento = models.AutoField(primary_key=True)
+    diretorio_destino = models.CharField(
+        max_length=255, 
+        default="G:\\Meu Drive\\BackupsAperus",
+        help_text="Caminho completo da pasta dentro da unidade G: do Google Drive"
+    )
+    
+    # Dias da Semana
+    segunda = models.BooleanField(default=True)
+    terca = models.BooleanField(default=True)
+    quarta = models.BooleanField(default=True)
+    quinta = models.BooleanField(default=True)
+    sexta = models.BooleanField(default=True)
+    sabado = models.BooleanField(default=True)
+    domingo = models.BooleanField(default=True)
+    
+    # Horários de execução (separados por vírgula, ex: "02:00,12:00,19:00")
+    horarios_execucao = models.TextField(
+        default="02:00", 
+        help_text="Horários separados por vírgula para execução diária"
+    )
+    
+    retencao_arquivos = models.IntegerField(
+        default=30, 
+        help_text="Quantidade máxima de arquivos de backup a manter na pasta"
+    )
+    
+    ativo = models.BooleanField(default=True)
+    ultimo_backup_em = models.DateTimeField(null=True, blank=True)
+    status_ultimo_backup = models.CharField(max_length=50, default="Pendente")
+
+    class Meta:
+        managed = True
+        db_table = 'saas_backup_agendado_local'
+        verbose_name = 'Backup Agendado Local'
+        verbose_name_plural = 'Backups Agendados Locais'
+
+    def __str__(self):
+        status = "Ativo" if self.ativo else "Inativo"
+        return f"Backup Local {self.diretorio_destino} ({status})"
 
 
 

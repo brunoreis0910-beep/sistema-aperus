@@ -14,7 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from './common/Toast';
 
 export default function GerenciadorBloqueioSaaS({ children }) {
-  const { axiosInstance, user } = useAuth();
+  const { axiosInstance, user, setModulosLiberados } = useAuth();
   const { showToast } = useToast();
 
   const [status, setStatus] = useState({
@@ -40,6 +40,10 @@ export default function GerenciadorBloqueioSaaS({ children }) {
           setFatura(response.data.fatura_pendente);
         } else {
           setFatura(null);
+        }
+        if (response.data.modulos_liberados && setModulosLiberados) {
+          setModulosLiberados(response.data.modulos_liberados);
+          localStorage.setItem('modulos_liberados', JSON.stringify(response.data.modulos_liberados));
         }
       }
     } catch (error) {

@@ -1,34 +1,34 @@
 # GERADOR DE APK - APERUS
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "   GERADOR DE APK - APERUS" -ForegroundColor Cyan  
-Write-Host "   Servidor: https://sistema.aperus.com.br" -ForegroundColor Cyan
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host ""
+Write-Host '======================================' -ForegroundColor Cyan
+Write-Host '   GERADOR DE APK - APERUS' -ForegroundColor Cyan  
+Write-Host '   Servidor: https://sistema.aperus.com.br' -ForegroundColor Cyan
+Write-Host '======================================' -ForegroundColor Cyan
+Write-Host ''
 
 # Build do Frontend
-Write-Host "[1/4] Buildando frontend React..." -ForegroundColor Yellow
-cd "C:\Projetos\SistemaGerencial\1_Sistema_Gerencial_Backend\frontend"
+Write-Host '[1/4] Buildando frontend React...' -ForegroundColor Yellow
+cd "$PSScriptRoot\frontend"
 npm run build
-Write-Host ""
+Write-Host ''
 
 # Capacitor Sync
-Write-Host "[2/4] Sincronizando Capacitor..." -ForegroundColor Yellow
+Write-Host '[2/4] Sincronizando Capacitor...' -ForegroundColor Yellow
 npx cap sync android
-Write-Host ""
+Write-Host ''
 
 # Verificar Gradle Wrapper
-Write-Host "[3/4] Verificando Gradle Wrapper..." -ForegroundColor Yellow
-cd "C:\Projetos\SistemaGerencial\1_Sistema_Gerencial_Backend\frontend\android"
+Write-Host '[3/4] Verificando Gradle Wrapper...' -ForegroundColor Yellow
+cd "$PSScriptRoot\frontend\android"
 
-if (!(Test-Path "gradlew.bat")) {
-    Write-Host "Criando Gradle Wrapper..." -ForegroundColor Yellow
+if (!(Test-Path 'gradlew.bat')) {
+    Write-Host 'Criando Gradle Wrapper...' -ForegroundColor Yellow
     
-    # Criar diretório wrapper
-    New-Item -ItemType Directory -Path "gradle\wrapper" -Force | Out-Null
+    # Criar diretorio wrapper
+    New-Item -ItemType Directory -Path 'gradle\wrapper' -Force | Out-Null
     
     # Baixar gradle-wrapper.jar
-    $wrapperJar = "gradle\wrapper\gradle-wrapper.jar"
-    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar" -OutFile $wrapperJar
+    $wrapperJar = 'gradle\wrapper\gradle-wrapper.jar'
+    Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar' -OutFile $wrapperJar
     
     # Criar gradle-wrapper.properties
     @"
@@ -37,7 +37,7 @@ distributionPath=wrapper/dists
 distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
 zipStoreBase=GRADLE_USER_HOME
 zipStorePath=wrapper/dists
-"@ | Out-File -FilePath "gradle\wrapper\gradle-wrapper.properties" -Encoding ASCII
+"@ | Out-File -FilePath 'gradle\wrapper\gradle-wrapper.properties' -Encoding ASCII
     
     # Criar gradlew.bat
     @"
@@ -76,37 +76,37 @@ exit /b 1
 :mainEnd
 if "%OS%"=="Windows_NT" endlocal
 :omega
-"@ | Out-File -FilePath "gradlew.bat" -Encoding ASCII
+"@ | Out-File -FilePath 'gradlew.bat' -Encoding ASCII
 }
 
-Write-Host "✓ Gradle Wrapper OK!" -ForegroundColor Green
-Write-Host ""
+Write-Host 'Gradle Wrapper OK!' -ForegroundColor Green
+Write-Host ''
 
 # Build APK
-Write-Host "[4/4] Compilando APK (pode demorar)..." -ForegroundColor Yellow
+Write-Host '[4/4] Compilando APK (pode demorar)...' -ForegroundColor Yellow
 .\gradlew.bat assembleDebug
 
 # Copiar APK
-$apkSource = "app\build\outputs\apk\debug\app-debug.apk"
-$apkDest = "C:\Projetos\SistemaGerencial\1_Sistema_Gerencial_Backend\APERUS.apk"
+$apkSource = 'app\build\outputs\apk\debug\app-debug.apk'
+$apkDest = "$PSScriptRoot\APERUS.apk"
 
 if (Test-Path $apkSource) {
     Copy-Item $apkSource $apkDest -Force
     $apkInfo = Get-Item $apkDest
     
-    Write-Host ""
-    Write-Host "======================================" -ForegroundColor Green
-    Write-Host "   APK GERADO COM SUCESSO!" -ForegroundColor Green
-    Write-Host "======================================" -ForegroundColor Green
+    Write-Host ''
+    Write-Host '======================================' -ForegroundColor Green
+    Write-Host '   APK GERADO COM SUCESSO!' -ForegroundColor Green
+    Write-Host '======================================' -ForegroundColor Green
     Write-Host "Arquivo: APERUS.apk" -ForegroundColor White
     Write-Host "Tamanho: $([math]::Round($apkInfo.Length / 1MB, 2)) MB" -ForegroundColor White
-    Write-Host "Servidor: https://sistema.aperus.com.br" -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host 'Servidor: https://sistema.aperus.com.br' -ForegroundColor Cyan
+    Write-Host ''
 } else {
-    Write-Host ""
-    Write-Host "ERRO: APK não foi encontrado!" -ForegroundColor Red
-    Write-Host "Tente abrir o Android Studio e compilar manualmente" -ForegroundColor Yellow
+    Write-Host ''
+    Write-Host 'ERRO: APK nao foi encontrado!' -ForegroundColor Red
+    Write-Host 'Tente abrir o Android Studio e compilar manualmente' -ForegroundColor Yellow
 }
 
-Write-Host ""
-Read-Host "Pressione Enter para sair"
+Write-Host ''
+Write-Host 'Done'

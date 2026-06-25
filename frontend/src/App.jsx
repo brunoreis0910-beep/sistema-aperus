@@ -135,6 +135,7 @@ import SaaSAdminPage from './pages/SaaSAdminPage'
 import ConfigContratoPadraoPage from './pages/ConfigContratoPadraoPage'
 import MeuContratoPage from './pages/MeuContratoPage'
 import GerenciadorBloqueioSaaS from './components/GerenciadorBloqueioSaaS'
+import MapeamentoTenantPage from './pages/MapeamentoTenantPage'
 import { useEffect } from 'react'
 import { useAuth } from './context/AuthContext'
 import { useOfflineSync } from './context/OfflineSyncContext'
@@ -167,6 +168,30 @@ function AxiosBridge() {
 }
 
 export default function App() {
+  // Se estiver acessando via HTTPS em dominio publico, com certeza e navegador web
+  const isWebBrowser = window.location.protocol === 'https:' && 
+                       window.location.hostname !== 'localhost' && 
+                       window.location.hostname !== '127.0.0.1';
+
+  // Detecta se esta rodando na plataforma nativa do Capacitor (android/ios) ou webview nativo
+  const isMobileApp = !isWebBrowser && (
+    (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() !== 'web') || 
+    navigator.userAgent.includes('; wv)')
+  );
+                      
+  const tenantUrl = localStorage.getItem('tenant_api_url');
+
+  if (isMobileApp && !tenantUrl) {
+    return (
+      <ThemeProvider theme={lightTheme}>
+        <CssBaseline />
+        <ToastProvider>
+          <MapeamentoTenantPage />
+        </ToastProvider>
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider theme={lightTheme}>
       <CssBaseline />

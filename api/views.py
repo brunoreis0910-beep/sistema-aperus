@@ -3590,12 +3590,42 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
     queryset = models.SaaSCliente.objects.all().order_by('-data_cadastro')
     serializer_class = serializers.SaaSClienteSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
     filterset_fields = ['status_licenca', 'dia_vencimento']
     search_fields = ['cnpj', 'razao_social']
 
+    def get_next_available_port(self):
+        import socket
+        port = 8007
+        while True:
+            if not models.SaaSCliente.objects.filter(db_port=str(port)).exists():
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                try:
+                    s.bind(('127.0.0.1', port))
+                    s.close()
+                    return str(port)
+                except socket.error:
+                    pass
+            port += 1
+
     def perform_create(self, serializer):
-        # Salva o cliente apenas centralmente no banco mãe (sem criar banco físico ainda)
-        serializer.save(banco_criado=False)
+        db_port = serializer.validated_data.get('db_port', '8005')
+        schema_name = serializer.validated_data.get('schema_name', '')
+        
+        if schema_name not in ['central', 'testes']:
+            if db_port == '8005' or models.SaaSCliente.objects.filter(db_port=db_port).exists():
+                db_port = self.get_next_available_port()
+                
+        serializer.save(banco_criado=False, db_port=db_port)
+
+    @action(detail=True, methods=['post'])
+    def reparar_servico(self, request, pk=None):
+        if not request.user.is_superuser:
+            return Response({'error': 'Apenas superusuários podem reparar serviços.'}, status=403)
+        cliente = self.get_object()
+        from api.services.tenant_service import registrar_servico_windows_nssm
+        sucesso, msg = registrar_servico_windows_nssm(cliente.schema_name, cliente.db_port)
+        return Response({'sucesso': sucesso, 'mensagem': msg})
 
     @action(detail=True, methods=['post'])
     def criar_banco_dados(self, request, pk=None):
@@ -3807,8 +3837,22 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
             cliente.banco_criado = True
             cliente.save()
             
+            # 6. Registra e inicia o serviço do Windows via NSSM se não for central/testes
+            msg_servico = "Serviço não registrado para base central/testes."
+            sucesso_servico = True
+            if cliente.schema_name not in ['central', 'testes']:
+                try:
+                    from api.services.tenant_service import registrar_servico_windows_nssm
+                    sucesso_servico, msg_servico = registrar_servico_windows_nssm(cliente.schema_name, cliente.db_port)
+                except Exception as e_servico:
+                    sucesso_servico = False
+                    msg_servico = f"Erro ao registrar o serviço Windows: {e_servico}"
+            
             serializer = self.get_serializer(cliente)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            response_data = serializer.data
+            response_data['sucesso_servico'] = sucesso_servico
+            response_data['mensagem_servico'] = msg_servico
+            return Response(response_data, status=status.HTTP_200_OK)
             
         except Exception as e:
             from rest_framework.exceptions import ValidationError
@@ -3927,12 +3971,31 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
 
         """
         Gera mensalidades em lote para um cliente.
-        Payload: {"meses": 6}
+        Payload: {"meses": 6, "id_config_bancaria": 2}
         """
         cliente = self.get_object()
         if cliente.is_test_environment:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'error': 'Não é possível gerar mensalidades para um cliente de ambiente de teste.'})
+            
+        id_config_bancaria = request.data.get('id_config_bancaria')
+        if not id_config_bancaria:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'error': 'Você deve selecionar uma conta bancária para emissão dos boletos.'})
+
+        try:
+            config_bancaria = models.ConfiguracaoBancaria.objects.get(pk=id_config_bancaria, ativo=True)
+        except models.ConfiguracaoBancaria.DoesNotExist:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'error': 'A configuração bancária selecionada não existe ou não está ativa.'})
+
+        from .services_bancarios import criar_integracao_bancaria
+        try:
+            integracao = criar_integracao_bancaria(config_bancaria)
+        except Exception as e:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'error': f'Erro ao inicializar integração bancária: {str(e)}'})
+
         try:
             meses = int(request.data.get('meses', 1))
         except (ValueError, TypeError):
@@ -3943,39 +4006,363 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         ano = hoje.year
         mes = hoje.month
 
-        for i in range(meses):
-            # Incrementa o mês
-            mes += 1
-            if mes > 12:
-                mes = 1
-                ano += 1
+        try:
+            for i in range(meses):
+                # Incrementa o mês
+                mes += 1
+                if mes > 12:
+                    mes = 1
+                    ano += 1
 
-            # Proteção contra dias inexistentes (ex: dia 31 em fevereiro)
-            dia = cliente.dia_vencimento
-            ultimo_dia_mes = calendar.monthrange(ano, mes)[1]
-            dia_efetivo = min(dia, ultimo_dia_mes)
-            vencimento = date(ano, mes, dia_efetivo)
+                # Proteção contra dias inexistentes (ex: dia 31 em fevereiro)
+                dia = cliente.dia_vencimento
+                ultimo_dia_mes = calendar.monthrange(ano, mes)[1]
+                dia_efetivo = min(dia, ultimo_dia_mes)
+                vencimento = date(ano, mes, dia_efetivo)
 
-            nosso_numero = f"{cliente.id_saas_cliente:03d}{ano}{mes:02d}"
-            valor_formatado = f"{int(cliente.valor_mensalidade * 100):010d}"
+                nosso_numero = f"{cliente.id_saas_cliente:03d}{ano}{mes:02d}"
 
-            mensalidade = models.SaaSClienteMensalidade.objects.create(
-                saas_cliente=cliente,
-                nosso_numero=nosso_numero,
-                data_vencimento=vencimento,
-                valor=cliente.valor_mensalidade,
-                status_pagamento='PENDENTE',
-                url_boleto=f"https://api.aperus.com.br/boletos/fake_{nosso_numero}.pdf",
-                linha_digitavel=f"34191.79001 01043.513184 91020.150008 7 {vencimento.strftime('%Y%M%d')}{valor_formatado[:6]}",
-                pix_copia_cola=f"00020101021226830014br.gov.bcb.pix2561api.aperus.com.br/pix/qr/v2/fake_{nosso_numero}5204000053039865406{cliente.valor_mensalidade:.2f}5802BR5910AperusSaaS6009SaoPaulo62070503***6304ABCD",
-            )
-            mensalidades_geradas.append(mensalidade)
+                # Cria a mensalidade com valores provisórios antes de registrar na API
+                mensalidade = models.SaaSClienteMensalidade.objects.create(
+                    saas_cliente=cliente,
+                    nosso_numero=nosso_numero,
+                    data_vencimento=vencimento,
+                    valor=cliente.valor_mensalidade,
+                    status_pagamento='PENDENTE',
+                    url_boleto="",
+                    linha_digitavel="",
+                    pix_copia_cola="",
+                    configuracao_bancaria=config_bancaria,
+                )
+
+                # Tenta registrar o boleto real via API
+                try:
+                    integracao.registrar_boleto_saas(mensalidade)
+                except Exception as e:
+                    # Se falhar a integração, remove a mensalidade atual e levanta erro
+                    mensalidade.delete()
+                    raise Exception(f"Erro ao registrar boleto para o vencimento {vencimento.strftime('%d/%m/%Y')}: {str(e)}")
+
+                mensalidades_geradas.append(mensalidade)
+        except Exception as e:
+            # Se ocorrer erro em qualquer mês, removemos as mensalidades que já haviam sido criadas neste lote
+            for m in mensalidades_geradas:
+                try:
+                    m.delete()
+                except Exception:
+                    pass
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'error': str(e)})
 
         serializer = serializers.SaaSClienteMensalidadeSerializer(mensalidades_geradas, many=True)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    def get_or_create_update_script(self, cliente):
+        import os
+        
+        # Determina o diretório de arquivos do cliente
+        if cliente.schema_name == 'testes':
+            client_dir = "C:\\APERUS\\SistemaAperus"
+        elif cliente.schema_name == 'central':
+            client_dir = "C:\\APERUS\\aperus_mae"
+        else:
+            client_dir = f"C:\\APERUS\\arquivos_clientes\\aperus_{cliente.schema_name}"
+            
+        # Para clientes normais, garante que o ATUALIZAR.ps1 do cliente é o correto (cópia rápida de template)
+        # e não o de git pull (herdado por engano do template SistemaAperus)
+        if cliente.schema_name not in ['testes', 'central'] and os.path.exists(client_dir):
+            ps1_path = os.path.join(client_dir, "ATUALIZAR.ps1")
+            needs_generation = True
+            if os.path.exists(ps1_path):
+                try:
+                    with open(ps1_path, 'r', encoding='utf-8', errors='ignore') as ps_file:
+                        content = ps_file.read()
+                        if "Copy-TemplateFiles" in content:
+                            needs_generation = False
+                except Exception:
+                    pass
+            
+            if needs_generation:
+                try:
+                    client_ps1_content = """# ATUALIZAR.ps1 - Atualizar cliente a partir do template SistemaAperus
+# ============================================================
+# ATENCAO: Este script e exclusivo para instancias de CLIENTES.
+# Ele NAO faz git pull. Em vez disso, copia apenas os arquivos
+# de CODIGO do template SistemaAperus, preservando os arquivos
+# de configuracao do banco de dados (.env, settings, etc.)
+# ============================================================
+$Host.UI.RawUI.WindowTitle = "APERUS - ATUALIZAR CLIENTE"
+$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ErrorActionPreference = "Continue"
+
+Clear-Host
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $scriptDir
+
+Write-Host ""
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "  APERUS - ATUALIZANDO CLIENTE" -ForegroundColor Cyan
+Write-Host "  Pasta: $scriptDir" -ForegroundColor DarkGray
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host ""
+
+# ============================================================
+# Detectar PORTA do cliente a partir do .env (para reiniciar
+# na porta correta)
+# ============================================================
+$portaCliente = "8007"  # Porta padrao se nao encontrada no .env
+if (Test-Path ".env") {
+    $envLines = Get-Content ".env" -ErrorAction SilentlyContinue
+    foreach ($line in $envLines) {
+        if ($line -match "^PORT\\\\s*=\\\\s*(\\\\d+)") {
+            $portaCliente = $Matches[1]
+            break
+        }
+    }
+}
+Write-Host "  Porta do cliente: $portaCliente" -ForegroundColor DarkGray
+Write-Host ""
+
+# ============================================================
+# Detectar nome do venv (pode ser 'venv' ou '.venv')
+# ============================================================
+$venvPath = "venv"
+if (Test-Path ".venv\\\\Scripts\\\\python.exe") { $venvPath = ".venv" }
+
+# ============================================================
+# [1/5] Parar servidor Django do cliente
+# ============================================================
+Write-Host "[1/5] Parando servidor Django..." -ForegroundColor Yellow
+$pids = @()
+if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+    $connections = Get-NetTCPConnection -LocalPort $portaCliente -ErrorAction SilentlyContinue
+    if ($connections) {
+        $pids = @($connections.OwningProcess)
+    }
+}
+$killed = $false
+foreach ($procId in $pids | Select-Object -Unique) {
+    $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
+    if ($proc -and ($proc.Name -like "*python*")) {
+        Write-Host "  Parando processo Python (PID $procId) na porta $portaCliente..." -ForegroundColor Yellow
+        Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+        $killed = $true
+    }
+}
+if ($killed) {
+    Start-Sleep -Seconds 2
+    Write-Host "  OK." -ForegroundColor Green
+} else {
+    Write-Host "  Nenhum processo Python na porta $portaCliente." -ForegroundColor DarkGray
+}
+
+# ============================================================
+# [2/5] Fazer backup dos arquivos de configuracao do banco
+#       ANTES de qualquer copia (para garantir preservacao)
+# ============================================================
+Write-Host ""
+Write-Host "[2/5] Protegendo arquivos de configuracao do banco..." -ForegroundColor Yellow
+
+# Arquivos de configuracao que NUNCA devem ser sobrescritos
+$arquivosProtegidos = @(
+    ".env",
+    "projeto_gerencial\\\\settings.py",
+    "projeto_gerencial\\\\settings_production.py",
+    "projeto_gerencial\\\\settings_azure.py",
+    "projeto_gerencial\\\\settings_exe.py",
+    "INICIAR.bat",
+    "INICIAR_PRODUCAO.ps1",
+    "ATUALIZAR.ps1",
+    "ATUALIZAR.bat"
+)
+
+# Pasta temporaria para backup dos arquivos protegidos
+$backupDir = Join-Path $env:TEMP "aperus_backup_$($portaCliente)_$(Get-Date -Format 'yyyyMMddHHmmss')"
+New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+
+$backupFeito = @{}
+foreach ($arquivo in $arquivosProtegidos) {
+    $caminhoCompleto = Join-Path $scriptDir $arquivo
+    if (Test-Path $caminhoCompleto) {
+        $destino = Join-Path $backupDir $arquivo
+        $pastaDestino = Split-Path -Parent $destino
+        if (-not (Test-Path $pastaDestino)) {
+            New-Item -ItemType Directory -Path $pastaDestino -Force | Out-Null
+        }
+        Copy-Item -Path $caminhoCompleto -Destination $destino -Force -ErrorAction SilentlyContinue
+        $backupFeito[$arquivo] = $destino
+        Write-Host "  Protegido: $arquivo" -ForegroundColor DarkGray
+    }
+}
+Write-Host "  OK - $($backupFeito.Count) arquivos de configuracao protegidos." -ForegroundColor Green
+
+# ============================================================
+# [3/5] Copiar arquivos de codigo do template SistemaAperus
+#       (apenas arquivos .py, .js, .jsx, etc. -- sem .env)
+# ============================================================
+Write-Host ""
+Write-Host "[3/5] Copiando atualizacoes de codigo..." -ForegroundColor Cyan
+
+$templateDir = "C:\\\\APERUS\\\\SistemaAperus"
+if (-not (Test-Path $templateDir)) {
+    Write-Host "  [AVISO] Pasta template $templateDir nao encontrada. Pulando copia." -ForegroundColor Yellow
+} else {
+    # Extensoes de arquivos de CODIGO que podem ser atualizados
+    $extensoesCodigo = @(".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".json", ".txt", ".md", ".rst")
+    
+    # Pastas que NAO devem ser copiadas
+    $pastasIgnoradas = @(".git", ".venv", "venv", "node_modules", "backups", "logs", "scratch",
+                         "staticfiles", "media", "__pycache__", ".vscode")
+    
+    # Arquivos que NAO devem ser copiados (configuracoes do banco/instancia)
+    $arquivosIgnorados = @(".env", ".env.example", ".env.local", ".env.production",
+                           "INICIAR.bat", "INICIAR_PRODUCAO.ps1", "ATUALIZAR.ps1", "ATUALIZAR.bat",
+                           "ATUALIZAR_SERVIDOR.vbs", "db.sqlite3")
+    
+    # Arquivos de settings que contem configuracao do banco
+    $settingsIgnorados = @("settings.py", "settings_production.py", "settings_azure.py", "settings_exe.py")
+    
+    function Copy-TemplateFiles ($srcDir, $currentRelPath) {
+        $srcPath = if ($currentRelPath) { Join-Path $srcDir $currentRelPath } else { $srcDir }
+        $items = Get-ChildItem -Path $srcPath
+        foreach ($item in $items) {
+            $relItemPath = if ($currentRelPath) { Join-Path $currentRelPath $item.Name } else { $item.Name }
+            if ($item.PSIsContainer) {
+                # Ignora pastas desnecessarias na origem
+                if ($pastasIgnoradas -contains $item.Name) { continue }
+                Copy-TemplateFiles $srcDir $relItemPath
+            } else {
+                # Ignora arquivos de configuracao e banco na raiz/settings
+                if ($arquivosIgnorados -contains $item.Name) { continue }
+                if ($relItemPath -like "projeto_gerencial\\\\*" -and $settingsIgnorados -contains $item.Name) { continue }
+                
+                # Filtra extensoes de codigo
+                $ext = $item.Extension.ToLower()
+                if ($extensoesCodigo -notcontains $ext) { continue }
+                
+                # Copia para o destino
+                $destino = Join-Path $scriptDir $relItemPath
+                $pastaDestino = Split-Path -Parent $destino
+                try {
+                    if (-not (Test-Path $pastaDestino)) {
+                        New-Item -ItemType Directory -Path $pastaDestino -Force | Out-Null
+                    }
+                    Copy-Item -Path $item.FullName -Destination $destino -Force -ErrorAction Stop
+                    $script:arquivosAtualizados++
+                } catch {
+                    $script:erros++
+                }
+            }
+        }
+    }
+
+    $script:arquivosAtualizados = 0
+    $script:erros = 0
+    Copy-TemplateFiles $templateDir ""
+    
+    Write-Host "  OK - $script:arquivosAtualizados arquivo(s) de codigo atualizado(s)." -ForegroundColor Green
+    if ($script:erros -gt 0) {
+        Write-Host "  [AVISO] $script:erros arquivo(s) com erro ao copiar (podem estar em uso)." -ForegroundColor Yellow
+    }
+}
+
+# ============================================================
+# [4/5] Restaurar arquivos de configuracao protegidos
+# ============================================================
+Write-Host ""
+Write-Host "[4/5] Restaurando configuracoes do banco de dados..." -ForegroundColor Yellow
+
+foreach ($arquivo in $backupFeito.Keys) {
+    $origem = $backupFeito[$arquivo]
+    $destino = Join-Path $scriptDir $arquivo
+    $pastaDestino = Split-Path -Parent $destino
+    
+    if (-not (Test-Path $pastaDestino)) {
+        New-Item -ItemType Directory -Path $pastaDestino -Force | Out-Null
+    }
+    
+    try {
+        Copy-Item -Path $origem -Destination $destino -Force -ErrorAction Stop
+        Write-Host "  Restaurado: $arquivo" -ForegroundColor DarkGray
+    } catch {
+        Write-Host "  [ERRO] Nao foi possivel restaurar: $arquivo" -ForegroundColor Red
+    }
+}
+
+# Limpar backup temporario
+Remove-Item -Path $backupDir -Recurse -Force -ErrorAction SilentlyContinue
+Write-Host "  OK - Configuracoes do banco de dados preservadas." -ForegroundColor Green
+
+# ============================================================
+# [4.2/5] Executando migracoes do banco de dados (migrate)
+# ============================================================
+Write-Host ""
+Write-Host "[4.2/5] Executando migracoes do banco de dados (migrate)..." -ForegroundColor Yellow
+if (Test-Path "$venvPath\\Scripts\\activate.bat") {
+    cmd.exe /c "call $venvPath\\Scripts\\activate.bat && python manage.py migrate --run-syncdb"
+    Write-Host "  OK - Banco de dados migrado!" -ForegroundColor Green
+} else {
+    Write-Host "  [AVISO] Ambiente virtual nao encontrado. Pulando migrate." -ForegroundColor Yellow
+}
+
+# ============================================================
+# [4.5/5] Sincronizar arquivos estaticos do frontend
+# ============================================================
+Write-Host ""
+Write-Host "[4.5/5] Sincronizando arquivos estaticos do frontend (collectstatic)..." -ForegroundColor Yellow
+if (Test-Path "$venvPath\\\\Scripts\\\\activate.bat") {
+    cmd.exe /c "call $venvPath\\\\Scripts\\\\activate.bat && python manage.py collectstatic --noinput"
+    Write-Host "  OK - Arquivos estaticos sincronizados!" -ForegroundColor Green
+} else {
+    Write-Host "  [AVISO] Ambiente virtual nao encontrado. Pulando collectstatic." -ForegroundColor Yellow
+}
+
+# ============================================================
+# [5/5] Reiniciar servidor Django do cliente
+# ============================================================
+Write-Host ""
+Write-Host "[5/5] Reiniciando servidor Django na porta $portaCliente..." -ForegroundColor Cyan
+
+if (Test-Path "$venvPath\\\\Scripts\\\\python.exe") {
+    Start-Process powershell -ArgumentList "-WindowStyle Minimized -ExecutionPolicy Bypass -Command `"cd '$scriptDir'; .\\\\$venvPath\\\\Scripts\\\\python.exe manage.py runserver 0.0.0.0:$portaCliente --noreload`""
+    Write-Host "  OK - Django iniciado na porta $portaCliente!" -ForegroundColor Green
+} else {
+    Write-Host "  [AVISO] Ambiente virtual nao encontrado ($venvPath). Execute INSTALAR.bat." -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "============================================================" -ForegroundColor Green
+Write-Host "  [OK] CLIENTE ATUALIZADO COM SUCESSO!" -ForegroundColor Green
+Write-Host "  Configuracoes do banco de dados preservadas." -ForegroundColor Green
+Write-Host "============================================================" -ForegroundColor Green
+Write-Host ""
+"""
+                    with open(ps1_path, 'w', encoding='utf-8') as ps_file:
+                        ps_file.write(client_ps1_content)
+                except Exception:
+                    pass
+
+        script_path = f"C:\\APERUS\\atualizar_{cliente.schema_name}.bat"
+        if not os.path.exists(script_path):
+            if os.path.exists(os.path.join(client_dir, "ATUALIZAR.ps1")):
+                try:
+                    with open(script_path, 'w', encoding='utf-8') as f:
+                        f.write('@echo off\n')
+                        f.write(f'cd /d "{client_dir}"\n')
+                        f.write(f'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File "{client_dir}\\ATUALIZAR.ps1"\n')
+                except Exception:
+                    pass
+            
+            # Se mesmo assim o script_path não existir, cai para o default
+            if not os.path.exists(script_path):
+                script_path = "C:\\APERUS\\atualizar_central.bat"
+                
+        return script_path
+
     @action(detail=True, methods=['post'])
     def disparar_atualizacao(self, request, pk=None):
+        import os
         if not check_user_permission(request.user, 'pode_atualizar_cliente'):
             return Response({'error': 'Você não tem permissão para atualizar clientes.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -3996,9 +4383,8 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
             status='PROCESSANDO'
         )
 
-        import os
         # Determina o caminho do script
-        script_path = f"C:\\APERUS\\atualizar_{cliente.schema_name}.bat"
+        script_path = self.get_or_create_update_script(cliente)
 
         if not os.path.exists(script_path):
             historico.status = 'FALHA'
@@ -4015,6 +4401,7 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def atualizar_em_lote(self, request):
+        import os
         if not check_user_permission(request.user, 'pode_atualizar_cliente'):
             return Response({'error': 'Você não tem permissão para atualizar clientes.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -4031,11 +4418,10 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         if not clientes_ativos.exists():
             return Response({'message': 'Nenhum cliente ativo encontrado para atualização.'}, status=status.HTTP_200_OK)
 
-        import os
         historicos_criados = []
         for cliente in clientes_ativos:
             # Determina o caminho do script
-            script_path = f"C:\\APERUS\\atualizar_{cliente.schema_name}.bat"
+            script_path = self.get_or_create_update_script(cliente)
 
             if not os.path.exists(script_path):
                 historico = models.HistoricoAtualizacao.objects.create(
@@ -4108,6 +4494,17 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         thread.start()
 
 
+class TerminalAtivoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciamento de terminais ativos dos clientes SaaS.
+    """
+    queryset = models.TerminalAtivo.objects.all().order_by('-ultimo_acesso')
+    serializer_class = serializers.TerminalAtivoSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filterset_fields = ['cliente']
+    search_fields = ['nome_computador', 'hardware_id']
+
+
 class SaaSClienteMensalidadeViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gerenciamento de mensalidades dos clientes SaaS.
@@ -4115,9 +4512,120 @@ class SaaSClienteMensalidadeViewSet(viewsets.ModelViewSet):
     queryset = models.SaaSClienteMensalidade.objects.all().order_by('-data_vencimento')
     serializer_class = serializers.SaaSClienteMensalidadeSerializer
     permission_classes = [permissions.IsAuthenticated, HasPermission]
+    pagination_class = None
     permission_required = 'pode_cadastrar_financeiro_saas'
     filterset_fields = ['saas_cliente', 'status_pagamento']
     search_fields = ['nosso_numero']
+
+    @action(detail=False, methods=['post'])
+    def consultar_abertos(self, request):
+        from .services_bancarios import criar_integracao_bancaria
+        from datetime import datetime
+        
+        # Filtra mensalidades pendentes
+        mensalidades_abertas = models.SaaSClienteMensalidade.objects.filter(status_pagamento='PENDENTE')
+        
+        atualizados = 0
+        erros = 0
+        integracoes_cache = {}
+        
+        # Busca uma configuração do Mercado Pago ativa como fallback
+        fallback_config = models.ConfiguracaoBancaria.objects.filter(banco='MERCADOPAGO', ativo=True).first()
+        
+        for m in mensalidades_abertas:
+            config = m.configuracao_bancaria or fallback_config
+            if not config or not m.nosso_numero:
+                continue
+                
+            if config.id_config not in integracoes_cache:
+                try:
+                    integracoes_cache[config.id_config] = criar_integracao_bancaria(config)
+                except Exception:
+                    continue
+                    
+            integracao = integracoes_cache[config.id_config]
+            
+            sucesso, resultado = integracao.consultar_boleto(m.nosso_numero)
+            if sucesso:
+                novo_status = resultado.get('status')
+                if novo_status == 'PAGO':
+                    m.status_pagamento = 'PAGO'
+                    data_pagto_str = resultado.get('data_pagamento')
+                    if data_pagto_str:
+                        try:
+                            m.data_pagamento = datetime.strptime(data_pagto_str, '%Y-%m-%d').date()
+                        except Exception:
+                            m.data_pagamento = timezone.now().date()
+                    else:
+                        m.data_pagamento = timezone.now().date()
+                    m.save()
+                    atualizados += 1
+            else:
+                erros += 1
+                
+        return Response({
+            'status': 'sucesso',
+            'mensagem': f'Verificação concluída. {atualizados} mensalidade(s) baixada(s) com sucesso. {erros} erro(s).',
+            'atualizados': atualizados
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def consultar_status(self, request, pk=None):
+        from .services_bancarios import criar_integracao_bancaria
+        from datetime import datetime
+        
+        mensalidade = self.get_object()
+        
+        if not mensalidade.nosso_numero:
+            return Response(
+                {'error': 'Mensalidade não possui nosso_numero registrado'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        config = mensalidade.configuracao_bancaria
+        if not config:
+            config = models.ConfiguracaoBancaria.objects.filter(banco='MERCADOPAGO', ativo=True).first()
+            
+        if not config:
+            return Response(
+                {'error': 'Configuração bancária não encontrada para esta mensalidade'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        try:
+            integracao = criar_integracao_bancaria(config)
+            sucesso, resultado = integracao.consultar_boleto(mensalidade.nosso_numero)
+            
+            if not sucesso:
+                return Response(
+                    {'error': resultado.get('erro', 'Erro na consulta do boleto')},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            novo_status = resultado.get('status')
+            if novo_status == 'PAGO' and mensalidade.status_pagamento != 'PAGO':
+                mensalidade.status_pagamento = 'PAGO'
+                data_pagto_str = resultado.get('data_pagamento')
+                if data_pagto_str:
+                    try:
+                        mensalidade.data_pagamento = datetime.strptime(data_pagto_str, '%Y-%m-%d').date()
+                    except Exception:
+                        mensalidade.data_pagamento = timezone.now().date()
+                else:
+                    mensalidade.data_pagamento = timezone.now().date()
+                mensalidade.save()
+                
+            return Response({
+                'status': mensalidade.status_pagamento,
+                'data_pagamento': mensalidade.data_pagamento,
+                'mensagem': resultado.get('mensagem', 'Consulta concluída com sucesso')
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Erro ao processar consulta: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class SaaSClienteContratoViewSet(viewsets.ModelViewSet):
@@ -4137,6 +4645,7 @@ class VersaoSistemaViewSet(viewsets.ModelViewSet):
     queryset = models.VersaoSistema.objects.all().order_by('-data_lancamento')
     serializer_class = serializers.VersaoSistemaSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
     search_fields = ['versao', 'descricao']
 
 
@@ -4147,6 +4656,7 @@ class HistoricoAtualizacaoViewSet(viewsets.ModelViewSet):
     queryset = models.HistoricoAtualizacao.objects.all().order_by('-data_atualizacao')
     serializer_class = serializers.HistoricoAtualizacaoSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
     filterset_fields = ['cliente', 'status', 'versao']
     search_fields = ['cliente__razao_social', 'versao__versao']
 
@@ -4175,6 +4685,7 @@ class ComunicadoSaaSViewSet(viewsets.ModelViewSet):
     queryset = models.ComunicadoSaaS.objects.all().order_by('-criado_em')
     serializer_class = serializers.ComunicadoSaaSSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
     filterset_fields = ['ativo', 'tipo']
     search_fields = ['titulo', 'conteudo_texto']
 
@@ -4904,11 +5415,14 @@ def saas_meu_contrato(request):
 def status_financeiro_saas(request):
     """
     Endpoint consultado pelas filiais para verificar faturamento,
-    alertas graduais e regras de bloqueio/carência com trava de fim de semana.
+    alertas graduais e regras de bloqueio/carência com trava de fim de semana,
+    além de validação de limite de máquinas (Auto-Ativação).
     """
     from django.http import JsonResponse
     if request.method == "GET":
         cnpj_cliente = request.query_params.get('cnpj')
+        hardware_id = request.query_params.get('hardware_id')
+        nome_computador = request.query_params.get('nome_computador')
     else:
         if hasattr(request, 'data') and request.data:
             dados = request.data
@@ -4918,6 +5432,8 @@ def status_financeiro_saas(request):
             except Exception:
                 dados = {}
         cnpj_cliente = dados.get('cnpj')
+        hardware_id = dados.get('hardware_id')
+        nome_computador = dados.get('nome_computador')
 
     cnpj_cliente = clean_cnpj(cnpj_cliente)
     if not cnpj_cliente:
@@ -4931,8 +5447,91 @@ def status_financeiro_saas(request):
             'alerta_estagio': 'isento',
             'dias_atraso': 0,
             'mensagem': 'Cliente não cadastrado no painel SaaS. Acesso liberado.',
-            'faturas': []
+            'faturas': [],
+            'modulos_liberados': {
+                "pdv": True,
+                "financeiro_avancado": True,
+                "producao": True,
+                "transporte": True,
+                "ciot": True,
+                "report_builder": True
+            }
         })
+
+    # Resolver módulos do plano
+    plano = cliente.plano
+    if plano:
+        recursos = {
+            "pdv": plano.modulo_pdv,
+            "financeiro_avancado": plano.modulo_financeiro_avancado,
+            "producao": plano.modulo_producao_industria,
+            "transporte": plano.modulo_transporte_cte,
+            "ciot": plano.modulo_ciot_automatico,
+            "report_builder": plano.modulo_report_builder,
+        }
+    else:
+        # Fallback para clientes sem plano definido: tudo liberado por padrão
+        recursos = {
+            "pdv": True,
+            "financeiro_avancado": True,
+            "producao": True,
+            "transporte": True,
+            "ciot": True,
+            "report_builder": True,
+        }
+
+    # Validação do Limite de Máquinas (Auto-Ativação)
+    # Se hardware_id não for informado, ignoramos a trava (retrocompatibilidade)
+    terminais_autorizados = list(models.TerminalAtivo.objects.filter(cliente=cliente).values_list('hardware_id', flat=True))
+    limite_maquinas = getattr(cliente, 'limite_maquinas', 1)
+
+    if hardware_id:
+        terminal = models.TerminalAtivo.objects.filter(hardware_id=hardware_id).first()
+        if terminal:
+            if terminal.cliente == cliente:
+                # Se for do mesmo cliente, atualiza data de último acesso e nome (se mudou)
+                if nome_computador and terminal.nome_computador != nome_computador:
+                    terminal.nome_computador = nome_computador
+                terminal.save()  # Dispara auto_now para ultimo_acesso
+            elif getattr(cliente, 'is_test_environment', False) or getattr(terminal.cliente, 'is_test_environment', False):
+                # Se for ambiente de teste (ou o dono do terminal for de teste), permite compartilhar o hardware_id sem bloqueio
+                pass
+            else:
+                # O terminal existe, mas pertence a outro cliente SaaS
+                return JsonResponse({
+                    'bloqueio_manual': False,
+                    'bloquear_sistema': True,
+                    'alerta_estagio': 'limite_dispositivos',
+                    'dias_atraso': 0,
+                    'dias_restantes_carencia': 0,
+                    'mensagem': 'Este dispositivo físico está associado a outro cliente SaaS.',
+                    'modulos_liberados': recursos,
+                    'terminais_autorizados': terminais_autorizados,
+                    'limite_maquinas': limite_maquinas
+                })
+        else:
+            # Não existe terminal para este hardware_id, tenta cadastrar/auto-ativar
+            quantidade_terminais = models.TerminalAtivo.objects.filter(cliente=cliente).count()
+            if quantidade_terminais >= limite_maquinas and not getattr(cliente, 'is_test_environment', False):
+                return JsonResponse({
+                    'bloqueio_manual': False,
+                    'bloquear_sistema': True,
+                    'alerta_estagio': 'limite_dispositivos',
+                    'dias_atraso': 0,
+                    'dias_restantes_carencia': 0,
+                    'mensagem': f'Limite de dispositivos contratados atingido ({limite_maquinas} máquina{"s" if limite_maquinas > 1 else ""}). Remova um dispositivo ativo no painel ou entre em contato com o suporte.',
+                    'modulos_liberados': recursos,
+                    'terminais_autorizados': terminais_autorizados,
+                    'limite_maquinas': limite_maquinas
+                })
+            else:
+                models.TerminalAtivo.objects.create(
+                    cliente=cliente,
+                    hardware_id=hardware_id,
+                    nome_computador=nome_computador or 'Máquina Auto-Ativada'
+                )
+                # Atualiza a lista local de terminais autorizados para retornar no response
+                terminais_autorizados = list(models.TerminalAtivo.objects.filter(cliente=cliente).values_list('hardware_id', flat=True))
 
     # 1. VERIFICAÇÃO DE BLOQUEIO MANUAL (FIM DE CONTRATO)
     if getattr(cliente, 'status_licenca', 'ATIVO') in ['BLOQUEADO', 'CANCELADO', 'SUSPENSO', 'INATIVO']:
@@ -4942,7 +5541,10 @@ def status_financeiro_saas(request):
             'alerta_estagio': 'bloqueio_manual',
             'dias_atraso': 0,
             'dias_restantes_carencia': 0,
-            'mensagem': 'Acesso suspenso devido ao encerramento do contrato de prestação de serviços.'
+            'mensagem': 'Acesso suspenso devido ao encerramento do contrato de prestação de serviços.',
+            'modulos_liberados': recursos,
+            'terminais_autorizados': terminais_autorizados,
+            'limite_maquinas': limite_maquinas
         })
 
     faturas = models.SaaSClienteMensalidade.objects.filter(saas_cliente=cliente)
@@ -4954,7 +5556,10 @@ def status_financeiro_saas(request):
             'alerta_estagio': 'isento',
             'dias_atraso': 0,
             'mensagem': 'Ambiente de teste ou sem faturamento gerado. Acesso liberado.',
-            'faturas': []
+            'faturas': [],
+            'modulos_liberados': recursos,
+            'terminais_autorizados': terminais_autorizados,
+            'limite_maquinas': limite_maquinas
         })
 
     hoje = timezone.now().date()
@@ -4969,7 +5574,10 @@ def status_financeiro_saas(request):
             'bloquear_sistema': False,
             'alerta_estagio': 'em_dia',
             'dias_atraso': 0,
-            'mensagem': 'Todas as faturas estão em dia.'
+            'mensagem': 'Todas as faturas estão em dia.',
+            'modulos_liberados': recursos,
+            'terminais_autorizados': terminais_autorizados,
+            'limite_maquinas': limite_maquinas
         })
 
     fatura_mais_antiga = faturas_atrasadas.first()
@@ -4998,6 +5606,9 @@ def status_financeiro_saas(request):
         'alerta_estagio': alerta_estagio,
         'dias_atraso': dias_atraso,
         'dias_restantes_carencia': max(0, dias_restantes),
+        'modulos_liberados': recursos,
+        'terminais_autorizados': terminais_autorizados,
+        'limite_maquinas': limite_maquinas,
         'fatura_pendente': {
             'id_mensalidade': fatura_mais_antiga.id_mensalidade,
             'valor': str(fatura_mais_antiga.valor),
@@ -5235,6 +5846,7 @@ def saas_gerar_link_cadastro(request):
     
     whatsapp = request.data.get('whatsapp_cliente')
     valor_mensalidade = request.data.get('valor_mensalidade')
+    plano_id = request.data.get('plano_id')
     
     if not whatsapp or not valor_mensalidade:
         return Response({'error': 'WhatsApp e Valor da Mensalidade são obrigatórios.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -5246,6 +5858,14 @@ def saas_gerar_link_cadastro(request):
         return Response({'error': 'Telefone inválido.'}, status=status.HTTP_400_BAD_REQUEST)
         
     try:
+        # Resolver Plano
+        plano = None
+        if plano_id:
+            try:
+                plano = models.PlanoSaaS.objects.get(id=plano_id)
+            except models.PlanoSaaS.DoesNotExist:
+                pass
+
         # Prazo de expiração: 48 horas
         prazo = timezone.now() + datetime.timedelta(hours=48)
         
@@ -5261,7 +5881,8 @@ def saas_gerar_link_cadastro(request):
             schema_name=request.data.get('schema_name'),
             db_host=request.data.get('db_host', 'localhost'),
             db_port=request.data.get('db_port', '8005'),
-            is_test_environment=bool(request.data.get('is_test_environment', False))
+            is_test_environment=bool(request.data.get('is_test_environment', False)),
+            plano=plano
         )
         
         # Construir link
@@ -5321,6 +5942,8 @@ def saas_validar_token_cadastro(request):
                 'db_host': convite.db_host,
                 'db_port': convite.db_port,
                 'is_test_environment': convite.is_test_environment,
+                'plano_id': convite.plano.id if convite.plano else None,
+                'nome_plano': convite.plano.nome if convite.plano else None,
             }
         }, status=status.HTTP_200_OK)
         
@@ -5395,7 +6018,8 @@ def saas_finalizar_cadastro_remoto(request):
             banco_criado=False,
             contrato_pendente=True,
             email_responsavel=request.data.get('email_responsavel') or request.data.get('email'),
-            data_nascimento_responsavel=request.data.get('data_nascimento_responsavel')
+            data_nascimento_responsavel=request.data.get('data_nascimento_responsavel'),
+            plano=convite.plano
         )
         
         # Marcar convite como usado
@@ -6777,3 +7401,209 @@ def saas_gabarito_gerar(request):
 </html>
 """
     return HttpResponse(html)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def saas_listar_planos(request):
+    """
+    Retorna a lista de planos cadastrados na Central SaaS.
+    Se for uma filial, encaminha para a Central Mãe.
+    """
+    is_central = models.EmpresaConfig.objects.filter(habilitar_central_saas=True).exists()
+    
+    if not is_central:
+        from django.conf import settings
+        import requests
+        central_base = getattr(settings, 'SAAS_MOTHER_URL', None) or "http://localhost:8006"
+        central_url = central_base.rstrip('/') + "/api/saas/planos/"
+        try:
+            r = requests.get(central_url, timeout=5)
+            if r.status_code == 200:
+                return Response(r.json(), status=200)
+            return Response(r.json(), status=r.status_code)
+        except Exception as e:
+            return Response({'error': f"Falha ao conectar na Central: {str(e)}"}, status=502)
+
+    planos = models.PlanoSaaS.objects.all().order_by('valor_mensalidade')
+    data = [{
+        'id': p.id,
+        'nome': p.nome,
+        'valor_mensalidade': str(p.valor_mensalidade),
+        'modulo_pdv': p.modulo_pdv,
+        'modulo_financeiro_avancado': p.modulo_financeiro_avancado,
+        'modulo_producao_industria': p.modulo_producao_industria,
+        'modulo_transporte_cte': p.modulo_transporte_cte,
+        'modulo_ciot_automatico': p.modulo_ciot_automatico,
+        'modulo_report_builder': p.modulo_report_builder,
+    } for p in planos]
+    return Response(data, status=200)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def saas_solicitar_upgrade(request):
+    """
+    Registra um pedido de upgrade de plano feito por uma filial local.
+    Se for uma filial, encaminha para a Central Mãe.
+    """
+    cnpj = request.data.get('cnpj')
+    plano_id = request.data.get('plano_id')
+    
+    if not cnpj or not plano_id:
+        return Response({'error': 'CNPJ e ID do plano são obrigatórios.'}, status=400)
+        
+    import re
+    cnpj_limpo = re.sub(r'\D', '', str(cnpj))
+    
+    is_central = models.EmpresaConfig.objects.filter(habilitar_central_saas=True).exists()
+    
+    if not is_central:
+        from django.conf import settings
+        import requests
+        central_base = getattr(settings, 'SAAS_MOTHER_URL', None) or "http://localhost:8006"
+        central_url = central_base.rstrip('/') + "/api/saas/solicitar-upgrade/"
+        try:
+            r = requests.post(central_url, json={'cnpj': cnpj_limpo, 'plano_id': plano_id}, timeout=5)
+            if r.status_code == 200:
+                return Response(r.json(), status=200)
+            return Response(r.json(), status=r.status_code)
+        except Exception as e:
+            return Response({'error': f"Falha ao conectar na Central: {str(e)}"}, status=502)
+            
+    try:
+        cliente = None
+        for c in models.SaaSCliente.objects.all():
+            if re.sub(r'\D', '', c.cnpj) == cnpj_limpo:
+                cliente = c
+                break
+                
+        if not cliente:
+            return Response({'error': 'Cliente SaaS não localizado para este CNPJ.'}, status=404)
+            
+        plano = models.PlanoSaaS.objects.get(id=plano_id)
+        cliente.upgrade_solicitado = plano
+        cliente.save()
+        
+        return Response({'success': True, 'message': f'Solicitação de upgrade para o plano {plano.nome} registrada com sucesso.'}, status=200)
+        
+    except models.PlanoSaaS.DoesNotExist:
+        return Response({'error': 'Plano não localizado.'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def saas_aprovar_upgrade(request):
+    """
+    Aprova a solicitação de upgrade do cliente, aplicando o novo plano e atualizando a mensalidade.
+    """
+    cliente_id = request.data.get('cliente_id')
+    if not cliente_id:
+        return Response({'error': 'ID do cliente é obrigatório.'}, status=400)
+        
+    try:
+        cliente = models.SaaSCliente.objects.get(id_saas_cliente=cliente_id)
+        if not cliente.upgrade_solicitado:
+            return Response({'error': 'Nenhuma solicitação de upgrade pendente para este cliente.'}, status=400)
+            
+        plano_novo = cliente.upgrade_solicitado
+        cliente.plano = plano_novo
+        cliente.valor_mensalidade = plano_novo.valor_mensalidade
+        cliente.upgrade_solicitado = None
+        cliente.save()
+        
+        return Response({
+            'success': True,
+            'message': f'Upgrade aprovado com sucesso! Cliente agora está no plano {plano_novo.nome}.',
+            'novo_valor': str(cliente.valor_mensalidade)
+        }, status=200)
+        
+    except models.SaaSCliente.DoesNotExist:
+        return Response({'error': 'Cliente não localizado.'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def saas_rejeitar_upgrade(request):
+    """
+    Rejeita a solicitação de upgrade do cliente, apenas limpando o campo upgrade_solicitado.
+    """
+    cliente_id = request.data.get('cliente_id')
+    if not cliente_id:
+        return Response({'error': 'ID do cliente é obrigatório.'}, status=400)
+        
+    try:
+        cliente = models.SaaSCliente.objects.get(id_saas_cliente=cliente_id)
+        cliente.upgrade_solicitado = None
+        cliente.save()
+        return Response({'success': True, 'message': 'Solicitação de upgrade rejeitada e limpa.'}, status=200)
+    except models.SaaSCliente.DoesNotExist:
+        return Response({'error': 'Cliente não localizado.'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def saas_editar_plano(request, plano_id):
+    """
+    Edita os valores e recursos de um plano SaaS.
+    """
+    is_central = models.EmpresaConfig.objects.filter(habilitar_central_saas=True).exists()
+    if not is_central:
+        from django.conf import settings
+        import requests
+        central_base = getattr(settings, 'SAAS_MOTHER_URL', None) or "http://localhost:8006"
+        central_url = central_base.rstrip('/') + f"/api/saas/planos/{plano_id}/editar/"
+        try:
+            headers = {}
+            auth_header = request.headers.get('Authorization')
+            if auth_header:
+                headers['Authorization'] = auth_header
+            r = requests.post(central_url, json=request.data, headers=headers, timeout=5)
+            return Response(r.json(), status=r.status_code)
+        except Exception as e:
+            return Response({'error': f"Falha ao conectar na Central: {str(e)}"}, status=502)
+
+    try:
+        plano = models.PlanoSaaS.objects.get(id=plano_id)
+        
+        if 'valor_mensalidade' in request.data:
+            plano.valor_mensalidade = request.data['valor_mensalidade']
+        if 'modulo_pdv' in request.data:
+            plano.modulo_pdv = bool(request.data['modulo_pdv'])
+        if 'modulo_financeiro_avancado' in request.data:
+            plano.modulo_financeiro_avancado = bool(request.data['modulo_financeiro_avancado'])
+        if 'modulo_producao_industria' in request.data:
+            plano.modulo_producao_industria = bool(request.data['modulo_producao_industria'])
+        if 'modulo_transporte_cte' in request.data:
+            plano.modulo_transporte_cte = bool(request.data['modulo_transporte_cte'])
+        if 'modulo_ciot_automatico' in request.data:
+            plano.modulo_ciot_automatico = bool(request.data['modulo_ciot_automatico'])
+        if 'modulo_report_builder' in request.data:
+            plano.modulo_report_builder = bool(request.data['modulo_report_builder'])
+            
+        plano.save()
+        
+        return Response({
+            'success': True,
+            'plano': {
+                'id': plano.id,
+                'nome': plano.nome,
+                'valor_mensalidade': str(plano.valor_mensalidade),
+                'modulo_pdv': plano.modulo_pdv,
+                'modulo_financeiro_avancado': plano.modulo_financeiro_avancado,
+                'modulo_producao_industria': plano.modulo_producao_industria,
+                'modulo_transporte_cte': plano.modulo_transporte_cte,
+                'modulo_ciot_automatico': plano.modulo_ciot_automatico,
+                'modulo_report_builder': plano.modulo_report_builder,
+            }
+        }, status=200)
+    except models.PlanoSaaS.DoesNotExist:
+        return Response({'error': 'Plano não localizado.'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)

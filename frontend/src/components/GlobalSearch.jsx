@@ -62,7 +62,8 @@ const CATALOG = [
 
   // ── Financeiro ─────────────────────────────────────────────────────────────
   { label: 'Financeiro', path: '/financeiro', category: 'Financeiro', keywords: 'financeiro contas pagar receber fluxo caixa' },
-  { label: 'Bancário', path: '/bancario', category: 'Financeiro', keywords: 'bancario banco extrato transferencia conta corrente' },
+  { label: 'Contas Bancárias', path: '/bancario', category: 'Financeiro', keywords: 'contas bancos bancario extrato' },
+  { label: 'Bancos / Bancário', path: '/bancario', category: 'Financeiro', keywords: 'contas bancos bancario extrato' },
   { label: 'Boletos', path: '/boletos', category: 'Financeiro', keywords: 'boleto cobranca emitir pagar vencimento' },
   { label: 'Cheques', path: '/cheques', category: 'Financeiro', keywords: 'cheque compensar emitir receber' },
   { label: 'Cartões', path: '/cartoes', category: 'Financeiro', keywords: 'cartao credito debito maquina bandeira' },
@@ -84,6 +85,8 @@ const CATALOG = [
 
   // ── Relatórios ─────────────────────────────────────────────────────────────
   { label: 'Relatórios', path: '/relatorios', category: 'Relatórios', keywords: 'relatorio analise exportar excel pdf' },
+  { label: 'Relatórios (Criar Personalizado)', action: 'report-builder', category: 'Relatórios', keywords: 'relatorios gabarito construtor report builder personalizado' },
+  { label: 'Gabarito (Criar Relatório)', action: 'report-builder', category: 'Relatórios', keywords: 'relatorios gabarito construtor report builder personalizado' },
   { label: 'Gráficos', path: '/graficos', category: 'Relatórios', keywords: 'graficos charts analytics visual' },
   { label: 'Relatório de Vendas', path: '/relatorios/vendas', category: 'Relatórios', keywords: 'relatorio vendas faturamento periodo' },
   { label: 'Relatório de Estoque', path: '/relatorios?categoria=estoque', category: 'Relatórios', keywords: 'relatorio estoque inventario saldo' },
@@ -120,6 +123,10 @@ const CATALOG = [
 
   // ── Configurações ──────────────────────────────────────────────────────────
   { label: 'Configurações', path: '/configuracoes', category: 'Config', keywords: 'configuracao sistema empresa parametro' },
+  { label: 'Planos SaaS', path: '/saas-central', category: 'Config', keywords: 'planos mensalidades saas faturamento assinatura' },
+  { label: 'Mensalidades SaaS', path: '/saas-central', category: 'Config', keywords: 'planos mensalidades saas faturamento assinatura' },
+  { label: 'Máquinas (Limite de Dispositivos)', path: '/saas-central?tab=terminais', category: 'Config', keywords: 'maquinas terminais limite dispositivos ativos' },
+  { label: 'Terminais Ativos (Gerenciamento)', path: '/saas-central?tab=terminais', category: 'Config', keywords: 'maquinas terminais limite dispositivos ativos' },
   { label: 'Aprovações / Autorização', path: '/aprovacoes', category: 'Config', keywords: 'aprovacao autorizacao solicitacao gerente' },
   { label: 'Minhas Solicitações', path: '/minhas-solicitacoes', category: 'Config', keywords: 'solicitacao minhas aprovacao pendente' },
   { label: 'Config. Contrato', path: '/configuracao-contrato', category: 'Config', keywords: 'contrato configuracao modelo' },
@@ -164,7 +171,7 @@ const CATEGORY_ICONS = {
   Config: '🔧',
 }
 
-export default function GlobalSearch({ open, onClose }) {
+export default function GlobalSearch({ open, onClose, onAction }) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const navigate = useNavigate()
@@ -204,18 +211,27 @@ export default function GlobalSearch({ open, onClose }) {
       } else if (e.key === 'Enter') {
         e.preventDefault()
         if (results[selected]) {
-          navigate(results[selected].path)
+          const item = results[selected];
+          if (item.action && onAction) {
+            onAction(item.action);
+          } else {
+            navigate(item.path);
+          }
           onClose()
         }
       } else if (e.key === 'Escape') {
         onClose()
       }
     },
-    [results, selected, navigate, onClose]
+    [results, selected, navigate, onClose, onAction]
   )
 
   const handleSelect = (item) => {
-    navigate(item.path)
+    if (item.action && onAction) {
+      onAction(item.action);
+    } else {
+      navigate(item.path);
+    }
     onClose()
   }
 
@@ -299,7 +315,7 @@ export default function GlobalSearch({ open, onClose }) {
           )}
           {results.map((item, idx) => (
             <ListItemButton
-              key={item.path}
+              key={item.label}
               data-idx={idx}
               selected={idx === selected}
               onClick={() => handleSelect(item)}

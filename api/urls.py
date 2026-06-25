@@ -283,6 +283,7 @@ from .views import (
     UserAtalhoViewSet,  # Atalhos de teclado por usuário
     user_preferencias_view,  # Preferências de interface por usuário
     SaaSClienteViewSet,
+    TerminalAtivoViewSet,
     SaaSClienteMensalidadeViewSet,
     SaaSClienteContratoViewSet,
     VersaoSistemaViewSet,
@@ -311,7 +312,16 @@ from .views import (
     saas_gerar_link_cadastro,
     saas_validar_token_cadastro,
     saas_finalizar_cadastro_remoto,
+    saas_listar_planos,
+    saas_editar_plano,
+    saas_solicitar_upgrade,
+    saas_aprovar_upgrade,
+    saas_rejeitar_upgrade,
 )
+
+from .views_tenant import saas_mapear_tenant
+from .views_backup import saas_obter_backup_config, saas_salvar_backup_config, saas_forcar_backup
+from .views_importador_saas import importar_dados_para_tenant
 
 from .viewsets_formapagamento import FormaPagamentoViewSet
 from .views_fornecedor import FornecedorViewSet
@@ -394,6 +404,7 @@ router.register(r'email/campaigns', EmailCampaignViewSet, basename='email-campai
 router.register(r'email/logs', EmailLogViewSet, basename='email-log')
 router.register(r'intelligence', ProductIntelligenceViewSet, basename='intelligence')
 router.register(r'saas-clientes', SaaSClienteViewSet, basename='saas-cliente')
+router.register(r'saas-terminais', TerminalAtivoViewSet, basename='saas-terminal')
 router.register(r'saas-gabaritos', GabaritoCustomizadoViewSet, basename='saas-gabaritos')
 router.register(r'saas-mensalidades', SaaSClienteMensalidadeViewSet, basename='saas-mensalidade')
 router.register(r'saas-contratos', SaaSClienteContratoViewSet, basename='saas-contrato')
@@ -722,11 +733,21 @@ urlpatterns = [
     path('saas/gerar-link-cadastro/', saas_gerar_link_cadastro, name='saas-gerar-link-cadastro'),
     path('saas/validar-token-cadastro/', saas_validar_token_cadastro, name='saas-validar-token-cadastro'),
     path('saas/finalizar-cadastro-remoto/', saas_finalizar_cadastro_remoto, name='saas-finalizar-cadastro-remoto'),
-    path('saas/importar-dados/<int:tenant_id>/', importar_dados_para_tenant, name='saas-importar-dados'),
+    path('saas/planos/', saas_listar_planos, name='saas-listar-planos'),
+    path('saas/planos/<int:plano_id>/editar/', saas_editar_plano, name='saas-editar-plano'),
+    path('saas/solicitar-upgrade/', saas_solicitar_upgrade, name='saas-solicitar-upgrade'),
+    path('saas/aprovar-upgrade/', saas_aprovar_upgrade, name='saas-aprovar-upgrade'),
+    path('saas/rejeitar-upgrade/', saas_rejeitar_upgrade, name='saas-rejeitar-upgrade'),
+    path('saas/mensalidades/<int:pk>/consultar_status/', SaaSClienteMensalidadeViewSet.as_view({'get': 'consultar_status'}), name='saas-mensalidade-consultar-status'),
     path('licenca/verificar/', verificar_licenca_local, name='verificar-licenca-local'),
     path('saas/contrato-padrao/atual/', buscar_contrato_atual, name='saas-contrato-padrao-atual'),
     path('saas/contrato-padrao/salvar/', salvar_edicao_contrato, name='saas-contrato-padrao-salvar'),
     path('saas/contrato-padrao/render/', render_contrato_padrao, name='saas-contrato-padrao-render'),
+    path('saas/mapear-tenant/', saas_mapear_tenant, name='saas-mapear-tenant'),
+    path('saas/importar-dados/<int:tenant_id>/', importar_dados_para_tenant, name='saas-importar-dados'),
+    path('saas/backup-config/', saas_obter_backup_config, name='saas-backup-config-obter'),
+    path('saas/backup-config/salvar/', saas_salvar_backup_config, name='saas-backup-config-salvar'),
+    path('saas/backup-config/forcar/', saas_forcar_backup, name='saas-backup-config-forcar'),
     path('git-webhook-update/', github_webhook_update, name='git-webhook-update'),
     
     path('', include(router.urls)),

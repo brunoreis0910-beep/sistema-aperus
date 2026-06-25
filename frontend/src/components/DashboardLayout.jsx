@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { Outlet, useLocation, Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -62,7 +62,7 @@ function DashboardLayout() {
   const { user, logout } = useAuth();
   const theme = useTheme();
   const screenSize = useScreenSize();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [anchorEl, setAnchorEl] = React.useState(null);

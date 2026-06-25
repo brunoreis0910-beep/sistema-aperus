@@ -2292,15 +2292,82 @@ class HistoricoAtualizacaoSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class TerminalAtivoSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import TerminalAtivo
+        model = TerminalAtivo
+        fields = '__all__'
+
+
 class SaaSClienteSerializer(serializers.ModelSerializer):
     mensalidades = SaaSClienteMensalidadeSerializer(many=True, read_only=True)
     contratos = SaaSClienteContratoSerializer(many=True, read_only=True)
     historicos_atualizacao = HistoricoAtualizacaoSerializer(many=True, read_only=True)
+    terminais = TerminalAtivoSerializer(many=True, read_only=True)
 
     class Meta:
         from .models import SaaSCliente
         model = SaaSCliente
         fields = '__all__'
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        
+        # Serialize plano if present
+        if instance.plano:
+            rep['plano'] = {
+                'id': instance.plano.id,
+                'nome': instance.plano.nome,
+                'valor_mensalidade': str(instance.plano.valor_mensalidade),
+                'modulo_pdv': instance.plano.modulo_pdv,
+                'modulo_financeiro_avancado': instance.plano.modulo_financeiro_avancado,
+                'modulo_producao_industria': instance.plano.modulo_producao_industria,
+                'modulo_transporte_cte': instance.plano.modulo_transporte_cte,
+                'modulo_ciot_automatico': instance.plano.modulo_ciot_automatico,
+                'modulo_report_builder': instance.plano.modulo_report_builder,
+            }
+            
+        # Serialize upgrade_solicitado if present
+        if instance.upgrade_solicitado:
+            rep['upgrade_solicitado'] = {
+                'id': instance.upgrade_solicitado.id,
+                'nome': instance.upgrade_solicitado.nome,
+                'valor_mensalidade': str(instance.upgrade_solicitado.valor_mensalidade),
+                'modulo_pdv': instance.upgrade_solicitado.modulo_pdv,
+                'modulo_financeiro_avancado': instance.upgrade_solicitado.modulo_financeiro_avancado,
+                'modulo_producao_industria': instance.upgrade_solicitado.modulo_producao_industria,
+                'modulo_transporte_cte': instance.upgrade_solicitado.modulo_transporte_cte,
+                'modulo_ciot_automatico': instance.upgrade_solicitado.modulo_ciot_automatico,
+                'modulo_report_builder': instance.upgrade_solicitado.modulo_report_builder,
+            }
+            
+        return rep
+
+    def validate_db_port(self, value):
+        from .models import SaaSCliente
+        
+        instance_id = self.instance.id_saas_cliente if self.instance else None
+        schema_name = self.initial_data.get('schema_name', '')
+        
+        if schema_name not in ['central', 'testes']:
+            # Se for a porta 8006, só bloqueia se não for a porta atual do cliente
+            if value == '8006' and (not self.instance or self.instance.db_port != '8006'):
+                raise serializers.ValidationError("A porta 8006 (Central Mãe) é reservada.")
+                
+            # Se for a porta 8005, só bloqueia se o cliente já existe e a porta atual dele NÃO era 8005
+            if value == '8005' and self.instance and self.instance.db_port != '8005':
+                raise serializers.ValidationError("A porta 8005 (Filho padrão) é reservada.")
+                
+            # Verifica se já existe outro cliente com esta porta
+            qs = SaaSCliente.objects.filter(db_port=value)
+            if instance_id:
+                qs = qs.exclude(id_saas_cliente=instance_id)
+            if qs.exists() and value != '8005':  # permite 8005 na criação para ser auto-alocada pelo viewset
+                raise serializers.ValidationError(f"A porta {value} já está em uso por outro cliente.")
+                
+        return value
+
+
 
 
 class ConfiguracaoAgendamentoSerializer(serializers.ModelSerializer):

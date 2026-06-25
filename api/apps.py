@@ -1,4 +1,4 @@
-﻿from django.apps import AppConfig
+from django.apps import AppConfig
 
 
 class ApiConfig(AppConfig):
@@ -42,6 +42,17 @@ class ApiConfig(AppConfig):
 
             import threading
             threading.Thread(target=_validar_cloud_api, daemon=True).start()
+
+            # ── Auto-inicia Agendador de Backup Local em background ─────────────
+            def _iniciar_agendador_backup_safe():
+                try:
+                    from api.services.backup_local_service import iniciar_agendador_backup
+                    iniciar_agendador_backup()
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Não foi possível iniciar o agendador de backup: {exc}")
+
+            threading.Thread(target=_iniciar_agendador_backup_safe, daemon=True).start()
 
             # ── Auto-inicia Playwright em background ───────────────────────────
             # TEMPORARIAMENTE DESABILITADO - estava bloqueando inicialização do servidor

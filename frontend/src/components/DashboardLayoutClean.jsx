@@ -94,13 +94,16 @@ import LogoutDialog from './LogoutDialog';
 import MobileMenuDrawer from './MobileMenuDrawer';
 import ShortcutManager from './ShortcutManager';
 import GlobalSearch from './GlobalSearch';
+import ReportBuilderDialog from './ReportBuilderDialog';
 import AcessoNegado from './AcessoNegado';
 import NotificationBell from './NotificationBell';
+import LockIcon from '@mui/icons-material/Lock';
+import UpgradeRequestDialog from './UpgradeRequestDialog';
 
 const DashboardLayoutClean = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, axiosInstance } = useAuth();
+  const { user, logout, axiosInstance, modulosLiberados } = useAuth();
   const { can } = usePermissions();
   const [empresaConfig, setEmpresaConfig] = React.useState(null);
 
@@ -142,7 +145,8 @@ const DashboardLayoutClean = () => {
 
   // Detectar tela ultrawide e forçar modo desktop
   const isUltraWide = window.innerWidth >= 2560;
-  const isMobileQuery = useMediaQuery(theme.breakpoints.down('md'));
+  // Habilita as abas horizontais de navegação para computadores e tablets (acima de sm - 600px)
+  const isMobileQuery = useMediaQuery(theme.breakpoints.down('sm'));
   const isMobile = !isUltraWide && isMobileQuery;
 
   const [anchorEl, setAnchorEl] = React.useState(null);
@@ -153,6 +157,66 @@ const DashboardLayoutClean = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [shortcutManagerOpen, setShortcutManagerOpen] = React.useState(false);
   const [globalSearchOpen, setGlobalSearchOpen] = React.useState(false);
+
+  // Upgrade Plan states & helpers
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = React.useState(false);
+  const [upgradeFeature, setUpgradeFeature] = React.useState(null);
+  const [reportBuilderOpen, setReportBuilderOpen] = React.useState(false);
+
+  const handleSaveReportTemplate = async (payload) => {
+    try {
+      await axiosInstance.post('/saas-gabaritos/', payload);
+      setReportBuilderOpen(false);
+      try {
+        const res = await axiosInstance.get('/saas-gabaritos/');
+        const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+        setGabaritos(list.filter(g => g.ativo));
+      } catch (err) {
+        console.error("Erro ao atualizar gabaritos:", err);
+      }
+    } catch (err) {
+      console.error("Erro ao salvar gabarito:", err);
+      alert('Erro ao salvar o relatório personalizado.');
+    }
+  };
+
+  const mapMenuItemToFeature = (keyOrPath) => {
+    if (!keyOrPath) return null;
+    if (['venda-rapida', 'pdv-nfce', 'nfce', '/venda-rapida', '/nfce', 'api/pdv-nfce/', 'pdv-nfce'].includes(keyOrPath)) {
+      return 'pdv';
+    }
+    if (['financeiro', '/financeiro', 'boletos', '/boletos', 'conciliacao', '/conciliacao', 'cartoes', '/cartoes', 'recorrencia', '/recorrencia'].includes(keyOrPath)) {
+      return 'financeiro_avancado';
+    }
+    if (['producao', '/producao'].includes(keyOrPath)) {
+      return 'producao';
+    }
+    if (['cte', '/cte', 'mdfe', '/mdfe', 'mapa-carga', '/mapa-carga', '/relatorios/cte', '/relatorios/mdfe', 'relatorios/cte', 'relatorios/mdfe'].includes(keyOrPath)) {
+      return 'transporte';
+    }
+    if (['ciot', '/ciot'].includes(keyOrPath)) {
+      return 'ciot';
+    }
+    if (typeof keyOrPath === 'string' && (keyOrPath.includes('gabarito') || keyOrPath.includes('customizado') || keyOrPath.includes('report_builder'))) {
+      return 'report_builder';
+    }
+    return null;
+  };
+
+  const isModuleLocked = (keyOrPath) => {
+    const feature = mapMenuItemToFeature(keyOrPath);
+    if (!feature) return false;
+    if (!modulosLiberados) return false;
+    return modulosLiberados[feature] === false;
+  };
+
+  const handleOpenUpgradeRequest = (keyOrPath) => {
+    const feature = mapMenuItemToFeature(keyOrPath);
+    if (feature) {
+      setUpgradeFeature(feature);
+      setUpgradeDialogOpen(true);
+    }
+  };
 
   // Define todos os itens de menu com suas permissões (usando nomes do banco de dados)
   const allMenuItems = [
@@ -420,7 +484,7 @@ const DashboardLayoutClean = () => {
         const key = e.key;
 
         // Ctrl+K — Busca global
-        if ((e.ctrlKey || e.metaKey) && key === 'k') {
+        if ((e.ctrlKey || e.metaKey) && (key === 'k' || key === 'K')) {
           e.preventDefault();
           setGlobalSearchOpen(true);
           return;
@@ -453,7 +517,9 @@ const DashboardLayoutClean = () => {
     };
 
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    return () => {
+      window.removeEventListener('keydown', handler);
+    };
   }, [navigate]);
 
   // Define a aba atual lendo a URL
@@ -682,7 +748,11 @@ const DashboardLayoutClean = () => {
             <Box sx={{
               borderBottom: 1,
               borderColor: 'divider',
-              backgroundColor: '#1976d2'
+              backgroundColor: '#1976d2',
+              width: '100%',
+              maxWidth: '100%',
+              minWidth: 0,
+              overflow: 'hidden'
             }}>
               <Tabs
                 value={currentTab}
@@ -714,8 +784,15 @@ const DashboardLayoutClean = () => {
                   }
                 }}
               >
-                {menuItems.map((item) => (
-                  item.hasSubmenu ? (
+                {menuItems.map((item) => {
+                  const isLocked = isModuleLocked(item.key);
+                  const labelText = isLocked ? (
+                    <Box display="flex" alignItems="center" gap={0.5}>
+                      {item.label} <LockIcon sx={{ fontSize: '0.95rem', color: '#fbbf24' }} />
+                    </Box>
+                  ) : item.label;
+
+                  return item.hasSubmenu ? (
                     <Tab
                       key={item.key}
                       label={item.label}
@@ -738,19 +815,35 @@ const DashboardLayoutClean = () => {
                   ) : (
                     <Tab
                       key={item.key}
-                      label={item.label}
+                      label={labelText}
                       value={item.key}
-                      {...(item.isExternal 
+                      {...(isLocked 
+                        ? {
+                            component: 'div',
+                            onClick: (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleOpenUpgradeRequest(item.key);
+                            }
+                          }
+                        : item.isExternal 
                         ? { component: 'a', href: item.path }
                         : { component: RouterLink, to: item.path }
                       )}
                       icon={React.cloneElement(item.icon, {
-                        sx: { fontSize: '1.2rem' }
+                        sx: { fontSize: '1.2rem', opacity: isLocked ? 0.6 : 1 }
                       })}
                       iconPosition="start"
+                      sx={isLocked ? {
+                        opacity: 0.7,
+                        cursor: 'pointer',
+                        '&:hover': {
+                          backgroundColor: 'rgba(255,255,255,0.08) !important'
+                        }
+                      } : {}}
                     />
-                  )
-                ))}
+                  );
+                })}
               </Tabs>
 
               {/* Submenu de Trocas */}
@@ -851,13 +944,31 @@ const DashboardLayoutClean = () => {
                   <ReceiptIcon sx={{ mr: 1, color: '#00796b' }} />
                   Comandas
                 </MenuItem>
-                <MenuItem onClick={() => { setRelatoriosMenuAnchor(null); navigate('/relatorios/cte'); }}>
+                 <MenuItem
+                  onClick={() => {
+                    setRelatoriosMenuAnchor(null);
+                    if (isModuleLocked('cte')) {
+                      handleOpenUpgradeRequest('cte');
+                    } else {
+                      navigate('/relatorios/cte');
+                    }
+                  }}
+                >
                   <LocalShipping sx={{ mr: 1, color: '#1565c0' }} />
-                  CT-e
+                  CT-e {isModuleLocked('cte') && <LockIcon sx={{ fontSize: '0.9rem', color: '#fbbf24', ml: 0.5 }} />}
                 </MenuItem>
-                <MenuItem onClick={() => { setRelatoriosMenuAnchor(null); navigate('/relatorios/mdfe'); }}>
+                <MenuItem
+                  onClick={() => {
+                    setRelatoriosMenuAnchor(null);
+                    if (isModuleLocked('mdfe')) {
+                      handleOpenUpgradeRequest('mdfe');
+                    } else {
+                      navigate('/relatorios/mdfe');
+                    }
+                  }}
+                >
                   <Description sx={{ mr: 1, color: '#6a1b9a' }} />
-                  MDF-e
+                  MDF-e {isModuleLocked('mdfe') && <LockIcon sx={{ fontSize: '0.9rem', color: '#fbbf24', ml: 0.5 }} />}
                 </MenuItem>
                 <MenuItem onClick={() => { setRelatoriosMenuAnchor(null); navigate('/relatorios/ficha-produto'); }}>
                   <AssessmentIcon sx={{ mr: 1, color: '#607D8B' }} />
@@ -876,20 +987,27 @@ const DashboardLayoutClean = () => {
                   <>
                     <Divider />
                     <MenuItem disabled sx={{ opacity: 1, fontWeight: 'bold', color: 'text.secondary', fontSize: '0.85rem' }}>
-                      Relatórios Personalizados
+                      Relatórios Personalizados {isModuleLocked('gabarito') && <LockIcon sx={{ fontSize: '0.9rem', color: '#fbbf24', ml: 0.5 }} />}
                     </MenuItem>
-                    {gabaritos.map(g => (
-                      <MenuItem 
-                        key={g.id} 
-                        onClick={() => { 
-                          setRelatoriosMenuAnchor(null); 
-                          navigate(`/relatorios?tab=1&gabarito=${g.nome_relatorio}`); 
-                        }}
-                      >
-                        <AssessmentIcon sx={{ mr: 1, color: '#f57c00' }} />
-                        {g.nome_relatorio}
-                      </MenuItem>
-                    ))}
+                    {gabaritos.map(g => {
+                      const isGabaritoLocked = isModuleLocked('gabarito');
+                      return (
+                        <MenuItem 
+                          key={g.id} 
+                          onClick={() => { 
+                            setRelatoriosMenuAnchor(null); 
+                            if (isGabaritoLocked) {
+                              handleOpenUpgradeRequest('report_builder');
+                            } else {
+                              navigate(`/relatorios?tab=1&gabarito=${g.nome_relatorio}`); 
+                            }
+                          }}
+                        >
+                          <AssessmentIcon sx={{ mr: 1, color: '#f57c00' }} />
+                          {g.nome_relatorio} {isGabaritoLocked && <LockIcon sx={{ fontSize: '0.9rem', color: '#fbbf24', ml: 0.5 }} />}
+                        </MenuItem>
+                      );
+                    })}
                   </>
                 )}
               </Menu>
@@ -1137,13 +1255,31 @@ const DashboardLayoutClean = () => {
                     Log de Auditoria
                   </MenuItem>
                 )}
-                <MenuItem onClick={() => { setOpcoesMenuAnchor(null); navigate('/conciliacao'); }}>
+                <MenuItem
+                  onClick={() => {
+                    setOpcoesMenuAnchor(null);
+                    if (isModuleLocked('conciliacao')) {
+                      handleOpenUpgradeRequest('financeiro_avancado');
+                    } else {
+                      navigate('/conciliacao');
+                    }
+                  }}
+                >
                   <PaymentIcon sx={{ mr: 1, color: '#00897B' }} />
-                  Conciliação
+                  Conciliação {isModuleLocked('conciliacao') && <LockIcon sx={{ fontSize: '0.9rem', color: '#fbbf24', ml: 0.5 }} />}
                 </MenuItem>
-                <MenuItem onClick={() => { setOpcoesMenuAnchor(null); navigate('/cartoes'); }}>
+                <MenuItem
+                  onClick={() => {
+                    setOpcoesMenuAnchor(null);
+                    if (isModuleLocked('cartoes')) {
+                      handleOpenUpgradeRequest('financeiro_avancado');
+                    } else {
+                      navigate('/cartoes');
+                    }
+                  }}
+                >
                   <PaymentIcon sx={{ mr: 1, color: '#1565C0' }} />
-                  Cartões
+                  Cartões {isModuleLocked('cartoes') && <LockIcon sx={{ fontSize: '0.9rem', color: '#fbbf24', ml: 0.5 }} />}
                 </MenuItem>
                 <MenuItem onClick={() => { setOpcoesMenuAnchor(null); navigate('/agenda'); }}>
                   <AssessmentIcon sx={{ mr: 1, color: '#6A1B9A' }} />
@@ -1165,13 +1301,31 @@ const DashboardLayoutClean = () => {
                   <PaymentIcon sx={{ mr: 1, color: '#7B1FA2' }} />
                   Formas de Pagamento
                 </MenuItem>
-                <MenuItem onClick={() => { setOpcoesMenuAnchor(null); navigate('/boletos'); }}>
+                <MenuItem
+                  onClick={() => {
+                    setOpcoesMenuAnchor(null);
+                    if (isModuleLocked('boletos')) {
+                      handleOpenUpgradeRequest('financeiro_avancado');
+                    } else {
+                      navigate('/boletos');
+                    }
+                  }}
+                >
                   <ReceiptIcon sx={{ mr: 1, color: '#1565C0' }} />
-                  Boletos
+                  Boletos {isModuleLocked('boletos') && <LockIcon sx={{ fontSize: '0.9rem', color: '#fbbf24', ml: 0.5 }} />}
                 </MenuItem>
-                <MenuItem onClick={() => { setOpcoesMenuAnchor(null); navigate('/producao'); }}>
+                <MenuItem
+                  onClick={() => {
+                    setOpcoesMenuAnchor(null);
+                    if (isModuleLocked('producao')) {
+                      handleOpenUpgradeRequest('producao');
+                    } else {
+                      navigate('/producao');
+                    }
+                  }}
+                >
                   <AssessmentIcon sx={{ mr: 1, color: '#FF5722' }} />
-                  Produção
+                  Produção {isModuleLocked('producao') && <LockIcon sx={{ fontSize: '0.9rem', color: '#fbbf24', ml: 0.5 }} />}
                 </MenuItem>
                 <MenuItem onClick={() => { setOpcoesMenuAnchor(null); navigate('/relatorios/comissoes'); }}>
                   <RelatoriosIcon sx={{ mr: 1, color: '#37474F' }} />
@@ -1236,8 +1390,30 @@ const DashboardLayoutClean = () => {
       {/* Gerenciador de Atalhos */}
       <ShortcutManager open={shortcutManagerOpen} onClose={() => setShortcutManagerOpen(false)} />
 
-      {/* Busca Global (Ctrl+K) */}
-      <GlobalSearch open={globalSearchOpen} onClose={() => setGlobalSearchOpen(false)} />
+      {/* Busca Global (Espaço+K) */}
+      <GlobalSearch 
+        open={globalSearchOpen} 
+        onClose={() => setGlobalSearchOpen(false)} 
+        onAction={(action) => {
+          if (action === 'report-builder') {
+            setReportBuilderOpen(true);
+          }
+        }}
+      />
+
+      {/* Editor do Gabarito do Construtor de Relatórios (Global) */}
+      <ReportBuilderDialog
+        open={reportBuilderOpen}
+        onClose={() => setReportBuilderOpen(false)}
+        onSave={handleSaveReportTemplate}
+        initialData={{
+          nome_relatorio: '',
+          tipo_gabarito: 'A4_RETRATO',
+          largura_gabarito_mm: 210,
+          altura_gabarito_mm: 297,
+          layout_json: []
+        }}
+      />
 
       {/* Menu Mobile Drawer */}
       <MobileMenuDrawer
@@ -1246,6 +1422,8 @@ const DashboardLayoutClean = () => {
         menuItems={menuItems}
         currentTab={currentTab}
         subMenuItems={subMenuItems}
+        isModuleLocked={isModuleLocked}
+        onLockClick={handleOpenUpgradeRequest}
       />
 
       {/* Assistente IA Flutuante */}
@@ -1253,6 +1431,15 @@ const DashboardLayoutClean = () => {
 
       {/* Botão Flutuante de QR Code */}
       <QRCodeFloating />
+
+      {/* Dialog para Solicitação de Upgrade de Plano SaaS */}
+      <UpgradeRequestDialog
+        open={upgradeDialogOpen}
+        onClose={() => setUpgradeDialogOpen(false)}
+        cnpj={empresaConfig?.cpf_cnpj}
+        currentFeature={upgradeFeature}
+        axiosInstance={axiosInstance}
+      />
     </Box>
   );
 }

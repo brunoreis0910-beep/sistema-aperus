@@ -4,11 +4,19 @@
 // Detecta se está rodando dentro do Capacitor (app nativo)
 // window.Capacitor pode não estar disponível no momento do import dos ES modules
 const isCapacitorApp = () => {
-  // Capacitor serve de localhost no WebView (sem porta = não é dev server)
+  // Se estiver em HTTPS em dominio publico, com certeza e navegador web
+  if (window.location.protocol === 'https:' && 
+      window.location.hostname !== 'localhost' && 
+      window.location.hostname !== '127.0.0.1') {
+    return false;
+  }
+  // Capacitor serve de localhost no WebView (sem porta = nao e dev server)
   if (window.location.hostname === 'localhost' && !window.location.port) {
     return true;
   }
-  if (window.Capacitor) return true;
+  if (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() !== 'web') {
+    return true;
+  }
   // Android WebView
   if (navigator.userAgent.includes('; wv)')) return true;
   return false;
@@ -57,6 +65,13 @@ const detectarIPDisponivel = async () => {
 };
 
 const getApiUrl = () => {
+  // ⚡ PRIORIDADE 0: URL do Tenant dinâmico (Multi-Tenant via CNPJ)
+  const tenantUrl = localStorage.getItem('tenant_api_url');
+  if (tenantUrl) {
+    console.log('⚡ [PRIORIDADE 0] Usando URL do Tenant salvo via CNPJ:', tenantUrl);
+    return tenantUrl.replace(/\/api\/?$/, '');
+  }
+
   // ⚡ PRIORIDADE 1: Se a página está em HTTPS no domínio público, usa a mesma origem
   // para evitar Mixed Content (nginx deve ter proxy_pass /api/ → localhost:8005/8006)
   const pageProtocol = window.location.protocol;
