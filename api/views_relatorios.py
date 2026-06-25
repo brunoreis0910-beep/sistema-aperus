@@ -782,7 +782,31 @@ class RelatoriosViewSet(viewsets.ViewSet):
             elements.append(Paragraph(f"<b>Filtros Aplicados:</b> {' | '.join(filtros_text)}", styles['Normal']))
             elements.append(Spacer(1, 0.5*cm))
             
-        # Query de Contas
+        # Mapeamento do tipo de relatório para SQL
+        sql_tipo_conta = None
+        sql_status = None
+        
+        if tipo_rel == 'receber':
+            sql_tipo_conta = 'Receber'
+        elif tipo_rel == 'receber_pendente':
+            sql_tipo_conta = 'Receber'
+            sql_status = 'pendente'
+        elif tipo_rel == 'receber_liquidado':
+            sql_tipo_conta = 'Receber'
+            sql_status = 'pago'
+        elif tipo_rel == 'pagar':
+            sql_tipo_conta = 'Pagar'
+        elif tipo_rel == 'pagar_pendente':
+            sql_tipo_conta = 'Pagar'
+            sql_status = 'pendente'
+        elif tipo_rel == 'pagar_liquidado':
+            sql_tipo_conta = 'Pagar'
+            sql_status = 'pago'
+            
+        if not sql_status:
+            sql_status = status_filtro
+            
+        # Query de Contas com joins para obter campos de resumo
         sql = """
             SELECT 
                 fc.tipo_conta,
@@ -791,10 +815,19 @@ class RelatoriosViewSet(viewsets.ViewSet):
                 fc.data_pagamento,
                 fc.status_conta,
                 fc.valor_parcela,
-                COALESCE(c.nome_razao_social, f.nome_razao_social, fc.descricao, 'Não Informado') as cliente_fornecedor
+                COALESCE(c.nome_razao_social, f.nome_razao_social, fc.descricao, 'Não Informado') as cliente_fornecedor,
+                cc.nome_centro_custo,
+                fc.forma_pagamento,
+                cb.nome_conta as nome_conta_baixa,
+                cl.nome_conta as nome_conta_lancamento,
+                op.nome_operacao
             FROM financeiro_contas fc
             LEFT JOIN clientes c ON fc.id_cliente_fornecedor = c.id_cliente AND fc.tipo_conta = 'Receber'
             LEFT JOIN fornecedores f ON fc.id_cliente_fornecedor = f.id_fornecedor AND fc.tipo_conta = 'Pagar'
+            LEFT JOIN centro_custo cc ON fc.id_centro_custo = cc.id_centro_custo
+            LEFT JOIN contas_bancarias cb ON fc.id_conta_baixa = cb.id_conta_bancaria
+            LEFT JOIN contas_bancarias cl ON fc.id_conta_cobranca = cl.id_conta_bancaria
+            LEFT JOIN operacoes op ON fc.id_operacao = op.id_operacao
             WHERE 1=1
         """
         params = []
@@ -812,14 +845,13 @@ class RelatoriosViewSet(viewsets.ViewSet):
             sql += f" AND DATE({campo_data}) <= %s"
             params.append(filtros['dataFim'])
             
-        if tipo_rel == 'receber':
-            sql += " AND fc.tipo_conta = 'Receber'"
-        elif tipo_rel == 'pagar':
-            sql += " AND fc.tipo_conta = 'Pagar'"
+        if sql_tipo_conta:
+            sql += " AND fc.tipo_conta = %s"
+            params.append(sql_tipo_conta)
             
-        if status_filtro == 'pendente':
+        if sql_status == 'pendente':
             sql += " AND UPPER(fc.status_conta) IN ('PENDENTE', 'ABERTO', 'VENCIDO')"
-        elif status_filtro == 'pago':
+        elif sql_status == 'pago':
             sql += " AND UPPER(fc.status_conta) IN ('PAGA', 'PAGO', 'BAIXADA', 'LIQUIDADO')"
             
         if filtros.get('cliente'):
@@ -849,14 +881,36 @@ class RelatoriosViewSet(viewsets.ViewSet):
         total_receber = 0
         total_pagar = 0
         
+        # Estrutura para os resumos agrupados
+        resumo_por_keys = filtros.get('resumoPor', [])
+        grupos_resumo = {key: {} for key in resumo_por_keys}
+        
         for idx, conta in enumerate(contas, 1):
-            tipo_c, emissao, vencimento, pagamento, status, valor, cli_forn = conta
+            tipo_c, emissao, vencimento, pagamento, status, valor, cli_forn, cc_nome, forma_pag, cb_nome, cl_nome, op_nome = conta
             
             val = float(valor) if valor else 0
             if tipo_c == 'Receber':
                 total_receber += val
             else:
                 total_pagar += val
+                
+            # Agrupar valores para os resumos dinâmicos
+            mapping_values = {
+                'centro_custo': cc_nome or 'Não Informado',
+                'cond_pagamento': forma_pag or 'Não Informado',
+                'conta_baixa': cb_nome or 'Não Informado',
+                'conta_lancamento': cl_nome or 'Não Informado',
+                'operacao': op_nome or 'Não Informado',
+            }
+            for key in resumo_por_keys:
+                if key in mapping_values:
+                    group_val = mapping_values[key]
+                    if group_val not in grupos_resumo[key]:
+                        grupos_resumo[key][group_val] = {'receber': 0.0, 'pagar': 0.0}
+                    if tipo_c == 'Receber':
+                        grupos_resumo[key][group_val]['receber'] += val
+                    else:
+                        grupos_resumo[key][group_val]['pagar'] += val
                 
             val_fmt = f"R$ {val:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
             
@@ -925,6 +979,65 @@ class RelatoriosViewSet(viewsets.ViewSet):
         elements.append(Paragraph(f'<b>💰 Total a Receber:</b> <font color="#2e7d32">R$ {total_receber:,.2f}</font>'.replace(',', 'X').replace('.', ',').replace('X', '.'), resumo_style))
         elements.append(Paragraph(f'<b>💸 Total a Pagar:</b> <font color="#d32f2f">R$ {total_pagar:,.2f}</font>'.replace(',', 'X').replace('.', ',').replace('X', '.'), resumo_style))
         elements.append(Paragraph(f'<b>💵 Saldo Previsto:</b> <font color="{saldo_cor}">R$ {saldo:,.2f}</font>'.replace(',', 'X').replace('.', ',').replace('X', '.'), resumo_style))
+        
+        # Renderização dos resumos agrupados dinâmicos
+        titulos_resumo = {
+            'centro_custo': 'Centro de Custo',
+            'cond_pagamento': 'Condição de Pagamento',
+            'conta_baixa': 'Conta de Baixa',
+            'conta_lancamento': 'Conta de Lançamento',
+            'operacao': 'Operação'
+        }
+        
+        for key in resumo_por_keys:
+            if key in grupos_resumo and grupos_resumo[key]:
+                elements.append(Spacer(1, 0.6*cm))
+                titulo_sec = f"<b>📊 Resumo por {titulos_resumo.get(key, key.capitalize())}</b>"
+                elements.append(Paragraph(titulo_sec, resumo_style))
+                
+                # Criar tabela para detalhamento do grupo
+                group_data = [['Item', 'Total a Receber', 'Total a Pagar', 'Saldo']]
+                
+                for item_name, values in sorted(grupos_resumo[key].items()):
+                    rec = values['receber']
+                    pag = values['pagar']
+                    sal = rec - pag
+                    
+                    rec_fmt = f"R$ {rec:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                    pag_fmt = f"R$ {pag:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                    sal_fmt = f"R$ {sal:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                    
+                    group_data.append([
+                        item_name,
+                        rec_fmt,
+                        pag_fmt,
+                        sal_fmt
+                    ])
+                
+                sub_table = Table(group_data, colWidths=[6.5*cm, 3.5*cm, 3.5*cm, 3.5*cm])
+                sub_style = [
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#eceff1')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#37474f')),
+                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+                    ('TOPPADDING', (0, 0), (-1, 0), 4),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cfd8dc')),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+                    ('FONTSIZE', (0, 1), (-1, -1), 8),
+                    ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+                    ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+                ]
+                
+                for r_idx in range(1, len(group_data)):
+                    sal_val = grupos_resumo[key][group_data[r_idx][0]]['receber'] - grupos_resumo[key][group_data[r_idx][0]]['pagar']
+                    sal_color = '#2e7d32' if sal_val >= 0 else '#d32f2f'
+                    sub_style.append(('TEXTCOLOR', (3, r_idx), (3, r_idx), colors.HexColor(sal_color)))
+                    sub_style.append(('FONTNAME', (3, r_idx), (3, r_idx), 'Helvetica-Bold'))
+                    
+                sub_table.setStyle(TableStyle(sub_style))
+                elements.append(sub_table)
         
         doc.build(elements)
         buffer.seek(0)
