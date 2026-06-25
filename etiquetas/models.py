@@ -11,6 +11,8 @@ class LayoutEtiqueta(models.Model):
         ('10X15', '10x15cm'),
         ('5X5', '5x5cm'),
         ('7X5', '7x5cm'),
+        ('TOMATE_80X50', 'Tomate 80x50mm'),
+        ('TOMATE_58', 'Tomate 58mm (Bobina)'),
         ('CUSTOM', 'Personalizado'),
     ]
     

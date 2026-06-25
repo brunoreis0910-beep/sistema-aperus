@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box, Button, Typography, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Select, MenuItem, FormControl, InputLabel, Grid, Card, CardContent,
@@ -187,6 +187,8 @@ export default function EtiquetasPage() {
     '10X15': { largura: 100, altura: 150 },
     '5X5': { largura: 50, altura: 50 },
     '7X5': { largura: 70, altura: 50 },
+    'TOMATE_80X50': { largura: 80, altura: 50 },
+    'TOMATE_58': { largura: 58, altura: 30 },
     'CUSTOM': { largura: 0, altura: 0 }
   };
 
@@ -194,12 +196,48 @@ export default function EtiquetasPage() {
     const tamanho = e.target.value;
     const dimensoes = tamanhosPapel[tamanho];
 
-    setLayoutForm({
-      ...layoutForm,
-      tamanho_papel: tamanho,
-      largura_papel: dimensoes.largura,
-      altura_papel: dimensoes.altura
-    });
+    if (tamanho === 'TOMATE_80X50') {
+      setLayoutForm({
+        ...layoutForm,
+        tamanho_papel: tamanho,
+        largura_papel: 80,
+        altura_papel: 50,
+        largura_etiqueta: 80,
+        altura_etiqueta: 50,
+        colunas: 1,
+        linhas: 1,
+        margem_superior: 0,
+        margem_inferior: 0,
+        margem_esquerda: 0,
+        margem_direita: 0,
+        espaco_horizontal: 0,
+        espaco_vertical: 0
+      });
+    } else if (tamanho === 'TOMATE_58') {
+      setLayoutForm({
+        ...layoutForm,
+        tamanho_papel: tamanho,
+        largura_papel: 58,
+        altura_papel: 30,
+        largura_etiqueta: 58,
+        altura_etiqueta: 30,
+        colunas: 1,
+        linhas: 1,
+        margem_superior: 0,
+        margem_inferior: 0,
+        margem_esquerda: 0,
+        margem_direita: 0,
+        espaco_horizontal: 0,
+        espaco_vertical: 0
+      });
+    } else {
+      setLayoutForm({
+        ...layoutForm,
+        tamanho_papel: tamanho,
+        largura_papel: dimensoes.largura,
+        altura_papel: dimensoes.altura
+      });
+    }
   };
 
   const handleCampoToggle = (campoId) => {
@@ -490,6 +528,149 @@ export default function EtiquetasPage() {
       } finally {
         setLoading(false);
       }
+      return;
+    }
+
+    if (tipoImpressora === 'tomate') {
+      let html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Etiquetas - ${layout.nome_layout}</title>
+          <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+          <style>
+            @page {
+              size: ${layout.largura_etiqueta}mm ${layout.altura_etiqueta}mm;
+              margin: 0;
+            }
+            
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: Arial, sans-serif;
+              background-color: #fff;
+              -webkit-print-color-adjust: exact;
+            }
+            
+            .etiqueta-termica {
+              width: ${layout.largura_etiqueta}mm;
+              height: ${layout.altura_etiqueta}mm;
+              padding: 2mm 3mm;
+              box-sizing: border-box;
+              page-break-after: always;
+              display: flex;
+              flex-direction: column;
+              justify-content: flex-start;
+              align-items: flex-start;
+              overflow: hidden;
+            }
+            
+            .etiqueta-termica:last-child {
+              page-break-after: auto;
+            }
+            
+            .campo {
+              width: 100%;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              line-height: 1.1;
+              margin-bottom: 0.5mm;
+            }
+            
+            .barcode-container {
+              width: 100%;
+              text-align: center;
+              margin-top: 1mm;
+            }
+            
+            .barcode-item {
+              max-width: 100%;
+              height: auto;
+              max-height: 12mm;
+            }
+          </style>
+        </head>
+        <body>
+      `;
+
+      etiquetas.forEach(etiqueta => {
+        if (!etiqueta.vazia && etiqueta.produto) {
+          const produto = etiqueta.produto;
+          html += '<div class="etiqueta-termica">';
+
+          Object.entries(layout.campos_visiveis || {})
+            .filter(([_, config]) => config.ativo)
+            .sort(([aId, aConfig], [bId, bConfig]) => (aConfig.ordem || 999) - (bConfig.ordem || 999))
+            .forEach(([campoId, config]) => {
+              const campo = camposDisponiveis.find(c => c.id === campoId);
+              let valor = produto[campoId] || '';
+
+              if (campo?.tipo === 'currency') {
+                valor = `R$ ${parseFloat(valor || 0).toFixed(2)}`;
+              }
+
+              if (campo?.tipo === 'barcode' && valor) {
+                html += `
+                  <div class="barcode-container">
+                    <svg class="barcode-item" data-value="${valor}"></svg>
+                  </div>
+                `;
+              } else {
+                html += `
+                  <div class="campo" style="
+                    font-size: ${config.tamanho_fonte || 10}pt;
+                    font-weight: ${config.negrito ? 'bold' : 'normal'};
+                    font-style: ${config.italico ? 'italic' : 'normal'};
+                  ">
+                    ${valor}
+                  </div>
+                `;
+              }
+            });
+
+          html += '</div>';
+        }
+      });
+
+      html += `
+        <script>
+          window.onload = function() {
+            try {
+              if (typeof JsBarcode !== 'undefined') {
+                const elements = document.querySelectorAll('.barcode-item');
+                elements.forEach(el => {
+                  const val = el.getAttribute('data-value');
+                  if (val) {
+                    JsBarcode(el, val, {
+                      format: val.length === 13 ? "EAN13" : "CODE128",
+                      width: 1.5,
+                      height: 35,
+                      displayValue: true,
+                      fontSize: 8,
+                      margin: 0
+                    });
+                  }
+                });
+              }
+            } catch (err) {
+              console.error('JsBarcode error:', err);
+            }
+            setTimeout(function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            }, 300);
+          }
+        </script>
+        </body>
+        </html>
+      `;
+
+      const janelaImpressao = window.open('', '_blank');
+      janelaImpressao.document.write(html);
+      janelaImpressao.document.close();
+      janelaImpressao.focus();
+      salvarHistoricoImpressao();
       return;
     }
 
@@ -831,6 +1012,8 @@ export default function EtiquetasPage() {
                   <MenuItem value="10X15">10x15cm</MenuItem>
                   <MenuItem value="5X5">5x5cm</MenuItem>
                   <MenuItem value="7X5">7x5cm</MenuItem>
+                  <MenuItem value="TOMATE_80X50">Tomate 80x50mm</MenuItem>
+                  <MenuItem value="TOMATE_58">Tomate 58mm (Bobina)</MenuItem>
                   <MenuItem value="CUSTOM">Personalizado</MenuItem>
                 </Select>
               </FormControl>
@@ -1129,6 +1312,7 @@ export default function EtiquetasPage() {
                   <MenuItem value="padrao">Padrão (HTML/PDF)</MenuItem>
                   <MenuItem value="zebra">Zebra (ZPL)</MenuItem>
                   <MenuItem value="elgin">Elgin (ESC/POS)</MenuItem>
+                  <MenuItem value="tomate">Térmica Tomate (HTML)</MenuItem>
                 </Select>
               </FormControl>
             </Grid>

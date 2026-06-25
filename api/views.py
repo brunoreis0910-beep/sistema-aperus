@@ -3999,8 +3999,6 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         import os
         # Determina o caminho do script
         script_path = f"C:\\APERUS\\atualizar_{cliente.schema_name}.bat"
-        if not os.path.exists(script_path):
-            script_path = "C:\\APERUS\\atualizar_central.bat"
 
         if not os.path.exists(script_path):
             historico.status = 'FALHA'
@@ -4038,8 +4036,6 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
         for cliente in clientes_ativos:
             # Determina o caminho do script
             script_path = f"C:\\APERUS\\atualizar_{cliente.schema_name}.bat"
-            if not os.path.exists(script_path):
-                script_path = "C:\\APERUS\\atualizar_central.bat"
 
             if not os.path.exists(script_path):
                 historico = models.HistoricoAtualizacao.objects.create(

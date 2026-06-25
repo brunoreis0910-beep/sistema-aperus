@@ -77,6 +77,16 @@ class RelatoriosViewSet(viewsets.ViewSet):
                 'dre': self.gerar_relatorio_dre,
             }
         
+        # Mapear tipos do frontend para geradores internos do backend
+        mapeamento_tipos = {
+            'inventario': 'estoque',
+            'inventario-retroativo': 'estoque',
+            'contas-receber-pagar': 'financeiro',
+        }
+        tipo_original = tipo
+        tipo = mapeamento_tipos.get(tipo, tipo)
+        filtros['_tipo_original'] = tipo_original
+
         gerador = geradores.get(tipo)
         if not gerador:
             return Response(
@@ -440,6 +450,9 @@ class RelatoriosViewSet(viewsets.ViewSet):
     
     def gerar_relatorio_financeiro(self, filtros):
         """Gera relatório financeiro com dados de vendas e compras"""
+        if filtros.get('_tipo_original') == 'contas-receber-pagar':
+            return self.gerar_relatorio_contas_receber_pagar(filtros)
+            
         from django.db import connection
         
         buffer, doc, elements, styles = self.criar_pdf_base(
@@ -738,7 +751,189 @@ class RelatoriosViewSet(viewsets.ViewSet):
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
-    
+
+    def gerar_relatorio_contas_receber_pagar(self, filtros):
+        """Gera relatório de contas a receber e pagar com base nos filtros"""
+        from django.db import connection
+        from datetime import datetime
+        
+        buffer, doc, elements, styles = self.criar_pdf_base(
+            'Contas a Receber e Pagar',
+            'Relatório detalhado de contas do sistema'
+        )
+        
+        # Mostrar filtros aplicados
+        filtros_text = []
+        if filtros.get('dataInicio'):
+            filtros_text.append(f"Início: {filtros['dataInicio']}")
+        if filtros.get('dataFim'):
+            filtros_text.append(f"Fim: {filtros['dataFim']}")
+        
+        tipo_data = filtros.get('tipoData', 'vencimento')
+        filtros_text.append(f"Data por: {tipo_data.capitalize()}")
+        
+        tipo_rel = filtros.get('tipoRelatorio', 'todos')
+        filtros_text.append(f"Tipo: {tipo_rel.capitalize()}")
+        
+        status_filtro = filtros.get('status', 'todos')
+        filtros_text.append(f"Status: {status_filtro.capitalize()}")
+        
+        if filtros_text:
+            elements.append(Paragraph(f"<b>Filtros Aplicados:</b> {' | '.join(filtros_text)}", styles['Normal']))
+            elements.append(Spacer(1, 0.5*cm))
+            
+        # Query de Contas
+        sql = """
+            SELECT 
+                fc.tipo_conta,
+                fc.data_emissao,
+                fc.data_vencimento,
+                fc.data_pagamento,
+                fc.status_conta,
+                fc.valor_parcela,
+                COALESCE(c.nome_razao_social, f.nome_razao_social, fc.descricao, 'Não Informado') as cliente_fornecedor
+            FROM financeiro_contas fc
+            LEFT JOIN clientes c ON fc.id_cliente_fornecedor = c.id_cliente AND fc.tipo_conta = 'Receber'
+            LEFT JOIN fornecedores f ON fc.id_cliente_fornecedor = f.id_fornecedor AND fc.tipo_conta = 'Pagar'
+            WHERE 1=1
+        """
+        params = []
+        
+        campo_data = 'fc.data_vencimento'
+        if tipo_data == 'pagamento':
+            campo_data = 'fc.data_pagamento'
+        elif tipo_data == 'emissao':
+            campo_data = 'fc.data_emissao'
+            
+        if filtros.get('dataInicio'):
+            sql += f" AND DATE({campo_data}) >= %s"
+            params.append(filtros['dataInicio'])
+        if filtros.get('dataFim'):
+            sql += f" AND DATE({campo_data}) <= %s"
+            params.append(filtros['dataFim'])
+            
+        if tipo_rel == 'receber':
+            sql += " AND fc.tipo_conta = 'Receber'"
+        elif tipo_rel == 'pagar':
+            sql += " AND fc.tipo_conta = 'Pagar'"
+            
+        if status_filtro == 'pendente':
+            sql += " AND UPPER(fc.status_conta) IN ('PENDENTE', 'ABERTO', 'VENCIDO')"
+        elif status_filtro == 'pago':
+            sql += " AND UPPER(fc.status_conta) IN ('PAGA', 'PAGO', 'BAIXADA', 'LIQUIDADO')"
+            
+        if filtros.get('cliente'):
+            sql += " AND fc.id_cliente_fornecedor = %s"
+            params.append(filtros['cliente'])
+            
+        if filtros.get('operacao'):
+            sql += " AND fc.id_operacao = %s"
+            params.append(filtros['operacao'])
+            
+        ordem = filtros.get('ordenacao', 'data_vencimento')
+        campo_ordem = 'fc.data_vencimento'
+        if ordem == 'data_emissao':
+            campo_ordem = 'fc.data_emissao'
+        elif ordem == 'valor_parcela':
+            campo_ordem = 'fc.valor_parcela'
+        elif ordem == 'status_conta':
+            campo_ordem = 'fc.status_conta'
+            
+        sql += f" ORDER BY {campo_ordem} ASC"
+        
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            contas = cursor.fetchall()
+            
+        data = [['#', 'Tipo', 'Emissão', 'Vencimento', 'Cliente / Fornecedor', 'Valor', 'Status']]
+        total_receber = 0
+        total_pagar = 0
+        
+        for idx, conta in enumerate(contas, 1):
+            tipo_c, emissao, vencimento, pagamento, status, valor, cli_forn = conta
+            
+            val = float(valor) if valor else 0
+            if tipo_c == 'Receber':
+                total_receber += val
+            else:
+                total_pagar += val
+                
+            val_fmt = f"R$ {val:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            
+            emissao_fmt = emissao.strftime('%d/%m/%Y') if emissao else '-'
+            venc_fmt = vencimento.strftime('%d/%m/%Y') if vencimento else '-'
+            
+            # Truncar cliente/fornecedor
+            cli_forn_fmt = cli_forn[:35] + '...' if len(cli_forn) > 35 else cli_forn
+            
+            data.append([
+                str(idx),
+                tipo_c,
+                emissao_fmt,
+                venc_fmt,
+                cli_forn_fmt,
+                val_fmt,
+                status or 'Pendente'
+            ])
+            
+        table = Table(data, colWidths=[0.8*cm, 1.8*cm, 2.2*cm, 2.2*cm, 6.5*cm, 2.5*cm, 2*cm])
+        
+        style_commands = [
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0288d1')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (1, 0), (1, -1), 'CENTER'),
+            ('ALIGN', (2, 0), (3, -1), 'CENTER'),
+            ('ALIGN', (5, 0), (5, -1), 'RIGHT'),
+            ('ALIGN', (6, 0), (6, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]
+        
+        for idx in range(1, len(data)):
+            tipo_c = data[idx][1]
+            if tipo_c == 'Receber':
+                style_commands.append(('TEXTCOLOR', (1, idx), (1, idx), colors.HexColor('#2e7d32')))
+                style_commands.append(('FONTNAME', (1, idx), (1, idx), 'Helvetica-Bold'))
+            else:
+                style_commands.append(('TEXTCOLOR', (1, idx), (1, idx), colors.HexColor('#d32f2f')))
+                style_commands.append(('FONTNAME', (1, idx), (1, idx), 'Helvetica-Bold'))
+                
+        table.setStyle(TableStyle(style_commands))
+        elements.append(table)
+        
+        elements.append(Spacer(1, 0.8*cm))
+        
+        saldo = total_receber - total_pagar
+        saldo_cor = '#2e7d32' if saldo >= 0 else '#d32f2f'
+        
+        resumo_style = ParagraphStyle(
+            'ResumoContas',
+            parent=styles['Normal'],
+            fontSize=10,
+            leading=14,
+            spaceAfter=6
+        )
+        
+        elements.append(Paragraph('<b>📊 Resumo Financeiro</b>', resumo_style))
+        elements.append(Paragraph(f'<b>💰 Total a Receber:</b> <font color="#2e7d32">R$ {total_receber:,.2f}</font>'.replace(',', 'X').replace('.', ',').replace('X', '.'), resumo_style))
+        elements.append(Paragraph(f'<b>💸 Total a Pagar:</b> <font color="#d32f2f">R$ {total_pagar:,.2f}</font>'.replace(',', 'X').replace('.', ',').replace('X', '.'), resumo_style))
+        elements.append(Paragraph(f'<b>💵 Saldo Previsto:</b> <font color="{saldo_cor}">R$ {saldo:,.2f}</font>'.replace(',', 'X').replace('.', ',').replace('X', '.'), resumo_style))
+        
+        doc.build(elements)
+        buffer.seek(0)
+        
+        filename = f'relatorio_contas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
     def gerar_relatorio_dre(self, filtros):
         """Gera relatório DRE em PDF"""
         from decimal import Decimal
@@ -930,10 +1125,20 @@ class RelatoriosViewSet(viewsets.ViewSet):
         from .models import Produto
         from django.db import connection
         
-        buffer, doc, elements, styles = self.criar_pdf_base(
-            'Relatório de Estoque',
-            'Posição atual de estoque por produto e depósito com valores'
-        )
+        tipo_orig = filtros.get('_tipo_original', 'estoque')
+        if tipo_orig == 'inventario':
+            titulo = 'Relatório de Inventário'
+            desc = 'Contagem física de estoque e divergências'
+        elif tipo_orig == 'inventario-retroativo':
+            titulo = 'Inventário Retroativo'
+            desc = f'Análise completa de estoque com valores retroativos'
+            if filtros.get('dataRetroativa'):
+                desc += f' em {filtros.get("dataRetroativa")}'
+        else:
+            titulo = 'Relatório de Estoque'
+            desc = 'Posição atual de estoque por produto e depósito com valores'
+            
+        buffer, doc, elements, styles = self.criar_pdf_base(titulo, desc)
         
         # Mostrar filtros aplicados
         filtros_text = []
@@ -985,6 +1190,18 @@ class RelatoriosViewSet(viewsets.ViewSet):
         if filtros.get('deposito'):
             sql += " AND e.id_deposito = %s"
             params.append(filtros['deposito'])
+            
+        if filtros.get('grupo'):
+            sql += " AND p.id_grupo = %s"
+            params.append(filtros['grupo'])
+            
+        tipo_estoque = filtros.get('tipoEstoque')
+        if tipo_estoque == 'positivo':
+            sql += " AND e.quantidade > 0"
+        elif tipo_estoque == 'negativo':
+            sql += " AND e.quantidade < 0"
+        elif tipo_estoque == 'zerado':
+            sql += " AND (e.quantidade = 0 OR e.quantidade IS NULL)"
         
         sql += " ORDER BY p.nome_produto"
         
@@ -1019,7 +1236,7 @@ class RelatoriosViewSet(viewsets.ViewSet):
             
             # Pular produtos sem estoque (quantidade = 0)
             quantidade = float(quantidade) if quantidade else 0
-            if quantidade == 0:
+            if quantidade == 0 and tipo_estoque != 'zerado' and tipo_estoque != 'todos':
                 continue
             
             # Formatar código e depósito
@@ -1201,7 +1418,7 @@ class RelatoriosViewSet(viewsets.ViewSet):
                     FROM produtos p
                     LEFT JOIN estoque e ON p.id_produto = e.id_produto
                     LEFT JOIN grupos_produto gp ON p.id_grupo = gp.id_grupo
-                    WHERE CAST(COALESCE(e.quantidade, 0) AS DECIMAL(10,2)) > 0
+                    WHERE CAST(COALESCE(e.quantidade, 0) AS DECIMAL(10,2)) != 0
                 """
                 params_grupo = []
                 
