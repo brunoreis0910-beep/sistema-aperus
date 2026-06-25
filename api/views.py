@@ -4204,7 +4204,7 @@ Write-Host "  OK - $($backupFeito.Count) arquivos de configuracao protegidos." -
 Write-Host ""
 Write-Host "[3/5] Copiando atualizacoes de codigo..." -ForegroundColor Cyan
 
-$templateDir = "C:\\\\APERUS\\\\SistemaAperus"
+$templateDir = "C:\\\\APERUS\\\\aperus_mae"
 if (-not (Test-Path $templateDir)) {
     Write-Host "  [AVISO] Pasta template $templateDir nao encontrada. Pulando copia." -ForegroundColor Yellow
 } else {
