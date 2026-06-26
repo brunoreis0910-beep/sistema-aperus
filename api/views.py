@@ -4414,13 +4414,13 @@ Write-Host ""
                     with open(script_path, 'w', encoding='utf-8') as f:
                         f.write('@echo off\n')
                         f.write(f'cd /d "{client_dir}"\n')
-                        f.write(f'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File "{client_dir}\\ATUALIZAR.ps1"\n')
+                        # Para central/testes, passa -NonInteractive para o git pull
+                        if cliente.schema_name in ['testes', 'central']:
+                            f.write(f'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File "{client_dir}\\ATUALIZAR.ps1" -NonInteractive\n')
+                        else:
+                            f.write(f'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File "{client_dir}\\ATUALIZAR.ps1"\n')
                 except Exception:
                     pass
-            
-            # Se mesmo assim o script_path não existir, cai para o default
-            if not os.path.exists(script_path):
-                script_path = "C:\\APERUS\\atualizar_central.bat"
                 
         return script_path
 
