@@ -4067,10 +4067,14 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
             client_dir = "C:\\APERUS\\aperus_mae"
         else:
             client_dir = f"C:\\APERUS\\arquivos_clientes\\aperus_{cliente.schema_name}"
+            # Se o cliente é ambiente de teste OU a pasta ainda não existe, usa SistemaAperus
+            if getattr(cliente, 'is_test_environment', False) or not os.path.exists(client_dir):
+                client_dir = "C:\\APERUS\\SistemaAperus"
             
         # Para clientes normais, garante que o ATUALIZAR.ps1 do cliente é o correto (cópia rápida de template)
         # e não o de git pull (herdado por engano do template SistemaAperus)
-        if cliente.schema_name not in ['testes', 'central'] and os.path.exists(client_dir):
+        _schema_especial = cliente.schema_name in ['testes', 'central'] or client_dir == "C:\\APERUS\\SistemaAperus"
+        if not _schema_especial and os.path.exists(client_dir):
             ps1_path = os.path.join(client_dir, "ATUALIZAR.ps1")
             needs_generation = True
             if os.path.exists(ps1_path):
@@ -4422,8 +4426,8 @@ Write-Host ""
                     with open(script_path, 'w', encoding='utf-8') as f:
                         f.write('@echo off\n')
                         f.write(f'cd /d "{client_dir}"\n')
-                        # Para central/testes, passa -NonInteractive para o git pull
-                        if cliente.schema_name in ['testes', 'central']:
+                        # Para central/testes/ambientes de teste, passa -NonInteractive para o git pull
+                        if _schema_especial:
                             f.write(f'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File "{client_dir}\\ATUALIZAR.ps1" -NonInteractive\n')
                         else:
                             f.write(f'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File "{client_dir}\\ATUALIZAR.ps1"\n')
