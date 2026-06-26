@@ -4348,8 +4348,16 @@ if (Test-Path "$venvPath\\Scripts\\activate.bat") {
 # ============================================================
 Write-Host ""
 Write-Host "[4.5/5] Sincronizando arquivos estaticos do frontend (collectstatic)..." -ForegroundColor Yellow
-if (Test-Path "$venvPath\\\\Scripts\\\\activate.bat") {
-    cmd.exe /c "call $venvPath\\\\Scripts\\\\activate.bat && python manage.py collectstatic --noinput"
+
+# Limpar staticfiles antigos para evitar conflito com builds anteriores
+$staticDir = Join-Path $scriptDir "staticfiles"
+if (Test-Path $staticDir) {
+    Write-Host "  Limpando staticfiles antigos..." -ForegroundColor DarkGray
+    Remove-Item -Path $staticDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+if (Test-Path "$venvPath\\Scripts\\activate.bat") {
+    cmd.exe /c "call $venvPath\\Scripts\\activate.bat && python manage.py collectstatic --noinput"
     Write-Host "  OK - Arquivos estaticos sincronizados!" -ForegroundColor Green
 } else {
     Write-Host "  [AVISO] Ambiente virtual nao encontrado. Pulando collectstatic." -ForegroundColor Yellow
