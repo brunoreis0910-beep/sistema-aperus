@@ -57,6 +57,10 @@ def registrar_servico_windows_nssm(cliente_schema, porta_cliente):
         subprocess.run([nssm_path, "set", nome_servico, "AppRotateOnline", "1"], check=True, capture_output=True)
         subprocess.run([nssm_path, "set", nome_servico, "AppRotateBytes", "10485760"], check=True, capture_output=True)
         
+        # 8. Configura para NÃO reiniciar automaticamente ao parar pelo Windows Services
+        subprocess.run([nssm_path, "set", nome_servico, "AppExit", "Default", "Exit"], check=True, capture_output=True)
+        subprocess.run([nssm_path, "set", nome_servico, "AppKillProcessTree", "1"], check=True, capture_output=True)
+        
         # 8. Inicia o serviço
         logger.info(f"[TENANT SERVICE] Iniciando serviço {nome_servico}...")
         res_start = subprocess.run([nssm_path, "start", nome_servico], capture_output=True, text=True)
