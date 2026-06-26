@@ -4077,7 +4077,7 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
                 try:
                     with open(ps1_path, 'r', encoding='utf-8', errors='ignore') as ps_file:
                         content = ps_file.read()
-                        if "Copy-TemplateFiles" in content:
+                        if "Copy-TemplateFiles" in content and "nssmPath" in content:
                             needs_generation = False
                 except Exception:
                     pass
@@ -4090,6 +4090,7 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
 # Ele NAO faz git pull. Em vez disso, copia apenas os arquivos
 # de CODIGO do template SistemaAperus, preservando os arquivos
 # de configuracao do banco de dados (.env, settings, etc.)
+# Usa NSSM para parar/iniciar o servico corretamente.
 # ============================================================
 $Host.UI.RawUI.WindowTitle = "APERUS - ATUALIZAR CLIENTE"
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -4131,30 +4132,66 @@ $venvPath = "venv"
 if (Test-Path ".venv\\\\Scripts\\\\python.exe") { $venvPath = ".venv" }
 
 # ============================================================
-# [1/5] Parar servidor Django do cliente
+# [1/5] Parar servidor Django do cliente (via NSSM)
 # ============================================================
 Write-Host "[1/5] Parando servidor Django..." -ForegroundColor Yellow
-$pids = @()
-if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
-    $connections = Get-NetTCPConnection -LocalPort $portaCliente -ErrorAction SilentlyContinue
-    if ($connections) {
-        $pids = @($connections.OwningProcess)
+
+# Detectar o nome do servico NSSM do cliente
+$nssmPath = "C:\\\\APERUS\\\\nssm.exe"
+$clienteFolderName = Split-Path $scriptDir -Leaf
+$schemaName = $clienteFolderName -replace '^aperus_', ''
+$nomeServico = "AperusServer$($schemaName.Substring(0,1).ToUpper())$($schemaName.Substring(1))"
+Write-Host "  Servico: $nomeServico" -ForegroundColor DarkGray
+
+# Tentar parar pelo servico NSSM
+$servicoParado = $false
+try {
+    $statusResult = & $nssmPath status $nomeServico 2>$null
+    if ($statusResult -match 'SERVICE_RUNNING') {
+        Write-Host "  Parando servico $nomeServico via NSSM..." -ForegroundColor Yellow
+        & $nssmPath stop $nomeServico 2>$null
+        Start-Sleep -Seconds 3
+        $servicoParado = $true
+        Write-Host "  OK - Servico parado." -ForegroundColor Green
+    } else {
+        Write-Host "  Servico $nomeServico ja estava parado." -ForegroundColor DarkGray
+        $servicoParado = $true
     }
+} catch {
+    Write-Host "  [AVISO] Nao foi possivel parar pelo NSSM. Tentando matar processo na porta..." -ForegroundColor Yellow
 }
-$killed = $false
-foreach ($procId in $pids | Select-Object -Unique) {
-    $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
-    if ($proc -and ($proc.Name -like "*python*")) {
-        Write-Host "  Parando processo Python (PID $procId) na porta $portaCliente..." -ForegroundColor Yellow
-        Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
-        $killed = $true
+
+# Fallback: matar processo pela porta se o NSSM nao conseguiu
+if (-not $servicoParado) {
+    $pids = @()
+    if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+        $connections = Get-NetTCPConnection -LocalPort $portaCliente -ErrorAction SilentlyContinue
+        if ($connections) {
+            $pids = @($connections.OwningProcess)
+        }
     }
-}
-if ($killed) {
+    foreach ($procId in $pids | Select-Object -Unique) {
+        $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
+        if ($proc -and ($proc.Name -like "*python*")) {
+            Write-Host "  Parando processo Python (PID $procId) na porta $portaCliente..." -ForegroundColor Yellow
+            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+        }
+    }
     Start-Sleep -Seconds 2
     Write-Host "  OK." -ForegroundColor Green
-} else {
-    Write-Host "  Nenhum processo Python na porta $portaCliente." -ForegroundColor DarkGray
+}
+
+# Garantir que a porta esta livre (matar qualquer processo orfao)
+$connections = Get-NetTCPConnection -LocalPort $portaCliente -ErrorAction SilentlyContinue
+if ($connections) {
+    foreach ($procId in ($connections.OwningProcess | Select-Object -Unique)) {
+        $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
+        if ($proc -and ($proc.Name -like "*python*")) {
+            Write-Host "  Matando processo orfao (PID $procId) na porta $portaCliente..." -ForegroundColor Yellow
+            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Start-Sleep -Seconds 1
 }
 
 # ============================================================
@@ -4319,16 +4356,43 @@ if (Test-Path "$venvPath\\\\Scripts\\\\activate.bat") {
 }
 
 # ============================================================
-# [5/5] Reiniciar servidor Django do cliente
+# [5/5] Reiniciar servidor Django do cliente (via NSSM)
 # ============================================================
 Write-Host ""
 Write-Host "[5/5] Reiniciando servidor Django na porta $portaCliente..." -ForegroundColor Cyan
 
-if (Test-Path "$venvPath\\\\Scripts\\\\python.exe") {
-    Start-Process powershell -ArgumentList "-WindowStyle Minimized -ExecutionPolicy Bypass -Command `"cd '$scriptDir'; .\\\\$venvPath\\\\Scripts\\\\python.exe manage.py runserver 0.0.0.0:$portaCliente --noreload`""
-    Write-Host "  OK - Django iniciado na porta $portaCliente!" -ForegroundColor Green
-} else {
-    Write-Host "  [AVISO] Ambiente virtual nao encontrado ($venvPath). Execute INSTALAR.bat." -ForegroundColor Yellow
+# Tentar iniciar pelo servico NSSM (metodo correto)
+$servicoIniciado = $false
+try {
+    $statusResult = & $nssmPath status $nomeServico 2>$null
+    if ($statusResult -match 'SERVICE_STOPPED|SERVICE_PAUSED') {
+        Write-Host "  Iniciando servico $nomeServico via NSSM..." -ForegroundColor Cyan
+        & $nssmPath start $nomeServico 2>$null
+        Start-Sleep -Seconds 3
+        $statusResult2 = & $nssmPath status $nomeServico 2>$null
+        if ($statusResult2 -match 'SERVICE_RUNNING') {
+            $servicoIniciado = $true
+            Write-Host "  OK - Servico $nomeServico iniciado via NSSM!" -ForegroundColor Green
+        } else {
+            Write-Host "  [AVISO] NSSM nao confirmou inicio. Status: $statusResult2" -ForegroundColor Yellow
+        }
+    } elseif ($statusResult -match 'SERVICE_RUNNING') {
+        Write-Host "  Servico $nomeServico ja esta rodando." -ForegroundColor Green
+        $servicoIniciado = $true
+    }
+} catch {
+    Write-Host "  [AVISO] Falha ao iniciar pelo NSSM: $_" -ForegroundColor Yellow
+}
+
+# Fallback: iniciar processo diretamente se NSSM falhou
+if (-not $servicoIniciado) {
+    Write-Host "  Tentando iniciar Django diretamente..." -ForegroundColor Yellow
+    if (Test-Path "$venvPath\\\\Scripts\\\\python.exe") {
+        Start-Process powershell -ArgumentList "-WindowStyle Minimized -ExecutionPolicy Bypass -Command `"cd '$scriptDir'; .\\\\$venvPath\\\\Scripts\\\\python.exe manage.py runserver 0.0.0.0:$portaCliente --noreload`""
+        Write-Host "  OK - Django iniciado diretamente na porta $portaCliente!" -ForegroundColor Green
+    } else {
+        Write-Host "  [AVISO] Ambiente virtual nao encontrado ($venvPath). Execute INSTALAR.bat." -ForegroundColor Yellow
+    }
 }
 
 Write-Host ""
