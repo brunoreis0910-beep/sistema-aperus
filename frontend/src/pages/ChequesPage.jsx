@@ -108,9 +108,9 @@ const ChequesPage = () => {
       const [chequesRes, dashRes, clientesRes, fornecedoresRes, contasRes] = await Promise.all([
         axiosInstance.get('/cheques/'),
         axiosInstance.get('/cheques/dashboard/'),
-        axiosInstance.get('/clientes/'),
-        axiosInstance.get('/fornecedores/'),
-        axiosInstance.get('/contas-bancarias/'),
+        axiosInstance.get('/clientes/?page_size=9999'),
+        axiosInstance.get('/fornecedores/?page_size=9999'),
+        axiosInstance.get('/contas-bancarias/?page_size=9999'),
       ]);
       
       // Garantir que sempre sejam arrays, tratando resposta paginada
@@ -126,6 +126,7 @@ const ChequesPage = () => {
       const contasData = Array.isArray(contasRes.data) 
         ? contasRes.data 
         : (contasRes.data?.results || contasRes.data?.value || []);
+
       
       setCheques(chequesData);
       setDashboard(dashRes.data);
