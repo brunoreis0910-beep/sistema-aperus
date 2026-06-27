@@ -4139,16 +4139,7 @@ Write-Host ""
 # Detectar PORTA do cliente a partir do .env (para reiniciar
 # na porta correta)
 # ============================================================
-$portaCliente = "8007"  # Porta padrao se nao encontrada no .env
-if (Test-Path ".env") {
-    $envLines = Get-Content ".env" -ErrorAction SilentlyContinue
-    foreach ($line in $envLines) {
-        if ($line -match "^PORT\\\\s*=\\\\s*(\\\\d+)") {
-            $portaCliente = $Matches[1]
-            break
-        }
-    }
-}
+$portaCliente = "__PORTA_CLIENTE__"
 Write-Host "  Porta do cliente: $portaCliente" -ForegroundColor DarkGray
 Write-Host ""
 
@@ -4438,6 +4429,7 @@ Write-Host ""
                     # Descobrir nome do serviço Windows e injetar
                     nome_servico = descobrir_nome_servico_windows(client_dir, cliente.schema_name)
                     client_ps1_content = client_ps1_content.replace("__NOME_SERVICO__", nome_servico)
+                    client_ps1_content = client_ps1_content.replace("__PORTA_CLIENTE__", str(cliente.db_port))
                     with open(ps1_path, 'w', encoding='utf-8') as ps_file:
                         ps_file.write(client_ps1_content)
                 except Exception:
