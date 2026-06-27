@@ -4059,6 +4059,30 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
 
     def get_or_create_update_script(self, cliente):
         import os
+        import subprocess
+
+        def descobrir_nome_servico_windows(client_dir, schema_name):
+            nssm_path = "C:\\APERUS\\nssm.exe"
+            try:
+                res = subprocess.run(['powershell', '-Command', 'Get-Service -Name AperusServer* | Select-Object -ExpandProperty Name'], capture_output=True, text=True)
+                if res.returncode == 0:
+                    servicos = [s.strip() for s in res.stdout.strip().split('\n') if s.strip()]
+                    for svc in servicos:
+                        res_dir = subprocess.run([nssm_path, 'get', svc, 'AppDirectory'], capture_output=True, text=True)
+                        if res_dir.returncode == 0:
+                            app_dir = res_dir.stdout.strip()
+                            if os.path.abspath(app_dir).lower() == os.path.abspath(client_dir).lower():
+                                return svc
+            except Exception:
+                pass
+            
+            if "SistemaAperus" in client_dir:
+                return "AperusServerFilho"
+            elif "aperus_mae" in client_dir:
+                return "AperusServerMae"
+            
+            name_cap = schema_name.capitalize()
+            return f"AperusServer{name_cap}"
         
         # Determina o diretório de arquivos do cliente
         if cliente.schema_name == 'testes':
@@ -4071,9 +4095,8 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
             if getattr(cliente, 'is_test_environment', False) or not os.path.exists(client_dir):
                 client_dir = "C:\\APERUS\\SistemaAperus"
             
-        # Para clientes normais, garante que o ATUALIZAR.ps1 do cliente é o correto (cópia rápida de template)
-        # e não o de git pull (herdado por engano do template SistemaAperus)
-        _schema_especial = cliente.schema_name in ['testes', 'central'] or client_dir == "C:\\APERUS\\SistemaAperus"
+        # Para clientes normais (incluindo testes e outros que copiam da mae), garante que o ATUALIZAR.ps1 é gerado
+        _schema_especial = cliente.schema_name == 'central'
         if not _schema_especial and os.path.exists(client_dir):
             ps1_path = os.path.join(client_dir, "ATUALIZAR.ps1")
             needs_generation = True
@@ -4142,9 +4165,7 @@ Write-Host "[1/5] Parando servidor Django..." -ForegroundColor Yellow
 
 # Detectar o nome do servico NSSM do cliente
 $nssmPath = "C:\\\\APERUS\\\\nssm.exe"
-$clienteFolderName = Split-Path $scriptDir -Leaf
-$schemaName = $clienteFolderName -replace '^aperus_', ''
-$nomeServico = "AperusServer$($schemaName.Substring(0,1).ToUpper())$($schemaName.Substring(1))"
+$nomeServico = "__NOME_SERVICO__"
 Write-Host "  Servico: $nomeServico" -ForegroundColor DarkGray
 
 # Tentar parar pelo servico NSSM
@@ -4414,6 +4435,9 @@ Write-Host "  Configuracoes do banco de dados preservadas." -ForegroundColor Gre
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host ""
 """
+                    # Descobrir nome do serviço Windows e injetar
+                    nome_servico = descobrir_nome_servico_windows(client_dir, cliente.schema_name)
+                    client_ps1_content = client_ps1_content.replace("__NOME_SERVICO__", nome_servico)
                     with open(ps1_path, 'w', encoding='utf-8') as ps_file:
                         ps_file.write(client_ps1_content)
                 except Exception:
