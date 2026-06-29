@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box, Card, CardContent, Typography, Grid, Button, Chip, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, Select, MenuItem, FormControl,
@@ -387,14 +387,42 @@ const ComandasPage = () => {
     try {
       setLoading(true);
       await axiosInstance.post(`/comandas/comandas/${comanda.id}/fechar/`);
+      
+      const comandaId = comanda.id;
+      const comandaNumero = comanda.numero;
+      
       fetchComandas();
       fetchMesas();
       setComandaSelecionada(null);
       setProdutoSelecionado(null);
       setBuscaProduto('');
       setItemDialog(false);
+
+      setTimeout(async () => {
+        if (window.confirm(`Comanda ${comandaNumero} fechada com sucesso!\n\nDeseja emitir e imprimir o cupom fiscal (NFC-e)?`)) {
+          try {
+            setLoading(true);
+            const nfceResponse = await axiosInstance.post(`/comandas/comandas/${comandaId}/gerar_nfce/`);
+            if (nfceResponse.data && nfceResponse.data.sucesso) {
+              const vendaId = nfceResponse.data.venda_id;
+              const printUrl = `${axiosInstance.defaults.baseURL}/vendas/${vendaId}/imprimir_danfe/`;
+              window.open(printUrl, '_blank');
+              alert('NFC-e emitida e enviada para a impressora!');
+            } else {
+              alert(`Erro ao emitir NFC-e: ${nfceResponse.data?.mensagem || 'Erro desconhecido'}`);
+            }
+          } catch (nfceError) {
+            console.error('Erro ao emitir NFC-e:', nfceError);
+            const msg = nfceError.response?.data?.mensagem || nfceError.response?.data?.detail || nfceError.message || 'Erro de conexão';
+            alert(`Falha ao emitir NFC-e:\n${msg}`);
+          } finally {
+            setLoading(false);
+          }
+        }
+      }, 500);
     } catch (error) {
       console.error('Erro ao fechar comanda:', error);
+      alert('Erro ao fechar comanda.');
     } finally {
       setLoading(false);
     }
@@ -868,6 +896,9 @@ const ComandasPage = () => {
       // Imprimir comprovante
       imprimirComprovantePagamento(troco, pagamentos);
 
+      const comandaId = comandaSelecionada.id;
+      const comandaNumero = comandaSelecionada.numero;
+
       fetchComandas();
       fetchMesas();
       setPagamentoDialog(false);
@@ -879,7 +910,28 @@ const ComandasPage = () => {
       setPagamentos([]);
       setValorPagamentoAtual(0);
 
-      alert(`Comanda fechada!\n${troco > 0 ? `Troco: R$ ${troco.toFixed(2)}` : 'Pagamento exato'}`);
+      setTimeout(async () => {
+        if (window.confirm(`Comanda ${comandaNumero} fechada com sucesso!\n\nDeseja emitir e imprimir o cupom fiscal (NFC-e)?`)) {
+          try {
+            setLoading(true);
+            const nfceResponse = await axiosInstance.post(`/comandas/comandas/${comandaId}/gerar_nfce/`);
+            if (nfceResponse.data && nfceResponse.data.sucesso) {
+              const vendaId = nfceResponse.data.venda_id;
+              const printUrl = `${axiosInstance.defaults.baseURL}/vendas/${vendaId}/imprimir_danfe/`;
+              window.open(printUrl, '_blank');
+              alert('NFC-e emitida e enviada para a impressora!');
+            } else {
+              alert(`Erro ao emitir NFC-e: ${nfceResponse.data?.mensagem || 'Erro desconhecido'}`);
+            }
+          } catch (nfceError) {
+            console.error('Erro ao emitir NFC-e:', nfceError);
+            const msg = nfceError.response?.data?.mensagem || nfceError.response?.data?.detail || nfceError.message || 'Erro de conexão';
+            alert(`Falha ao emitir NFC-e:\n${msg}`);
+          } finally {
+            setLoading(false);
+          }
+        }
+      }, 500);
     } catch (error) {
       console.error('Erro ao fechar comanda:', error);
       console.error('Detalhes do erro:', error.response?.data);

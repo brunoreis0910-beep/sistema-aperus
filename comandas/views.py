@@ -352,7 +352,7 @@ class ComandaViewSet(viewsets.ModelViewSet):
         Cria uma Venda com operação modelo 65, produtos da comanda, formas de pagamento e cliente consumidor.
         URL: POST /api/comandas/comandas/<id>/gerar_nfce/
         """
-        from api.models import Venda, VendaItem, Operacao, Cliente, FinanceiroConta, FormaPagamento
+        from api.models import Venda, VendaItem, Operacao, Cliente, FinanceiroConta, FormaPagamento, Produto
         from api.services.nfce_service import NFCeService
         from decimal import Decimal
         import re
@@ -486,7 +486,32 @@ class ComandaViewSet(viewsets.ModelViewSet):
                     vi.valor_total = item.subtotal
                     vi.save()
                 
-                logger.info(f"✅ {len(itens_comanda)} itens adicionados à venda")
+                # 🎯 SE TIVER TAXA DE GORJETA, LANÇA COMO ITEM DE PRODUTO 998 (CÓDIGO DE PRODUTO 998 NO XML)
+                if comanda.taxa_servico > 0:
+                    p_gorjeta = Produto.objects.filter(codigo_produto='998').first()
+                    if not p_gorjeta:
+                        p_gorjeta = Produto.objects.filter(nome_produto__icontains='gorjeta').first()
+                    
+                    if not p_gorjeta:
+                        p_gorjeta = Produto.objects.create(
+                            codigo_produto='998',
+                            nome_produto='OUTROS - TAXA DE SERVICO/GORJETA',
+                            unidade_medida='UN',
+                            ncm='22021000',
+                        )
+                        logger.info(f"✨ Produto 998 (Gorjeta) criado automaticamente.")
+                    
+                    vi = VendaItem()
+                    vi.id_venda = venda
+                    vi.id_produto = p_gorjeta
+                    vi.quantidade = Decimal('1.000')
+                    vi.valor_unitario = comanda.taxa_servico
+                    vi.desconto_valor = Decimal('0.00')
+                    vi.valor_total = comanda.taxa_servico
+                    vi.save()
+                    logger.info(f"✅ Item de taxa de serviço (gorjeta) adicionado à venda: R$ {comanda.taxa_servico}")
+                
+                logger.info(f"✅ Itens adicionados à venda (incluindo eventual taxa de serviço)")
 
                 # 5. 🎯 PROCESSAR FORMAS DE PAGAMENTO DA COMANDA
                 # Buscar pagamentos detalhados da tabela PagamentoComanda
