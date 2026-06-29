@@ -752,7 +752,10 @@ const DashboardLayoutClean = () => {
               width: '100%',
               maxWidth: '100%',
               minWidth: 0,
-              overflow: 'hidden'
+              overflow: 'hidden',
+              minHeight: '48px',
+              display: 'flex',
+              alignItems: 'center'
             }}>
               <Tabs
                 value={currentTab}
