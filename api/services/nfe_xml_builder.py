@@ -1393,6 +1393,12 @@ class NfeXmlBuilder:
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vST").text = "0.00"
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vFCPST").text = "0.00"
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vFCPSTRet").text = "0.00"
+        
+        # Adiciona totais de ICMS Monofásico (NT 2023.001) se houver (deve ficar antes de vProd)
+        if total_vicms_mono_ret > 0:
+            ET.SubElement(ICMSTot, f"{{{self.ns}}}qBCMonoRet").text = "{:.4f}".format(total_qbc_mono_ret)
+            ET.SubElement(ICMSTot, f"{{{self.ns}}}vICMSMonoRet").text = "{:.2f}".format(total_vicms_mono_ret)
+
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vProd").text = "{:.2f}".format(total_fiscal)
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vFrete").text = "0.00"
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vSeg").text = "0.00"
@@ -1404,11 +1410,6 @@ class NfeXmlBuilder:
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vCOFINS").text = "{:.2f}".format(total_vcofins)
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vOutro").text = "0.00"
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vNF").text = "{:.2f}".format(total_fiscal)
-        
-        # Adiciona totais de ICMS Monofásico (NT 2023.001) se houver
-        if total_vicms_mono_ret > 0:
-            ET.SubElement(ICMSTot, f"{{{self.ns}}}qBCMonoRet").text = "{:.4f}".format(total_qbc_mono_ret)
-            ET.SubElement(ICMSTot, f"{{{self.ns}}}vICMSMonoRet").text = "{:.2f}".format(total_vicms_mono_ret)
 
         # --- REFORMA TRIBUTÁRIA TOTAIS ---
         # NT 2025.002 - IBSCBSTot gerado para TODOS os modelos (55 e 65)
