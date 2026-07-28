@@ -509,6 +509,10 @@ class NfeXmlBuilder:
         total_vicms = 0.0
         total_vprod = 0.0
         
+        # Totais ICMS Monofásico (NT 2023.001)
+        total_qbc_mono_ret = 0.0
+        total_vicms_mono_ret = 0.0
+        
         # Totais Reforma Tributária
         total_vbc_reforma = 0.0
         total_vibs = 0.0
@@ -922,6 +926,9 @@ class NfeXmlBuilder:
                 q_bc = float(item.quantidade) if ad_rem > 0 else 0.0
                 v_mono = q_bc * ad_rem if ad_rem > 0 else 0.0
                 
+                total_qbc_mono_ret += q_bc
+                total_vicms_mono_ret += v_mono
+                
                 ET.SubElement(icms61, f"{{{self.ns}}}qBCMonoRet").text = "{:.4f}".format(q_bc)
                 ET.SubElement(icms61, f"{{{self.ns}}}adRemICMSRet").text = "{:.4f}".format(ad_rem)
                 ET.SubElement(icms61, f"{{{self.ns}}}vICMSMonoRet").text = "{:.2f}".format(v_mono)
@@ -1018,6 +1025,10 @@ class NfeXmlBuilder:
                       q_bc_mono = float(getattr(item, 'quantidade', 0) or 0)
                       ad_rem = float(getattr(tributacao, 'ad_rem_icms_ret', 0) if tributacao else 0)
                       v_icms_mono = q_bc_mono * ad_rem
+                      
+                      total_qbc_mono_ret += q_bc_mono
+                      total_vicms_mono_ret += v_icms_mono
+                      
                       ET.SubElement(icms61, f"{{{self.ns}}}qBCMonoRet").text = "{:.4f}".format(q_bc_mono)
                       ET.SubElement(icms61, f"{{{self.ns}}}adRemICMSRet").text = "{:.4f}".format(ad_rem)
                       ET.SubElement(icms61, f"{{{self.ns}}}vICMSMonoRet").text = "{:.2f}".format(v_icms_mono)
@@ -1393,6 +1404,11 @@ class NfeXmlBuilder:
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vCOFINS").text = "{:.2f}".format(total_vcofins)
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vOutro").text = "0.00"
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vNF").text = "{:.2f}".format(total_fiscal)
+        
+        # Adiciona totais de ICMS Monofásico (NT 2023.001) se houver
+        if total_vicms_mono_ret > 0:
+            ET.SubElement(ICMSTot, f"{{{self.ns}}}qBCMonoRet").text = "{:.4f}".format(total_qbc_mono_ret)
+            ET.SubElement(ICMSTot, f"{{{self.ns}}}vICMSMonoRet").text = "{:.2f}".format(total_vicms_mono_ret)
 
         # --- REFORMA TRIBUTÁRIA TOTAIS ---
         # NT 2025.002 - IBSCBSTot gerado para TODOS os modelos (55 e 65)
