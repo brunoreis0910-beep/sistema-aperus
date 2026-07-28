@@ -747,6 +747,24 @@ class NfeXmlBuilder:
                 
                 uf_cons = self._limpar_texto(self.empresa.estado, 2) or "MG"
                 ET.SubElement(comb, f"{{{self.ns}}}UFCons").text = uf_cons[:2].upper()
+                
+                # Adiciona origComb conforme NT 2023.001 para GLP
+                if is_anp_glp:
+                    origens = [
+                        {"indImport": "0", "cUFOrig": "32", "pOrig": "0.0002"},
+                        {"indImport": "0", "cUFOrig": "33", "pOrig": "36.8902"},
+                        {"indImport": "0", "cUFOrig": "35", "pOrig": "63.1096"},
+                        {"indImport": "1", "cUFOrig": "26", "pOrig": "35.8485"},
+                        {"indImport": "1", "cUFOrig": "33", "pOrig": "0.0002"},
+                        {"indImport": "1", "cUFOrig": "43", "pOrig": "60.7091"},
+                        {"indImport": "1", "cUFOrig": "35", "pOrig": "3.4422"},
+                    ]
+                    for orig in origens:
+                        orig_elem = ET.SubElement(comb, f"{{{self.ns}}}origComb")
+                        ET.SubElement(orig_elem, f"{{{self.ns}}}indImport").text = orig["indImport"]
+                        ET.SubElement(orig_elem, f"{{{self.ns}}}cUFOrig").text = orig["cUFOrig"]
+                        ET.SubElement(orig_elem, f"{{{self.ns}}}pOrig").text = orig["pOrig"]
+                        
                 item_has_comb = True
             
             # [MODIFICADO] Lógica de Recálculo Automático (Normal e Simples)
