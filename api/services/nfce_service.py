@@ -308,7 +308,10 @@ class NFCeService:
                 xml_signed = signer_v2.sign_xml(xml_unsigned, parent_tag='infNFe')
             
             # Inicializa SefazService para envio
-            sefaz = SefazService(empresa)
+            modelo_doc = '65'
+            if venda.id_operacao and venda.id_operacao.modelo_documento:
+                modelo_doc = str(venda.id_operacao.modelo_documento)
+            sefaz = SefazService(empresa, modelo=modelo_doc)
             
             # --- POST-SIGNATURE CHECKS ---
             # O sistema agora gera o QR Code V2.00 (p=...) no Builder (antes de assinar).
