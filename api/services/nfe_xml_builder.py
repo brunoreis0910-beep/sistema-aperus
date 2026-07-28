@@ -747,7 +747,7 @@ class NfeXmlBuilder:
                     
                     vpart_val = float(getattr(tributacao, 'vpart', 0) or 0.0)
                     if vpart_val > 0:
-                        ET.SubElement(comb, f"{{{self.ns}}}vPart").text = "{:.4f}".format(vpart_val)
+                        ET.SubElement(comb, f"{{{self.ns}}}vPart").text = "{:.2f}".format(vpart_val)
                 
                 uf_cons = self._limpar_texto(self.empresa.estado, 2) or "MG"
                 ET.SubElement(comb, f"{{{self.ns}}}UFCons").text = uf_cons[:2].upper()
@@ -1396,7 +1396,7 @@ class NfeXmlBuilder:
         
         # Adiciona totais de ICMS Monofásico (NT 2023.001) se houver (deve ficar antes de vProd)
         if total_vicms_mono_ret > 0:
-            ET.SubElement(ICMSTot, f"{{{self.ns}}}qBCMonoRet").text = "{:.4f}".format(total_qbc_mono_ret)
+            ET.SubElement(ICMSTot, f"{{{self.ns}}}qBCMonoRet").text = "{:.2f}".format(total_qbc_mono_ret)
             ET.SubElement(ICMSTot, f"{{{self.ns}}}vICMSMonoRet").text = "{:.2f}".format(total_vicms_mono_ret)
 
         ET.SubElement(ICMSTot, f"{{{self.ns}}}vProd").text = "{:.2f}".format(total_fiscal)
