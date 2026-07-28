@@ -480,35 +480,26 @@ def create_exchange(request):
                     id_financeiro = cursor.lastrowid
                     
             elif diferenca < 0:
-                # Criar crédito (empresa deve devolver)
+                # Criar crédito (empresa deve devolver em forma de crédito para futuras compras)
                 tipo_ajuste = 'credito'
                 valor_credito = abs(diferenca)
-                descricao = f'Troca #{troca.id_troca} - Crédito ao cliente'
                 
-                # Inserir registro financeiro
-                with connection.cursor() as cursor:
-                    cursor.execute("""
-                        INSERT INTO financeiro_contas (
-                            tipo_conta, id_cliente_fornecedor, descricao,
-                            valor_parcela, status_conta, data_emissao, data_vencimento,
-                            gerencial, parcela_numero, parcela_total,
-                            id_conta_cobranca, forma_pagamento, id_centro_custo
-                        ) VALUES (%s, %s, %s, %s, %s, CURDATE(), %s, %s, %s, %s, %s, %s, %s)
-                    """, [
-                        'Pagar',  # tipo_conta para crédito
-                        validated_data.get('id_cliente'),
-                        descricao,
-                        valor_credito,
-                        'Pendente',
-                        data_vencimento,
-                        1,  # gerencial
-                        1,  # parcela_numero
-                        numero_parcelas,  # parcela_total
-                        id_conta,
-                        nome_forma_pagamento,
-                        id_centro_custo
-                    ])
-                    id_financeiro = cursor.lastrowid
+                from datetime import date, timedelta
+                data_validade = date.today() + timedelta(days=90) # Validade de 90 dias padrão
+                
+                # Criar registro de Crédito de Cliente
+                from .models_devolucao import CreditoCliente
+                credito = CreditoCliente.objects.create(
+                    id_cliente=validated_data.get('id_cliente') or troca.id_cliente,
+                    valor_credito=valor_credito,
+                    saldo=valor_credito,
+                    data_validade=data_validade,
+                    status='disponivel'
+                )
+                
+                # Adiciona nota informativa na observacao
+                troca.observacao = f"{troca.observacao or ''} (Gerado Crédito Cliente ID={credito.id_credito} no valor de R$ {valor_credito:.2f})".strip()
+                troca.save()
             
             # Atualizar troca com ID do financeiro
             if id_financeiro:

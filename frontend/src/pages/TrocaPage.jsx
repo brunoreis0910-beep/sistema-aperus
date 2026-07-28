@@ -274,8 +274,10 @@ const TrocaPage = () => {
       nome_produto: produto.nome_produto,
       codigo_produto: produto.codigo_produto,
       quantidade_substituicao: 1,
-      valor_unit_substituicao: produto.valor_venda,
-      valor_total_substituicao: produto.valor_venda,
+      valor_unit_original: parseFloat(produto.valor_venda || 0),
+      desconto: 0,
+      valor_unit_substituicao: parseFloat(produto.valor_venda || 0),
+      valor_total_substituicao: parseFloat(produto.valor_venda || 0),
       estoque_disponivel: produto.estoque_disponivel
     };
 
@@ -320,7 +322,31 @@ const TrocaPage = () => {
     const item = novosItens[index];
 
     item.valor_unit_substituicao = novoValor;
+    item.desconto = Math.max(0, (item.valor_unit_original || 0) - novoValor);
     item.valor_total_substituicao = item.quantidade_substituicao * novoValor;
+
+    setItensSubstituicao(novosItens);
+  };
+
+  // Atualizar desconto unitário de substituição
+  const handleUpdateDescontoSubstituicao = (index, valorDesconto) => {
+    if (valorDesconto < 0) {
+      showSnackbar('Desconto deve ser positivo', 'warning');
+      return;
+    }
+
+    const novosItens = [...itensSubstituicao];
+    const item = novosItens[index];
+
+    const basePrice = item.valor_unit_original || 0;
+    if (valorDesconto > basePrice) {
+      showSnackbar('Desconto não pode ser maior que o preço do produto', 'warning');
+      return;
+    }
+
+    item.desconto = valorDesconto;
+    item.valor_unit_substituicao = Math.max(0, basePrice - valorDesconto);
+    item.valor_total_substituicao = item.quantidade_substituicao * item.valor_unit_substituicao;
 
     setItensSubstituicao(novosItens);
   };
@@ -346,8 +372,8 @@ const TrocaPage = () => {
       return;
     }
 
-    // Validar campos de pagamento se houver diferença
-    if (diferenca !== 0) {
+    // Validar campos de pagamento apenas se houver cobrança (diferença positiva)
+    if (diferenca > 0) {
       if (!selectedConta) {
         showSnackbar('Selecione uma conta para o financeiro', 'warning');
         return;
@@ -733,8 +759,10 @@ const TrocaPage = () => {
                     <TableHead>
                       <TableRow>
                         <TableCell>Produto</TableCell>
+                        <TableCell align="right">Preço Base</TableCell>
+                        <TableCell align="right">Desc. Unit. (R$)</TableCell>
+                        <TableCell align="right">Preço Final</TableCell>
                         <TableCell align="right">Qtd</TableCell>
-                        <TableCell align="right">Valor Unit.</TableCell>
                         <TableCell align="right">Total</TableCell>
                         <TableCell align="center">Ação</TableCell>
                       </TableRow>
@@ -742,7 +770,7 @@ const TrocaPage = () => {
                     <TableBody>
                       {itensSubstituicao.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} align="center">
+                          <TableCell colSpan={7} align="center">
                             <Typography color="text.secondary">
                               Nenhum produto selecionado para substituição
                             </Typography>
@@ -760,23 +788,36 @@ const TrocaPage = () => {
                               </Typography>
                             </TableCell>
                             <TableCell align="right">
+                              {formatCurrency(item.valor_unit_original || item.valor_unit_substituicao)}
+                            </TableCell>
+                            <TableCell align="right">
                               <TextField
                                 type="number"
-                                value={item.quantidade_substituicao}
-                                onChange={(e) => handleUpdateQuantidadeSubstituicao(index, parseFloat(e.target.value))}
-                                inputProps={{ min: 0.1, max: item.estoque_disponivel, step: 0.1 }}
+                                value={item.desconto || 0}
+                                onChange={(e) => handleUpdateDescontoSubstituicao(index, parseFloat(e.target.value) || 0)}
+                                inputProps={{ min: 0, step: 0.01 }}
                                 size="small"
-                                sx={{ width: 80 }}
+                                sx={{ width: 90 }}
                               />
                             </TableCell>
                             <TableCell align="right">
                               <TextField
                                 type="number"
                                 value={item.valor_unit_substituicao}
-                                onChange={(e) => handleUpdateValorSubstituicao(index, parseFloat(e.target.value))}
+                                onChange={(e) => handleUpdateValorSubstituicao(index, parseFloat(e.target.value) || 0)}
                                 inputProps={{ min: 0, step: 0.01 }}
                                 size="small"
                                 sx={{ width: 100 }}
+                              />
+                            </TableCell>
+                            <TableCell align="right">
+                              <TextField
+                                type="number"
+                                value={item.quantidade_substituicao}
+                                onChange={(e) => handleUpdateQuantidadeSubstituicao(index, parseFloat(e.target.value) || 1)}
+                                inputProps={{ min: 0.1, max: item.estoque_disponivel, step: 0.1 }}
+                                size="small"
+                                sx={{ width: 80 }}
                               />
                             </TableCell>
                             <TableCell align="right">
@@ -853,8 +894,8 @@ const TrocaPage = () => {
                 </Paper>
               </Grid>
 
-              {/* Condições de Pagamento - mostrar apenas se houver diferença */}
-              {diferenca !== 0 && (
+              {/* Condições de Pagamento - mostrar apenas se houver cobrança */}
+              {diferenca > 0 && (
                 <Grid item xs={12}>
                   <Divider sx={{ my: 2 }} />
                   <Paper sx={{ p: 2, bgcolor: 'info.50' }}>
