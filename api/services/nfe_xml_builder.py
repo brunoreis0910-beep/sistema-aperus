@@ -1213,7 +1213,7 @@ class NfeXmlBuilder:
             
             # REFORMA TRIBUTÁRIA: IBSCBS desativado para o Schema NFe 4.00 oficial (produção)
             # A SEFAZ 4.00 rejeita o XML com Rejeição 215 se contiver tags de reforma não ativadas no WebService
-            should_generate_reform = (self.modelo == 55)
+            should_generate_reform = True
             
             has_reform_fields = True
             
