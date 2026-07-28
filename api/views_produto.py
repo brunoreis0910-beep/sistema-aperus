@@ -1143,6 +1143,18 @@ class ProdutoViewSetCustom(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
+        # Auto-regra para CST ICMS 61 (Monofásico de Combustíveis e Gás)
+        if trib.cst_icms == '61':
+            if not trib.cst_ibs_cbs or trib.cst_ibs_cbs in ('000', '410'):
+                trib.cst_ibs_cbs = '620'
+            if not trib.classificacao_fiscal or trib.classificacao_fiscal in ('000001', '410008'):
+                trib.classificacao_fiscal = '620006'
+            if not trib.cprod_anp:
+                trib.cprod_anp = '210203001'
+            if not trib.desc_anp:
+                trib.desc_anp = 'GLP - GAS LIQUEFEITO DE PETROLEO'
+            trib.save()
+
         result = serializer.data
         result['ncm']  = produto.ncm or ''
         result['cfop'] = trib.cfop or '5102'
@@ -1676,6 +1688,141 @@ class ProdutoViewSetCustom(viewsets.ModelViewSet):
             "produtos_atualizados": updated_count,
             "total_produtos": total,
             "erros": errors[:10]
+        })
+
+    @action(detail=False, methods=['post'], url_path='alteracao-tributaria-em-massa')
+    def alteracao_tributaria_em_massa(self, request):
+        """
+        Alteração tributária em massa para produtos filtrados por Grupo, Referência, NCM ou lista de IDs.
+        Aceita simulacao=true para pré-visualização.
+        """
+        from django.db import transaction
+        from .models import Produto, TributacaoProduto, TipoTributacao
+
+        data = request.data
+        id_grupo = data.get('id_grupo')
+        referencia = data.get('referencia')
+        ncm_filtro = data.get('ncm')
+        ids_selecionados = data.get('produto_ids')
+        simulacao = data.get('simulacao', False)
+
+        # Dados de alteração
+        tipo_tributacao_id = data.get('tipo_tributacao_id')
+        ncm_novo = data.get('ncm_novo')
+        cfop_novo = data.get('cfop_novo')
+        cst_icms_novo = data.get('cst_icms_novo')
+        csosn_novo = data.get('csosn_novo')
+        icms_aliq_nova = data.get('icms_aliquota_nova')
+        pis_cst_novo = data.get('pis_cst_novo')
+        pis_aliq_nova = data.get('pis_aliquota_nova')
+        cofins_cst_novo = data.get('cofins_cst_novo')
+        cofins_aliq_nova = data.get('cofins_aliquota_nova')
+        ipi_cst_novo = data.get('ipi_cst_novo')
+        ipi_aliq_nova = data.get('ipi_aliquota_nova')
+
+        qs = Produto.objects.all()
+
+        if ids_selecionados:
+            qs = qs.filter(id_produto__in=ids_selecionados)
+        else:
+            if id_grupo:
+                qs = qs.filter(id_grupo_id=id_grupo)
+            if referencia:
+                qs = qs.filter(referencia__icontains=referencia)
+            if ncm_filtro:
+                clean_ncm = str(ncm_filtro).replace('.', '').strip()
+                qs = qs.filter(ncm__icontains=clean_ncm)
+
+        tipo_trib_obj = None
+        if tipo_tributacao_id:
+            tipo_trib_obj = TipoTributacao.objects.filter(id=tipo_tributacao_id).first()
+
+        produtos_lista = list(qs.select_related('id_grupo').prefetch_related('tributacao_detalhada')[:500])
+
+        if simulacao:
+            resultado_simulacao = []
+            for p in produtos_lista:
+                trib = getattr(p, 'tributacao_detalhada', None)
+                resultado_simulacao.append({
+                    'id_produto': p.id_produto,
+                    'codigo': p.codigo_produto,
+                    'nome': p.nome_produto,
+                    'grupo': p.id_grupo.nome_grupo if p.id_grupo else '-',
+                    'referencia': p.referencia or '-',
+                    'ncm_atual': p.ncm or '-',
+                    'ncm_novo': ncm_novo if ncm_novo else (p.ncm or '-'),
+                    'cfop_atual': trib.cfop if trib else '-',
+                    'cfop_novo': cfop_novo if cfop_novo else (tipo_trib_obj.cfop_padrao if tipo_trib_obj else (trib.cfop if trib else '-')),
+                    'cst_icms_atual': trib.cst_icms if trib else '-',
+                    'csosn_atual': trib.csosn if trib else '-',
+                    'pis_cst_atual': trib.cst_pis_cofins if trib else '-',
+                    'cofins_cst_atual': trib.cst_cofins_sn if trib else '-',
+                    'ipi_cst_atual': trib.cst_ipi if trib else '-',
+                })
+            return Response({
+                'total_afetados': len(resultado_simulacao),
+                'simulacao': resultado_simulacao
+            })
+
+        # Execução Real
+        updated_count = 0
+        with transaction.atomic():
+            for p in produtos_lista:
+                if ncm_novo:
+                    p.ncm = str(ncm_novo).strip()
+                    p.save(update_fields=['ncm'])
+
+                trib, _ = TributacaoProduto.objects.get_or_create(produto=p)
+                if tipo_trib_obj:
+                    trib.tipo_tributacao = tipo_trib_obj
+                    if tipo_trib_obj.cfop_padrao and not cfop_novo:
+                        trib.cfop = tipo_trib_obj.cfop_padrao
+                    if tipo_trib_obj.icms_cst_csosn:
+                        if len(tipo_trib_obj.icms_cst_csosn) <= 2:
+                            trib.cst_icms = tipo_trib_obj.icms_cst_csosn
+                        else:
+                            trib.csosn = tipo_trib_obj.icms_cst_csosn
+                    if hasattr(tipo_trib_obj, 'pis_cst') and tipo_trib_obj.pis_cst:
+                        trib.cst_pis_cofins = tipo_trib_obj.pis_cst
+                    if hasattr(tipo_trib_obj, 'pis_aliq') and tipo_trib_obj.pis_aliq:
+                        trib.pis_aliquota = tipo_trib_obj.pis_aliq
+                    if hasattr(tipo_trib_obj, 'cofins_cst') and tipo_trib_obj.cofins_cst:
+                        trib.cst_cofins_sn = tipo_trib_obj.cofins_cst
+                    if hasattr(tipo_trib_obj, 'cofins_aliq') and tipo_trib_obj.cofins_aliq:
+                        trib.cofins_aliquota = tipo_trib_obj.cofins_aliq
+                    if hasattr(tipo_trib_obj, 'ipi_cst') and tipo_trib_obj.ipi_cst:
+                        trib.cst_ipi = tipo_trib_obj.ipi_cst
+                    if hasattr(tipo_trib_obj, 'ipi_aliq') and tipo_trib_obj.ipi_aliq:
+                        trib.ipi_aliquota = tipo_trib_obj.ipi_aliq
+
+                if cfop_novo:
+                    trib.cfop = str(cfop_novo).strip()
+                if cst_icms_novo:
+                    trib.cst_icms = str(cst_icms_novo).strip()
+                if csosn_novo:
+                    trib.csosn = str(csosn_novo).strip()
+                if icms_aliq_nova is not None:
+                    trib.icms_aliquota = icms_aliq_nova
+                if pis_cst_novo:
+                    trib.cst_pis_cofins = str(pis_cst_novo).strip()
+                if pis_aliq_nova is not None:
+                    trib.pis_aliquota = pis_aliq_nova
+                if cofins_cst_novo:
+                    trib.cst_cofins_sn = str(cofins_cst_novo).strip()
+                if cofins_aliq_nova is not None:
+                    trib.cofins_aliquota = cofins_aliq_nova
+                if ipi_cst_novo:
+                    trib.cst_ipi = str(ipi_cst_novo).strip()
+                if ipi_aliq_nova is not None:
+                    trib.ipi_aliquota = ipi_aliq_nova
+
+                trib.save()
+                updated_count += 1
+
+        return Response({
+            'sucesso': True,
+            'mensagem': f'{updated_count} produtos foram atualizados com sucesso.',
+            'total_atualizados': updated_count
         })
 
     @action(detail=False, methods=['get'])

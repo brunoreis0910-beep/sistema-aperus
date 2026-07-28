@@ -67,6 +67,39 @@ class TecnicoViewSet(viewsets.ModelViewSet):
     queryset = Tecnico.objects.filter(ativo=True)
     serializer_class = TecnicoSerializer
 
+    def get_queryset(self):
+        from django.db.models import Q
+        from api.models import Vendedor
+        
+        # 1. Busca todos os vendedores que possuem a função de Técnico (tratando mojibake)
+        vendedores = Vendedor.objects.filter(
+            Q(funcoes__nome_funcao__icontains='TECNICO') |
+            Q(funcoes__nome_funcao__icontains='TÉCNICO') |
+            Q(funcoes__nome_funcao__icontains='T├ëCNICO')
+        ).distinct()
+        
+        # 2. Sincroniza com a tabela Tecnico
+        for vend in vendedores:
+            tecnico, created = Tecnico.objects.get_or_create(
+                nome_tecnico=vend.nome,
+                defaults={
+                    'cpf': vend.cpf,
+                    'telefone': vend.telefone,
+                    'percentual_comissao': vend.percentual_comissao or 0.00,
+                    'ativo': True
+                }
+            )
+            # Se já existia, atualiza os dados para garantir sincronismo
+            if not created:
+                tecnico.cpf = vend.cpf
+                tecnico.telefone = vend.telefone
+                tecnico.percentual_comissao = vend.percentual_comissao or tecnico.percentual_comissao
+                tecnico.ativo = True
+                tecnico.save()
+                
+        nomes_vendedores = [vend.nome for vend in vendedores]
+        return Tecnico.objects.filter(ativo=True, nome_tecnico__in=nomes_vendedores)
+
 
 class OrdemServicoViewSet(viewsets.ModelViewSet):
     queryset = OrdemServico.objects.all()

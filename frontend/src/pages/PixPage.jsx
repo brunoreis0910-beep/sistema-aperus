@@ -323,7 +323,7 @@ const PixPage = () => {
                 <TableCell>{c.descricao || '—'}</TableCell>
                 <TableCell align="right"><b>{fmtMoeda(c.valor)}</b></TableCell>
                 <TableCell>{c.nome_pagador || '—'}</TableCell>
-                <TableCell>{fmtDataHora(c.gerado_em)}</TableCell>
+                <TableCell>{fmtDataHora(c.criado_em)}</TableCell>
                 <TableCell>{fmtDataHora(c.expira_em)}</TableCell>
                 <TableCell><StatusChip status={c.status} /></TableCell>
                 <TableCell>

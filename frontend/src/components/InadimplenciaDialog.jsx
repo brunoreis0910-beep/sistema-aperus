@@ -20,6 +20,7 @@ export default function InadimplenciaDialog({ open, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandido, setExpandido] = useState({});
+  const [sendingMode, setSendingMode] = useState('unificado');
 
   useEffect(() => {
     if (open) {
@@ -32,10 +33,11 @@ export default function InadimplenciaDialog({ open, onClose }) {
     setError('');
     try {
       const response = await axiosInstance.get('/notificacoes/inadimplencia/');
-      setClientes(response.data);
+      setClientes(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
       console.error('Erro ao buscar inadimplência:', err);
       setError('Erro ao carregar dados. Tente novamente.');
+      setClientes([]);
     } finally {
       setLoading(false);
     }
@@ -52,20 +54,40 @@ export default function InadimplenciaDialog({ open, onClose }) {
       return;
     }
 
-    const totalFormatado = cliente.total_devido.toFixed(2).replace('.', ',');
-    const parcelasTexto = cliente.parcelas
-      .map(p => {
+    let parcelasTexto = '';
+    
+    if (sendingMode === 'individual') {
+      parcelasTexto = cliente.parcelas.map((p) => {
         const dt = new Date(p.data_vencimento).toLocaleDateString('pt-BR');
-        return `  • R$ ${p.valor.toFixed(2).replace('.', ',')} - Venc: ${dt} (${p.dias_atraso} dias)`;
-      })
-      .join('\n');
+        const prodsText = p.produtos && p.produtos.length > 0 ? `\n    🛍️ _Produtos: ${p.produtos.join(', ')}_` : '';
+        const docText = p.documento ? ` [Doc: ${p.documento}]` : '';
+        const linkText = p.link_fatura ? `\n    🔗 *Link para Pagamento:* ${p.link_fatura}` : '';
+        return `  • *R$ ${p.valor.toFixed(2).replace('.', ',')}* - Venc: ${dt} (${p.dias_atraso} dias de atraso)${docText}${prodsText}${linkText}`;
+      }).join('\n\n');
+    } else {
+      parcelasTexto = cliente.parcelas.map((p) => {
+        const dt = new Date(p.data_vencimento).toLocaleDateString('pt-BR');
+        const prodsText = p.produtos && p.produtos.length > 0 ? `\n    🛍️ _Produtos: ${p.produtos.join(', ')}_` : '';
+        const docText = p.documento ? ` [Doc: ${p.documento}]` : '';
+        return `  • *R$ ${p.valor.toFixed(2).replace('.', ',')}* - Venc: ${dt} (${p.dias_atraso} dias de atraso)${docText}${prodsText}`;
+      }).join('\n\n');
+    }
+
+    const totalFormatado = cliente.total_devido.toFixed(2).replace('.', ',');
+    let linkUnificadoText = '';
+    if (sendingMode === 'unificado' && cliente.link_fatura_unificada) {
+      linkUnificadoText = `\n\n🔗 *Link de Pagamento Unificado (Pix):*\n${cliente.link_fatura_unificada}`;
+    }
 
     const mensagem =
       `Olá, *${cliente.nome_cliente}*!\n\n` +
       `Identificamos pendência(s) financeira(s) em seu cadastro:\n\n` +
       `💰 *Total em aberto: R$ ${totalFormatado}*\n\n` +
-      `📋 Detalhamento:\n${parcelasTexto}\n\n` +
-      `Por favor, entre em contato para regularizar sua situação.\n` +
+      `📋 Detalhes das Parcelas:\n\n${parcelasTexto}` +
+      `${linkUnificadoText}\n\n` +
+      (sendingMode === 'texto' 
+        ? `Por favor, entre em contato para regularizar sua situação.\n\n` 
+        : `Por favor, acesse o(s) link(s) acima para realizar o pagamento via Pix ou regularizar sua situação.\n\n`) +
       `Estamos à disposição! 😊\n\n` +
       `*APERUS*`;
 
@@ -85,7 +107,7 @@ export default function InadimplenciaDialog({ open, onClose }) {
     );
     if (!confirmado) return;
     clientesComContato.forEach((cliente, i) => {
-      setTimeout(() => enviarWhatsApp(cliente), i * 800);
+      setTimeout(() => enviarWhatsApp(cliente), i * 1500);
     });
   };
 
@@ -148,10 +170,73 @@ export default function InadimplenciaDialog({ open, onClose }) {
               </Box>
             </Alert>
 
+            {/* Seletor de Modo de Envio */}
+            <Box sx={{ mb: 3, p: 2, bgcolor: '#f8fafc', borderRadius: 3, border: '1px solid #e2e8f0' }}>
+              <Typography variant="subtitle2" fontWeight={700} color="text.secondary" mb={1.5}>
+                ⚙️ Configuração de Envio das Cobranças (WhatsApp):
+              </Typography>
+              <Box display="flex" gap={2} flexWrap="wrap">
+                <Box 
+                  onClick={() => setSendingMode('unificado')}
+                  sx={{ 
+                    flex: 1, minWidth: 160, p: 1.5, borderRadius: 2, cursor: 'pointer', border: '2px solid',
+                    borderColor: sendingMode === 'unificado' ? 'primary.main' : '#cbd5e1',
+                    bgcolor: sendingMode === 'unificado' ? 'rgba(79, 70, 229, 0.04)' : 'white',
+                    transition: 'all 0.2s',
+                    '&:hover': { borderColor: 'primary.main' }
+                  }}
+                >
+                  <Typography variant="body2" fontWeight="bold" color={sendingMode === 'unificado' ? 'primary.main' : 'text.primary'} mb={0.5}>
+                    🔗 Link Único Unificado
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ lineHeight: 1.2 }}>
+                    Gera um único link somando todas as parcelas e listando os itens.
+                  </Typography>
+                </Box>
+
+                <Box 
+                  onClick={() => setSendingMode('individual')}
+                  sx={{ 
+                    flex: 1, minWidth: 160, p: 1.5, borderRadius: 2, cursor: 'pointer', border: '2px solid',
+                    borderColor: sendingMode === 'individual' ? 'primary.main' : '#cbd5e1',
+                    bgcolor: sendingMode === 'individual' ? 'rgba(79, 70, 229, 0.04)' : 'white',
+                    transition: 'all 0.2s',
+                    '&:hover': { borderColor: 'primary.main' }
+                  }}
+                >
+                  <Typography variant="body2" fontWeight="bold" color={sendingMode === 'individual' ? 'primary.main' : 'text.primary'} mb={0.5}>
+                    🔗 Links Individuais
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ lineHeight: 1.2 }}>
+                    Envia links individuais para o cliente pagar cada nota separadamente.
+                  </Typography>
+                </Box>
+
+                <Box 
+                  onClick={() => setSendingMode('texto')}
+                  sx={{ 
+                    flex: 1, minWidth: 160, p: 1.5, borderRadius: 2, cursor: 'pointer', border: '2px solid',
+                    borderColor: sendingMode === 'texto' ? 'primary.main' : '#cbd5e1',
+                    bgcolor: sendingMode === 'texto' ? 'rgba(79, 70, 229, 0.04)' : 'white',
+                    transition: 'all 0.2s',
+                    '&:hover': { borderColor: 'primary.main' }
+                  }}
+                >
+                  <Typography variant="body2" fontWeight="bold" color={sendingMode === 'texto' ? 'primary.main' : 'text.primary'} mb={0.5}>
+                    💬 Apenas Texto
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ lineHeight: 1.2 }}>
+                    Envia o relatório detalhado das parcelas e produtos, sem link.
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
+
             <List>
-              {clientes.map((cliente, index) => {
+              {Array.isArray(clientes) && clientes.map((cliente, index) => {
                 const temWhatsApp = cliente.whatsapp || cliente.telefone;
                 const isExpandido = expandido[cliente.id_cliente];
+                const parcelas = Array.isArray(cliente.parcelas) ? cliente.parcelas : [];
                 return (
                   <React.Fragment key={cliente.id_cliente}>
                     {index > 0 && <Divider />}
@@ -169,35 +254,57 @@ export default function InadimplenciaDialog({ open, onClose }) {
                           💰 Total: R$ {cliente.total_devido.toFixed(2).replace('.', ',')}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          📋 {cliente.parcelas.length} parcela(s) vencida(s)
+                          📋 {parcelas.length} parcela(s) vencida(s)
                         </Typography>
                         {(cliente.whatsapp || cliente.telefone) && (
                           <Typography variant="body2" color="text.secondary">
                             📱 {cliente.whatsapp || cliente.telefone}
                           </Typography>
                         )}
+                        {cliente.link_fatura_unificada && (
+                          <Typography variant="body2" color="secondary.main" sx={{ mt: 0.5, fontWeight: 'bold' }}>
+                            🔗 Link Unificado: <a href={cliente.link_fatura_unificada} target="_blank" rel="noopener noreferrer">{cliente.link_fatura_unificada}</a>
+                          </Typography>
+                        )}
                         <Box sx={{ mt: 1 }}>
                           <Chip
-                            label={`Maior atraso: ${Math.max(...cliente.parcelas.map(p => p.dias_atraso))} dias`}
-                            color={getCorChip(Math.max(...cliente.parcelas.map(p => p.dias_atraso)))}
+                            label={`Maior atraso: ${parcelas.length > 0 ? Math.max(...parcelas.map(p => p.dias_atraso)) : 0} dias`}
+                            color={getCorChip(parcelas.length > 0 ? Math.max(...parcelas.map(p => p.dias_atraso)) : 0)}
                             size="small"
                           />
                         </Box>
 
                         <Collapse in={isExpandido}>
                           <Box sx={{ mt: 1, pl: 2, borderLeft: '2px solid #eee' }}>
-                            {cliente.parcelas.map((p, pi) => (
-                              <Box key={pi} sx={{ mb: 1 }}>
+                            {parcelas.map((p, pi) => (
+                              <Box key={pi} sx={{ mb: 1.5 }}>
                                 <Typography variant="body2">
                                   <strong>R$ {p.valor.toFixed(2).replace('.', ',')}</strong>
                                   {' - Venc: '}{new Date(p.data_vencimento).toLocaleDateString('pt-BR')}
                                   {' ('}<Chip label={`${p.dias_atraso}d atraso`} color={getCorChip(p.dias_atraso)} size="small" sx={{ height: 20, fontSize: 11 }} />{')'}
                                 </Typography>
-                                {p.descricao && (
-                                  <Typography variant="caption" color="text.secondary">
-                                    {p.descricao} - Parcela {p.parcela}
-                                  </Typography>
-                                )}
+                                <Box sx={{ display: 'flex', flexDirection: 'column', mt: 0.5, pl: 1 }}>
+                                  {p.documento && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'bold' }}>
+                                      📄 Doc: {p.documento}
+                                    </Typography>
+                                  )}
+                                  {p.produtos && p.produtos.length > 0 && (
+                                    <Typography variant="caption" color="primary.main" sx={{ fontWeight: 500 }}>
+                                      🛍️ Produtos: {p.produtos.join(', ')}
+                                    </Typography>
+                                  )}
+                                  {p.link_fatura && (
+                                    <Typography variant="caption" color="secondary.main" sx={{ fontWeight: 'bold' }}>
+                                      🔗 Link de Pagamento: <a href={p.link_fatura} target="_blank" rel="noopener noreferrer">{p.link_fatura}</a>
+                                    </Typography>
+                                  )}
+                                  {p.descricao && (
+                                    <Typography variant="caption" color="text.secondary">
+                                      ℹ️ {p.descricao} - Parcela {p.parcela}
+                                    </Typography>
+                                  )}
+                                </Box>
                               </Box>
                             ))}
                           </Box>

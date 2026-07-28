@@ -57,6 +57,20 @@ class ConhecimentoTransporte(models.Model):
     p_icms = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     v_bc_icms = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     v_icms = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+
+    # Reforma Tributária 2026 - IBS / CBS (CT-e)
+    cst_ibs_cbs = models.CharField(max_length=10, blank=True, null=True, default='01', help_text="CST IBS/CBS")
+    c_class_trib = models.CharField(max_length=20, blank=True, null=True, default='000000', help_text="Código de Classificação Tributária")
+    ibs_cst = models.CharField(max_length=10, blank=True, null=True, default='01')
+    ibs_aliq = models.DecimalField(max_digits=7, decimal_places=4, default=0.1000, help_text="Alíquota IBS total (%)")
+    ibs_aliq_uf = models.DecimalField(max_digits=7, decimal_places=4, default=0.1000, help_text="Alíquota IBS UF (%)")
+    ibs_aliq_mun = models.DecimalField(max_digits=7, decimal_places=4, default=0.0000, help_text="Alíquota IBS Mun (%)")
+    ibs_bc = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    valor_ibs = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    cbs_cst = models.CharField(max_length=10, blank=True, null=True, default='01')
+    cbs_aliq = models.DecimalField(max_digits=7, decimal_places=4, default=0.9000, help_text="Alíquota CBS (%)")
+    cbs_bc = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    valor_cbs = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     
     # Seguro
     resp_seguro = models.IntegerField(default=0, help_text="0-Remetente, 4-Emitente, 5-Tomador")

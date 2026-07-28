@@ -3318,6 +3318,7 @@ const ProdutoPageResponsive = () => {
                   <Tab label="PIS" />
                   <Tab label="COFINS" />
                   <Tab label="IBS / CBS" />
+                  <Tab label="Combustíveis / Gás (Monofásico)" />
                 </Tabs>
               </Box>
 
@@ -3388,7 +3389,15 @@ const ProdutoPageResponsive = () => {
                       <InputLabel>CST ICMS (Lucro Presumido/Real)</InputLabel>
                       <Select
                         value={tributacaoData.cst_icms || ''}
-                        onChange={e => setTributacaoData({ ...tributacaoData, cst_icms: e.target.value })}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const updates = { cst_icms: val };
+                          if (val === '61') {
+                            updates.cst_ibs_cbs = '620';
+                            updates.classificacao_fiscal = '620006';
+                          }
+                          setTributacaoData({ ...tributacaoData, ...updates });
+                        }}
                         label="CST ICMS (Lucro Presumido/Real)"
                       >
                         <MenuItem value=""><em>Selecione</em></MenuItem>
@@ -3401,6 +3410,7 @@ const ProdutoPageResponsive = () => {
                         <MenuItem value="50">50 – Suspensão</MenuItem>
                         <MenuItem value="51">51 – Diferimento</MenuItem>
                         <MenuItem value="60">60 – ICMS cobrado por ST anterior</MenuItem>
+                        <MenuItem value="61">61 – Tributação Monofásica sobre Combustíveis e Gás</MenuItem>
                         <MenuItem value="70">70 – Redução BC com ST</MenuItem>
                         <MenuItem value="90">90 – Outros</MenuItem>
                       </Select>
@@ -3409,8 +3419,8 @@ const ProdutoPageResponsive = () => {
                   <Grid item xs={12}>
                     <Alert severity="info" sx={{ py: 0.5 }}>
                       <Typography variant="body2">
-                        Use <strong>CSOSN</strong> para Simples Nacional · <strong>CST</strong> para Lucro Presumido/Real.
-                        O sistema seleciona automaticamente na emissão da NF-e conforme o regime da empresa.
+                        Use <strong>CSOSN</strong> para Simples Nacional · <strong>CST</strong> para Lucro Presumido/Real.<br />
+                        Para Gás/GLP e Combustíveis Monofásicos, utilize <strong>CST ICMS 61</strong> (que configura automaticamente IBS/CBS <strong>620</strong> e cClassTrib <strong>620006</strong>).
                       </Typography>
                     </Alert>
                   </Grid>
@@ -3685,7 +3695,7 @@ const ProdutoPageResponsive = () => {
                           <MenuItem value="510">510 - Diferimento</MenuItem>
                           <MenuItem value="515">515 - Diferimento com redução de alíquota</MenuItem>
                           <MenuItem value="550">550 - Suspensão</MenuItem>
-                          <MenuItem value="620">620 - Tributação Monofásica</MenuItem>
+                          <MenuItem value="620">620 - Tributação Monofásica sobre Combustíveis e Gás</MenuItem>
                           <MenuItem value="800">800 - Transferência de crédito</MenuItem>
                           <MenuItem value="810">810 - Ajuste de IBS na ZFM</MenuItem>
                           <MenuItem value="811">811 - Ajustes</MenuItem>
@@ -3720,6 +3730,7 @@ const ProdutoPageResponsive = () => {
                           { value: '000015', label: '000015 - Ajuste de IBS na Zona Franca de Manaus (ZFM).' },
                           { value: '000016', label: '000016 - Ajuste de CBS na Zona Franca de Manaus (ZFM).' },
                           { value: '000017', label: '000017 - Exclusão da Base de Cálculo.' },
+                          { value: '620006', label: '620006 - Tributação monofásica sobre combustíveis e gás cobrada anteriormente.' },
                         ];
                         const dynamicOptions = classTribList
                           .filter(d => !staticOptions.find(s => s.value === d.codigo))
@@ -3785,6 +3796,88 @@ const ProdutoPageResponsive = () => {
                         Campos salvos para uso futuro — NF-e atual utiliza ICMS/PIS/COFINS.
                       </Typography>
                     </Alert>
+                  </Grid>
+                </Grid>
+              )}
+
+              {tributacaoSubTab === 5 && (
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <Alert severity="info" sx={{ py: 0.5, mb: 1 }}>
+                      <Typography variant="body2">
+                        <strong>Combustíveis e Gás (Monofásico ICMS 61 / ANP)</strong><br />
+                        Para GLP (Gás de Cozinha), utilize o Código ANP <strong>210203001</strong> e CST ICMS <strong>61</strong> (IBS/CBS <strong>620</strong> / cClassTrib <strong>620006</strong>).
+                      </Typography>
+                    </Alert>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      fullWidth size="small"
+                      label="Código ANP (cProdANP)"
+                      value={tributacaoData.cprod_anp || ''}
+                      onChange={e => setTributacaoData({ ...tributacaoData, cprod_anp: e.target.value })}
+                      helperText="Ex: 210203001 (GLP P13 / Gás de Cozinha)"
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={8}>
+                    <TextField
+                      fullWidth size="small"
+                      label="Descrição ANP (descANP)"
+                      value={tributacaoData.desc_anp || ''}
+                      onChange={e => setTributacaoData({ ...tributacaoData, desc_anp: e.target.value })}
+                      helperText="Ex: GLP - GAS LIQUEFEITO DE PETROLEO"
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      fullWidth size="small"
+                      label="% GLP Derivado de Petróleo (pGLP)"
+                      type="number"
+                      value={tributacaoData.pglp ?? '0'}
+                      onChange={e => setTributacaoData({ ...tributacaoData, pglp: e.target.value })}
+                      InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
+                      helperText="Ex: 100.00 se 100% GLP Petróleo"
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      fullWidth size="small"
+                      label="% Gás Natural Nacional (pGNn)"
+                      type="number"
+                      value={tributacaoData.pgnn ?? '0'}
+                      onChange={e => setTributacaoData({ ...tributacaoData, pgnn: e.target.value })}
+                      InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      fullWidth size="small"
+                      label="% Gás Natural Importado (pGNi)"
+                      type="number"
+                      value={tributacaoData.pgni ?? '0'}
+                      onChange={e => setTributacaoData({ ...tributacaoData, pgni: e.target.value })}
+                      InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth size="small"
+                      label="Preço de Partida R$/kg (vPart)"
+                      type="number"
+                      value={tributacaoData.vpart ?? '0'}
+                      onChange={e => setTributacaoData({ ...tributacaoData, vpart: e.target.value })}
+                      InputProps={{ startAdornment: <InputAdornment position="start">R$</InputAdornment> }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth size="small"
+                      label="Ad Rem ICMS Retido R$/kg ou R$/L (adRemICMSRet)"
+                      type="number"
+                      value={tributacaoData.ad_rem_icms_ret ?? '0'}
+                      onChange={e => setTributacaoData({ ...tributacaoData, ad_rem_icms_ret: e.target.value })}
+                      InputProps={{ startAdornment: <InputAdornment position="start">R$</InputAdornment> }}
+                    />
                   </Grid>
                 </Grid>
               )}

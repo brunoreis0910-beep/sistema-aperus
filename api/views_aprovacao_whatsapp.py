@@ -625,21 +625,30 @@ class SolicitarDescontoWhatsAppView(APIView):
 
                     return f'http://{candidatos[0]}:{porta}'
 
-                host = _detectar_ip_lan(_port)
-                logger.info(f"[WEB] [HOST] IP detectado para links WhatsApp: {host}")
+                from django.urls import reverse
+                url_path = reverse('aprovacao-painel-curto', args=[solicitacao.pk, token])
+                link_aprovacao = request.build_absolute_uri(url_path)
         except Exception:
-            host = config('SERVER_HOST', default='http://localhost:8000')
+            from django.urls import reverse
+            url_path = reverse('aprovacao-painel-curto', args=[solicitacao.pk, token])
+            link_aprovacao = request.build_absolute_uri(url_path)
 
-        # Garante URL limpa (sem barra no final) para montagem correta
-        base_url = host.rstrip('/')
+        # Anexa parâmetros do tenant para roteamento de banco de dados
+        tenant_schema = request.headers.get('X-Tenant-Schema') or request.GET.get('tenant_schema') or request.GET.get('schema_name')
+        tenant_cnpj = request.headers.get('X-Tenant-CNPJ') or request.GET.get('tenant_cnpj')
+        
+        query_params = []
+        if tenant_schema:
+            query_params.append(f"tenant_schema={tenant_schema}")
+        if tenant_cnpj:
+            query_params.append(f"tenant_cnpj={tenant_cnpj}")
+            
+        if query_params:
+            link_aprovacao += "?" + "&".join(query_params)
 
-        # Links curtos: /ap/<pk>/<token>/s  e  /ap/<pk>/<token>/n
-        link_curto_sim = f"{base_url}/ap/{solicitacao.pk}/{token}/s"
-        link_curto_nao = f"{base_url}/ap/{solicitacao.pk}/{token}/n"
-
-        # Mensagem principal (sem os links)
+        # Mensagem principal
         mensagem = (
-            f"🚨 *APROVAÇÃO DE DESCONTO #{solicitacao.pk}*\n\n"
+            f"🚨 *SOLICITAÇÃO DE DESCONTO #{solicitacao.pk}*\n\n"
             f"👤 *Vendedor:* {nome_vendedor}\n"
             f"🛒 *Cliente:* {nome_cliente}\n"
             f"💰 *Valor:* R$ {valor:,.2f}\n"
@@ -649,41 +658,11 @@ class SolicitarDescontoWhatsAppView(APIView):
         if sugestao_ia:
             mensagem += f"\n🤖 *IA:* {sugestao_ia}\n"
 
-        # SIM/NÃO é o método principal; links são alternativa (copiar e colar no navegador)
-        mensagem += f"\n*✅ Responda SIM para APROVAR*"
-        mensagem += f"\n*❌ Responda NÃO para RECUSAR*"
+        mensagem += f"\n*Acesse o link abaixo para APROVAR, AJUSTAR ou RECUSAR:* \n👉 {link_aprovacao}"
 
-        # Garante protocolo http para links ficarem clicáveis
-        link_sim = link_curto_sim if link_curto_sim.startswith('http') else f"http://{link_curto_sim}"
-        link_nao = link_curto_nao if link_curto_nao.startswith('http') else f"http://{link_curto_nao}"
-
-        mensagem += f"\n_(Ou copie o link no navegador)_"
-        mensagem += f"\nAPROVAR: {link_sim}"
-        mensagem += f"\nRECUSAR: {link_nao}"
-
-        # 5. Envia com fallback por prioridade:
-        #    1° WhatsApp Cloud API (se configurado)
-        #    2° Evolution API (se configurado)
-        #    3° Playwright (último recurso, pode ter problemas com asyncio)
+        # Para evitar envio duplo, não disparamos automaticamente pelo servidor.
+        # O vendedor enviará manualmente através do WhatsApp Web que se abrirá na tela dele.
         enviado = False
-        
-        # Tenta Cloud API primeiro
-        if _cloud.is_configurado() and not _cloud.token_com_erro():
-            logger.info("Tentando enviar via WhatsApp Cloud API...")
-            enviado = _cloud.enviar_mensagem(telefone_sup, mensagem)
-        
-        # Se não enviou, tenta Evolution API
-        if not enviado:
-            evolution_url = config('EVOLUTION_API_URL', default='').strip()
-            evolution_key = config('EVOLUTION_API_KEY', default='').strip()
-            if evolution_url and evolution_key:
-                logger.info("Tentando enviar via Evolution API...")
-                enviado = _enviar_evolution(telefone_sup, mensagem)
-        
-        # Último recurso: tenta Playwright
-        if not enviado:
-            logger.warning("Tentando enviar via Playwright (pode falhar se Django está em modo ASGI)...")
-            enviado = _enviar_whatsapp(telefone_sup, mensagem)
 
         # 5. Retorna status para o Frontend
         return Response({
@@ -691,6 +670,8 @@ class SolicitarDescontoWhatsAppView(APIView):
             'token': token,
             'whatsapp_enviado': enviado,
             'mensagem_whatsapp': mensagem,
+            'link_aprovacao': link_aprovacao,
+            'telefone_supervisor': telefone_sup,
             'status': 'Aguardando Aprovação'
         })
 
@@ -1449,3 +1430,197 @@ class ResponderAprovacaoView(APIView):
             f"</div></body></html>",
             content_type="text/html; charset=utf-8",
         )
+
+
+class PainelAprovacaoView(APIView):
+    """
+    GET /ap/<pk>/<token>/
+    Exibe a interface web para o supervisor aprovar ou rejeitar a solicitação.
+    
+    POST /ap/<pk>/<token>/
+    Processa a decisão do supervisor.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request, pk: int, token: str):
+        # 1. Busca a solicitação
+        try:
+            solicitacao = SolicitacaoAprovacao.objects.get(
+                id_solicitacao=pk,
+                tipo_solicitacao='desconto_venda',
+            )
+        except SolicitacaoAprovacao.DoesNotExist:
+            return HttpResponse(
+                "<h2>Solicitação não encontrada.</h2>",
+                content_type="text/html; charset=utf-8",
+                status=404,
+            )
+
+        # 2. Valida o token
+        try:
+            dados = json.loads(solicitacao.dados_solicitacao or '{}')
+        except Exception:
+            dados = {}
+
+        token_salvo = str(dados.get('token', '')).strip()
+        if token_salvo and token.strip() != token_salvo:
+            return HttpResponse(
+                "<h2>Token inválido ou expirado.</h2>",
+                content_type="text/html; charset=utf-8",
+                status=403,
+            )
+
+        # 3. Se já processou, mostra tela de resultado
+        if solicitacao.status != 'Pendente':
+            return self._renderizar_resultado(request, solicitacao, dados)
+
+        # 4. Renderiza o painel de aprovação
+        from django.contrib.auth.models import User
+        from django.db.models import Q
+        from .models import UserPermissoes
+        perms_users = list(UserPermissoes.objects.filter(aut_desconto=True).values_list('id_user_id', flat=True))
+        supervisores_qs = User.objects.filter(is_active=True).filter(
+            Q(is_superuser=True) | Q(is_staff=True) | Q(id__in=perms_users)
+        ).order_by('first_name', 'username')
+        
+        supervisores = []
+        for u in supervisores_qs:
+            nome = f"{u.first_name} {u.last_name}".strip() or u.username
+            supervisores.append({
+                'id': u.id,
+                'username': u.username,
+                'nome': nome,
+            })
+
+        context = {
+            'solicitacao': solicitacao,
+            'dados': dados,
+            'pk': pk,
+            'token': token,
+            'percentual_solicitado': dados.get('percentual_solicitado', 0),
+            'nome_vendedor': dados.get('nome_vendedor', solicitacao.id_usuario_solicitante.first_name or solicitacao.id_usuario_solicitante.username),
+            'nome_cliente': dados.get('nome_cliente', 'Consumidor'),
+            'valor_total': dados.get('valor_total', 0),
+            'sugestao_ia': dados.get('sugestao_ia', ''),
+            'supervisores': supervisores,
+        }
+        from django.shortcuts import render
+        return render(request, 'api/painel_aprovacao.html', context)
+
+    def post(self, request, pk: int, token: str):
+        try:
+            solicitacao = SolicitacaoAprovacao.objects.get(
+                id_solicitacao=pk,
+                tipo_solicitacao='desconto_venda',
+            )
+        except SolicitacaoAprovacao.DoesNotExist:
+            return HttpResponse("<h2>Solicitação não encontrada.</h2>", status=404)
+
+        try:
+            dados = json.loads(solicitacao.dados_solicitacao or '{}')
+        except Exception:
+            dados = {}
+
+        token_salvo = str(dados.get('token', '')).strip()
+        if token_salvo and token.strip() != token_salvo:
+            return HttpResponse("<h2>Token inválido.</h2>", status=403)
+
+        if solicitacao.status != 'Pendente':
+            return self._renderizar_resultado(request, solicitacao, dados)
+
+        decisao = request.POST.get('decisao')  # 'aprovar' ou 'rejeitar'
+        if decisao not in ('aprovar', 'rejeitar'):
+            return HttpResponse("<h2>Decisão inválida.</h2>", status=400)
+
+        aprovado = (decisao == 'aprovar')
+
+        if aprovado:
+            # Valida o usuário e a senha do supervisor
+            username = request.POST.get('usuario_supervisor', '')
+            senha = request.POST.get('senha_supervisor', '')
+            
+            from django.contrib.auth import authenticate
+            supervisor_user = authenticate(username=username, password=senha)
+            
+            is_valid_supervisor = False
+            if supervisor_user and supervisor_user.is_active:
+                from .models import UserPermissoes
+                has_perm = UserPermissoes.objects.filter(id_user=supervisor_user, aut_desconto=True).exists()
+                if supervisor_user.is_superuser or supervisor_user.is_staff or has_perm:
+                    is_valid_supervisor = True
+                    # Associa o supervisor que realmente aprovou
+                    solicitacao.id_usuario_supervisor = supervisor_user
+            
+            if not is_valid_supervisor:
+                # Reconstrói a lista de supervisores para renderizar a página
+                from django.contrib.auth.models import User
+                from django.db.models import Q
+                from .models import UserPermissoes
+                perms_users = list(UserPermissoes.objects.filter(aut_desconto=True).values_list('id_user_id', flat=True))
+                supervisores_qs = User.objects.filter(is_active=True).filter(
+                    Q(is_superuser=True) | Q(is_staff=True) | Q(id__in=perms_users)
+                ).order_by('first_name', 'username')
+                
+                supervisores = []
+                for u in supervisores_qs:
+                    nome = f"{u.first_name} {u.last_name}".strip() or u.username
+                    supervisores.append({
+                        'id': u.id,
+                        'username': u.username,
+                        'nome': nome,
+                    })
+
+                context = {
+                    'solicitacao': solicitacao,
+                    'dados': dados,
+                    'pk': pk,
+                    'token': token,
+                    'percentual_solicitado': dados.get('percentual_solicitado', 0),
+                    'nome_vendedor': dados.get('nome_vendedor', solicitacao.id_usuario_solicitante.first_name or solicitacao.id_usuario_solicitante.username),
+                    'nome_cliente': dados.get('nome_cliente', 'Consumidor'),
+                    'valor_total': dados.get('valor_total', 0),
+                    'sugestao_ia': dados.get('sugestao_ia', ''),
+                    'supervisores': supervisores,
+                    'erro_senha': "Usuário ou senha incorretos, ou usuário não possui permissão de supervisor.",
+                }
+                from django.shortcuts import render
+                return render(request, 'api/painel_aprovacao.html', context)
+
+        # Pega o desconto aprovado (pode ser o customizado ou o original)
+        try:
+            perc_aprovado = float(request.POST.get('percentual_aprovado', dados.get('percentual_solicitado', 0)))
+        except ValueError:
+            perc_aprovado = float(dados.get('percentual_solicitado', 0))
+
+        novo_status = 'Aprovada' if aprovado else 'Rejeitada'
+        
+        dados['percentual_aprovado'] = perc_aprovado if aprovado else None
+        dados['resposta_supervisor'] = f'Aprovou {perc_aprovado}% (Painel Web)' if aprovado else 'Rejeitou (Painel Web)'
+        dados['processado_em'] = timezone.now().isoformat()
+
+        solicitacao.status = novo_status
+        solicitacao.data_aprovacao = timezone.now()
+        solicitacao.observacao_supervisor = (
+            f"Aprovado {perc_aprovado}% via painel web"
+            if aprovado
+            else "Recusado via painel web"
+        )
+        solicitacao.dados_solicitacao = json.dumps(dados, ensure_ascii=False)
+        solicitacao.save()
+
+        return self._renderizar_resultado(request, solicitacao, dados)
+
+    def _renderizar_resultado(self, request, solicitacao, dados):
+        from django.shortcuts import render
+        context = {
+            'solicitacao': solicitacao,
+            'dados': dados,
+            'processado': True,
+            'status': solicitacao.status,
+            'percentual_aprovado': dados.get('percentual_aprovado'),
+            'nome_vendedor': dados.get('nome_vendedor', solicitacao.id_usuario_solicitante.first_name or solicitacao.id_usuario_solicitante.username),
+            'nome_cliente': dados.get('nome_cliente', 'Consumidor'),
+            'valor_total': dados.get('valor_total', 0),
+        }
+        return render(request, 'api/painel_aprovacao.html', context)

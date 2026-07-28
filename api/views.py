@@ -290,6 +290,94 @@ class FinanceiroContaViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
+    def partial_update(self, request, *args, **kwargs):
+        from decimal import Decimal
+        import decimal
+        from django.db import transaction
+        
+        instance = self.get_object()
+        status_conta = request.data.get('status_conta')
+        valor_liquidado_val = request.data.get('valor_liquidado')
+        
+        if status_conta == 'Paga' and valor_liquidado_val is not None:
+            try:
+                valor_liquidado = Decimal(str(valor_liquidado_val))
+            except (ValueError, TypeError, decimal.InvalidOperation):
+                valor_liquidado = instance.valor_parcela
+                
+            original_valor = instance.valor_parcela
+            
+            # Obtém juros, multa e desconto enviados
+            juros_val = request.data.get('valor_juros')
+            multa_val = request.data.get('valor_multa')
+            desconto_val = request.data.get('valor_desconto')
+            
+            try:
+                juros = Decimal(str(juros_val)) if juros_val is not None else Decimal('0.00')
+            except (ValueError, TypeError, decimal.InvalidOperation):
+                juros = Decimal('0.00')
+                
+            try:
+                multa = Decimal(str(multa_val)) if multa_val is not None else Decimal('0.00')
+            except (ValueError, TypeError, decimal.InvalidOperation):
+                multa = Decimal('0.00')
+                
+            try:
+                desconto = Decimal(str(desconto_val)) if desconto_val is not None else Decimal('0.00')
+            except (ValueError, TypeError, decimal.InvalidOperation):
+                desconto = Decimal('0.00')
+                
+            # Calcula o valor principal pago (deduz juros/multa e soma o desconto concedido)
+            valor_principal_pago = valor_liquidado - juros - multa + desconto
+            
+            # Se for baixa parcial (valor principal pago maior que 0 e menor que o valor total)
+            if Decimal('0.00') < valor_principal_pago < original_valor:
+                with transaction.atomic():
+                    diferenca = original_valor - valor_principal_pago
+                    
+                    # 1. Ajusta o valor_parcela para o valor principal pago na conta atual
+                    mutable_data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+                    mutable_data['valor_parcela'] = float(valor_principal_pago)
+                    
+                    serializer = self.get_serializer(instance, data=mutable_data, partial=True)
+                    serializer.is_valid(raise_exception=True)
+                    self.perform_update(serializer)
+                    
+                    # 2. Cria a nova conta para o saldo restante
+                    # Copia todos os campos relevantes
+                    FinanceiroConta.objects.create(
+                        tipo_conta=instance.tipo_conta,
+                        id_cliente_fornecedor=instance.id_cliente_fornecedor,
+                        descricao=f"SALDO RESTANTE - {instance.descricao}",
+                        valor_parcela=diferenca,
+                        valor_liquidado=Decimal('0.00'),
+                        valor_juros=Decimal('0.00'),
+                        valor_multa=Decimal('0.00'),
+                        valor_desconto=Decimal('0.00'),
+                        data_emissao=instance.data_emissao,
+                        data_vencimento=instance.data_vencimento,
+                        status_conta='Pendente',
+                        forma_pagamento=instance.forma_pagamento,
+                        id_venda_origem=instance.id_venda_origem,
+                        id_compra_origem=instance.id_compra_origem,
+                        id_os_origem=instance.id_os_origem,
+                        id_operacao=instance.id_operacao,
+                        id_departamento=instance.id_departamento,
+                        id_centro_custo=instance.id_centro_custo,
+                        id_conta_cobranca=instance.id_conta_cobranca,
+                        documento_numero=instance.documento_numero,
+                        parcela_numero=instance.parcela_numero,
+                        parcela_total=instance.parcela_total,
+                        id_aluguel_origem=instance.id_aluguel_origem,
+                        gerencial=instance.gerencial,
+                        id_safra=instance.id_safra,
+                        id_contrato_agricola=instance.id_contrato_agricola
+                    )
+                    
+                    return Response(serializer.data)
+                    
+        return super().partial_update(request, *args, **kwargs)
+
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 
@@ -618,18 +706,26 @@ class UserParametrosView(generics.RetrieveAPIView):
                 'nome': operacao.nome_operacao,
                 'abreviacao': operacao.abreviacao if hasattr(operacao, 'abreviacao') else ''
             }
-        else:
-            response_data['operacao'] = None
+        # Fallback para operação
+        if not response_data.get('operacao'):
+            from .models import Operacao
+            op_fb = Operacao.objects.filter(transacao__icontains='VENDA').first() or Operacao.objects.first()
+            if op_fb:
+                response_data['operacao'] = {
+                    'id': op_fb.id_operacao,
+                    'nome': op_fb.nome_operacao,
+                    'abreviacao': getattr(op_fb, 'abreviacao', '') or ''
+                }
         
-        # Vendedor NFCe
-        if parametros.id_vendedor_nfce:
-            vendedor = parametros.id_vendedor_nfce  # É um ForeignKey, já retorna o objeto
-            response_data['vendedor'] = {
-                'id': vendedor.id_vendedor,
-                'nome': vendedor.nome  # Campo correto é 'nome'
-            }
-        else:
-            response_data['vendedor'] = None
+        # Fallback para vendedor
+        if not response_data.get('vendedor'):
+            from .models import Vendedor
+            v_fb = Vendedor.objects.first()
+            if v_fb:
+                response_data['vendedor'] = {
+                    'id': v_fb.id_vendedor,
+                    'nome': getattr(v_fb, 'nome', '') or 'Vendedor'
+                }
         
         return Response(response_data)
 
@@ -3241,6 +3337,7 @@ def user_preferencias_view(request):
     GET  /api/user-preferencias/  → retorna todas as preferências do usuário como {chave: valor}
     PATCH /api/user-preferencias/ → atualiza/cria preferências enviadas como {chave: valor}
     """
+    from api.models import UserPreferencia
     if request.method == 'GET':
         prefs = UserPreferencia.objects.filter(user=request.user)
         return Response({p.chave: p.valor for p in prefs})
@@ -3587,12 +3684,22 @@ class SaaSClienteViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gerenciamento de clientes SaaS (Aperus Mãe).
     """
-    queryset = models.SaaSCliente.objects.all().order_by('-data_cadastro')
     serializer_class = serializers.SaaSClienteSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None
     filterset_fields = ['status_licenca', 'dia_vencimento']
     search_fields = ['cnpj', 'razao_social']
+
+    def get_queryset(self):
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW TABLES LIKE 'saas_cliente'")
+                if cursor.fetchone():
+                    return models.SaaSCliente.objects.all().order_by('-data_cadastro')
+        except Exception:
+            pass
+        return models.SaaSCliente.objects.none()
 
     def get_next_available_port(self):
         import socket
@@ -4601,13 +4708,23 @@ class SaaSClienteMensalidadeViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gerenciamento de mensalidades dos clientes SaaS.
     """
-    queryset = models.SaaSClienteMensalidade.objects.all().order_by('-data_vencimento')
     serializer_class = serializers.SaaSClienteMensalidadeSerializer
     permission_classes = [permissions.IsAuthenticated, HasPermission]
     pagination_class = None
     permission_required = 'pode_cadastrar_financeiro_saas'
     filterset_fields = ['saas_cliente', 'status_pagamento']
     search_fields = ['nosso_numero']
+
+    def get_queryset(self):
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW TABLES LIKE 'saas_mensalidade'")
+                if cursor.fetchone():
+                    return models.SaaSClienteMensalidade.objects.all().order_by('-data_vencimento')
+        except Exception:
+            pass
+        return models.SaaSClienteMensalidade.objects.none()
 
     @action(detail=False, methods=['post'])
     def consultar_abertos(self, request):
@@ -4724,62 +4841,115 @@ class SaaSClienteContratoViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gerenciamento de contratos dos clientes SaaS.
     """
-    queryset = models.SaaSClienteContrato.objects.all().order_by('-data_geracao')
     serializer_class = serializers.SaaSClienteContratoSerializer
     permission_classes = [permissions.IsAuthenticated]
     filterset_fields = ['saas_cliente', 'assinado']
+
+    def get_queryset(self):
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW TABLES LIKE 'saas_contrato'")
+                if cursor.fetchone():
+                    return models.SaaSClienteContrato.objects.all().order_by('-data_geracao')
+        except Exception:
+            pass
+        return models.SaaSClienteContrato.objects.none()
 
 
 class VersaoSistemaViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gerenciamento de versões do sistema SaaS.
     """
-    queryset = models.VersaoSistema.objects.all().order_by('-data_lancamento')
     serializer_class = serializers.VersaoSistemaSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None
     search_fields = ['versao', 'descricao']
+
+    def get_queryset(self):
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW TABLES LIKE 'saas_versao'")
+                if cursor.fetchone():
+                    return models.VersaoSistema.objects.all().order_by('-data_lancamento')
+        except Exception:
+            pass
+        return models.VersaoSistema.objects.none()
 
 
 class HistoricoAtualizacaoViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gerenciamento de histórico de atualizações de clientes SaaS.
     """
-    queryset = models.HistoricoAtualizacao.objects.all().order_by('-data_atualizacao')
     serializer_class = serializers.HistoricoAtualizacaoSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None
     filterset_fields = ['cliente', 'status', 'versao']
     search_fields = ['cliente__razao_social', 'versao__versao']
 
+    def get_queryset(self):
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW TABLES LIKE 'saas_historico_atualizacao'")
+                if cursor.fetchone():
+                    return models.HistoricoAtualizacao.objects.all().order_by('-data_atualizacao')
+        except Exception:
+            pass
+        return models.HistoricoAtualizacao.objects.none()
+
 
 class ConfiguracaoAgendamentoViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gerenciamento da configuração de agendamento do SaaS.
     """
-    queryset = models.ConfiguracaoAgendamento.objects.all()
     serializer_class = serializers.ConfiguracaoAgendamentoSerializer
     permission_classes = [permissions.IsAuthenticated, HasPermission]
     permission_required = 'pode_gerenciar_agendamento'
 
+    def get_queryset(self):
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW TABLES LIKE 'saas_agendamento'")
+                if cursor.fetchone():
+                    return models.ConfiguracaoAgendamento.objects.all()
+        except Exception:
+            pass
+        return models.ConfiguracaoAgendamento.objects.none()
+
     def list(self, request, *args, **kwargs):
-        config = models.ConfiguracaoAgendamento.objects.first()
-        if not config:
-            config = models.ConfiguracaoAgendamento.objects.create()
-        serializer = self.get_serializer(config)
-        return Response(serializer.data)
+        try:
+            config = models.ConfiguracaoAgendamento.objects.first()
+            if not config:
+                config = models.ConfiguracaoAgendamento.objects.create()
+            serializer = self.get_serializer(config)
+            return Response(serializer.data)
+        except Exception:
+            return Response({})
 
 
 class ComunicadoSaaSViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gerenciamento dos comunicados do Mural de Avisos (SaaS).
     """
-    queryset = models.ComunicadoSaaS.objects.all().order_by('-criado_em')
     serializer_class = serializers.ComunicadoSaaSSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None
     filterset_fields = ['ativo', 'tipo']
     search_fields = ['titulo', 'conteudo_texto']
+
+    def get_queryset(self):
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW TABLES LIKE 'saas_comunicado'")
+                if cursor.fetchone():
+                    return models.ComunicadoSaaS.objects.all().order_by('-criado_em')
+        except Exception:
+            pass
+        return models.ComunicadoSaaS.objects.none()
 
 
 # ─── Public API Endpoints for Client Instances ────────────────────────────────
@@ -5714,35 +5884,62 @@ def status_financeiro_saas(request):
     })
 
 
+@csrf_exempt
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def obter_comunicado_ativo(request):
     """
     Retorna o comunicado ativo vigente para o sistema central.
+    Tenta consultar localmente e, caso a tabela não exista na base tenant, busca via HTTP da Central SaaS (Mãe).
     """
-    from django.http import JsonResponse
+    from rest_framework.response import Response
     from django.utils import timezone
-    from api import models
-    
+    from django.db import connection
+    from django.conf import settings
+    import requests
+
     hoje = timezone.now().date()
-    comunicado = models.ComunicadoSaaS.objects.filter(
-        ativo=True, 
-        data_inicio__lte=hoje, 
-        data_fim__gte=hoje
-    ).order_by('-id').first()
     
-    if comunicado:
-        url = comunicado.url_midia
-        if comunicado.tipo == 'IMAGEM' and comunicado.imagem:
-            url = comunicado.imagem.url
-            
-        return JsonResponse({
-            'existe_comunicado': True,
-            'id': comunicado.id,
-            'titulo': comunicado.titulo,
-            'tipo': comunicado.tipo,
-            'texto': comunicado.conteudo_texto,
-            'url': url
-        })
-    return JsonResponse({'existe_comunicado': False})
+    # 1. Tenta buscar da base local usando SQL bruto se a tabela existir
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SHOW TABLES LIKE 'saas_comunicado'")
+            if cursor.fetchone():
+                cursor.execute("""
+                    SELECT id, titulo, tipo, conteudo_texto, url_midia, imagem 
+                    FROM saas_comunicado 
+                    WHERE ativo = 1 AND data_inicio <= %s AND data_fim >= %s 
+                    ORDER BY id DESC LIMIT 1
+                """, [hoje, hoje])
+                row = cursor.fetchone()
+                if row:
+                    c_id, titulo, tipo, conteudo_texto, url_midia, imagem = row
+                    url = url_midia
+                    if tipo == 'IMAGEM' and imagem:
+                        url = f"/media/{imagem}"
+                        
+                    return Response({
+                        'existe_comunicado': True,
+                        'id': c_id,
+                        'titulo': titulo,
+                        'tipo': tipo,
+                        'texto': conteudo_texto,
+                        'url': url
+                    })
+    except Exception:
+        pass
+
+    # 2. Se a tabela não existir no banco local do tenant, tenta buscar na Central Mãe
+    try:
+        central_base = getattr(settings, 'SAAS_MOTHER_URL', None) or "https://central.aperus.com.br"
+        central_url = central_base.rstrip('/') + "/api/saas/comunicado-ativo/"
+        resp = requests.get(central_url, timeout=3)
+        if resp.status_code == 200:
+            return Response(resp.json())
+    except Exception:
+        pass
+
+    return Response({'existe_comunicado': False})
 
 
 def enviar_nfse_mensalidade(fatura):

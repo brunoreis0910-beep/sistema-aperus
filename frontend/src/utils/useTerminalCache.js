@@ -175,8 +175,8 @@ const useTerminalCache = (axiosInstance, servidorOk) => {
       setCacheOk(true);
 
       // Atualiza estado em memória das listas que a UI usa diretamente
-      setFormasPagamento(formas);
-      setTabelasComerciais(tabelas);
+      setFormasPagamento(Array.isArray(formas) ? formas : []);
+      setTabelasComerciais(Array.isArray(tabelas) ? tabelas : []);
 
     } catch (err) {
       console.warn('[CACHE] Erro ao carregar cache:', err);
@@ -192,8 +192,8 @@ const useTerminalCache = (axiosInstance, servidorOk) => {
       buscarFormasPagamentoCache(),
       buscarTabelasComerciaisCache(),
     ]);
-    setFormasPagamento(formas);
-    setTabelasComerciais(tabelas);
+    setFormasPagamento(Array.isArray(formas) ? formas : []);
+    setTabelasComerciais(Array.isArray(tabelas) ? tabelas : []);
   };
 
   // ─── Dispara carga quando servidor voltar online ──────────────────────────

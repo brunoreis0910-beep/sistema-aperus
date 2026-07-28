@@ -532,6 +532,15 @@ class NfeXmlBuilder:
         for item in itens_fiscais:
             det = ET.SubElement(infNFe, f"{{{self.ns}}}det", attrib={"nItem": str(i)})
             prod = ET.SubElement(det, f"{{{self.ns}}}prod")
+            
+            # Carregar tributacao especifica do produto logo no inicio
+            tributacao = None
+            try:
+                if hasattr(item.id_produto, 'tributacao_detalhada'):
+                     tributacao = item.id_produto.tributacao_detalhada
+            except:
+                pass
+                
             ET.SubElement(prod, f"{{{self.ns}}}cProd").text = self._limpar_texto(str(item.id_produto.codigo_produto if item.id_produto else item.id_item), 60)
             ET.SubElement(prod, f"{{{self.ns}}}cEAN").text = "SEM GTIN"
             
@@ -565,17 +574,39 @@ class NfeXmlBuilder:
             raw_ncm = ''.join(filter(str.isdigit, item.id_produto.ncm or "00000000"))
             # FIX SCHEMA: NCM length must be 8 or 2. If 4, pad with zeros
             if len(raw_ncm) == 4:
-                 raw_ncm = f"{raw_ncm}1019" # Default to 'Outros' if NCM=0703, or just pad. 
-                 # Safer: Pad 0000 (might be invalid code) or assume valid
-                 # If user has "0703", likely meant 07031019 (Onions/Garlic - common)
-                 # However, to be generic: 
                  if raw_ncm == "0703": raw_ncm = "07031019" # Especifico
                  else: raw_ncm = raw_ncm.ljust(8, '0')
             elif len(raw_ncm) < 8 and len(raw_ncm) != 2:
                  raw_ncm = raw_ncm.ljust(8, '0')
 
             ET.SubElement(prod, f"{{{self.ns}}}NCM").text = raw_ncm
-            ET.SubElement(prod, f"{{{self.ns}}}CFOP").text = "5102"
+            
+            # Obter CFOP do item ou tributação (fallback para 5102)
+            cfop_val = "5102"
+            if hasattr(item, 'cfop') and item.cfop and item.cfop.strip():
+                cfop_val = item.cfop.strip()
+            elif tributacao and hasattr(tributacao, 'cfop') and tributacao.cfop and tributacao.cfop.strip():
+                cfop_val = tributacao.cfop.strip()
+            
+            # Ajustar para interestadual se aplicável
+            try:
+                uf_emitente = self.empresa.estado.strip().upper() if self.empresa and self.empresa.estado else "MG"
+                uf_destinatario = uf_emitente
+                if self.venda.id_cliente and hasattr(self.venda.id_cliente, 'estado') and self.venda.id_cliente.estado:
+                    uf_destinatario = self.venda.id_cliente.estado.strip().upper()
+                elif hasattr(self.venda, 'endereco_entrega') and self.venda.endereco_entrega and hasattr(self.venda.endereco_entrega, 'estado') and self.venda.endereco_entrega.estado:
+                    uf_destinatario = self.venda.endereco_entrega.estado.strip().upper()
+                
+                if uf_emitente != uf_destinatario:
+                    if cfop_val.startswith('5'):
+                        cfop_val = '6' + cfop_val[1:]
+                else:
+                    if cfop_val.startswith('6'):
+                        cfop_val = '5' + cfop_val[1:]
+            except Exception as e:
+                print(f"Erro ao ajustar CFOP estadual/interestadual: {e}")
+
+            ET.SubElement(prod, f"{{{self.ns}}}CFOP").text = cfop_val
             ET.SubElement(prod, f"{{{self.ns}}}uCom").text = self._limpar_texto(item.id_produto.unidade_medida, 6) or "UN"
             
             # Values come from DB (already mapped correctly in view now)
@@ -629,50 +660,94 @@ class NfeXmlBuilder:
             except Exception as _ev:
                 pass  # Se não tiver veiculo_novo cadastrado, ignora silenciosamente
 
+            # --- TENTATIVA DE CARREGAR TRIBUTACAO ESPECIFICA DO PRODUTO ---
+            tributacao = None
+            try:
+                if hasattr(item.id_produto, 'tributacao_detalhada'):
+                    tributacao = item.id_produto.tributacao_detalhada
+            except Exception:
+                pass
+
+            # --- OBTER CST ICMS ANTECIPADAMENTE ---
+            cst_icms_val = ""
+            if hasattr(item, 'icms_cst_csosn') and item.icms_cst_csosn and str(item.icms_cst_csosn).strip():
+                cst_icms_val = str(item.icms_cst_csosn).strip()
+            elif tributacao and hasattr(tributacao, 'cst_icms') and tributacao.cst_icms and str(tributacao.cst_icms).strip():
+                cst_icms_val = str(tributacao.cst_icms).strip()
+            elif tributacao and hasattr(tributacao, 'csosn') and tributacao.csosn and str(tributacao.csosn).strip():
+                cst_icms_val = str(tributacao.csosn).strip()
+
             # --- GRUPO COMBUSTÍVEL <comb> ---
-            # Obrigatório para combustíveis/derivados de petróleo com código ANP válido.
-            # Se o produto tiver campo anp_code preenchido, usa. Caso contrário, tenta mapeamento por NCM.
-            # NOTA: Se não houver ANP code válido, NÃO adiciona <comb> e o CST IBSCBS cairá para 000.
+            # Obrigatório para combustíveis/derivados de petróleo com código ANP válido ou CFOP de combustível.
             NCM_ANP_MAP = {
                 '27101911': ('120101001', 'GASOLINA AUTOMOTIVA TIPO A COMUM'),
                 '27101912': ('120201001', 'GASOLINA AUTOMOTIVA TIPO A PREMIUM'),
+                '27101259': ('320102001', 'GASOLINA C COMUM'),
+                '27101251': ('320101001', 'GASOLINA A COMUM'),
                 '27101921': ('130101001', 'OLEO DIESEL A S50'),
                 '27101922': ('130102001', 'OLEO DIESEL A S10'),
                 '27101923': ('130202001', 'OLEO DIESEL B S10'),
                 '27101931': ('110201001', 'QUEROSENE DE AVIACAO NACIONAL'),
                 '27111100': ('210201001', 'GLP - GAS LIQUEFEITO DE PETROLEO'),
-                '27111900': ('210201001', 'GLP - GAS LIQUEFEITO DE PETROLEO'),
+                '27111900': ('210203001', 'GLP - GAS LIQUEFEITO DE PETROLEO'),
+                '27111910': ('210203001', 'GLP - GAS LIQUEFEITO DE PETROLEO'),
+                '27112100': ('210101001', 'GAS NATURAL GÁS'),
             }
-            # Verificar código ANP direto no cadastro do produto
-            anp_code_prod = getattr(item.id_produto, 'anp_code', None) or getattr(item.id_produto, 'cod_anp', None)
-            anp_desc_prod = getattr(item.id_produto, 'desc_anp', None) or getattr(item.id_produto, 'descricao_anp', None)
-            
-            if anp_code_prod:
-                anp_data = (str(anp_code_prod).strip(), str(anp_desc_prod or 'COMBUSTIVEL').strip()[:95])
+            # Verificar código ANP direto no cadastro do produto ou tributação
+            anp_code_prod = (
+                getattr(tributacao, 'cprod_anp', None) or
+                getattr(item.id_produto, 'cprod_anp', None) or
+                getattr(item.id_produto, 'anp_code', None) or
+                getattr(item.id_produto, 'cod_anp', None)
+            )
+            anp_desc_prod = (
+                getattr(tributacao, 'desc_anp', None) or
+                getattr(item.id_produto, 'desc_anp', None) or
+                getattr(item.id_produto, 'descricao_anp', None)
+            )
+
+            is_cfop_combustivel = any(str(cfop_val).startswith(prefix) for prefix in ['565', '566', '665', '666', '765', '766'])
+            is_cst_61 = (cst_icms_val == '61')
+            is_ncm_combustivel = raw_ncm.startswith('2710') or raw_ncm.startswith('2711') or raw_ncm in NCM_ANP_MAP
+
+            if anp_code_prod and str(anp_code_prod).strip():
+                anp_data = (str(anp_code_prod).strip(), str(anp_desc_prod or 'GLP - GAS LIQUEFEITO DE PETROLEO').strip()[:95])
+            elif raw_ncm in NCM_ANP_MAP:
+                anp_data = NCM_ANP_MAP[raw_ncm]
+            elif is_cfop_combustivel or is_cst_61 or is_ncm_combustivel:
+                # Default de emergência para Gás/GLP quando o CFOP/NCM é de combustível mas não tinha ANP cadastrado no produto
+                anp_data = ('210203001', 'GLP - GAS LIQUEFEITO DE PETROLEO')
             else:
-                anp_data = NCM_ANP_MAP.get(raw_ncm)
-            
-            # Sinaliza se o grupo <comb> foi adicionado (influencia CST no IBSCBS)
+                anp_data = None
+
             item_has_comb = False
             if anp_data:
                 comb = ET.SubElement(prod, f"{{{self.ns}}}comb")
-                ET.SubElement(comb, f"{{{self.ns}}}cProdANP").text = anp_data[0]
-                ET.SubElement(comb, f"{{{self.ns}}}descANP").text = anp_data[1]
-                ET.SubElement(comb, f"{{{self.ns}}}pGLP").text = "0.00"
-                ET.SubElement(comb, f"{{{self.ns}}}pGNn").text = "0.00"
-                ET.SubElement(comb, f"{{{self.ns}}}pGNi").text = "0.00"
-                ET.SubElement(comb, f"{{{self.ns}}}vPart").text = "0.00"
+                ET.SubElement(comb, f"{{{self.ns}}}cProdANP").text = str(anp_data[0]).strip()
+                ET.SubElement(comb, f"{{{self.ns}}}descANP").text = str(anp_data[1]).strip()[:95]
+                
+                is_anp_glp = str(anp_data[0]).strip().startswith('21020') or 'GLP' in str(anp_data[1]).upper()
+                if is_anp_glp:
+                    pglp_val = float(getattr(tributacao, 'pglp', 100) or 100.0)
+                    if pglp_val == 0.0:
+                        pglp_val = 100.0
+                    ET.SubElement(comb, f"{{{self.ns}}}pGLP").text = "{:.4f}".format(pglp_val)
+                    
+                    pgnn_val = float(getattr(tributacao, 'pgnn', 0) or 0.0)
+                    if pgnn_val > 0:
+                        ET.SubElement(comb, f"{{{self.ns}}}pGNn").text = "{:.4f}".format(pgnn_val)
+                    
+                    pgni_val = float(getattr(tributacao, 'pgni', 0) or 0.0)
+                    if pgni_val > 0:
+                        ET.SubElement(comb, f"{{{self.ns}}}pGNi").text = "{:.4f}".format(pgni_val)
+                    
+                    vpart_val = float(getattr(tributacao, 'vpart', 0) or 0.0)
+                    if vpart_val > 0:
+                        ET.SubElement(comb, f"{{{self.ns}}}vPart").text = "{:.4f}".format(vpart_val)
+                
                 uf_cons = self._limpar_texto(self.empresa.estado, 2) or "MG"
-                ET.SubElement(comb, f"{{{self.ns}}}UFCons").text = uf_cons
+                ET.SubElement(comb, f"{{{self.ns}}}UFCons").text = uf_cons[:2].upper()
                 item_has_comb = True
-
-            # --- TENTATIVA DE CARREGAR TRIBUTACAO ESPECIFICA DO PRODUTO ---
-            tributacao = None
-            try:
-                if hasattr(item.id_produto, 'tributacao_detalhada'):
-                     tributacao = item.id_produto.tributacao_detalhada
-            except:
-                pass
             
             # [MODIFICADO] Lógica de Recálculo Automático (Normal e Simples)
             # Se não tiver tributação OU se tiver mas IBS/CBS estiverem zerados (0.00), forçar cálculo
@@ -767,31 +842,72 @@ class NfeXmlBuilder:
             csosn_val = "102"
             cst_icms_val = "00"
 
-            if is_simples:
-                # Para Simples Nacional: ler o campo correto = csosn
-                if tributacao and tributacao.csosn and tributacao.csosn.strip():
-                    csosn_val = tributacao.csosn.strip()
-                elif tributacao and tributacao.cst_icms and tributacao.cst_icms.strip():
-                    # Fallback: se csosn estiver vazio mas cst_icms tiver valor 3-dígitos
-                    val_fb = tributacao.cst_icms.strip()
-                    if len(val_fb) == 3 and val_fb.isdigit():
-                        csosn_val = val_fb
-            else:
-                # Para Regime Normal: ler cst_icms
-                if tributacao and tributacao.cst_icms and tributacao.cst_icms.strip():
-                    val_raw = tributacao.cst_icms.strip()
-                    # Se vier com CSOSN (3 dígitos), converter para CST 2 dígitos
-                    if len(val_raw) == 3 and val_raw.isdigit():
-                        if val_raw in ['101', '102']: cst_icms_val = "00"
-                        elif val_raw in ['103', '300', '400']: cst_icms_val = "41"
-                        elif val_raw in ['201', '202', '203']: cst_icms_val = "60"
-                        elif val_raw in ['500']: cst_icms_val = "60"
-                        elif val_raw in ['900']: cst_icms_val = "90"
-                        else: cst_icms_val = "00"
-                    else:
-                        cst_icms_val = val_raw.zfill(2)
+            # 1. Tentar ler do item (venda_itens) primeiro, depois da tributação do produto
+            cst_raw = ""
+            if hasattr(item, 'icms_cst_csosn') and item.icms_cst_csosn and item.icms_cst_csosn.strip():
+                cst_raw = item.icms_cst_csosn.strip()
+            elif tributacao and hasattr(tributacao, 'cst_icms') and tributacao.cst_icms and tributacao.cst_icms.strip():
+                cst_raw = tributacao.cst_icms.strip()
+            elif tributacao and hasattr(tributacao, 'csosn') and tributacao.csosn and tributacao.csosn.strip():
+                cst_raw = tributacao.csosn.strip()
 
             if is_simples:
+                if cst_raw:
+                    # Se for de 2 dígitos, pode ser CST que precisa virar CSOSN equivalente
+                    if len(cst_raw) == 2 and cst_raw.isdigit():
+                        if cst_raw in ['00', '20', '90']: csosn_val = "102"
+                        elif cst_raw in ['40', '41', '50']: csosn_val = "400"
+                        elif cst_raw in ['60', '61']: csosn_val = "500"
+                        else: csosn_val = "102"
+                    else:
+                        csosn_val = cst_raw
+                # Forçar CSOSN 500 se o CFOP for ST ou combustível em Simples Nacional
+                is_cfop_fuel = any(str(cfop_val).startswith(p) for p in ['565', '566', '665', '666', '765', '766'])
+                if cfop_val in ['5405', '6405'] or is_cfop_fuel:
+                    csosn_val = "500"
+            else:
+                if cst_raw:
+                    # Se for de 3 dígitos (CSOSN), converter para CST 2 dígitos
+                    if len(cst_raw) == 3 and cst_raw.isdigit():
+                        if cst_raw in ['101', '102']: cst_icms_val = "00"
+                        elif cst_raw in ['103', '300', '400']: cst_icms_val = "41"
+                        elif cst_raw in ['201', '202', '203']: cst_icms_val = "60"
+                        elif cst_raw in ['500']: cst_icms_val = "60"
+                        elif cst_raw in ['900']: cst_icms_val = "90"
+                        else: cst_icms_val = "00"
+                    else:
+                        cst_icms_val = cst_raw.zfill(2)
+                # Forçar CST 60 se o CFOP for ST
+                if cfop_val in ['5405', '6405']:
+                    cst_icms_val = "60"
+
+            # Definir se o CST/regime do item é combustível
+            cst_ibs_cbs_val = ""
+            if tributacao and hasattr(tributacao, 'cst_ibs_cbs') and tributacao.cst_ibs_cbs:
+                cst_ibs_cbs_val = tributacao.cst_ibs_cbs.strip()
+            
+            is_cst_combustivel = (
+                (cst_ibs_cbs_val and cst_ibs_cbs_val.startswith('6')) or 
+                cst_icms_val in ['61', '60', '500'] or 
+                item_has_comb or 
+                is_cfop_combustivel
+            )
+
+            if item_has_comb or cst_icms_val in ['61', '60'] or is_cst_combustivel:
+                # SEFAZ NT 2023.001 / Rejeição 960: Para combustíveis/GLP (tag comb),
+                # a SEFAZ exige o grupo ICMS61 obrigatoriamente (mesmo em Simples Nacional)
+                icms61 = ET.SubElement(icms, f"{{{self.ns}}}ICMS61")
+                ET.SubElement(icms61, f"{{{self.ns}}}orig").text = "0"
+                ET.SubElement(icms61, f"{{{self.ns}}}CST").text = "61"
+                
+                ad_rem = float(getattr(tributacao, 'ad_rem_icms_ret', 0) or 0.0)
+                q_bc = float(item.quantidade) if ad_rem > 0 else 0.0
+                v_mono = q_bc * ad_rem if ad_rem > 0 else 0.0
+                
+                ET.SubElement(icms61, f"{{{self.ns}}}qBCMonoRet").text = "{:.4f}".format(q_bc)
+                ET.SubElement(icms61, f"{{{self.ns}}}adRemICMSRet").text = "{:.4f}".format(ad_rem)
+                ET.SubElement(icms61, f"{{{self.ns}}}vICMSMonoRet").text = "{:.2f}".format(v_mono)
+            elif is_simples:
                 # LÓGICA PARA SIMPLES NACIONAL (mantida)
                 if len(csosn_val) == 3 or csosn_val in ['101','102','103','201','202','203','300','400','500','900']:
                     # Cria a tag correta baseada no CSOSN
@@ -877,6 +993,16 @@ class NfeXmlBuilder:
                      ET.SubElement(icms60, f"{{{self.ns}}}vBCSTRet").text = "0.00"
                      ET.SubElement(icms60, f"{{{self.ns}}}pST").text = "0.00"
                      ET.SubElement(icms60, f"{{{self.ns}}}vICMSSTRet").text = "0.00"
+                 elif cst_icms_val == '61':
+                      icms61 = ET.SubElement(icms, f"{{{self.ns}}}ICMS61")
+                      ET.SubElement(icms61, f"{{{self.ns}}}orig").text = "0"
+                      ET.SubElement(icms61, f"{{{self.ns}}}CST").text = "61"
+                      q_bc_mono = float(getattr(item, 'quantidade', 0) or 0)
+                      ad_rem = float(getattr(tributacao, 'ad_rem_icms_ret', 0) if tributacao else 0)
+                      v_icms_mono = q_bc_mono * ad_rem
+                      ET.SubElement(icms61, f"{{{self.ns}}}qBCMonoRet").text = "{:.4f}".format(q_bc_mono)
+                      ET.SubElement(icms61, f"{{{self.ns}}}adRemICMSRet").text = "{:.4f}".format(ad_rem)
+                      ET.SubElement(icms61, f"{{{self.ns}}}vICMSMonoRet").text = "{:.2f}".format(v_icms_mono)
                  elif cst_icms_val in ['40', '41', '50']: # Isento, Não Trib, Suspensão
                      icms40 = ET.SubElement(icms, f"{{{self.ns}}}ICMS40")
                      ET.SubElement(icms40, f"{{{self.ns}}}orig").text = "0"
@@ -1056,16 +1182,13 @@ class NfeXmlBuilder:
             # DEBBUG FORCE
             # print(f"DEBUG: CRT={crt_raw} Regime={getattr(self.empresa, 'regime_tributario', 'N/A')} is_normal={is_regime_normal}")
             
-            # [ATUALIZADO] REFORMA TRIBUTÁRIA: IBS/CBS gerado para TODOS os modelos (55 e 65)
-            # NT 2025.002 - IBSCBS é obrigatório para NF-e modelo 55 em ambiente habilitado
-            should_generate_reform = True  # Habilita para modelo 55 (NF-e) e 65 (NFC-e)
+            # REFORMA TRIBUTÁRIA: IBSCBS desativado para o Schema NFe 4.00 oficial (produção)
+            # A SEFAZ 4.00 rejeita o XML com Rejeição 215 se contiver tags de reforma não ativadas no WebService
+            should_generate_reform = True
             
-            # [MODIFICADO] Se tiver tributação (mesmo mock calculado automaticamente), gerar
-            # has_reform_fields agora pode vir do MockTrib calculado acima
-            has_reform_fields = hasattr(tributacao, 'ibs_aliquota') or hasattr(tributacao, 'cst_ibs_cbs')
+            has_reform_fields = True
             
-            # Se tiver tributação com campos de reforma, gerar IBS/CBS
-            if should_generate_reform and tributacao and has_reform_fields:
+            if should_generate_reform:
                     # DEBUG LOG REMOVED TO PREVENT CRASH
 
 
@@ -1085,15 +1208,13 @@ class NfeXmlBuilder:
                     # VAMOS SIMPLIFICAR E USAR DIRETAMENTE O QUE ESTA NO BANCO DE DADOS
                     
                     cst_val = "000" 
-                    if hasattr(tributacao, 'cst_ibs_cbs') and tributacao.cst_ibs_cbs:
+                    if tributacao and hasattr(tributacao, 'cst_ibs_cbs') and tributacao.cst_ibs_cbs:
                          cst_val = tributacao.cst_ibs_cbs.strip()
 
-                    # Fallback para CST 6xx (combustíveis monofásico) sem grupo <comb> cadastrado:
-                    # Sem ANP code válido, não podemos emitir como monofásico de combustíveis.
-                    # Usamos CST 000 (tributação normal ad valorem) como alternativa segura.
-                    is_cst_combustivel = cst_val.startswith('6')
-                    if is_cst_combustivel and not item_has_comb:
-                        cst_val = "000"
+                    if (cst_icms_val in ['61', '60', '500'] or item_has_comb or is_cfop_combustivel) and (not cst_val or cst_val in ['000', '001', '']):
+                         cst_val = "620"
+
+                    is_cst_combustivel = cst_val.startswith('6') or cst_icms_val in ['61', '60', '500'] or item_has_comb or is_cfop_combustivel
 
                     # Parent Tag: <IBSCBS>
                     ibs_cbs_group = ET.SubElement(imposto, f"{{{self.ns}}}IBSCBS")
@@ -1102,23 +1223,24 @@ class NfeXmlBuilder:
                     ET.SubElement(ibs_cbs_group, f"{{{self.ns}}}CST").text = cst_val
 
                     # 2. <cClassTrib>
-                    c_class_trib = "410008" if cst_val == '410' else "000001"
+                    if cst_val == '620' or cst_icms_val in ['61', '60', '500'] or item_has_comb or is_cfop_combustivel:
+                        c_class_trib = "620006"
+                    elif cst_val == '410':
+                        c_class_trib = "410008"
+                    else:
+                        c_class_trib = "000001"
+
                     if tributacao and hasattr(tributacao, 'classificacao_fiscal') and tributacao.classificacao_fiscal:
                          c_clean = ''.join(filter(str.isdigit, tributacao.classificacao_fiscal))
-                         if c_clean:
+                         if c_clean and c_clean not in ['000001', '0']:
                              c_class_trib = c_clean
-                    
-                    # Se o CST foi rebaixado de combustível (6xx) para 000 por falta de ANP,
-                    # forçar cClassTrib para 000001 (bens em geral) para manter consistência.
-                    if is_cst_combustivel and not item_has_comb:
-                        c_class_trib = "000001"
                     
                     # Garantir 6 digitos
                     ET.SubElement(ibs_cbs_group, f"{{{self.ns}}}cClassTrib").text = c_class_trib.zfill(6)
 
                     # 3. Grupo de valores: <gIBSCBS> (estrutura padrão para todos os CSTs com valor)
-                    # Para CSTs sem valor a recolher (imunidade, suspensão, ajustes), omitir gIBSCBS
-                    CST_SEM_VALOR = {'410', '550', '800', '810', '811', '830'}
+                    # Para CSTs sem valor a recolher (imunidade, suspensão, monofásico, ajustes), omitir gIBSCBS
+                    CST_SEM_VALOR = {'410', '620', '550', '800', '810', '811', '830'}
                     
                     if cst_val not in CST_SEM_VALOR:
                          # Truncação (floor) para 2 casas decimais — SEFAZ não aceita arredondamento
@@ -1127,9 +1249,57 @@ class NfeXmlBuilder:
 
                          p_ibs = float(tributacao.ibs_aliquota) if hasattr(tributacao, 'ibs_aliquota') and tributacao.ibs_aliquota else 0.1
                          p_cbs = float(tributacao.cbs_aliquota) if hasattr(tributacao, 'cbs_aliquota') and tributacao.cbs_aliquota else 0.9
+                         p_ibs_mun = 0.0
+                         
+                         # Detecção de redução da Reforma
+                         p_ibs_nominal = p_ibs
+                         p_cbs_nominal = p_cbs
+                         p_ibs_mun_nominal = p_ibs_mun
+                         p_red_ibs = 0.0
+                         p_red_cbs = 0.0
+                         p_red_ibs_mun = 0.0
+                         
+                         try:
+                             from api.services.reforma_tax_service import ReformaTaxService
+                             svc = ReformaTaxService()
+                             
+                             # Obter cClassTrib formatado do item/produto
+                             c_class_trib_clean = "000001"
+                             if tributacao and hasattr(tributacao, 'classificacao_fiscal') and tributacao.classificacao_fiscal:
+                                 c_clean = ''.join(filter(str.isdigit, tributacao.classificacao_fiscal))
+                                 if c_clean:
+                                     c_class_trib_clean = c_clean
+                                     
+                             reducoes_db = svc._get_reducoes_db(c_class_trib_clean)
+                             if reducoes_db:
+                                 p_red_ibs = float(reducoes_db.get(3, 0.0))
+                                 p_red_cbs = float(reducoes_db.get(2, 0.0))
+                                 p_red_ibs_mun = float(reducoes_db.get(4, 0.0))
+                                 
+                                 # Se houver redução de IBS
+                                 if p_red_ibs > 0:
+                                     aliq_ref = svc._get_aliquotas_referencia()
+                                     p_ibs_nominal = float(aliq_ref.get(3, 0.1))
+                                     # Força a alíquota efetiva a ser a nominal reduzida
+                                     p_ibs = p_ibs_nominal * (1.0 - p_red_ibs / 100.0)
+                                     
+                                 # Se houver redução de IBS Municipal
+                                 if p_red_ibs_mun > 0:
+                                     aliq_ref = svc._get_aliquotas_referencia()
+                                     p_ibs_mun_nominal = float(aliq_ref.get(4, 0.0))
+                                     p_ibs_mun = p_ibs_mun_nominal * (1.0 - p_red_ibs_mun / 100.0)
+                                     
+                                 # Se houver redução de CBS
+                                 if p_red_cbs > 0:
+                                     aliq_ref = svc._get_aliquotas_referencia()
+                                     p_cbs_nominal = float(aliq_ref.get(2, 0.9))
+                                     # Força a alíquota efetiva a ser a nominal reduzida
+                                     p_cbs = p_cbs_nominal * (1.0 - p_red_cbs / 100.0)
+                         except Exception as e:
+                             print(f"Erro ao obter informacoes de reducao da Reforma no builder: {e}")
+
                          vbc_trib = vt
                          p_ibs_uf = p_ibs
-                         p_ibs_mun = 0.0
                          v_ibs_uf = _trunc2(vbc_trib * p_ibs_uf / 100)
                          v_ibs_mun = _trunc2(vbc_trib * p_ibs_mun / 100)
                          v_ibs_total = _trunc2(v_ibs_uf + v_ibs_mun)
@@ -1143,12 +1313,20 @@ class NfeXmlBuilder:
                          
                          # <gIBSUF>
                          g_ibs_uf = ET.SubElement(g_ibs_cbs, f"{{{self.ns}}}gIBSUF")
-                         ET.SubElement(g_ibs_uf, f"{{{self.ns}}}pIBSUF").text = "{:.4f}".format(p_ibs_uf)
+                         ET.SubElement(g_ibs_uf, f"{{{self.ns}}}pIBSUF").text = "{:.4f}".format(p_ibs_nominal)
+                         if p_red_ibs > 0:
+                             g_red = ET.SubElement(g_ibs_uf, f"{{{self.ns}}}gRed")
+                             ET.SubElement(g_red, f"{{{self.ns}}}pRedAliq").text = "{:.4f}".format(p_red_ibs)
+                             ET.SubElement(g_red, f"{{{self.ns}}}pAliqEfet").text = "{:.4f}".format(p_ibs)
                          ET.SubElement(g_ibs_uf, f"{{{self.ns}}}vIBSUF").text = "{:.2f}".format(v_ibs_uf)
 
                          # <gIBSMun>
                          g_ibs_mun = ET.SubElement(g_ibs_cbs, f"{{{self.ns}}}gIBSMun")
-                         ET.SubElement(g_ibs_mun, f"{{{self.ns}}}pIBSMun").text = "{:.4f}".format(p_ibs_mun)
+                         ET.SubElement(g_ibs_mun, f"{{{self.ns}}}pIBSMun").text = "{:.4f}".format(p_ibs_mun_nominal)
+                         if p_red_ibs_mun > 0:
+                             g_red = ET.SubElement(g_ibs_mun, f"{{{self.ns}}}gRed")
+                             ET.SubElement(g_red, f"{{{self.ns}}}pRedAliq").text = "{:.4f}".format(p_red_ibs_mun)
+                             ET.SubElement(g_red, f"{{{self.ns}}}pAliqEfet").text = "{:.4f}".format(p_ibs_mun)
                          ET.SubElement(g_ibs_mun, f"{{{self.ns}}}vIBSMun").text = "{:.2f}".format(v_ibs_mun)
                          
                          # <vIBS> (Total)
@@ -1156,7 +1334,11 @@ class NfeXmlBuilder:
                          
                          # <gCBS>
                          g_cbs = ET.SubElement(g_ibs_cbs, f"{{{self.ns}}}gCBS")
-                         ET.SubElement(g_cbs, f"{{{self.ns}}}pCBS").text = "{:.4f}".format(p_cbs)
+                         ET.SubElement(g_cbs, f"{{{self.ns}}}pCBS").text = "{:.4f}".format(p_cbs_nominal)
+                         if p_red_cbs > 0:
+                             g_red = ET.SubElement(g_cbs, f"{{{self.ns}}}gRed")
+                             ET.SubElement(g_red, f"{{{self.ns}}}pRedAliq").text = "{:.4f}".format(p_red_cbs)
+                             ET.SubElement(g_red, f"{{{self.ns}}}pAliqEfet").text = "{:.4f}".format(p_cbs)
                          ET.SubElement(g_cbs, f"{{{self.ns}}}vCBS").text = "{:.2f}".format(v_cbs)
 
                          # Accumulate Totals
@@ -1198,7 +1380,7 @@ class NfeXmlBuilder:
         # NT 2025.002 - IBSCBSTot gerado para TODOS os modelos (55 e 65)
         v_nf_tot_val = total_fiscal  # Total fiscal (sem diária de hospedagem)
         
-        if True:  # IBSCBSTot para NF-e (55) e NFC-e (65)
+        if should_generate_reform:  # IBSCBSTot desativado para Schema 4.00 (evita Rejeição 215)
             # Tag Principal: IBSCBSTot
             ibs_cbs_tot = ET.SubElement(total, f"{{{self.ns}}}IBSCBSTot")
             

@@ -1,6 +1,11 @@
 // Utilitários para consulta de CNPJ e CEP
 import { API_ENDPOINT } from '../config/api';
 
+// função para limpar CNPJ mantendo letras e números
+export const cleanCNPJ = (str) => {
+  return str ? str.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : '';
+};
+
 // função para limpar strings (remove caracteres especiais)
 export const cleanString = (str) => {
   return str ? str.replace(/\D/g, '') : '';
@@ -8,9 +13,9 @@ export const cleanString = (str) => {
 
 // função para formatar CNPJ
 export const formatCNPJ = (value) => {
-  const v = cleanString(value);
-  if (v.length <= 14) {
-    return v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  const v = cleanCNPJ(value);
+  if (v.length === 14) {
+    return v.replace(/^([a-zA-Z0-9]{2})([a-zA-Z0-9]{3})([a-zA-Z0-9]{3})([a-zA-Z0-9]{4})(\d{2})$/, '$1.$2.$3/$4-$5');
   }
   return v;
 };
@@ -370,9 +375,9 @@ export const normalizeClienteData = (data) => {
     cnpj: (() => {
       const cpfCnpj = data.cpf_cnpj || data.cnpj || data.cpf || '';
       if (!cpfCnpj) return '';
-      const numbers = cpfCnpj.replace(/\D/g, '');
-      if (numbers.length === 11) return formatCPF(cpfCnpj);
-      if (numbers.length === 14) return formatCNPJ(cpfCnpj);
+      const limpo = cpfCnpj.replace(/[^a-zA-Z0-9]/g, '');
+      if (limpo.length === 11) return formatCPF(cpfCnpj);
+      if (limpo.length === 14) return formatCNPJ(cpfCnpj);
       return cpfCnpj;
     })(),
     inscricao_estadual: data.inscricao_estadual || data.state_registration || '',

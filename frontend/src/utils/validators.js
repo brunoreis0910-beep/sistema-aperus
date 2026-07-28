@@ -66,23 +66,30 @@ export const validarCPF = (cpf) => {
 export const validarCNPJ = (cnpj) => {
     if (!cnpj) return false;
 
-    cnpj = removerFormatacao(cnpj);
+    // Remover caracteres especiais e deixar em maiúsculo
+    cnpj = cnpj.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
-    // Verifica se tem 14 dígitos
+    // Verifica se tem 14 caracteres
     if (cnpj.length !== 14) return false;
 
-    // Verifica se todos os dígitos são iguais (CNPJ inválido)
-    if (/^(\d)\1+$/.test(cnpj)) return false;
+    // Verifica se todos os caracteres são iguais
+    if (/^([a-zA-Z0-9])\1+$/.test(cnpj)) return false;
+
+    // As duas últimas posições DEVEM ser numéricas (dígitos verificadores)
+    if (!/^\d{2}$/.test(cnpj.substring(12))) return false;
 
     // Validação do primeiro dígito verificador
-    let tamanho = cnpj.length - 2;
+    let tamanho = 12;
     let numeros = cnpj.substring(0, tamanho);
     let digitos = cnpj.substring(tamanho);
     let soma = 0;
-    let pos = tamanho - 7;
+    let pos = 5; // Peso inicial para 12 caracteres (5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2)
 
-    for (let i = tamanho; i >= 1; i--) {
-        soma += parseInt(numeros.charAt(tamanho - i)) * pos--;
+    for (let i = 0; i < tamanho; i++) {
+        // Conversão alfanumérica: valor correspondente é o código ASCII - 48
+        const charVal = numeros.charCodeAt(i) - 48;
+        soma += charVal * pos;
+        pos = pos - 1;
         if (pos < 2) pos = 9;
     }
 
@@ -90,13 +97,15 @@ export const validarCNPJ = (cnpj) => {
     if (resultado !== parseInt(digitos.charAt(0))) return false;
 
     // Validação do segundo dígito verificador
-    tamanho = tamanho + 1;
+    tamanho = 13;
     numeros = cnpj.substring(0, tamanho);
     soma = 0;
-    pos = tamanho - 7;
+    pos = 6; // Peso inicial para 13 caracteres (6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2)
 
-    for (let i = tamanho; i >= 1; i--) {
-        soma += parseInt(numeros.charAt(tamanho - i)) * pos--;
+    for (let i = 0; i < tamanho; i++) {
+        const charVal = numeros.charCodeAt(i) - 48;
+        soma += charVal * pos;
+        pos = pos - 1;
         if (pos < 2) pos = 9;
     }
 
@@ -118,7 +127,8 @@ export const validarCNPJ = (cnpj) => {
 export const validarCPFouCNPJ = (documento) => {
     if (!documento) return false;
 
-    const limpo = removerFormatacao(documento);
+    // Remover caracteres não numéricos para verificar CPF, mas manter letras/números para CNPJ
+    const limpo = documento.replace(/[^a-zA-Z0-9]/g, '');
 
     if (limpo.length === 11) {
         return validarCPF(documento);
@@ -158,11 +168,13 @@ export const formatarCPF = (cpf) => {
 export const formatarCNPJ = (cnpj) => {
     if (!cnpj) return '';
 
-    cnpj = removerFormatacao(cnpj);
+    // Limpar mantendo letras e números
+    cnpj = cnpj.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
     if (cnpj.length !== 14) return cnpj;
 
-    return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+    // Suportar letras nas primeiras 12 posições
+    return cnpj.replace(/([a-zA-Z0-9]{2})([a-zA-Z0-9]{3})([a-zA-Z0-9]{3})([a-zA-Z0-9]{4})(\d{2})/, '$1.$2.$3/$4-$5');
 };
 
 /**
@@ -177,7 +189,7 @@ export const formatarCNPJ = (cnpj) => {
 export const formatarCPFouCNPJ = (documento) => {
     if (!documento) return '';
 
-    const limpo = removerFormatacao(documento);
+    const limpo = documento.replace(/[^a-zA-Z0-9]/g, '');
 
     if (limpo.length === 11) {
         return formatarCPF(documento);

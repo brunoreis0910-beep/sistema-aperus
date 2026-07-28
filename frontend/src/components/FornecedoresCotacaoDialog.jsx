@@ -32,10 +32,15 @@ export default function FornecedoresCotacaoDialog({ open, onClose }) {
     setError('');
     try {
       const response = await axiosInstance.get('/notificacoes/fornecedores-estoque-critico/');
-      setDados(response.data);
+      const data = response.data || {};
+      setDados({
+        fornecedores: Array.isArray(data.fornecedores) ? data.fornecedores : [],
+        sem_fornecedor: Array.isArray(data.sem_fornecedor) ? data.sem_fornecedor : []
+      });
     } catch (err) {
       console.error('Erro ao buscar fornecedores:', err);
       setError('Erro ao carregar dados. Tente novamente.');
+      setDados({ fornecedores: [], sem_fornecedor: [] });
     } finally {
       setLoading(false);
     }
@@ -90,8 +95,8 @@ export default function FornecedoresCotacaoDialog({ open, onClose }) {
     window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensagem)}`, '_blank');
   };
 
-  const totalFornecedores = dados.fornecedores.length;
-  const totalProdutos = dados.fornecedores.reduce((s, f) => s + f.produtos.length, 0) + dados.sem_fornecedor.length;
+  const totalFornecedores = Array.isArray(dados?.fornecedores) ? dados.fornecedores.length : 0;
+  const totalProdutos = (Array.isArray(dados?.fornecedores) ? dados.fornecedores.reduce((s, f) => s + (Array.isArray(f?.produtos) ? f.produtos.length : 0), 0) : 0) + (Array.isArray(dados?.sem_fornecedor) ? dados.sem_fornecedor.length : 0);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>

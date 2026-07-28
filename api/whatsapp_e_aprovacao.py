@@ -15,6 +15,7 @@ from .views_aprovacao_whatsapp import (
     DesktopListenerView,
     ResponderAprovacaoView,
     LinkCurtoAprovacaoView,
+    PainelAprovacaoView,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -53,6 +54,7 @@ __all__ = [
     'DesktopListenerView',
     'ResponderAprovacaoView',
     'LinkCurtoAprovacaoView',
+    'PainelAprovacaoView',
     # Fila e config
     'fila_whatsapp_view',
     'fila_whatsapp_detail',

@@ -415,20 +415,51 @@ class CTeService:
         self._tag(comps, 'xNome', 'Frete Valor')
         self._tag(comps, 'vComp', f"{cte.componente_frete_valor:.2f}")
         
-        # 6. <imp> Impostos (Simples Nacional)
+        # 6. <imp> Impostos
         imp = etree.SubElement(inf, 'imp')
         icms = etree.SubElement(imp, 'ICMS')
         
         # Se Simples Nacional
         if True: # self.empresa.regime_tributario == 'SIMPLES':
             icmsSN = etree.SubElement(icms, 'ICMSSN')
-            self._tag(icmsSN, 'CST', '90') # 90 - Outros (Comum no Simples para Transporte) ou 00
+            self._tag(icmsSN, 'CST', getattr(cte, 'cst_icms', '90') or '90') # 90 - Outros (Comum no Simples para Transporte) ou 00
             self._tag(icmsSN, 'indSN', '1')
 
-        # [REMOVIDO] IBS/CBS para evitar Rejeição 225
-        # ...
+        # Reforma Tributária 2026 - Grupo IBS/CBS no CT-e
+        cst_ibs = getattr(cte, 'cst_ibs_cbs', '') or getattr(cte, 'ibs_cst', '') or '01'
+        c_class_trib = getattr(cte, 'c_class_trib', '') or '000000'
+        v_bc_reforma = float(getattr(cte, 'ibs_bc', 0) or getattr(cte, 'valor_total_servico', 0) or 0)
         
-        # [REMOVIDO RESTO IBSCBS]
+        p_ibs_uf = float(getattr(cte, 'ibs_aliq_uf', 0.10) or 0.10)
+        p_ibs_mun = float(getattr(cte, 'ibs_aliq_mun', 0.00) or 0.00)
+        
+        v_ibs_uf = float(getattr(cte, 'valor_ibs_uf', 0) or ((v_bc_reforma * p_ibs_uf) / 100))
+        v_ibs_mun = float(getattr(cte, 'valor_ibs_mun', 0) or ((v_bc_reforma * p_ibs_mun) / 100))
+        v_ibs_total = float(getattr(cte, 'valor_ibs', 0) or (v_ibs_uf + v_ibs_mun))
+        
+        p_cbs = float(getattr(cte, 'cbs_aliq', 0.90) or 0.90)
+        v_cbs = float(getattr(cte, 'valor_cbs', 0) or ((v_bc_reforma * p_cbs) / 100))
+
+        # Adicionar tag <IBSCBS> no XML do CT-e
+        ibscbs = etree.SubElement(imp, 'IBSCBS')
+        self._tag(ibscbs, 'cST', str(cst_ibs).zfill(2))
+        self._tag(ibscbs, 'cClassTrib', str(c_class_trib))
+        self._tag(ibscbs, 'vBCIBSCBS', f"{v_bc_reforma:.2f}")
+        
+        gIBS = etree.SubElement(ibscbs, 'gIBS')
+        gIBSUF = etree.SubElement(gIBS, 'gIBSUF')
+        self._tag(gIBSUF, 'pIBSUF', f"{p_ibs_uf:.4f}")
+        self._tag(gIBSUF, 'vIBSUF', f"{v_ibs_uf:.2f}")
+        
+        gIBSMun = etree.SubElement(gIBS, 'gIBSMun')
+        self._tag(gIBSMun, 'pIBSMun', f"{p_ibs_mun:.4f}")
+        self._tag(gIBSMun, 'vIBSMun', f"{v_ibs_mun:.2f}")
+        
+        self._tag(gIBS, 'vIBS', f"{v_ibs_total:.2f}")
+        
+        gCBS = etree.SubElement(ibscbs, 'gCBS')
+        self._tag(gCBS, 'pCBS', f"{p_cbs:.4f}")
+        self._tag(gCBS, 'vCBS', f"{v_cbs:.2f}")
         
         # 7. <infCTeNorm> Normal
         infNorm = etree.SubElement(inf, 'infCTeNorm')

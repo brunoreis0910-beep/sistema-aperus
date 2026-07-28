@@ -2747,11 +2747,24 @@ const ComandasPage = () => {
                     onChange={(e) => setFormaPagamentoAtual(e.target.value)}
                     label="Forma de Pagamento"
                   >
-                    {formasPagamento.map((forma) => (
-                      <MenuItem key={forma.id_forma_pagamento} value={forma.nome_forma}>
-                        {forma.nome_forma}
-                      </MenuItem>
-                    ))}
+                    {formasPagamento.map((forma) => {
+                      const nomeNorm = (forma.nome_forma || forma.nome || forma.descricao || '').toUpperCase().replace(/[_]/g, ' ');
+                      const termosPrazo = ['BOLETO', 'A PRAZO', 'PRAZO', 'FATURAD', 'CREDIARI', 'CREDIÁRI', 'DUPLICATA', 'PROMISSORI', 'PROMISSÓRI', 'CARNE', 'CARNÊ', 'FIADO', 'CONVENIO', 'CONVÊNIO', 'FATURA'];
+                      const ehFormaPrazo = (forma.dias_vencimento && parseInt(forma.dias_vencimento) > 0) || termosPrazo.some(t => nomeNorm.includes(t)) || forma.is_a_prazo;
+
+                      const clienteComanda = comandaSelecionada?.cliente;
+                      const nomeCli = (clienteComanda?.nome_razao_social || '').toUpperCase().trim();
+                      const cpfClean = String(clienteComanda?.cpf_cnpj || '').replace(/[^0-9]/g, '');
+                      const ehClienteBloqueado = !clienteComanda || clienteComanda.permite_venda_prazo === false || ['CONSUMIDOR', 'CONSUMIDOR FINAL', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', ''].includes(nomeCli) || nomeCli.includes('CONSUMIDOR') || !cpfClean || cpfClean.replace(/0/g, '').length === 0;
+
+                      const desativado = ehFormaPrazo && ehClienteBloqueado;
+
+                      return (
+                        <MenuItem key={forma.id_forma_pagamento} value={forma.nome_forma} disabled={desativado}>
+                          {forma.nome_forma} {desativado ? '🚫 (Inacessível para Consumidor)' : ''}
+                        </MenuItem>
+                      );
+                    })}
                   </Select>
                 </FormControl>
 

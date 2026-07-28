@@ -183,29 +183,39 @@ def _get_contexto_fiscal(operacao, cliente, empresa_id) -> dict:
 
 class NFCeView(APIView):
     """
-    Endpoint para emiss�o de NFC-e via ACBrMonitor.
+    Endpoint para emisso de NFC-e via ACBrMonitor.
     URL: /api/vendas/<id>/emitir_nfce/
     """
     def post(self, request, id_venda):
-        venda = get_object_or_404(Venda, pk=id_venda)
-        
-        service = NFCeService()
-        
-        # OTIMIZA��O: N�o configurar ACBr antes de tentar nativo. O m�todo emitir_nfce gerencia isso.
-        # service.configurar_da_empresa()
-        
-        # Emitir
-        # O Service j� busca a configura��o da empresa se n�o passada
-        result = service.emitir_nfce(venda)
+        try:
+            venda = get_object_or_404(Venda, pk=id_venda)
+            service = NFCeService()
+            result = service.emitir_nfce(venda)
 
-        # Compatibilidade com Frontend (message vs mensagem)
-        if 'mensagem' in result:
-             result['message'] = result['mensagem']
-        
-        if result.get('sucesso'):
-            return Response(result)
-        else:
-            return Response(result, status=400)
+            if isinstance(result, dict) and 'mensagem' in result:
+                 result['message'] = result['mensagem']
+                 result['details'] = result['mensagem']
+                 result['error']   = result['mensagem']
+            
+            if isinstance(result, dict) and result.get('sucesso'):
+                return Response(result)
+            else:
+                res_dict = result if isinstance(result, dict) else {'mensagem': str(result)}
+                if 'mensagem' in res_dict:
+                    res_dict['message'] = res_dict['mensagem']
+                    res_dict['details'] = res_dict['mensagem']
+                    res_dict['error']   = res_dict['mensagem']
+                return Response(res_dict, status=400)
+        except Exception as e:
+            logger.error(f"Erro interno ao emitir NFC-e venda {id_venda}: {e}", exc_info=True)
+            msg = f"Erro interno ao emitir NFC-e: {str(e)}"
+            return Response({
+                'sucesso': False,
+                'mensagem': msg,
+                'message': msg,
+                'details': msg,
+                'error': msg
+            }, status=400)
 
 
 class VendaAtualizarImpostosItensView(APIView):
@@ -299,10 +309,13 @@ class CancelarNFCeView(APIView):
         venda = get_object_or_404(Venda, pk=id_venda)
         justificativa = request.data.get('justificativa', '').strip()
         
-        # Validar Prazo de 30 Minutos
+        # Validar Prazo de 30 Minutos (timezone-aware)
         if venda.data_documento:
+            data_doc = venda.data_documento
+            if timezone.is_naive(data_doc):
+                data_doc = timezone.make_aware(data_doc, timezone.get_current_timezone())
             limite = timedelta(minutes=30)
-            tempo_decorrido = timezone.now() - venda.data_documento
+            tempo_decorrido = timezone.now() - data_doc
             
             if tempo_decorrido > limite:
                  msg = f"Prazo de cancelamento excedido (30 minutos). Tempo decorrido: {int(tempo_decorrido.total_seconds()/60)} min."
@@ -630,9 +643,9 @@ class PainelXMLView(TemplateView):
 class SalvarVendaPDVNFCeView(APIView):
     """
     Endpoint composto para o PDV Simplificado.
-    Recebe um JSON com dados da venda + itens, salva tudo e dispara a emiss�o da NFC-e.
+    Recebe um JSON com dados da venda + itens, salva tudo e dispara a emissão da NFC-e.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def post(self, request):
         data = request.data
@@ -640,25 +653,22 @@ class SalvarVendaPDVNFCeView(APIView):
         lista_itens = data.get('itens', [])
 
         if not dados_venda:
-            return Response({'sucesso': False, 'mensagem': 'Dados da venda n�o fornecidos'}, status=400)
+            return Response({'sucesso': False, 'mensagem': 'Dados da venda não fornecidos', 'message': 'Dados da venda não fornecidos'}, status=400)
         if not lista_itens:
-            return Response({'sucesso': False, 'mensagem': 'Nenhum item na venda'}, status=400)
+            return Response({'sucesso': False, 'mensagem': 'Nenhum item na venda', 'message': 'Nenhum item na venda'}, status=400)
         
         from .models import Cliente, UserParametros
         
-        # 0. Busca Par�metros do Usu�rio
+        # 0. Busca Parâmetros do Usuário
         user_params = None
         usuario_identificado = None
         
-        # Tentar obter usu�rio de m�ltiplas fontes (prioridade: autenticado > payload)
+        # Tentar obter usuário de múltiplas fontes (prioridade: autenticado > payload > primeiro admin)
         if request.user and request.user.is_authenticated:
             from api.utils.caixa_utils import get_operador_pdv
-            # Fix: Usar get_operador_pdv para atribuir a venda ao caixa correto
             usuario_identificado = get_operador_pdv(request.user)
-            # Parametros continuam sendo do usu�rio logado (Admin) para pegar configs
             user_params = UserParametros.objects.filter(id_user=request.user).first()
         else:
-            # Fallback: Aceitar id_usuario no payload (importante para PDV sem token)
             id_usuario_payload = dados_venda.get('id_usuario')
             if id_usuario_payload:
                 from django.contrib.auth.models import User
@@ -666,11 +676,18 @@ class SalvarVendaPDVNFCeView(APIView):
                 if usuario_payload:
                     from api.utils.caixa_utils import get_operador_pdv
                     usuario_identificado = get_operador_pdv(usuario_payload)
-                    # Parametros baseados no usuario original
                     user_params = UserParametros.objects.filter(id_user=usuario_payload).first()
+            
+            if not usuario_identificado:
+                from django.contrib.auth.models import User
+                first_admin = User.objects.filter(is_superuser=True).first() or User.objects.first()
+                if first_admin:
+                    from api.utils.caixa_utils import get_operador_pdv
+                    usuario_identificado = get_operador_pdv(first_admin)
+                    user_params = UserParametros.objects.filter(id_user=first_admin).first()
 
-        # 1. Opera��o (Prioridade: Parameter NFCE > Payload > Operacao Padr�o VENDA > Primeira do Banco)
-        # IMPORTANTE: Par�metro do usu�rio tem prioridade sobre payload para respeitar configura��o
+        # 1. Operao (Prioridade: Parameter NFCE > Payload > Operacao Padro VENDA > Primeira do Banco)
+        # IMPORTANTE: Parmetro do usurio tem prioridade sobre payload para respeitar configurao
         operacao = None
         operacao_origem = ""  # Para debug
         
@@ -702,25 +719,17 @@ class SalvarVendaPDVNFCeView(APIView):
         if not operacao:
             operacao = Operacao.objects.first()
             if operacao:
-                operacao_origem = "Primeira opera��o do banco (qualquer)"
+                operacao_origem = "Primeira operao do banco (qualquer)"
             
         if not operacao:
             return Response({
                 'sucesso': False, 
-                'mensagem': 'Nenhuma opera��o encontrada no sistema. Por favor, cadastre uma opera��o primeiro.',
-                'detalhes': 'Configure em: Configura��es > Opera��es'
+                'mensagem': 'Nenhuma operao encontrada no sistema. Por favor, cadastre uma operao primeiro.',
+                'detalhes': 'Configure em: Configuraes > Operaes'
             }, status=400)
         
-        # LOG DE DEBUG - Mostra qual opera��o foi selecionada
-        print("=" * 80)
-        print("?? [NFC-e] SELE??O DE OPERA??O")
-        print(f"   Usu?rio: {usuario_identificado.username if usuario_identificado else 'An?nimo (sem autentica??o)'}")
-        print(f"   Opera??o selecionada: {operacao.nome_operacao} (ID: {operacao.id_operacao})")
-        print(f"   Origem: {operacao_origem}")
-        print(f"   Payload id_operacao: {dados_venda.get('id_operacao')}")
-        if user_params:
-            print(f"   Par?metro id_operacao_nfce: {user_params.id_operacao_nfce.id_operacao if user_params.id_operacao_nfce else 'N?o configurado'}")
-        print("=" * 80)
+        # LOG DE DEBUG - Mostra qual operação foi selecionada (ASCII seguro)
+        logger.info(f"[PDV-NFCe] Operacao selecionada: {operacao.nome_operacao} (ID: {operacao.id_operacao}) | Origem: {operacao_origem}")
             
         # 2. Cliente (Prioridade: Payload > Parameter NFCE > Primeiro do Banco)
         id_cliente = dados_venda.get('id_cliente')
@@ -1007,7 +1016,14 @@ class SalvarVendaPDVNFCeView(APIView):
         except Exception as e:
             transaction.savepoint_rollback(sid)
             logging.exception("Erro ao salvar PDV NFC-e")
-            return Response({'sucesso': False, 'mensagem': str(e)}, status=500)
+            err_msg = f"Erro ao salvar venda: {str(e)}"
+            return Response({
+                'sucesso': False,
+                'mensagem': err_msg,
+                'message': err_msg,
+                'details': err_msg,
+                'error': err_msg
+            }, status=400)
 
 # Helpers flex?veis para parsing
 def parse_date_flexible(value):
@@ -1390,23 +1406,23 @@ class VendaView(APIView):
                         'ipi_aliq': str(item.ipi_aliq or 0),
                         'ipi_bc': str(item.ipi_bc or 0),
                         'valor_ipi': str(item.valor_ipi or 0),
-                        # IBS (Reforma)
-                        'ibs_cst': item.ibs_cst or '',
-                        'ibs_aliq': str(item.ibs_aliq or 0),
-                        'ibs_bc': str(item.ibs_bc or 0),
-                        'valor_ibs': str(item.valor_ibs or 0),
+                        # IBS / CBS / IS (Reforma Tributária)
+                        'cst_ibs_cbs': getattr(item, 'cst_ibs_cbs', '') or getattr(item, 'ibs_cst', '') or '',
+                        'cClassTrib': getattr(item, 'c_class_trib', '') or '',
+                        'c_class_trib': getattr(item, 'c_class_trib', '') or '',
+                        'ibs_cst': getattr(item, 'ibs_cst', '') or getattr(item, 'cst_ibs_cbs', '') or '',
+                        'ibs_aliq': str(getattr(item, 'ibs_aliq', 0) or 0),
+                        'ibs_bc': str(getattr(item, 'ibs_bc', 0) or 0),
+                        'valor_ibs': str(getattr(item, 'valor_ibs', 0) or 0),
                         # CBS (Reforma)
-                        'cbs_cst': item.cbs_cst or '',
-                        'cbs_aliq': str(item.cbs_aliq or 0),
-                        'cbs_bc': str(item.cbs_bc or 0),
-                        'valor_cbs': str(item.valor_cbs or 0),
+                        'cbs_cst': getattr(item, 'cbs_cst', '') or getattr(item, 'cst_ibs_cbs', '') or '',
+                        'cbs_aliq': str(getattr(item, 'cbs_aliq', 0) or 0),
+                        'cbs_bc': str(getattr(item, 'cbs_bc', 0) or 0),
+                        'valor_cbs': str(getattr(item, 'valor_cbs', 0) or 0),
                         # IS (Reforma)
-                        'is_aliq': str(item.is_aliq or 0),
-                        'valor_is': str(item.valor_is or 0),
+                        'is_aliq': str(getattr(item, 'is_aliq', 0) or 0),
+                        'valor_is': str(getattr(item, 'valor_is', 0) or 0),
                         # Reforma metadata
-                        'tipo_produto_reform': item.tipo_produto_reform or '',
-                        'split_payment': item.split_payment or False,
-                        # Totais tribut�rios
                         'valor_total_tributos': str(item.valor_total_tributos or 0),
                         'carga_tributaria_perc': str(item.carga_tributaria_perc or 0),
                         # -----------------------------------------------------
@@ -1435,25 +1451,31 @@ class VendaView(APIView):
                     if venda.id_operacao.empresa:
                         try:
                             from api.models import EmpresaConfig
-                            empresa = EmpresaConfig.objects.get(pk=venda.id_operacao.empresa)
-                            empresa_data = {
-                                'id_empresa': empresa.pk,
-                                'nome_razao_social': empresa.nome_razao_social,
-                                'nome_fantasia': empresa.nome_fantasia,
-                                'cnpj': empresa.cnpj if hasattr(empresa, 'cnpj') else None,
-                                'inscricao_estadual': empresa.inscricao_estadual if hasattr(empresa, 'inscricao_estadual') else None,
-                                'endereco': empresa.endereco if hasattr(empresa, 'endereco') else None,
-                                'numero': empresa.numero if hasattr(empresa, 'numero') else None,
-                                'bairro': empresa.bairro if hasattr(empresa, 'bairro') else None,
-                                'cidade': empresa.cidade if hasattr(empresa, 'cidade') else None,
-                                'estado': empresa.estado if hasattr(empresa, 'estado') else None,
-                                'cep': empresa.cep if hasattr(empresa, 'cep') else None,
-                                'telefone': empresa.telefone if hasattr(empresa, 'telefone') else None,
-                                'email': empresa.email if hasattr(empresa, 'email') else None,
-                                'logo_url': empresa.logo_url if hasattr(empresa, 'logo_url') else None,
-                            }
-                        except Exception as e:
-                            print(f"Erro ao buscar empresa: {e}")
+                            emp_val = venda.id_operacao.empresa
+                            if isinstance(emp_val, int) or (isinstance(emp_val, str) and emp_val.isdigit()):
+                                empresa = EmpresaConfig.objects.filter(pk=int(emp_val)).first()
+                            else:
+                                empresa = EmpresaConfig.objects.filter(nome_fantasia__icontains=str(emp_val)).first() or EmpresaConfig.objects.first()
+                            
+                            if empresa:
+                                empresa_data = {
+                                    'id_empresa': empresa.pk,
+                                    'nome_razao_social': empresa.nome_razao_social,
+                                    'nome_fantasia': empresa.nome_fantasia,
+                                    'cnpj': empresa.cnpj if hasattr(empresa, 'cnpj') else None,
+                                    'inscricao_estadual': empresa.inscricao_estadual if hasattr(empresa, 'inscricao_estadual') else None,
+                                    'endereco': empresa.endereco if hasattr(empresa, 'endereco') else None,
+                                    'numero': empresa.numero if hasattr(empresa, 'numero') else None,
+                                    'bairro': empresa.bairro if hasattr(empresa, 'bairro') else None,
+                                    'cidade': empresa.cidade if hasattr(empresa, 'cidade') else None,
+                                    'estado': empresa.estado if hasattr(empresa, 'estado') else None,
+                                    'cep': empresa.cep if hasattr(empresa, 'cep') else None,
+                                    'telefone': empresa.telefone if hasattr(empresa, 'telefone') else None,
+                                    'email': empresa.email if hasattr(empresa, 'email') else None,
+                                    'logo_url': empresa.logo_url if hasattr(empresa, 'logo_url') else None,
+                                }
+                        except Exception as _emp_err:
+                            logger.info(f"Erro ao buscar empresa para operacao: {_emp_err}")
                     
                     operacao_data = {
                         'id_operacao': venda.id_operacao.pk,
@@ -1527,11 +1549,8 @@ class VendaView(APIView):
                     'chave_nfe_referenciada': venda.chave_nfe_referenciada or '',
                 }
                 
-                # DEBUG: Verificar o que est� sendo enviado
-                print(f"\n?? DEBUG - Venda {venda.pk}:")
-                print(f"  - operacao_data: {operacao_data}")
-                print(f"  - Campo 'operacao' no response: {'operacao' in response_data}")
-                print(f"  - Valor do campo 'operacao': {response_data.get('operacao')}")
+                # DEBUG: Log seguro em UTF-8
+                logger.info(f"[VendaView] Detalhes da Venda {venda.pk} carregados com sucesso.")
                 
                 return Response(response_data, status=status.HTTP_200_OK)
             except Venda.DoesNotExist:
@@ -2306,7 +2325,7 @@ class VendaView(APIView):
         _op_numeracao = venda.id_operacao
         _is_last_number = False
 
-        if numero_nfe and _op_numeracao and status_atual == 'PENDENTE':
+        if numero_nfe and _op_numeracao and status_atual in ('PENDENTE', 'ERRO'):
             modelo_doc = str(getattr(_op_numeracao, 'modelo_documento', '') or '')
             is_fiscal = modelo_doc in ('55', '65')
             try:

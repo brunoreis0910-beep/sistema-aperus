@@ -59,6 +59,33 @@ class ReformaTaxService:
         self.repo = RepositorioReforma()
         self._cache_aliquotas_ref = None
         
+    def _get_reducoes_db(self, cltr_cd):
+        """
+        Queries ncm_local.db for reductions of a classification code.
+        Retorna dict {tributo_id: valor_reducao}
+        """
+        reducoes = {}
+        if not self.repo.db_path:
+            return reducoes
+            
+        try:
+            with sqlite3.connect(self.repo.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT P.PERE_TBTO_ID, P.PERE_VALOR
+                    FROM PERCENTUAL_REDUCAO P
+                    JOIN CLASSIFICACAO_TRIBUTARIA C ON P.PERE_CLTR_ID = C.CLTR_ID
+                    WHERE C.CLTR_CD = ?
+                      AND (P.PERE_INICIO_VIGENCIA <= date('now') OR P.PERE_INICIO_VIGENCIA IS NULL)
+                      AND (P.PERE_FIM_VIGENCIA >= date('now') OR P.PERE_FIM_VIGENCIA IS NULL OR P.PERE_FIM_VIGENCIA = 'NULL')
+                """, (cltr_cd,))
+                rows = cursor.fetchall()
+                for row in rows:
+                    reducoes[row[0]] = Decimal(str(row[1]))
+        except Exception as e:
+            print(f"Erro ao buscar reducoes no DB: {e}")
+        return reducoes
+        
     def _get_aliquotas_referencia(self):
         """
         Busca as alíquotas de referência do banco (valores oficiais da Reforma)
@@ -213,21 +240,32 @@ class ReformaTaxService:
             res["ibs_aliquota"] = Decimal("0.00")
             res["cbs_aliquota"] = Decimal("0.00")
             
-        # Aplicar Reduções do JSON (se existir classificação)
-        if cClassTrib and cClassTrib in self.repo.classification_map:
-            rule = self.repo.classification_map[cClassTrib]
+        # Obter Reduções do DB (tenta DB local primeiro) ou JSON como fallback
+        red_cbs = Decimal("0.0")
+        red_ibs = Decimal("0.0")
+        if cClassTrib:
+            reducoes_db = self._get_reducoes_db(cClassTrib)
+            if reducoes_db:
+                red_cbs = reducoes_db.get(2, Decimal("0.0"))
+                red_ibs = reducoes_db.get(3, Decimal("0.0"))
+            elif cClassTrib in self.repo.classification_map:
+                rule = self.repo.classification_map[cClassTrib]
+                red_cbs = Decimal(str(rule.get('percentualReducaoCbs', 0.0)))
+                red_ibs = Decimal(str(rule.get('percentualReducaoIbsUf', 0.0) or rule.get('percentualReducaoIbs', 0.0)))
+
+        # Guardar valores nominais e redução
+        res["ibs_aliquota_nominal"] = res["ibs_aliquota"]
+        res["cbs_aliquota_nominal"] = res["cbs_aliquota"]
+        res["percentual_reducao_ibs"] = red_ibs
+        res["percentual_reducao_cbs"] = red_cbs
+
+        # Aplicar redução: Alíquota Efetiva = Alíquota Base × (1 - Redução%)
+        if red_cbs > 0:
+            nova_cbs = res["cbs_aliquota"] * (Decimal("1") - red_cbs / Decimal("100"))
+            res["cbs_aliquota"] = nova_cbs.quantize(Decimal("0.01"))
             
-            # Reduções Percentuais
-            red_cbs = Decimal(str(rule.get('percentualReducaoCbs', 0.0)))
-            red_ibs = Decimal(str(rule.get('percentualReducaoIbsUf', 0.0) or rule.get('percentualReducaoIbs', 0.0)))
-            
-            # Aplicar redução: Alíquota Efetiva = Alíquota Base × (1 - Redução%)
-            if red_cbs > 0:
-                nova_cbs = res["cbs_aliquota"] * (Decimal("1") - red_cbs / Decimal("100"))
-                res["cbs_aliquota"] = nova_cbs.quantize(Decimal("0.01"))
-                
-            if red_ibs > 0:
-                nova_ibs = res["ibs_aliquota"] * (Decimal("1") - red_ibs / Decimal("100"))
-                res["ibs_aliquota"] = nova_ibs.quantize(Decimal("0.01"))
+        if red_ibs > 0:
+            nova_ibs = res["ibs_aliquota"] * (Decimal("1") - red_ibs / Decimal("100"))
+            res["ibs_aliquota"] = nova_ibs.quantize(Decimal("0.01"))
             
         return res

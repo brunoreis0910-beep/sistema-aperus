@@ -27,7 +27,12 @@ import {
   Select,
   MenuItem,
   FormControl,
-  InputLabel
+  InputLabel,
+  List,
+  ListItemButton,
+  ClickAwayListener,
+  ToggleButton,
+  ToggleButtonGroup
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -103,14 +108,23 @@ const VendaRapidaPage = () => {
   const [mostrarBannerOffline, setMostrarBannerOffline] = useState(false);
   const [openPesquisaProduto, setOpenPesquisaProduto] = useState(false);
   const [produtosPesquisa, setProdutosPesquisa] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionIndex, setSuggestionIndex] = useState(-1);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const searchTimeoutRef = useRef(null);
   const [codigoProduto, setCodigoProduto] = useState('');
   const [nomeProduto, setNomeProduto] = useState('');
+  const [referenciaProduto, setReferenciaProduto] = useState('');
+  const [localizacaoProduto, setLocalizacaoProduto] = useState('');
+  const [estoqueProduto, setEstoqueProduto] = useState(0);
   const [quantidade, setQuantidade] = useState(1);
   const [valorUnitario, setValorUnitario] = useState(0);
   const [idProdutoSelecionado, setIdProdutoSelecionado] = useState(null);
   const [grupoProdutoSelecionado, setGrupoProdutoSelecionado] = useState(null);
   const [descontoItem, setDescontoItem] = useState(0);
   const [descontoItemEdit, setDescontoItemEdit] = useState(0);
+  const [tipoDescontoGeral, setTipoDescontoGeral] = useState('porcentagem');
+  const [valorDescontoGeralInput, setValorDescontoGeralInput] = useState('');
   const [precoBaseProduto, setPrecoBaseProduto] = useState(0);
   const [produtoBalanca, setProdutoBalanca] = useState(null);
   const [controlaProdutoLote, setControlaProdutoLote] = useState(false);
@@ -152,6 +166,7 @@ const VendaRapidaPage = () => {
   const [caixaStatus, setCaixaStatus] = useState('VERIFICANDO');
   const [caixaInfo, setCaixaInfo] = useState(null);
   const [tabelaSelecionada, setTabelaSelecionada] = useState(null);
+  const clientePadraoRef = useRef(null);
 
   const [openSelecionarTabela, setOpenSelecionarTabela] = useState(false);
   const [produtoPendenteTabela, setProdutoPendenteTabela] = useState(null);
@@ -401,7 +416,7 @@ const VendaRapidaPage = () => {
   // 🔹 RECALCULAR TOTAL SEMPRE QUE ITENS OU DESCONTO GERAL MUDAREM
   useEffect(() => {
     calcularTotal();
-  }, [itens, descontoGeral]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [itens, descontoGeral, tipoDescontoGeral, valorDescontoGeralInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 🔹 SELECIONAR TABELA COMERCIAL DO PARÂMETRO DO USUÁRIO
   // Observa quando usuario e tabelas comerciais são carregados e então seleciona automaticamente
@@ -510,8 +525,8 @@ const VendaRapidaPage = () => {
           const resCliente = await axiosInstance.get(
             `/clientes/${resUsuario.data.parametros.id_cliente_padrao}/`
           );
+          clientePadraoRef.current = resCliente.data;
           console.log('✅ Cliente padrão carregado, chamando selecionarClienteVenda:', resCliente.data);
-          // Chamar selecionarClienteVenda para executar todas as validações (limite, atraso, etc)
           await selecionarClienteVenda(resCliente.data);
         }
 
@@ -1239,6 +1254,9 @@ const VendaRapidaPage = () => {
       setGrupoProdutoSelecionado(produto.id_grupo); // Armazenar ID do grupo
       // Usar nome_produto ou descricao, o que estiver disponível
       setNomeProduto(produto.nome_produto || produto.descricao || produto.codigo_produto);
+      setReferenciaProduto(produto.referencia || '');
+      setLocalizacaoProduto(produto.localizacao || '');
+      setEstoqueProduto(estoqueDisponivel);
       setControlaProdutoLote(produto.controla_lote || false);
       setLotePreSelecionado(null);
       setOpenPesquisaProduto(false);
@@ -1352,14 +1370,194 @@ const VendaRapidaPage = () => {
     }
   };
 
-  const handleCodigoProdutoKeyPress = async (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
+  const handleCodigoProdutoChange = (e) => {
+    const val = e.target.value;
+    setCodigoProduto(val);
 
-      if (!codigoProduto) return;
-
-      await buscarProduto(codigoProduto, true);
+    if (!val || val.trim().length < 2) {
+      setSuggestions([]);
+      setSuggestionIndex(-1);
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      return;
     }
+
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        setLoadingSuggestions(true);
+        let list = [];
+        const query = val.trim();
+        if (servidorOkRef.current) {
+          const res = await axiosInstance.get(`/produtos/?search=${encodeURIComponent(query)}`);
+          list = Array.isArray(res.data) ? res.data : (res.data.results || []);
+        } else {
+          list = await buscarProdutosHook(query);
+        }
+        setSuggestions(list.slice(0, 10));
+        setSuggestionIndex(list.length > 0 ? 0 : -1);
+      } catch (err) {
+        console.error("Erro ao buscar sugestões de produtos:", err);
+        setSuggestions([]);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 200);
+  };
+
+  const handleCodigoProdutoKeyDown = async (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (suggestions.length > 0) {
+        setSuggestionIndex((prev) => (prev + 1) % suggestions.length);
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (suggestions.length > 0) {
+        setSuggestionIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      if (suggestions.length > 0 && suggestionIndex >= 0 && suggestionIndex < suggestions.length) {
+        const prod = suggestions[suggestionIndex];
+        setSuggestions([]);
+        setSuggestionIndex(-1);
+        setCodigoProduto(prod.codigo_produto || prod.codigo || '');
+        await selecionarProduto(prod, true);
+      } else if (codigoProduto) {
+        setSuggestions([]);
+        setSuggestionIndex(-1);
+        await buscarProduto(codigoProduto, true);
+      }
+    } else if (e.key === 'Escape') {
+      setSuggestions([]);
+      setSuggestionIndex(-1);
+    }
+  };
+
+  const renderSuggestionsDropdown = () => {
+    if (suggestions.length === 0 && !loadingSuggestions) return null;
+
+    const depositoId = operacao?.id_deposito_baixa || operacao?.id_deposito;
+    const nomeDep = operacao?.nome_deposito_baixa || operacao?.nome_deposito || '';
+
+    return (
+      <Paper
+        elevation={8}
+        sx={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          zIndex: 1400,
+          mt: 0.5,
+          maxHeight: 340,
+          overflowY: 'auto',
+          borderRadius: 2,
+          border: '1px solid #2196F3',
+          backgroundColor: '#ffffff',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+        }}
+      >
+        {loadingSuggestions ? (
+          <Box sx={{ p: 2, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+            <CircularProgress size={20} color="primary" />
+            <Typography variant="body2" color="text.secondary">Buscando produtos...</Typography>
+          </Box>
+        ) : (
+          <List disablePadding>
+            {suggestions.map((prod, idx) => {
+              const precoVal = parseFloat(prod.valor_venda || prod.preco_venda || prod.preco || 0);
+              const precoFormatado = precoVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+              const isSelected = idx === suggestionIndex;
+
+              // Calcular estoque específico do depósito de baixa da operação
+              let qtdEstoque = prod.quantidade_estoque;
+              let nomeDepItem = nomeDep;
+
+              if (prod.estoque_por_deposito && Array.isArray(prod.estoque_por_deposito) && depositoId) {
+                const estDep = prod.estoque_por_deposito.find(e => String(e.id_deposito) === String(depositoId));
+                if (estDep) {
+                  qtdEstoque = estDep.quantidade_atual ?? estDep.quantidade ?? 0;
+                  if (estDep.nome_deposito) nomeDepItem = estDep.nome_deposito;
+                }
+              }
+
+              if (qtdEstoque === undefined || qtdEstoque === null) {
+                qtdEstoque = prod.estoque_total ?? prod.quantidade_estoque ?? 0;
+              }
+
+              const numEstoque = parseFloat(qtdEstoque || 0);
+
+              return (
+                <ListItemButton
+                  key={prod.id_produto || prod.id || idx}
+                  selected={isSelected}
+                  onClick={async () => {
+                    setSuggestions([]);
+                    setSuggestionIndex(-1);
+                    setCodigoProduto(prod.codigo_produto || prod.codigo || '');
+                    await selecionarProduto(prod, true);
+                  }}
+                  sx={{
+                    py: 1.2,
+                    px: 2,
+                    borderBottom: '1px solid #f0f0f0',
+                    backgroundColor: isSelected ? '#e3f2fd !important' : 'transparent',
+                    '&:hover': { backgroundColor: '#f5f5f5' },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <Box sx={{ pr: 1 }}>
+                      <Typography variant="body1" sx={{ fontWeight: isSelected ? 700 : 600, color: '#1a237e' }}>
+                        {prod.nome_produto || prod.nome}
+                      </Typography>
+
+                      <Box sx={{ display: 'flex', gap: 1.5, mt: 0.4, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          Cód: <strong>{prod.codigo_produto || prod.codigo || prod.id_produto}</strong>
+                        </Typography>
+
+                        {prod.referencia && (
+                          <Typography variant="caption" sx={{ color: '#00695c', fontWeight: 600 }}>
+                            Ref: <strong>{prod.referencia}</strong>
+                          </Typography>
+                        )}
+
+                        {prod.localizacao && (
+                          <Typography variant="caption" sx={{ color: '#e65100', fontWeight: 600 }}>
+                            Loc: <strong>{prod.localizacao}</strong>
+                          </Typography>
+                        )}
+
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: numEstoque > 0 ? '#2e7d32' : '#d32f2f',
+                            fontWeight: 700,
+                            backgroundColor: numEstoque > 0 ? '#e8f5e9' : '#ffebee',
+                            px: 0.8,
+                            py: 0.2,
+                            borderRadius: 1,
+                            border: `1px solid ${numEstoque > 0 ? '#c8e6c9' : '#ffcdd2'}`,
+                          }}
+                        >
+                          Estoque{nomeDepItem ? ` (${nomeDepItem})` : ''}: {numEstoque.toFixed(2)}
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#2e7d32', ml: 2, whiteSpace: 'nowrap' }}>
+                      {precoFormatado}
+                    </Typography>
+                  </Box>
+                </ListItemButton>
+              );
+            })}
+          </List>
+        )}
+      </Paper>
+    );
   };
 
   const handleQuantidadeKeyPress = (e) => {
@@ -1816,17 +2014,25 @@ const VendaRapidaPage = () => {
   };
 
   const calcularTotal = () => {
-    const subtotal = itens.reduce((acc, item) => acc + item.valor_total, 0);
-    const valorDescontoGeral = (subtotal * descontoGeral) / 100;
-    const totalCalculado = subtotal - valorDescontoGeral;
+    const subtotalVal = itens.reduce((acc, item) => acc + (item.valor_total || 0), 0);
+    let descValor = 0;
+    if (tipoDescontoGeral === 'valor') {
+      descValor = parseFloat(valorDescontoGeralInput || 0);
+    } else {
+      descValor = (subtotalVal * parseFloat(descontoGeral || 0)) / 100;
+    }
+    const totalCalculado = Math.max(0, subtotalVal - descValor);
     console.log('🧮 CALCULANDO TOTAL:', {
       'itens.length': itens.length,
-      'subtotal': subtotal,
-      'descontoGeral': descontoGeral,
-      'valorDescontoGeral': valorDescontoGeral,
+      'subtotal': subtotalVal,
+      'tipoDescontoGeral': tipoDescontoGeral,
+      'descontoGeral (%)': descontoGeral,
+      'valorDescontoGeralInput (R$)': valorDescontoGeralInput,
+      'descValorCalculado': descValor,
       'totalCalculado': totalCalculado
     });
     setValorTotal(totalCalculado);
+    setValorDescontoGeral(descValor);
   };
 
   // Funções de Condições de Pagamento
@@ -2100,6 +2306,33 @@ const VendaRapidaPage = () => {
       const dataDocStr = dataDocumento.toISOString().split('T')[0];
       const dataVencStr = dataVencimento.toISOString().split('T')[0];
       const ehVendaAPrazo = dataVencStr > dataDocStr;
+
+      const nomeNormForma = (forma?.nome_forma || forma?.nome || forma?.descricao || '').toUpperCase().replace(/[_]/g, ' ').replace(/[-]/g, ' ');
+      const permitidosVR = ['CARTAO', 'CARTÃO', 'CREDITO', 'CRÉDITO', 'DEBITO', 'DÉBITO', 'PIX', 'DINHEIRO', 'MERCADO PAGO', 'MERCADOPAGO', 'POINT', 'VOUCHER'];
+      const termosBloqueadosVR = ['BOLETO', 'FATURAD', 'CREDIARI', 'CREDIÁRI', 'DUPLICATA', 'PROMISSORI', 'PROMISSÓRI', 'CARNE', 'CARNÊ', 'FIADO', 'CONVENIO', 'CONVÊNIO'];
+
+      const nomeCliVR = (cliente?.nome_razao_social || '').toUpperCase().trim();
+      const cpfCleanVR = String(cliente?.cpf_cnpj || '').replace(/[^0-9]/g, '');
+      const ehClienteBloqueadoVR = !cliente || cliente.permite_venda_prazo === false || ['CONSUMIDOR', 'CONSUMIDOR FINAL', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', ''].includes(nomeCliVR) || nomeCliVR.includes('CONSUMIDOR') || !cpfCleanVR || cpfCleanVR.replace(/0/g, '').length === 0;
+
+      let ehFormaPrazoVR = false;
+      if (permitidosVR.some(p => nomeNormForma.includes(p)) && !nomeNormForma.includes('BOLETO')) {
+        ehFormaPrazoVR = false;
+      } else {
+        if (termosBloqueadosVR.some(t => nomeNormForma.includes(t))) {
+          ehFormaPrazoVR = true;
+        } else {
+          const pal = nomeNormForma.split(' ');
+          if (pal.includes('PRAZO') || pal.includes('FATURA')) {
+            ehFormaPrazoVR = true;
+          }
+        }
+      }
+
+      if (ehFormaPrazoVR && ehClienteBloqueadoVR) {
+        setError('🚫 Operação Negada: O cliente Consumidor Final (CPF 000.000.000-00) não tem autorização para compras faturadas ou boleto. Selecione Dinheiro, Pix, Cartão ou Mercado Pago.');
+        return;
+      }
 
       console.log('🔍 Verificando tipo de venda:', {
         forma: forma.nome_forma,
@@ -2425,8 +2658,8 @@ const VendaRapidaPage = () => {
         tipo_conta: 'receber',
         id_cliente_fornecedor: cliente?.id_cliente || null,
         descricao: `Venda #${numeroDocumento} - ${forma?.nome_forma || 'Pagamento'} ${condicoesSelecionadas.length > 1 ? `(${i + 1}/${condicoesSelecionadas.length})` : ''}`,
-        valor_parcela: condicao.valor,
-        valor_liquidado: deveBaixar ? condicao.valor : 0,
+        valor_parcela: Number(parseFloat(condicao.valor || 0).toFixed(2)),
+        valor_liquidado: deveBaixar ? Number(parseFloat(condicao.valor || 0).toFixed(2)) : 0,
         valor_juros: 0,
         valor_multa: 0,
         valor_desconto: 0,
@@ -2615,8 +2848,8 @@ const VendaRapidaPage = () => {
             tipo_conta: 'receber', // Venda gera contas a receber
             id_cliente_fornecedor: cliente?.id_cliente || null,
             descricao: `Venda #${numeroDocumento} - ${forma?.nome_forma || 'Pagamento'} ${condicoesSelecionadas.length > 1 ? `(${i + 1}/${condicoesSelecionadas.length})` : ''}`,
-            valor_parcela: condicao.valor,
-            valor_liquidado: deveBaixarAutomaticamente ? condicao.valor : 0,
+            valor_parcela: Number(parseFloat(condicao.valor || 0).toFixed(2)),
+            valor_liquidado: deveBaixarAutomaticamente ? Number(parseFloat(condicao.valor || 0).toFixed(2)) : 0,
             valor_juros: 0,
             valor_multa: 0,
             valor_desconto: 0,
@@ -2750,16 +2983,18 @@ const VendaRapidaPage = () => {
       if (err.response?.data) {
         // Se houver detalhes do erro do backend
         if (typeof err.response.data === 'object') {
-          // Mostrar todos os campos com erro
-          const erros = Object.entries(err.response.data)
-            .map(([campo, msg]) => `${campo}: ${Array.isArray(msg) ? msg.join(', ') : msg}`)
-            .join('\n');
-          mensagemErro = erros;
+          const d = err.response.data;
+          mensagemErro = d.mensagem || d.message || d.details || d.detail || d.error || d.erro;
+          if (!mensagemErro) {
+            mensagemErro = Object.entries(d)
+              .map(([campo, msg]) => `${campo}: ${Array.isArray(msg) ? msg.join(', ') : msg}`)
+              .join('\n');
+          }
         } else {
-          mensagemErro = err.response.data.detail || err.response.data;
+          mensagemErro = String(err.response.data);
         }
       } else {
-        mensagemErro = err.message;
+        mensagemErro = err.message || mensagemErro;
       }
 
       setError(mensagemErro);
@@ -2789,6 +3024,17 @@ const VendaRapidaPage = () => {
     setLimiteAutorizado(false);
     setAtrasoAutorizado(false);
     setEstoqueAutorizado(false);
+
+    // 🔹 RESETAR CLIENTE PARA CONSUMIDOR FINAL NA PRÓXIMA VENDA
+    if (clientePadraoRef.current) {
+      setCliente(clientePadraoRef.current);
+    } else if (clientes && clientes.length > 0) {
+      const cons = clientes.find(c => {
+        const n = (c.nome_razao_social || '').toUpperCase();
+        return n.includes('CONSUMIDOR') || n.includes('PADRAO') || n.includes('PADRÃO');
+      });
+      if (cons) setCliente(cons);
+    }
     
     // 🔹 Limpar estado salvo do IndexedDB após finalizar venda
     try {
@@ -2798,6 +3044,42 @@ const VendaRapidaPage = () => {
       console.error('❌ Erro ao limpar estado do IndexedDB:', err);
     }
   };
+
+  // ⌨️ TECLAS DE ATALHO GLOBAIS DA VENDA RÁPIDA (F1, F2, F4, F6, F8, F10)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      const key = e.key;
+
+      if (['F1', 'F2', 'F4', 'F6', 'F8', 'F10'].includes(key)) {
+        e.preventDefault();
+      } else {
+        return;
+      }
+
+      if (key === 'F1') {
+        setOpenSelecionarCliente(true);
+      } else if (key === 'F2') {
+        setOpenPesquisaProduto(true);
+      } else if (key === 'F4') {
+        setOpenDesconto(true);
+      } else if (key === 'F6') {
+        limparVenda();
+      } else if (key === 'F8') {
+        abrirCondicoesPagamento();
+      } else if (key === 'F10') {
+        if (openCondicoesPagamento) {
+          finalizarVenda();
+        } else {
+          abrirCondicoesPagamento();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [cliente, itens, condicoesSelecionadas, valorTotal, openCondicoesPagamento, openSelecionarCliente, openPesquisaProduto, openDesconto]);
 
   // Função para gerar HTML de impressão (reutilizável)
   const gerarConteudoImpressao = (dados, config = {}) => {
@@ -3420,7 +3702,7 @@ const VendaRapidaPage = () => {
                   }}
                   label="💰 Tabela de Preço"
                 >
-                  {tabelasComerciais.map((tabela) => (
+                  {(tabelasComerciais || []).map((tabela) => (
                     <MenuItem key={tabela.id_tabela_comercial} value={tabela.id_tabela_comercial}>
                       {tabela.nome} ({tabela.percentual > 0 ? '+' : ''}{tabela.percentual}%)
                     </MenuItem>
@@ -3525,11 +3807,32 @@ const VendaRapidaPage = () => {
         <Typography variant="h3" fontWeight="bold">
           {nomeProduto || codigoProduto || 'Digite o código ou nome do produto'}
         </Typography>
-        {nomeProduto && codigoProduto && (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, mt: 1 }}>
-            <Typography variant="h6" sx={{ opacity: 0.9 }}>
-              Código: {codigoProduto}
-            </Typography>
+        {nomeProduto && (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, mt: 1, flexWrap: 'wrap' }}>
+            {codigoProduto && (
+              <Typography variant="h6" sx={{ opacity: 0.95 }}>
+                Código: <strong>{codigoProduto}</strong>
+              </Typography>
+            )}
+            {referenciaProduto && (
+              <Typography variant="h6" sx={{ opacity: 0.95 }}>
+                Ref: <strong>{referenciaProduto}</strong>
+              </Typography>
+            )}
+            {localizacaoProduto && (
+              <Typography variant="h6" sx={{ opacity: 0.95 }}>
+                Loc: <strong>{localizacaoProduto}</strong>
+              </Typography>
+            )}
+            <Chip
+              label={`Estoque ${operacao?.nome_deposito_baixa ? `(${operacao.nome_deposito_baixa})` : (operacao?.nome_deposito ? `(${operacao.nome_deposito})` : '')}: ${parseFloat(estoqueProduto || 0).toFixed(2)}`}
+              sx={{
+                backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                color: 'white',
+                fontWeight: 'bold',
+                fontSize: '0.9rem'
+              }}
+            />
             {produtoBalanca && (
               <Chip
                 icon={<ScaleIcon />}
@@ -3563,32 +3866,37 @@ const VendaRapidaPage = () => {
           ════════════════════════════════════════════════════ */}
       <Box sx={{ display: { xs: 'flex', md: 'none' }, flexDirection: 'column', gap: 1 }}>
 
-        {/* ── Busca ── */}
+        {/* ── Busca com Sugestões em Tempo Real ── */}
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <TextField
-            fullWidth
-            value={codigoProduto}
-            onChange={(e) => setCodigoProduto(e.target.value)}
-            onKeyPress={handleCodigoProdutoKeyPress}
-            inputRef={codigoProdutoRef}
-            autoFocus
-            placeholder="Código ou nome do produto"
-            size="medium"
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ color: '#2196F3' }} />
-                </InputAdornment>
-              ),
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: 'white',
-                fontSize: '1rem',
-                borderRadius: 2,
-              }
-            }}
-          />
+          <ClickAwayListener onClickAway={() => setSuggestions([])}>
+            <Box sx={{ position: 'relative', flexGrow: 1 }}>
+              <TextField
+                fullWidth
+                value={codigoProduto}
+                onChange={handleCodigoProdutoChange}
+                onKeyDown={handleCodigoProdutoKeyDown}
+                inputRef={codigoProdutoRef}
+                autoFocus
+                placeholder="Código ou nome do produto"
+                size="medium"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ color: '#2196F3' }} />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: 'white',
+                    fontSize: '1rem',
+                    borderRadius: 2,
+                  }
+                }}
+              />
+              {renderSuggestionsDropdown()}
+            </Box>
+          </ClickAwayListener>
           <Button
             variant="contained"
             onClick={() => buscarProduto(codigoProduto)}
@@ -3817,34 +4125,39 @@ const VendaRapidaPage = () => {
         {/* Coluna Esquerda - Entrada de Dados */}
         <Grid item xs={12} md={5}>
           <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
-            {/* Código */}
+            {/* Código com Autocomplete em Tempo Real */}
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                 Código ou Nome:
               </Typography>
-              <TextField
-                fullWidth
-                value={codigoProduto}
-                onChange={(e) => setCodigoProduto(e.target.value)}
-                onKeyPress={handleCodigoProdutoKeyPress}
-                inputRef={codigoProdutoRef}
-                autoFocus
-                size="large"
-                placeholder="Digite código ou nome do produto"
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <SearchIcon />
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    backgroundColor: 'white',
-                    fontSize: '1.2rem'
-                  }
-                }}
-              />
+              <ClickAwayListener onClickAway={() => setSuggestions([])}>
+                <Box sx={{ position: 'relative' }}>
+                  <TextField
+                    fullWidth
+                    value={codigoProduto}
+                    onChange={handleCodigoProdutoChange}
+                    onKeyDown={handleCodigoProdutoKeyDown}
+                    inputRef={codigoProdutoRef}
+                    autoFocus
+                    size="large"
+                    placeholder="Digite código ou nome do produto"
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <SearchIcon />
+                        </InputAdornment>
+                      ),
+                    }}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: 'white',
+                        fontSize: '1.2rem'
+                      }
+                    }}
+                  />
+                  {renderSuggestionsDropdown()}
+                </Box>
+              </ClickAwayListener>
               <Button
                 fullWidth
                 variant="outlined"
@@ -3963,55 +4276,6 @@ const VendaRapidaPage = () => {
                   fullWidth
                   variant="outlined"
                   size="large"
-                  startIcon={<ReceiptIcon />}
-                  onClick={() => {
-                    // Funcionalidade de serviços a ser implementada
-                    console.log('Botão Serviços clicado');
-                  }}
-                  sx={{
-                    height: 60,
-                    borderColor: '#9C27B0',
-                    color: '#9C27B0',
-                    '&:hover': {
-                      borderColor: '#7B1FA2',
-                      backgroundColor: '#F3E5F5'
-                    }
-                  }}
-                >
-                  Serviços
-                </Button>
-              </Grid>
-              <Grid item xs={6}>
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  size="large"
-                  startIcon={<MoneyIcon />}
-                  onClick={() => {
-                    // Funcionalidade de pagamento parcial a ser implementada
-                    console.log('Botão Parcial clicado');
-                  }}
-                  sx={{
-                    height: 60,
-                    borderColor: '#4CAF50',
-                    color: '#4CAF50',
-                    '&:hover': {
-                      borderColor: '#388E3C',
-                      backgroundColor: '#E8F5E9'
-                    }
-                  }}
-                >
-                  Parcial
-                </Button>
-              </Grid>
-            </Grid>
-
-            <Grid container spacing={2} sx={{ mb: 2 }}>
-              <Grid item xs={6}>
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  size="large"
                   startIcon={<PersonIcon />}
                   onClick={() => {
                     setOpenSelecionarCliente(true);
@@ -4021,6 +4285,7 @@ const VendaRapidaPage = () => {
                     height: 60,
                     borderColor: '#2196F3',
                     color: '#2196F3',
+                    fontWeight: 'bold',
                     '&:hover': {
                       borderColor: '#1976D2',
                       backgroundColor: '#E3F2FD'
@@ -4038,22 +4303,24 @@ const VendaRapidaPage = () => {
                   fullWidth
                   variant="outlined"
                   size="large"
-                  startIcon={<GroupIcon />}
-                  onClick={() => {
-                    // Funcionalidade de agrupar itens a ser implementada
-                    console.log('Botão Agrupar clicado');
-                  }}
+                  startIcon={<DiscountIcon />}
+                  onClick={() => setOpenDesconto(true)}
+                  disabled={itens.length === 0}
                   sx={{
                     height: 60,
-                    borderColor: '#00BCD4',
-                    color: '#00BCD4',
+                    borderColor: '#FF9800',
+                    color: '#FF9800',
+                    fontWeight: 'bold',
                     '&:hover': {
-                      borderColor: '#0097A7',
-                      backgroundColor: '#E0F7FA'
+                      borderColor: '#F57C00',
+                      backgroundColor: '#FFF3E0'
                     }
                   }}
                 >
-                  Agrupar
+                  Desconto
+                  <Typography component="span" sx={{ ml: 1, fontSize: '0.75rem', opacity: 0.7 }}>
+                    (F4)
+                  </Typography>
                 </Button>
               </Grid>
             </Grid>
@@ -4374,45 +4641,141 @@ const VendaRapidaPage = () => {
       >
         <DialogTitle sx={{ backgroundColor: '#FF9800', color: 'white', fontWeight: 'bold' }}>
           <DiscountIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-          Desconto Geral
+          Desconto Geral na Venda
         </DialogTitle>
         <DialogContent sx={{ mt: 3 }}>
-          <TextField
-            fullWidth
-            label="Desconto %"
-            type="number"
-            value={descontoGeral}
-            onChange={(e) => setDescontoGeral(e.target.value)}
-            inputProps={{ min: 0, max: 100, step: 0.01 }}
-            sx={{
-              mt: 2,
-              '& .MuiOutlinedInput-root': {
-                fontSize: '1.5rem',
-                fontWeight: 'bold'
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+            <ToggleButtonGroup
+              value={tipoDescontoGeral}
+              exclusive
+              onChange={(e, newTipo) => {
+                if (newTipo !== null) setTipoDescontoGeral(newTipo);
+              }}
+              color="primary"
+              size="large"
+              sx={{ width: '100%' }}
+            >
+              <ToggleButton value="porcentagem" sx={{ flexGrow: 1, fontWeight: 'bold', py: 1.2 }}>
+                % Porcentagem
+              </ToggleButton>
+              <ToggleButton value="valor" sx={{ flexGrow: 1, fontWeight: 'bold', py: 1.2 }}>
+                R$ Valor (Reais)
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
+
+          {tipoDescontoGeral === 'porcentagem' ? (
+            <TextField
+              fullWidth
+              label="Desconto em Porcentagem (%)"
+              type="number"
+              value={descontoGeral}
+              onChange={(e) => setDescontoGeral(e.target.value)}
+              inputProps={{ min: 0, max: 100, step: 0.01 }}
+              InputProps={{
+                startAdornment: <InputAdornment position="start">%</InputAdornment>,
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  fontSize: '1.5rem',
+                  fontWeight: 'bold'
+                }
+              }}
+              autoFocus
+            />
+          ) : (
+            <TextField
+              fullWidth
+              label="Desconto em Reais (R$)"
+              type="number"
+              value={valorDescontoGeralInput}
+              onChange={(e) => setValorDescontoGeralInput(e.target.value)}
+              inputProps={{ min: 0, step: 0.01 }}
+              InputProps={{
+                startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  fontSize: '1.5rem',
+                  fontWeight: 'bold'
+                }
+              }}
+              autoFocus
+            />
+          )}
+
+          {/* Resumo do Cálculo do Desconto */}
+          <Box sx={{ mt: 3, p: 2, backgroundColor: '#fff3e0', borderRadius: 2, border: '1px solid #ffe0b2' }}>
+            {(() => {
+              const subtotalVal = itens.reduce((acc, item) => acc + (item.valor_total || 0), 0);
+              let valDesc = 0;
+              let pctDesc = 0;
+              if (tipoDescontoGeral === 'valor') {
+                valDesc = parseFloat(valorDescontoGeralInput || 0);
+                pctDesc = subtotalVal > 0 ? (valDesc / subtotalVal) * 100 : 0;
+              } else {
+                pctDesc = parseFloat(descontoGeral || 0);
+                valDesc = (subtotalVal * pctDesc) / 100;
               }
-            }}
-            autoFocus
-          />
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-            Desconto será aplicado ao total da venda
-          </Typography>
+              const totalFinalPreview = Math.max(0, subtotalVal - valDesc);
+
+              return (
+                <Grid container spacing={1}>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Subtotal da Venda:</Typography>
+                    <Typography variant="body1" fontWeight="bold">R$ {subtotalVal.toFixed(2)}</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Desconto Aplicado:</Typography>
+                    <Typography variant="body1" fontWeight="bold" color="error">
+                      - R$ {valDesc.toFixed(2)} ({pctDesc.toFixed(2)}%)
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sx={{ mt: 1, pt: 1, borderTop: '1px dashed #ffb74d' }}>
+                    <Typography variant="body2" color="text.secondary">Total Final:</Typography>
+                    <Typography variant="h5" fontWeight="bold" color="primary">
+                      R$ {totalFinalPreview.toFixed(2)}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              );
+            })()}
+          </Box>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
+        <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
           <Button
-            onClick={() => setOpenDesconto(false)}
+            onClick={() => {
+              setTipoDescontoGeral('porcentagem');
+              setDescontoGeral(0);
+              setValorDescontoGeralInput('');
+              setOpenDesconto(false);
+            }}
             variant="outlined"
             size="large"
+            color="error"
           >
-            Cancelar
+            Remover Desconto
           </Button>
-          <Button
-            onClick={() => setOpenDesconto(false)}
-            variant="contained"
-            size="large"
-            sx={{ backgroundColor: '#FF9800', '&:hover': { backgroundColor: '#F57C00' } }}
-          >
-            Aplicar
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              onClick={() => setOpenDesconto(false)}
+              variant="outlined"
+              size="large"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                calcularTotal();
+                setOpenDesconto(false);
+              }}
+              variant="contained"
+              size="large"
+              sx={{ backgroundColor: '#FF9800', '&:hover': { backgroundColor: '#F57C00' } }}
+            >
+              Aplicar
+            </Button>
+          </Box>
         </DialogActions>
       </Dialog>
 
@@ -4805,12 +5168,42 @@ const VendaRapidaPage = () => {
                   size="small"
                 >
                   <option value="">Selecione...</option>
-                  {formasPagamento.map((forma) => (
-                    <option key={forma.id_forma_pagamento} value={forma.id_forma_pagamento}>
-                      {forma.nome_forma}
-                      {(!forma.id_conta_padrao || !forma.id_centro_custo || !forma.id_departamento) && ' ⚠️'}
-                    </option>
-                  ))}
+                  {formasPagamento.map((forma) => {
+                    const nomeNormForma = (forma?.nome_forma || forma?.nome || forma?.descricao || '').toUpperCase().replace(/[_]/g, ' ').replace(/[-]/g, ' ');
+                    const permitidosVR = ['CARTAO', 'CARTÃO', 'CREDITO', 'CRÉDITO', 'DEBITO', 'DÉBITO', 'PIX', 'DINHEIRO', 'MERCADO PAGO', 'MERCADOPAGO', 'POINT', 'VOUCHER'];
+                    const termosBloqueadosVR = ['BOLETO', 'FATURAD', 'CREDIARI', 'CREDIÁRI', 'DUPLICATA', 'PROMISSORI', 'PROMISSÓRI', 'CARNE', 'CARNÊ', 'FIADO', 'CONVENIO', 'CONVÊNIO'];
+
+                    const nomeCliVR = (cliente?.nome_razao_social || '').toUpperCase().trim();
+                    const cpfCleanVR = String(cliente?.cpf_cnpj || '').replace(/[^0-9]/g, '');
+                    const ehClienteBloqueadoVR = !cliente || cliente.permite_venda_prazo === false || ['CONSUMIDOR', 'CONSUMIDOR FINAL', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', ''].includes(nomeCliVR) || nomeCliVR.includes('CONSUMIDOR') || !cpfCleanVR || cpfCleanVR.replace(/0/g, '').length === 0;
+
+                    let ehFormaPrazoVR = false;
+                    if (permitidosVR.some(p => nomeNormForma.includes(p)) && !nomeNormForma.includes('BOLETO')) {
+                      ehFormaPrazoVR = false;
+                    } else {
+                      if (termosBloqueadosVR.some(t => nomeNormForma.includes(t))) {
+                        ehFormaPrazoVR = true;
+                      } else {
+                        const pal = nomeNormForma.split(' ');
+                        if (pal.includes('PRAZO') || pal.includes('FATURA')) {
+                          ehFormaPrazoVR = true;
+                        }
+                      }
+                    }
+
+                    const desativado = ehFormaPrazoVR && ehClienteBloqueadoVR;
+
+                    return (
+                      <option
+                        key={forma.id_forma_pagamento}
+                        value={forma.id_forma_pagamento}
+                        disabled={desativado}
+                        style={desativado ? { color: '#999', backgroundColor: '#e9ecef' } : {}}
+                      >
+                        {forma.nome_forma} {desativado ? '🚫 (Inacessível para Consumidor)' : ((!forma.id_conta_padrao || !forma.id_centro_custo || !forma.id_departamento) && ' ⚠️')}
+                      </option>
+                    );
+                  })}
                 </TextField>
               </Grid>
               <Grid item xs={4}>
@@ -5844,7 +6237,7 @@ const VendaRapidaPage = () => {
           </Typography>
 
           <Grid container spacing={2}>
-            {tabelasComerciais.map((tabela) => (
+            {(tabelasComerciais || []).map((tabela) => (
               <Grid item xs={12} key={tabela.id_tabela_comercial}>
                 <Button
                   variant="outlined"
@@ -5913,7 +6306,7 @@ const VendaRapidaPage = () => {
           </Alert>
 
           <Grid container spacing={2}>
-            {tabelasComerciais.map((tabela) => (
+            {(tabelasComerciais || []).map((tabela) => (
               <Grid item xs={12} key={tabela.id_tabela_comercial}>
                 <Button
                   variant={tabelaSelecionada?.id_tabela_comercial === tabela.id_tabela_comercial ? 'contained' : 'outlined'}

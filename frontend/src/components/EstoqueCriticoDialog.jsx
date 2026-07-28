@@ -29,10 +29,11 @@ export default function EstoqueCriticoDialog({ open, onClose, onAbrirFornecedore
     setError('');
     try {
       const response = await axiosInstance.get('/notificacoes/estoque-critico/');
-      setProdutos(response.data);
+      setProdutos(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
       console.error('Erro ao buscar estoque crítico:', err);
       setError('Erro ao carregar dados. Tente novamente.');
+      setProdutos([]);
     } finally {
       setLoading(false);
     }
@@ -104,7 +105,7 @@ export default function EstoqueCriticoDialog({ open, onClose, onAbrirFornecedore
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {produtos.map((prod) => (
+                  {Array.isArray(produtos) && produtos.map((prod) => (
                     <TableRow key={prod.id_produto} hover>
                       <TableCell>
                         <Typography variant="body2" fontWeight="bold">

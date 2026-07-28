@@ -180,7 +180,8 @@ const OrdemServicoPage = () => {
     quantidade: 1,
     valorUnitario: 0,
     desconto: 0,
-    valorTotal: 0
+    valorTotal: 0,
+    id_tecnico_executante: ''
   });
 
   // Dados para dropdowns
@@ -333,27 +334,27 @@ const OrdemServicoPage = () => {
   const carregarDadosIniciais = async () => {
     try {
       // Carregar operações (apenas com modelo_documento = 'Servico')
-      const resOp = await axiosInstance.get('/operacoes/');
+      const resOp = await axiosInstance.get('/operacoes/', { params: { page_size: 1000 } });
       const dadosOperacoes = Array.isArray(resOp.data) ? resOp.data : resOp.data.results || [];
       console.log('📦 Todas as Operações carregadas:', dadosOperacoes.length, dadosOperacoes);
       setTodasOperacoes(dadosOperacoes);
 
-      const operacoesServico = dadosOperacoes.filter(op => op.modelo_documento === 'Servico');
+      const operacoesServico = dadosOperacoes.filter(op => op.modelo_documento === 'Servico' || op.modelo_documento === 'OS');
       console.log('🔧 Operações filtradas (Servico):', operacoesServico.length, operacoesServico);
       setOperacoes(operacoesServico);
 
       // Carregar clientes
-      const resCli = await axiosInstance.get('/clientes/');
+      const resCli = await axiosInstance.get('/clientes/', { params: { page_size: 1000 } });
       setClientes(Array.isArray(resCli.data) ? resCli.data : resCli.data.results || []);
 
       // Carregar técnicos (para o campo vendedor/técnico)
-      const resTec = await axiosInstance.get('/tecnicos/');
+      const resTec = await axiosInstance.get('/tecnicos/', { params: { page_size: 1000 } });
       const tecnicosCarregados = Array.isArray(resTec.data) ? resTec.data : resTec.data.results || [];
       console.log('👷 Técnicos carregados:', tecnicosCarregados.length, tecnicosCarregados);
       setVendedores(tecnicosCarregados);
 
       // Carregar produtos
-      const resProd = await axiosInstance.get('/produtos/');
+      const resProd = await axiosInstance.get('/produtos/', { params: { page_size: 1000 } });
       const produtosCarregados = Array.isArray(resProd.data) ? resProd.data : resProd.data.results || [];
       console.log('📦 Produtos carregados:', produtosCarregados.length, produtosCarregados);
       setProdutos(produtosCarregados);
@@ -381,6 +382,13 @@ const OrdemServicoPage = () => {
     setOperacao(idOp);
     if (idOp) {
       buscarProximoNumero(idOp);
+    }
+  };
+
+  const handleTipoAtendimentoChange = async (novoTipo) => {
+    setTipoAtendimento(novoTipo);
+    if (cliente) {
+      await buscarVeiculosCliente(cliente, novoTipo);
     }
   };
 
@@ -516,40 +524,71 @@ const OrdemServicoPage = () => {
     }
   };
 
-  const buscarVeiculosCliente = async (idCliente) => {
+  const buscarVeiculosCliente = async (idCliente, tipoOverride) => {
+    const tipo = tipoOverride || tipoAtendimento;
     try {
       // Buscar no localStorage
       const chave = `veiculos_cliente_${idCliente}`;
       const dadosArmazenados = localStorage.getItem(chave);
       let lista = dadosArmazenados ? JSON.parse(dadosArmazenados) : [];
-      console.log('✅ Carregados', lista.length, 'itens do localStorage');
+      // Filtrar itens do localStorage pelo tipo ativo
+      lista = lista.filter(item => item.tipo === tipo);
+      console.log('✅ Carregados', lista.length, 'itens do tipo', tipo, 'do localStorage');
 
-      // Buscar também no banco de dados
-      try {
-        const response = await axiosInstance.get('/veiculos/', { params: { id_cliente: idCliente } });
-        const veiculosBackend = (Array.isArray(response.data) ? response.data : response.data.results || [])
-          .map(v => ({
-            id: v.id_veiculo,
-            id_veiculo: v.id_veiculo,
-            tipo: 'veiculo',
-            id_cliente: idCliente,
-            placa: v.placa || '',
-            marca: v.marca || '',
-            modelo: v.modelo || '',
-            ano: v.ano ? String(v.ano) : '',
-            cor: v.cor || '',
-            chassi: v.chassi || '',
-          }));
+      // Buscar no banco de dados
+      if (tipo === 'veiculo') {
+        try {
+          const response = await axiosInstance.get('/veiculos/', { params: { id_cliente: idCliente } });
+          const veiculosBackend = (Array.isArray(response.data) ? response.data : response.data.results || [])
+            .map(v => ({
+              id: v.id_veiculo,
+              id_veiculo: v.id_veiculo,
+              tipo: 'veiculo',
+              id_cliente: idCliente,
+              placa: v.placa || '',
+              marca: v.marca || '',
+              modelo: v.modelo || '',
+              ano: v.ano ? String(v.ano) : '',
+              cor: v.cor || '',
+              chassi: v.chassi || '',
+            }));
 
-        // Adicionar veículos do banco que não estão no localStorage
-        const placasLocal = new Set(lista.map(v => v.placa?.toUpperCase().replace(/[^A-Z0-9]/g, '')));
-        const novosDoBackend = veiculosBackend.filter(
-          v => !placasLocal.has(v.placa?.toUpperCase().replace(/[^A-Z0-9]/g, ''))
-        );
-        lista = [...lista, ...novosDoBackend];
-        console.log('✅ Veículos do banco:', veiculosBackend.length, '| Novos adicionados:', novosDoBackend.length);
-      } catch (apiErr) {
-        console.error('⚠️ Erro ao buscar veículos do banco:', apiErr.message);
+          const placasLocal = new Set(lista.map(v => v.placa?.toUpperCase().replace(/[^A-Z0-9]/g, '')));
+          const novosDoBackend = veiculosBackend.filter(
+            v => !placasLocal.has(v.placa?.toUpperCase().replace(/[^A-Z0-9]/g, ''))
+          );
+          lista = [...lista, ...novosDoBackend];
+          console.log('✅ Veículos do banco:', veiculosBackend.length, '| Novos adicionados:', novosDoBackend.length);
+        } catch (apiErr) {
+          console.error('⚠️ Erro ao buscar veículos do banco:', apiErr.message);
+        }
+      } else if (tipo === 'animais') {
+        try {
+          const response = await axiosInstance.get('/pets/', { params: { id_cliente: idCliente } });
+          const petsBackend = (Array.isArray(response.data) ? response.data : response.data.results || [])
+            .map(p => ({
+              id: p.id_pet,
+              id_pet: p.id_pet,
+              tipo: 'animais',
+              id_cliente: idCliente,
+              nome: p.nome_pet || '',
+              especie: 'Cão/Gato',
+              raca: p.raca || '',
+              idade: p.data_nascimento ? `${Math.floor((new Date() - new Date(p.data_nascimento)) / (1000 * 60 * 60 * 24 * 365.25))} anos` : '',
+              cor: p.cor || '',
+              peso: p.peso || '',
+              sexo: p.sexo || 'M'
+            }));
+
+          const nomesLocal = new Set(lista.map(p => p.nome?.toUpperCase().trim()));
+          const novosDoBackend = petsBackend.filter(
+            p => !nomesLocal.has(p.nome?.toUpperCase().trim())
+          );
+          lista = [...lista, ...novosDoBackend];
+          console.log('✅ Pets do banco:', petsBackend.length, '| Novos adicionados:', novosDoBackend.length);
+        } catch (apiErr) {
+          console.error('⚠️ Erro ao buscar pets do banco:', apiErr.message);
+        }
       }
 
       setListaVeiculosCliente(lista);
@@ -559,7 +598,7 @@ const OrdemServicoPage = () => {
         setOpenListaModal(true);
       }
     } catch (err) {
-      console.error('Erro ao buscar veículos do cliente:', err);
+      console.error('Erro ao buscar veículos/animais do cliente:', err);
     }
   };
 
@@ -847,17 +886,33 @@ const OrdemServicoPage = () => {
         console.error('⚠️ Erro ao salvar veículo no banco:', apiErr.response?.data || apiErr.message);
         // Continua salvando localmente mesmo se o backend falhar
       }
+    } else if (tipoCadastro === 'animais') {
+      try {
+        const postData = {
+          id_cliente: dadosCadastro.id_cliente,
+          nome_pet: dadosCadastro.nome,
+          raca: dadosCadastro.raca || null,
+          cor: dadosCadastro.cor || null,
+          sexo: dadosCadastro.sexo || 'M',
+          observacoes: `Espécie: ${dadosCadastro.especie || '-'}. Idade: ${dadosCadastro.idade || '-'}.` + (dadosCadastro.observacoes ? ` Obs: ${dadosCadastro.observacoes}` : ''),
+        };
+        const resp = await axiosInstance.post('/pets/', postData);
+        novoItem = { ...novoItem, id_pet: resp.data.id_pet, id: resp.data.id_pet };
+        console.log('✅ Pet salvo no banco com id_pet:', resp.data.id_pet);
+      } catch (apiErr) {
+        console.error('⚠️ Erro ao salvar pet no banco:', apiErr.response?.data || apiErr.message);
+      }
     }
 
     // Salvar no localStorage
     const chave = `veiculos_cliente_${dadosCadastro.id_cliente}`;
     const dadosExistentes = localStorage.getItem(chave);
-    const lista = dadosExistentes ? JSON.parse(dadosExistentes) : [];
-    lista.push(novoItem);
-    localStorage.setItem(chave, JSON.stringify(lista));
+    const listaInteira = dadosExistentes ? JSON.parse(dadosExistentes) : [];
+    listaInteira.push(novoItem);
+    localStorage.setItem(chave, JSON.stringify(listaInteira));
 
     setVeiculoAnimalEquipamento(novoItem);
-    setListaVeiculosCliente(lista);
+    setListaVeiculosCliente(listaInteira.filter(item => item.tipo === tipoCadastro));
 
     setOpenCadastroModal(false);
     setSuccess(`${tipoCadastro === 'veiculo' ? 'Veículo' : tipoCadastro === 'animais' ? 'Animal' : 'Equipamento'} cadastrado!`);
@@ -1402,7 +1457,7 @@ const OrdemServicoPage = () => {
         console.log('📋 Classificação:', produtoSelecionado.classificacao);
 
         // Se o produto NÃO for da classificação "Servico", validar estoque
-        if (produtoSelecionado.classificacao !== 'Servico') {
+        if (produtoSelecionado.classificacao?.toUpperCase() !== 'SERVICO') {
           // Buscar operação selecionada para verificar se valida estoque
           const operacaoSelecionada = operacoes.find(op => op.id_operacao === operacao || op.id === operacao);
 
@@ -1483,7 +1538,11 @@ const OrdemServicoPage = () => {
       ...itemAtual,
       id: Date.now(),
       desconto: desconto,
-      valorTotal: valorTotal
+      valorTotal: valorTotal,
+      tipo: itemAtual.tipo_item,
+      tecnico_nome: itemAtual.tipo_item === 'servico' && itemAtual.id_tecnico_executante
+        ? (vendedores.find(v => v.id_tecnico === itemAtual.id_tecnico_executante)?.nome_tecnico || '')
+        : ''
     };
 
     // Proteção anti-duplicação: verifica se item semelhante foi adicionado recentemente
@@ -1507,7 +1566,8 @@ const OrdemServicoPage = () => {
       quantidade: 1,
       valorUnitario: 0,
       desconto: 0,
-      valorTotal: 0
+      valorTotal: 0,
+      id_tecnico_executante: ''
     });
     setSuccess('Item adicionado');
     setTimeout(() => setSuccess(''), 2000);
@@ -1909,6 +1969,22 @@ const OrdemServicoPage = () => {
       return;
     }
 
+
+    // Bloqueio de compra a prazo para Consumidor / CPF 000.000.000-00
+    const clienteOS = clientes.find(c => c.id_cliente === parseInt(cliente || ordemAtual?.id_cliente));
+    const nomeNorm = (forma.nome_forma || forma.nome || forma.descricao || '').toUpperCase().replace(/[_]/g, ' ');
+    const termosPrazo = ['BOLETO', 'A PRAZO', 'PRAZO', 'FATURAD', 'CREDIARI', 'CREDIÁRI', 'DUPLICATA', 'PROMISSORI', 'PROMISSÓRI', 'CARNE', 'CARNÊ', 'FIADO', 'CONVENIO', 'CONVÊNIO', 'FATURA'];
+    const ehFormaPrazo = (forma.dias_vencimento && parseInt(forma.dias_vencimento) > 0) || termosPrazo.some(t => nomeNorm.includes(t));
+
+    const nomeCli = (clienteOS?.nome_razao_social || '').toUpperCase().trim();
+    const cpfClean = String(clienteOS?.cpf_cnpj || '').replace(/[^0-9]/g, '');
+    const ehClienteBloqueado = !clienteOS || clienteOS.permite_venda_prazo === false || ['CONSUMIDOR', 'CONSUMIDOR FINAL', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', ''].includes(nomeCli) || nomeCli.includes('CONSUMIDOR') || !cpfClean || cpfClean.replace(/0/g, '').length === 0;
+
+    if (ehFormaPrazo && ehClienteBloqueado) {
+      setError('🚫 Operação Negada: O cliente Consumidor Final (CPF 000.000.000-00) não tem permissão para compras faturadas ou a prazo. Selecione uma forma à vista (Dinheiro, Pix ou Cartão).');
+      return;
+    }
+
     const novaForma = {
       id_forma_pagamento: forma.id_forma_pagamento,
       nome_forma: forma.nome_forma,
@@ -2136,7 +2212,7 @@ const OrdemServicoPage = () => {
         // Encontra o produto na lista geral de produtos carregados
         const produtoCadastrado = produtos.find(p => p.id_produto === item.id_produto);
         // Verifica se a classificação é 'Revenda'
-        return produtoCadastrado && produtoCadastrado.classificacao === 'Revenda';
+        return produtoCadastrado && (produtoCadastrado.classificacao === 'Revenda' || produtoCadastrado.classificacao === 'REVENDA');
     });
 
     if (!temProdutoRevenda) {
@@ -3883,7 +3959,7 @@ const OrdemServicoPage = () => {
                   <InputLabel>Tipo de Atendimento</InputLabel>
                   <Select
                     value={tipoAtendimento}
-                    onChange={(e) => setTipoAtendimento(e.target.value)}
+                    onChange={(e) => handleTipoAtendimentoChange(e.target.value)}
                     label="Tipo de Atendimento"
                     disabled={osBloqueadaParaEdicao}
                   >
@@ -4217,13 +4293,13 @@ const OrdemServicoPage = () => {
                           label="Serviço"
                         >
                           <MenuItem value="">Selecione um serviço...</MenuItem>
-                          {produtos.filter(p => p.classificacao === 'Servico').length === 0 && (
+                          {produtos.filter(p => p.classificacao?.toUpperCase() === 'SERVICO').length === 0 && (
                             <MenuItem disabled>
                               <em>Nenhum serviço cadastrado (produtos com classificação "servico")</em>
                             </MenuItem>
                           )}
                           {produtos
-                            .filter(p => p.classificacao === 'Servico')
+                            .filter(p => p.classificacao?.toUpperCase() === 'SERVICO')
                             .map((prod) => {
                               const descricao = prod.descricao || prod.nome_produto || `Produto ${prod.codigo_produto}`;
 
@@ -4258,6 +4334,26 @@ const OrdemServicoPage = () => {
                       </FormControl>
                     )}
                   </Grid>
+
+                  {itemAtual.tipo_item === 'servico' && (
+                    <Grid item xs={12} sm={3}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Técnico Executante</InputLabel>
+                        <Select
+                          value={itemAtual.id_tecnico_executante || ''}
+                          onChange={(e) => setItemAtual({ ...itemAtual, id_tecnico_executante: e.target.value })}
+                          label="Técnico Executante"
+                        >
+                          <MenuItem value=""><em>Selecione o técnico...</em></MenuItem>
+                          {vendedores.map((tec) => (
+                            <MenuItem key={tec.id_tecnico} value={tec.id_tecnico}>
+                              {tec.nome_tecnico}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  )}
                   <Grid item xs={12} sm={2}>
                     <TextField
                       fullWidth
@@ -4352,12 +4448,19 @@ const OrdemServicoPage = () => {
                         <TableRow key={item.id}>
                           <TableCell>
                             <Chip
-                              label={item.tipo}
+                              label={item.tipo_item || item.tipo}
                               size="small"
-                              color={item.tipo === 'produto' ? 'primary' : 'secondary'}
+                              color={(item.tipo_item || item.tipo) === 'produto' ? 'primary' : 'secondary'}
                             />
                           </TableCell>
-                          <TableCell>{item.descricao}</TableCell>
+                          <TableCell>
+                            {item.descricao}
+                            {(item.tipo_item || item.tipo) === 'servico' && item.id_tecnico_executante && (
+                              <Box sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.5 }}>
+                                🔧 Técnico: {vendedores.find(v => v.id_tecnico === item.id_tecnico_executante)?.nome_tecnico || item.tecnico_nome || '-'}
+                              </Box>
+                            )}
+                          </TableCell>
                           <TableCell align="center">{item.quantidade}</TableCell>
                           <TableCell align="right">R$ {(parseFloat(item.valorUnitario) || 0).toFixed(2)}</TableCell>
                           <TableCell align="right">R$ {(parseFloat(item.desconto) || 0).toFixed(2)}</TableCell>
@@ -5376,11 +5479,38 @@ const OrdemServicoPage = () => {
                       label="Forma de Pagamento *"
                     >
                       <MenuItem value="">Selecione...</MenuItem>
-                      {formasPagamento.map((forma) => (
-                        <MenuItem key={forma.id_forma_pagamento} value={forma.id_forma_pagamento}>
-                          {forma.nome_forma}
-                        </MenuItem>
-                      ))}
+                      {formasPagamento.map((forma) => {
+                        const clienteOS = clientes.find(c => c.id_cliente === parseInt(cliente || ordemAtual?.id_cliente));
+                        const nomeNorm = (forma.nome_forma || forma.nome || forma.descricao || '').toUpperCase().replace(/[_]/g, ' ').replace(/[-]/g, ' ');
+                        const permitidos = ['CARTAO', 'CARTÃO', 'CREDITO', 'CRÉDITO', 'DEBITO', 'DÉBITO', 'PIX', 'DINHEIRO', 'MERCADO PAGO', 'MERCADOPAGO', 'POINT', 'VOUCHER'];
+                        const termosBloqueados = ['BOLETO', 'FATURAD', 'CREDIARI', 'CREDIÁRI', 'DUPLICATA', 'PROMISSORI', 'PROMISSÓRI', 'CARNE', 'CARNÊ', 'FIADO', 'CONVENIO', 'CONVÊNIO'];
+
+                        const nomeCli = (clienteOS?.nome_razao_social || '').toUpperCase().trim();
+                        const cpfClean = String(clienteOS?.cpf_cnpj || '').replace(/[^0-9]/g, '');
+                        const ehClienteBloqueado = !clienteOS || clienteOS.permite_venda_prazo === false || ['CONSUMIDOR', 'CONSUMIDOR FINAL', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', ''].includes(nomeCli) || nomeCli.includes('CONSUMIDOR') || !cpfClean || cpfClean.replace(/0/g, '').length === 0;
+
+                        let ehFormaPrazo = false;
+                        if (permitidos.some(p => nomeNorm.includes(p)) && !nomeNorm.includes('BOLETO')) {
+                          ehFormaPrazo = false;
+                        } else {
+                          if (termosBloqueados.some(t => nomeNorm.includes(t))) {
+                            ehFormaPrazo = true;
+                          } else {
+                            const pal = nomeNorm.split(' ');
+                            if (pal.includes('PRAZO') || pal.includes('FATURA')) {
+                              ehFormaPrazo = true;
+                            }
+                          }
+                        }
+
+                        const desativado = ehFormaPrazo && ehClienteBloqueado;
+
+                        return (
+                          <MenuItem key={forma.id_forma_pagamento} value={forma.id_forma_pagamento} disabled={desativado}>
+                            {forma.nome_forma} {desativado ? '🚫 (Inacessível para Consumidor)' : ''}
+                          </MenuItem>
+                        );
+                      })}
                     </Select>
                   </FormControl>
                 </Grid>

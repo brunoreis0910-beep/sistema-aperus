@@ -7,7 +7,6 @@ import { GruposProdutoProvider } from './context/GruposProdutoContext'
 import { VendaRapidaProvider } from './context/VendaRapidaContext';
 import { ToastProvider } from './components/common/Toast'
 import { lightTheme } from './theme/unifiedTheme'
-import DebugLogger from './components/DebugLogger'
 
 // Importa estilos - APENAS CSS LIMPO
 import './styles/clean.css'
@@ -155,7 +154,8 @@ function AxiosBridge() {
       const id = axiosInstance.interceptors.response.use(
         null,
         (error) => {
-          if (!error.response || error.response.status >= 500) {
+          const isCanceled = error.code === 'ERR_CANCELED' || error.name === 'CanceledError' || error.name === 'AbortError';
+          if (!isCanceled && (!error.response || error.response.status >= 500)) {
             marcarServidorIndisponivel?.();
           }
           return Promise.reject(error);
@@ -341,7 +341,6 @@ export default function App() {
             </MenuStateProvider>
           </GruposProdutoProvider>
         </UltraWideConfig>
-        <DebugLogger />
       </ToastProvider>
     </ThemeProvider>
   )

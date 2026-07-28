@@ -39,6 +39,7 @@ class Cliente(models.Model):
     valor_desconto = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     percentual_arredondamento = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     priorizar_desconto_cliente = models.BooleanField(default=False)
+    permite_venda_prazo = models.BooleanField(default=True, help_text="Permite venda faturada / a prazo / boleto")
     grupos_excecao = models.ManyToManyField(
         'GrupoProduto',
         through='ClienteGrupoExcecao',
@@ -57,7 +58,7 @@ class Cliente(models.Model):
     def cpf_cnpj_limpo(self):
         import re
         if not self.cpf_cnpj: return ""
-        return re.sub(r'[^0-9]', '', self.cpf_cnpj)
+        return re.sub(r'[^a-zA-Z0-9]', '', self.cpf_cnpj).upper()
         
     @property
     def codigo_municipio_limpo(self):
@@ -117,7 +118,7 @@ class Fornecedor(models.Model):
     def cpf_cnpj_limpo(self):
         import re
         if not self.cpf_cnpj: return ""
-        return re.sub(r'[^0-9]', '', self.cpf_cnpj)
+        return re.sub(r'[^a-zA-Z0-9]', '', self.cpf_cnpj).upper()
         
     @property
     def codigo_municipio_limpo(self):
@@ -303,6 +304,11 @@ class LoteProduto(models.Model):
 class TributacaoProduto(models.Model):
     id_tributacao = models.AutoField(primary_key=True)
     produto = models.OneToOneField(Produto, on_delete=models.CASCADE, related_name='tributacao_detalhada')
+    tipo_tributacao = models.ForeignKey(
+        'TipoTributacao', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='produtos_tributados',
+        help_text='Perfil de tributação padrão associado ao produto'
+    )
     
     # Classificação
     classificacao_fiscal = models.CharField(max_length=50, blank=True, null=True) # Ex: Revenda, Consumo
@@ -338,6 +344,14 @@ class TributacaoProduto(models.Model):
     imposto_seletivo_aliquota = models.DecimalField(max_digits=5, decimal_places=2, default=0.00) # IS
     cst_ibs_cbs = models.CharField(max_length=10, blank=True, null=True, default='410') # Default Tributado
 
+    # Combustíveis e Gás (Monofásico ICMS 61 / ANP)
+    cprod_anp = models.CharField(max_length=15, blank=True, null=True, default='') # Ex: 210203001 para GLP
+    desc_anp = models.CharField(max_length=95, blank=True, null=True, default='') # Descrição oficial ANP
+    pglp = models.DecimalField(max_digits=7, decimal_places=4, default=0.0000) # % GLP Petróleo
+    pgnn = models.DecimalField(max_digits=7, decimal_places=4, default=0.0000) # % Gás Nat. Nacional
+    pgni = models.DecimalField(max_digits=7, decimal_places=4, default=0.0000) # % Gás Nat. Importado
+    vpart = models.DecimalField(max_digits=12, decimal_places=4, default=0.0000) # Valor de partida (R$/kg)
+    ad_rem_icms_ret = models.DecimalField(max_digits=10, decimal_places=4, default=0.0000) # Ad Rem ICMS R$/kg ou R$/L
     
     # Metadados
     fonte_info = models.CharField(max_length=100, blank=True, null=True) # Ex: IBPT, Gov
@@ -405,7 +419,7 @@ class Operacao(models.Model):
     abreviacao = models.CharField(max_length=4, blank=True, null=True, default='')
     empresa = models.CharField(max_length=100, blank=True, null=True)
     transacao = models.CharField(max_length=15, blank=True, null=True)  # Aumentado para suportar "Devolucao"
-    modelo_documento = models.CharField(max_length=10, blank=True, null=True)
+    modelo_documento = models.CharField(max_length=50, blank=True, null=True)
     emitente = models.CharField(max_length=20, blank=True, null=True)  # Aumentado para "Terceiros"
     usa_auto_numeracao = models.IntegerField(blank=True, null=True, default=0)
     serie_nf = models.IntegerField(blank=True, null=True, default=1)
@@ -878,6 +892,56 @@ class FinanceiroConta(models.Model):
         db_table = 'financeiro_contas'
         ordering = ['data_vencimento', 'descricao']
 
+    def save(self, *args, **kwargs):
+        if self.tipo_conta == 'Receber':
+            import re
+            cliente = self.id_cliente_fornecedor
+            if not cliente and self.id_venda_origem:
+                if hasattr(self.id_venda_origem, 'id_cliente'):
+                    cliente = self.id_venda_origem.id_cliente
+                elif isinstance(self.id_venda_origem, (int, str)) and str(self.id_venda_origem).isdigit():
+                    from .models import Venda
+                    venda_obj = Venda.objects.filter(pk=int(self.id_venda_origem)).first()
+                    if venda_obj:
+                        cliente = venda_obj.id_cliente
+
+            is_cliente_bloqueado = False
+            if not cliente:
+                is_cliente_bloqueado = True
+            else:
+                if not getattr(cliente, 'permite_venda_prazo', True):
+                    is_cliente_bloqueado = True
+                nome_c = (getattr(cliente, 'nome_razao_social', '') or '').upper().strip()
+                if nome_c in ['CONSUMIDOR', 'CONSUMIDOR FINAL', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', ''] or 'CONSUMIDOR' in nome_c:
+                    is_cliente_bloqueado = True
+                cpf_limpo = re.sub(r'[^0-9]', '', str(getattr(cliente, 'cpf_cnpj', '') or '')).strip()
+                if not cpf_limpo or set(cpf_limpo) == {'0'}:
+                    is_cliente_bloqueado = True
+
+            nome_norm = (self.forma_pagamento or '').upper().replace('_', ' ').replace('-', ' ').strip()
+            
+            # Cartão de crédito/débito, Pix, Dinheiro e Mercado Pago são SEMPRE PERMITIDOS
+            permitidos = ['CARTAO', 'CARTÃO', 'CREDITO', 'CRÉDITO', 'DEBITO', 'DÉBITO', 'PIX', 'DINHEIRO', 'MERCADO PAGO', 'MERCADOPAGO', 'POINT', 'VOUCHER']
+            is_forma_bloqueada = False
+
+            if any(p in nome_norm for p in permitidos) and 'BOLETO' not in nome_norm:
+                is_forma_bloqueada = False
+            else:
+                termos_prazo_estritos = ['BOLETO', 'FATURAD', 'CREDIARI', 'CREDIÁRI', 'DUPLICATA', 'PROMISSORI', 'PROMISSÓRI', 'CARNE', 'CARNÊ', 'FIADO', 'CONVENIO', 'CONVÊNIO']
+                if any(b in nome_norm for b in termos_prazo_estritos):
+                    is_forma_bloqueada = True
+                elif 'PRAZO' in nome_norm.split() or 'FATURA' in nome_norm.split():
+                    is_forma_bloqueada = True
+
+            if is_forma_bloqueada and is_cliente_bloqueado:
+                from django.core.exceptions import ValidationError
+                nome_exib = cliente.nome_razao_social if cliente else 'CONSUMIDOR'
+                raise ValidationError(
+                    f"🚫 Operação Negada: O cliente '{nome_exib}' (CPF: 000.000.000-00 ou Consumidor Final) não tem autorização "
+                    "para compras faturadas ou boleto. Escolha Dinheiro, Pix, Cartão ou Mercado Pago."
+                )
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f'[{self.tipo_conta}] - {self.descricao} (Venc: {self.data_vencimento})'
 
@@ -1033,7 +1097,21 @@ class EmpresaConfig(models.Model):
         ('1', 'Produção'),
         ('2', 'Homologação'),
     ]
-    ambiente_nfce = models.CharField(max_length=1, choices=AMBIENTE_CHOICES, default='2', help_text="Ambiente de emissão")
+    # --- Matriz Tributária Central ---
+    # Simples Nacional
+    simples_csosn_padrao = models.CharField(max_length=4, default="102")
+    simples_cfop_padrao = models.CharField(max_length=4, default="5102")
+    simples_pede_credito = models.BooleanField(default=False)
+    simples_aliquota_credito = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    
+    # Regime Normal
+    normal_cfop_padrao = models.CharField(max_length=4, default="5102")
+    normal_cst_icms = models.CharField(max_length=3, default="00")
+    normal_aliquota_icms = models.DecimalField(max_digits=5, decimal_places=2, default=18.00)
+    normal_cst_pis = models.CharField(max_length=2, default="01")
+    normal_aliquota_pis = models.DecimalField(max_digits=5, decimal_places=2, default=0.65)
+    normal_cst_cofins = models.CharField(max_length=2, default="01")
+    normal_aliquota_cofins = models.DecimalField(max_digits=5, decimal_places=2, default=3.00)
 
     # --- Configurações SPED Fiscal (EFD ICMS/IPI) ---
     sped_versao = models.CharField(max_length=3, default='020', help_text="Versão do Layout (ex: 020)")
@@ -1305,10 +1383,14 @@ class EmpresaConfig(models.Model):
         return self.nome_razao_social
 
     @property
+    def ambiente_nfce(self):
+        return self.ambiente_nfe or '2'
+
+    @property
     def cpf_cnpj_limpo(self):
         import re
         if not self.cpf_cnpj: return ""
-        return re.sub(r'[^0-9]', '', self.cpf_cnpj)
+        return re.sub(r'[^a-zA-Z0-9]', '', self.cpf_cnpj).upper()
 
     @property
     def cpf_responsavel_limpo(self):
@@ -1838,6 +1920,7 @@ class Venda(models.Model):
     data_documento = models.DateTimeField(auto_now_add=True)
     valor_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     taxa_entrega = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, blank=True, null=True)
+    taxa_servico = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, db_column='taxa_servico', blank=True, null=True)
     valor_desconto = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, db_column='valor_desconto', blank=True, null=True)
     criado_por = models.ForeignKey(User, models.SET_NULL, db_column='criado_por', blank=True, null=True)
     gerou_financeiro = models.IntegerField(blank=True, null=True, default=0)
@@ -3789,6 +3872,11 @@ class Veiculo(models.Model):
     uf = models.CharField(max_length=2, blank=True, null=True)
     rntrc = models.CharField(max_length=20, blank=True, null=True)
     observacoes = models.TextField(blank=True, null=True)
+    tipo_rodado = models.CharField(max_length=2, blank=True, null=True)
+    tipo_carroceria = models.CharField(max_length=2, blank=True, null=True)
+    tara_kg = models.IntegerField(blank=True, null=True)
+    capacidade_kg = models.IntegerField(blank=True, null=True)
+    tipo_propriedade = models.IntegerField(blank=True, null=True)
 
     class Meta:
         managed = False
@@ -5670,6 +5758,11 @@ class TipoTributacao(models.Model):
         max_length=100,
         help_text='Nome do perfil (ex: CONSUMIDOR, REVENDEDOR, INDUSTRIAL)',
     )
+    regime_tributario = models.CharField(
+        max_length=20, default='SIMPLES',
+        choices=[('SIMPLES', 'Simples Nacional'), ('NORMAL', 'Regime Normal')],
+        help_text='Regime ao qual o perfil se aplica'
+    )
 
     # ICMS — configuração geral
     icms_cst_csosn = models.CharField(
@@ -5701,6 +5794,40 @@ class TipoTributacao(models.Model):
         help_text='Percentual de antecipação tributária (%)',
     )
 
+    # PIS
+    pis_cst = models.CharField(
+        max_length=3, default='01', null=True, blank=True,
+        help_text='CST do PIS (ex: 01, 02, 04, 06, 07, 08, 49, 99)',
+    )
+    pis_aliq = models.DecimalField(
+        max_digits=7, decimal_places=4, default=0.65,
+        help_text='Alíquota do PIS (%)',
+    )
+
+    # COFINS
+    cofins_cst = models.CharField(
+        max_length=3, default='01', null=True, blank=True,
+        help_text='CST do COFINS (ex: 01, 02, 04, 06, 07, 08, 49, 99)',
+    )
+    cofins_aliq = models.DecimalField(
+        max_digits=7, decimal_places=4, default=3.00,
+        help_text='Alíquota do COFINS (%)',
+    )
+
+    # IPI
+    ipi_cst = models.CharField(
+        max_length=3, default='53', null=True, blank=True,
+        help_text='CST do IPI (ex: 50, 51, 52, 53, 55, 99)',
+    )
+    ipi_aliq = models.DecimalField(
+        max_digits=7, decimal_places=4, default=0.0,
+        help_text='Alíquota do IPI (%)',
+    )
+    ipi_enquadramento = models.CharField(
+        max_length=3, default='999', null=True, blank=True,
+        help_text='Código de Enquadramento IPI',
+    )
+
     # Opções fiscais
     considera_sintegra = models.BooleanField(
         default=False,
@@ -5720,7 +5847,7 @@ class TipoTributacao(models.Model):
         db_table = 'tributacao_tipos'
         verbose_name = 'Tipo de Tributação ICMS'
         verbose_name_plural = 'Tipos de Tributação ICMS'
-        unique_together = [('empresa', 'nome')]
+        unique_together = [('empresa', 'nome', 'regime_tributario')]
         ordering = ['nome']
 
     def __str__(self):
@@ -6198,6 +6325,51 @@ class AgendamentoBackupLocal(models.Model):
     def __str__(self):
         status = "Ativo" if self.ativo else "Inativo"
         return f"Backup Local {self.diretorio_destino} ({status})"
+
+
+class CentralErroLog(models.Model):
+    tenant_schema = models.CharField(max_length=100, help_text="Qual cliente gerou o erro (ex: amerpusinformatica)")
+    url_afetada = models.CharField(max_length=255, null=True, blank=True)
+    tipo_excecao = models.CharField(max_length=255, help_text="Ex: KeyError, OperationalError")
+    mensagem_erro = models.TextField()
+    traceback_completo = models.TextField(help_text="Onde o código quebrou exatamente")
+    nivel = models.CharField(max_length=10, choices=[('ERROR', 'Erro Crítico'), ('WARNING', 'Aviso / Alerta')], default='ERROR')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    resolvido = models.BooleanField(default=False)
+    observacao_suporte = models.TextField(null=True, blank=True)
+
+    class Meta:
+        managed = True
+        db_table = 'saas_central_erro_log'
+        ordering = ['-criado_em']
+        verbose_name = 'Log de Erro Centralizado'
+        verbose_name_plural = 'Logs de Erro Centralizados'
+
+    def __str__(self):
+        return f"[{self.tenant_schema}] {self.tipo_excecao} - {self.criado_em}"
+
+
+class UserPreferencia(models.Model):
+    """Armazena preferências de interface por usuário (chave → valor)."""
+    user = models.ForeignKey(
+        'auth.User',
+        on_delete=models.CASCADE,
+        related_name='preferencias',
+        db_column='id_user'
+    )
+    chave = models.CharField(max_length=100, help_text='Nome da preferência')
+    valor = models.TextField(blank=True, null=True, help_text='Valor da preferência')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'user_preferencias'
+        managed = True
+        unique_together = [('user', 'chave')]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.chave}"
+
+
 
 
 

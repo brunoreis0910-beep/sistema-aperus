@@ -59,28 +59,41 @@ export const OfflineSyncProvider = ({ children }) => {
     }
     try {
       const ctrl = new AbortController();
-      const tid  = setTimeout(() => ctrl.abort(), TIMEOUT_PING);
+      const tid  = setTimeout(() => ctrl.abort(), 8000);
       const resp = await fetch(`${API_BASE_URL}/api/health/`, {
         signal: ctrl.signal,
         cache:  'no-store',
       });
       clearTimeout(tid);
-      const ok = resp.ok || resp.status < 500;
+      const ok = resp.ok || (resp.status > 0 && resp.status < 500);
       setIsOnline(true);
       setServidorOk(ok);
       if (ok) tentativasErroRef.current = 0;
       return ok;
     } catch {
-      setServidorOk(false);
-      return false;
+      try {
+        const respToken = await fetch(`${API_BASE_URL}/api/token/`, { method: 'HEAD', cache: 'no-store' });
+        const ok = respToken.status > 0;
+        setIsOnline(true);
+        setServidorOk(ok);
+        if (ok) tentativasErroRef.current = 0;
+        return ok;
+      } catch {
+        setServidorOk(false);
+        return false;
+      }
     }
   }, []);
 
-  // Exposto para que o interceptor Axios possa marcar o servidor como indisponível
-  const marcarServidorIndisponivel = useCallback(() => {
-    tentativasErroRef.current += 1;
-    setServidorOk(false);
-  }, []);
+  // Exposto para que o interceptor Axios possa verificar o servidor antes de declarar indisponível
+  const marcarServidorIndisponivel = useCallback(async () => {
+    // Executa verificação ativa antes de alternar estado do app para offline
+    const ok = await verificarServidor();
+    if (!ok) {
+      tentativasErroRef.current += 1;
+      setServidorOk(false);
+    }
+  }, [verificarServidor]);
 
   // ─── Sincroniza a fila offline ──────────────────────────────────────────────
   const sincronizar = useCallback(async (forcar = false) => {

@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aprovação de Desconto - Aperus</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --success: #10B981;
+            --success-hover: #059669;
+            --danger: #EF4444;
+            --danger-hover: #DC2626;
+            --background: #F9FAFB;
+            --card-bg: #FFFFFF;
+            --text-main: #111827;
+            --text-muted: #6B7280;
+            --border: #E5E7EB;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --background: #0B0F19;
+                --card-bg: #151B2C;
+                --text-main: #F3F4F6;
+                --text-muted: #9CA3AF;
+                --border: #1F2937;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--background);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            transition: background-color 0.3s ease;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            perspective: 1000px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 32px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 6px;
+            background: linear-gradient(90deg, var(--primary), var(--success));
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .logo-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(79, 70, 229, 0.1);
+            color: var(--primary);
+            font-weight: 600;
+            font-size: 14px;
+            padding: 8px 16px;
+            border-radius: 100px;
+            margin-bottom: 16px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 6px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .details-list {
+            background: rgba(0, 0, 0, 0.02);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .details-list {
+                background: rgba(255, 255, 255, 0.02);
+            }
+        }
+
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .detail-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .detail-item:first-child {
+            padding-top: 0;
+        }
+
+        .detail-label {
+            font-size: 14px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .detail-value {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .ia-box {
+            background: linear-gradient(135deg, rgba(79, 70, 229, 0.07), rgba(16, 185, 129, 0.07));
+            border: 1px solid rgba(79, 70, 229, 0.15);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 24px;
+            position: relative;
+        }
+
+        .ia-box-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .ia-box-content {
+            font-size: 13.5px;
+            line-height: 1.5;
+            color: var(--text-main);
+            font-style: italic;
+        }
+
+        .form-section {
+            margin-top: 24px;
+        }
+
+        .slider-container {
+            margin-bottom: 28px;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .slider-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .slider-value-badge {
+            background: var(--primary);
+            color: white;
+            font-size: 16px;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
+        }
+
+        .range-slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            outline: none;
+            -webkit-appearance: none;
+            background: var(--border);
+            margin-bottom: 16px;
+        }
+
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+            transition: transform 0.1s ease;
+        }
+
+        .range-slider::-webkit-slider-thumb:active {
+            transform: scale(1.2);
+        }
+
+        .calculation-card {
+            background: rgba(79, 70, 229, 0.03);
+            border: 1px dashed rgba(79, 70, 229, 0.2);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 24px;
+            font-size: 13.5px;
+        }
+
+        .calc-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .calc-row:last-child {
+            margin-bottom: 0;
+            padding-top: 6px;
+            border-top: 1px solid var(--border);
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .btn {
+            border: none;
+            border-radius: 14px;
+            padding: 16px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+            color: white;
+            text-decoration: none;
+        }
+
+        .btn-approve {
+            background: var(--success);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+        }
+
+        .btn-approve:hover {
+            background: var(--success-hover);
+            transform: translateY(-2px);
+        }
+
+        .btn-reject {
+            background: var(--danger);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-reject:hover {
+            background: var(--danger-hover);
+            transform: translateY(-2px);
+        }
+
+        /* Result State styles */
+        .result-state {
+            text-align: center;
+            padding: 16px 0;
+        }
+
+        .result-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            animation: bounce 1s infinite alternate;
+        }
+
+        .result-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .result-desc {
+            font-size: 14px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        {% if processado %}
+            <!-- Tela de Resultado Pós-Decisão -->
+            <div class="result-state">
+                {% if status == 'Aprovada' %}
+                    <div class="result-icon">✅</div>
+                    <h1 class="result-title" style="color: var(--success)">Desconto Aprovado!</h1>
+                    <div class="details-list" style="margin-top: 24px;">
+                        <div class="detail-item">
+                            <span class="detail-label">Cliente</span>
+                            <span class="detail-value">{{ nome_cliente }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Desconto Final</span>
+                            <span class="detail-value" style="color: var(--success)">{{ percentual_aprovado }}%</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Valor Total</span>
+                            <span class="detail-value">R$ {{ valor_total|floatformat:2 }}</span>
+                        </div>
+                    </div>
+                    <p class="result-desc">A aprovação foi enviada ao vendedor. Ele já pode finalizar a venda no sistema.</p>
+                {% else %}
+                    <div class="result-icon">❌</div>
+                    <h1 class="result-title" style="color: var(--danger)">Solicitação Recusada</h1>
+                    <div class="details-list" style="margin-top: 24px;">
+                        <div class="detail-item">
+                            <span class="detail-label">Cliente</span>
+                            <span class="detail-value">{{ nome_cliente }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Vendedor</span>
+                            <span class="detail-value">{{ nome_vendedor }}</span>
+                        </div>
+                    </div>
+                    <p class="result-desc">O vendedor foi notificado de que a solicitação foi rejeitada.</p>
+                {% endif %}
+            </div>
+        {% else %}
+            <!-- Painel de Decisão Pendente -->
+            <div class="header">
+                <span class="logo-badge">Solicitação #{{ pk }}</span>
+                <h1 class="title">Autorização de Desconto</h1>
+                <p class="subtitle">Analise a solicitação abaixo para tomar uma decisão</p>
+            </div>
+
+            <div class="details-list">
+                <div class="detail-item">
+                    <span class="detail-label">👤 Vendedor</span>
+                    <span class="detail-value">{{ nome_vendedor }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">🛒 Cliente</span>
+                    <span class="detail-value">{{ nome_cliente }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">💰 Valor Bruto</span>
+                    <span class="detail-value">R$ {{ valor_total|floatformat:2 }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">📉 Solicitado</span>
+                    <span class="detail-value" style="color: var(--primary)">{{ percentual_solicitado }}%</span>
+                </div>
+            </div>
+
+            {% if sugestao_ia %}
+                <div class="ia-box">
+                    <div class="ia-box-title">🤖 Sugestão da Inteligência Artificial</div>
+                    <div class="ia-box-content">"{{ sugestao_ia }}"</div>
+                </div>
+            {% endif %}
+
+            <form method="POST" class="form-section">
+                {% csrf_token %}
+                <input type="hidden" name="decisao" id="decisao-input" value="aprovar">
+
+                <div class="slider-container">
+                    <div class="slider-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="slider-label">Desconto Autorizado (%)</span>
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <input 
+                                type="number" 
+                                id="number-input" 
+                                min="0" 
+                                max="100" 
+                                step="0.1" 
+                                value="{{ percentual_solicitado|stringformat:'.1f' }}"
+                                style="width: 80px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); text-align: right; font-weight: bold; font-size: 14px; outline: none; background: var(--card-bg); color: var(--text-main);"
+                            >
+                            <span style="font-weight: bold; font-size: 14px; color: var(--text-main);">%</span>
+                        </div>
+                    </div>
+                    <input 
+                        type="range" 
+                        name="percentual_aprovado" 
+                        id="range-slider" 
+                        class="range-slider" 
+                        min="0" 
+                        max="100" 
+                        step="0.1" 
+                        value="{{ percentual_solicitado|stringformat:'.1f' }}"
+                        style="margin-top: 10px;"
+                    >
+                </div>
+
+                <div class="calculation-card">
+                    <div class="calc-row">
+                        <span>Desconto Calculado:</span>
+                        <span id="calc-desconto-reais">R$ 0,00</span>
+                    </div>
+                    <div class="calc-row">
+                        <span>Novo Valor Final:</span>
+                        <span id="calc-final-reais">R$ {{ valor_total|floatformat:2 }}</span>
+                    </div>
+                </div>
+
+                {% if erro_senha %}
+                    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: var(--danger); padding: 12px 16px; border-radius: 12px; margin-bottom: 20px; font-size: 14px; font-weight: 500; text-align: center;">
+                        ⚠️ {{ erro_senha }}
+                    </div>
+                {% endif %}
+
+                <div style="margin-bottom: 20px; text-align: left;">
+                    <label for="usuario_supervisor" style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--text-main);">
+                        👤 Selecione o Supervisor:
+                    </label>
+                    <select 
+                        name="usuario_supervisor" 
+                        id="usuario_supervisor" 
+                        style="width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text-main); font-size: 15px; outline: none; appearance: none; -webkit-appearance: none; background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23666%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E'); background-repeat: no-repeat; background-position: right 16px top 50%; background-size: 12px auto; transition: border-color 0.2s;"
+                    >
+                        {% for sup in supervisores %}
+                            <option value="{{ sup.username }}" {% if sup.id == solicitacao.id_usuario_supervisor.id %}selected{% endif %}>
+                                {{ sup.nome }} ({{ sup.username }})
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div style="margin-bottom: 24px; text-align: left;">
+                    <label for="senha_supervisor" style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--text-main);">
+                        🔒 Senha do Supervisor para Confirmar:
+                    </label>
+                    <input 
+                        type="password" 
+                        name="senha_supervisor" 
+                        id="senha_supervisor" 
+                        placeholder="Digite sua senha..."
+                        style="width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text-main); font-size: 15px; outline: none; transition: border-color 0.2s;"
+                        onfocus="this.style.borderColor='var(--primary)'"
+                        onblur="this.style.borderColor='var(--border)'"
+                    >
+                </div>
+
+                <div class="actions">
+                    <button type="submit" class="btn btn-reject" onclick="document.getElementById('senha_supervisor').required = false; setDecisao('rejeitar')">
+                        ✕ Recusar
+                    </button>
+                    <button type="submit" class="btn btn-approve" onclick="document.getElementById('senha_supervisor').required = true; setDecisao('aprovar')">
+                        ✓ Aprovar
+                    </button>
+                </div>
+            </form>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    const slider = document.getElementById('range-slider');
+    const numberInput = document.getElementById('number-input');
+    let rawVal = "{{ valor_total }}";
+    if (rawVal.includes(",")) {
+        rawVal = rawVal.replace(/\./g, "").replace(",", ".");
+    }
+    const valorTotal = parseFloat(rawVal) || 0;
+    
+    const calcDesconto = document.getElementById('calc-desconto-reais');
+    const calcFinal = document.getElementById('calc-final-reais');
+    const decisaoInput = document.getElementById('decisao-input');
+
+    function setDecisao(tipo) {
+        decisaoInput.value = tipo;
+    }
+
+    if (slider && numberInput) {
+        function updateCalculations(source) {
+            let perc = 0;
+            if (source === 'slider') {
+                perc = parseFloat(slider.value) || 0;
+                numberInput.value = perc.toFixed(1);
+            } else {
+                perc = parseFloat(numberInput.value) || 0;
+                if (perc < 0) perc = 0;
+                if (perc > 100) perc = 100;
+                slider.value = perc;
+            }
+            
+            const descontoReais = (valorTotal * perc) / 100;
+            const finalReais = valorTotal - descontoReais;
+
+            calcDesconto.textContent = 'R$ ' + descontoReais.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            calcFinal.textContent = 'R$ ' + finalReais.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        slider.addEventListener('input', () => updateCalculations('slider'));
+        numberInput.addEventListener('input', () => updateCalculations('number'));
+        
+        // Executa cálculo inicial
+        updateCalculations('slider');
+    }
+</script>
+</body>
+</html>

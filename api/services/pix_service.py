@@ -170,3 +170,27 @@ class PixService:
             hashlib.sha256,
         ).hexdigest()
         return hmac.compare_digest(expected, signature or '')
+
+    def consultar_status(self, cobranca):
+        """Consulta o status de uma cobrança no PSP (atualmente suporta Efí Bank)."""
+        if self.config.psp == 'EFI' and self.config.client_id:
+            base = 'https://pix.api.efipay.com.br' if self.config.ambiente == 'PRODUCAO' else 'https://pix-h.api.efipay.com.br'
+            token = self._get_token_efi()
+            resp = requests.get(
+                f'{base}/v2/cob/{cobranca.txid}',
+                headers={'Authorization': f'Bearer {token}'},
+                timeout=15
+            )
+            if resp.ok:
+                data = resp.json()
+                cobranca.status = data.get('status', cobranca.status)
+                if cobranca.status == 'CONCLUIDA' and not cobranca.pago_em:
+                    from django.utils import timezone
+                    cobranca.pago_em = timezone.now()
+                    pix_events = data.get('pix', [])
+                    if pix_events:
+                        cobranca.end_to_end_id = pix_events[0].get('endToEndId', '')
+                        valor_pago = pix_events[0].get('valor')
+                        cobranca.valor_pago = Decimal(str(valor_pago)) if valor_pago else cobranca.valor
+                cobranca.save()
+        return cobranca

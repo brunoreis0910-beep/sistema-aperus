@@ -23,6 +23,7 @@ import {
   CardContent,
   Divider,
   InputAdornment,
+  Checkbox,
   Chip,
   Dialog,
   DialogTitle,
@@ -46,7 +47,9 @@ import {
   PersonAdd as PersonAddIcon,
   Search as SearchIcon,
   Check as CheckIcon,
-  CheckCircle as CheckCircleIcon
+  CheckCircle as CheckCircleIcon,
+  AddShoppingCart as AddShoppingCartIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -441,6 +444,75 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   const [lotesDisponiveis, setLotesDisponiveis] = useState([]);
   const [lotePreSelecionado, setLotePreSelecionado] = useState(null);
   const [controlaProdutoLote, setControlaProdutoLote] = useState(false);
+
+  // Estados para multi-seleção de produtos
+  const [openMultiSelecao, setOpenMultiSelecao] = useState(false);
+  const [multiPesquisa, setMultiPesquisa] = useState('');
+  const [produtosSelecionados, setProdutosSelecionados] = useState({});
+  const [quantidadesSelecionadas, setQuantidadesSelecionadas] = useState({});
+  const [valoresSelecionadas, setValoresSelecionadas] = useState({});
+
+  const getProdutosMultiSelecao = () => {
+    const query = (multiPesquisa || '').toLowerCase();
+    const filtrados = produtos.filter(p => {
+      const id = String(p.id_produto || p.id || p.pk || p.ID || '').toLowerCase();
+      const nome = (p.nome_produto || p.nome || p.name || p.produto || p.title || '').toLowerCase();
+      const codigo = (p.codigo_produto || p.codigo || p.code || p.sku || '').toLowerCase();
+      const ref = (p.referencia || '').toLowerCase();
+      const loc = (p.localizacao || '').toLowerCase();
+      return id.includes(query) || nome.includes(query) || codigo.includes(query) || ref.includes(query) || loc.includes(query);
+    });
+    return filtrados.slice(0, 50);
+  };
+
+  const confirmarMultiSelecao = async () => {
+    setOpenMultiSelecao(false);
+    setLoading(true);
+    let sucessos = 0;
+    
+    // Obter todos os IDs de produtos selecionados (que estão como true)
+    const selecionadosIds = Object.keys(produtosSelecionados).filter(id => produtosSelecionados[id]);
+    
+    for (const idProd of selecionadosIds) {
+      const prod = produtos.find(p => String(p.id_produto || p.id || p.pk || p.ID) === String(idProd));
+      if (prod) {
+        const qtd = parseFloat(quantidadesSelecionadas[idProd] || 1);
+        const val = parseFloat(valoresSelecionadas[idProd] !== undefined ? valoresSelecionadas[idProd] : (prod.valor_venda || prod.preco_venda || prod.preco || 0));
+        
+        // Simular o itemData para adicionar
+        const itemData = {
+          quantidade: qtd,
+          valor_unitario: val,
+          desconto: 0,
+          id_produto: idProd,
+          tipo_desconto: 'valor',
+          cfop: prod.tributacao_detalhada?.cfop || '5102',
+          cst_csosn: regimeTributario === 'SIMPLES' 
+            ? (prod.tributacao_detalhada?.csosn || '400') 
+            : (prod.tributacao_detalhada?.cst_icms || '000')
+        };
+        
+        try {
+          await efetivarAdicaoItem(itemData, prod);
+          sucessos++;
+        } catch (err) {
+          console.error(`Erro ao adicionar produto ${prod.nome_produto} em lote:`, err);
+        }
+      }
+    }
+    
+    // Limpar estados da multi-seleção
+    setProdutosSelecionados({});
+    setQuantidadesSelecionadas({});
+    setValoresSelecionadas({});
+    setMultiPesquisa('');
+    setLoading(false);
+    
+    if (sucessos > 0) {
+      setSuccess(`${sucessos} produto(s) adicionado(s) com sucesso!`);
+      setTimeout(() => setSuccess(''), 3000);
+    }
+  };
 
   // Função para processar a próxima validação da fila
   const processarProximaValidacao = () => {
@@ -4861,23 +4933,33 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         fullWidth
         PaperProps={{
           sx: {
-            maxHeight: '85vh'
+            maxHeight: '90vh',
+            borderRadius: '16px',
+            boxShadow: '0 12px 40px rgba(0,0,0,0.12)'
           }
         }}
       >
-        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1.5 }}>
-          <Typography variant="h6" component="span">
+        <DialogTitle sx={{ 
+          background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)', 
+          color: 'white', 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          py: 2, 
+          px: 3 
+        }}>
+          <Typography variant="h6" component="span" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
             📝 Nova Venda
           </Typography>
           <IconButton 
             size="small"
             onClick={() => { setOpenModalNovaVenda(false); if (embedded) onClose?.(); }} 
-            sx={{ color: 'white' }}
+            sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
           >
             <ClearIcon />
           </IconButton>
         </DialogTitle>
-        <DialogContent sx={{ p: 2, overflow: 'auto' }}>
+        <DialogContent sx={{ p: 3, overflow: 'auto', bgcolor: '#f8fafc' }}>
         <Grid container spacing={1.5}>
           {/* Mensagem de erro visível dentro do modal */}
           {error && (
@@ -4910,8 +4992,17 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
           {/* Dados da venda - Compacto */}
           <Grid item xs={12}>
-            <Box sx={{ p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
-              <Grid container spacing={1.5}>
+            <Box sx={{ 
+              p: 2.5, 
+              bgcolor: 'background.paper', 
+              borderRadius: '16px',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+            }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 2, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.75rem' }}>
+                📋 Informações Gerais
+              </Typography>
+              <Grid container spacing={2}>
                   <Grid item xs={6} md={2}>
                     <TextField
                       fullWidth
@@ -4920,6 +5011,9 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                       value={venda.numero_documento}
                       onChange={(e) => setVenda(prev => ({ ...prev, numero_documento: e.target.value }))}
                       disabled={vendaBloqueadaParaEdicao}
+                      InputProps={{
+                        startAdornment: <InputAdornment position="start"><span style={{ color: '#94a3b8', fontSize: '0.875rem' }}>#</span></InputAdornment>,
+                      }}
                     />
                   </Grid>
 
@@ -4942,6 +5036,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                       <Select
                         value={venda.id_operacao || ''}
                         disabled={vendaBloqueadaParaEdicao}
+                        startAdornment={<InputAdornment position="start"><span style={{ fontSize: '0.875rem' }}>⚙️</span></InputAdornment>}
                         onChange={async (e) => {
                           console.log('🔧 Operação selecionada:', e.target.value);
                           const operacaoSelecionada = operacoes.find(op =>
@@ -5063,6 +5158,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                         <Select
                           value={venda.id_cliente || ''}
                           disabled={vendaBloqueadaParaEdicao}
+                          startAdornment={<InputAdornment position="start"><span style={{ fontSize: '0.875rem' }}>👤</span></InputAdornment>}
                           onChange={(e) => {
                             const clienteId = e.target.value;
                             setVenda(prev => {
@@ -5128,6 +5224,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                       <Select
                         value={venda.id_vendedor || ''}
                         disabled={vendaBloqueadaParaEdicao}
+                        startAdornment={<InputAdornment position="start"><span style={{ fontSize: '0.875rem' }}>🏷️</span></InputAdornment>}
                         onChange={(e) => {
                           setVenda(prev => ({ ...prev, id_vendedor: e.target.value }));
                         }}
@@ -5215,13 +5312,38 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
             // Caso contrário, mostrar o card normal de adicionar produtos - Compacto
             return (
               <Grid item xs={12}>
-                <Box sx={{ p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
-                  <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
-                    🛒 Adicionar Produtos
-                  </Typography>
+                <Box sx={{ 
+                  p: 2.5, 
+                  bgcolor: 'background.paper', 
+                  borderRadius: '16px',
+                  border: '1px solid #e2e8f0',
+                  borderLeft: '4px solid #1976d2',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+                }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'primary.main', textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.75rem' }}>
+                      🛒 Adicionar Produtos
+                    </Typography>
+                    {!vendaBloqueadaParaEdicao && (
+                      <Button
+                        variant="outlined"
+                        color="secondary"
+                        size="small"
+                        startIcon={<AddShoppingCartIcon />}
+                        onClick={() => setOpenMultiSelecao(true)}
+                        sx={{
+                          borderRadius: '20px',
+                          textTransform: 'none',
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        Adicionar Vários
+                      </Button>
+                    )}
+                  </Box>
 
-                <Grid container spacing={1} alignItems="center">
-                  <Grid item xs={12} md={5}>
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={12} md={4}>
                     <Autocomplete
                       fullWidth
                       size="small"
@@ -5567,7 +5689,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                     </Grid>
                   )}
 
-                  <Grid item xs={6} md={2.5}>
+                  <Grid item xs={6} md={2}>
                     <TextField
                       fullWidth
                       size="medium"
@@ -5625,7 +5747,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                     />
                   </Grid>
 
-                  <Grid item xs={3} md={1.5}>
+                  <Grid item xs={6} md={2}>
                     <TextField
                       fullWidth
                       size="small"
@@ -5639,8 +5761,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          descontoRef.current?.focus();
-                          descontoRef.current?.select();
+                          btnAdicionarRef.current?.click();
                         }
                       }}
                       inputRef={valorUnitarioRef}
@@ -5651,42 +5772,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                     />
                   </Grid>
 
-                  <Grid item xs={3} md={1.5}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      type="number"
-                      label="Desc"
-                      value={novoItem.desconto}
-                      disabled={vendaBloqueadaParaEdicao}
-                      onChange={(e) => setNovoItem(prev => ({ ...prev, desconto: e.target.value }))}
-                      onBlur={(e) => setNovoItem(prev => ({ ...prev, desconto: parseFloat(e.target.value) || 0 }))}
-                      onFocus={(e) => e.target.select()}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          btnAdicionarRef.current?.click();
-                        }
-                      }}
-                      inputRef={descontoRef}
-                      inputProps={{ min: 0, step: 0.01 }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Box
-                              onClick={() => !vendaBloqueadaParaEdicao && setNovoItem(prev => ({ ...prev, tipo_desconto: prev.tipo_desconto === 'valor' ? 'percentual' : 'valor' }))}
-                              sx={{ cursor: 'pointer', fontWeight: 'bold', color: 'primary.main', userSelect: 'none', minWidth: 20, textAlign: 'center' }}
-                              title="Clique para alternar entre R$ e %"
-                            >
-                              {novoItem.tipo_desconto === 'valor' ? 'R$' : '%'}
-                            </Box>
-                          </InputAdornment>
-                        ),
-                      }}
-                    />
-                  </Grid>
-
-                  <Grid item xs={3} md={1}>
+                  <Grid item xs={4} md={1.3}>
                     <TextField
                       fullWidth
                       size="small"
@@ -5702,7 +5788,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                     />
                   </Grid>
 
-                  <Grid item xs={3} md={1.5}>
+                  <Grid item xs={4} md={1.3}>
                     <TextField
                       fullWidth
                       size="small"
@@ -5718,7 +5804,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                     />
                   </Grid>
 
-                  <Grid item xs={3} md={1.5}>
+                  <Grid item xs={4} md={1.4}>
                     <Button
                       fullWidth
                       variant="contained"
@@ -5728,6 +5814,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                       onClick={adicionarItem}
                       ref={btnAdicionarRef}
                       disabled={vendaBloqueadaParaEdicao}
+                      sx={{ py: 1 }}
                     >
                       Add
                     </Button>
@@ -5740,40 +5827,46 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
           {/* Itens da venda */}
           <Grid item xs={12}>
-            <Box sx={{ bgcolor: 'grey.50', p: 1.5, borderRadius: 1 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  🛍️ Itens
-                  <Chip label={venda.itens.length} color="primary" size="small" />
+            <Box sx={{ 
+              p: 2.5, 
+              bgcolor: 'background.paper', 
+              borderRadius: '16px',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+            }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  🛍️ Itens da Venda
+                  <Chip label={venda.itens.length} color="primary" size="small" sx={{ fontWeight: 'bold' }} />
                 </Typography>
                 {venda.itens.length > 0 && (
-                  <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'success.main' }}>
-                    R$ {calcularTotal().toFixed(2)}
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'success.main', bgcolor: '#e8f5e9', px: 1.5, py: 0.5, borderRadius: '8px' }}>
+                    Total dos Itens: R$ {calcularTotal().toFixed(2)}
                   </Typography>
                 )}
               </Box>
 
-              <TableContainer>
-                <Table size="small" sx={{ '& .MuiTableCell-root': { py: 0.5, px: 1 } }}>
-                    <TableHead>
+              <TableContainer sx={{ borderRadius: '8px', border: '1px solid #eef2f6', overflow: 'hidden' }}>
+                <Table size="small" sx={{ '& .MuiTableCell-root': { py: 1.2, px: 1.5 } }}>
+                    <TableHead sx={{ bgcolor: '#f8fafc' }}>
                       <TableRow>
-                        <TableCell sx={{ width: 60 }}>Imagem</TableCell>
-                        <TableCell>Produto</TableCell>
+                        <TableCell sx={{ width: 80, fontWeight: 'bold', color: '#64748b' }}>Imagem</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>Produto</TableCell>
                         {venda.venda_futura_origem ? (
                           <>
-                            <TableCell align="center">Qtd Vendida</TableCell>
-                            <TableCell align="center">Qtd Entregue</TableCell>
-                            <TableCell align="center">Qtd a Entregar</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="center">Qtd Vendida</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="center">Qtd Entregue</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="center">Qtd a Entregar</TableCell>
                           </>
                         ) : (
-                          <TableCell align="center">Qtd</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="center">Qtd</TableCell>
                         )}
-                        <TableCell align="right">Valor Unit.</TableCell>
-                        <TableCell align="right">Desconto</TableCell>
-                        <TableCell align="center">CFOP</TableCell>
-                        <TableCell align="center">CST/CSOSN</TableCell>
-                        <TableCell align="right">Subtotal</TableCell>
-                        <TableCell align="center">Ação</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="right">Valor Unit.</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="right">Desconto</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="center">CFOP</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="center">CST/CSOSN</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="right">Subtotal</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="center">Ação</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -6039,149 +6132,18 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
             {/* Totais e ações */}
             <Grid item xs={12}>
-              <Box sx={{ bgcolor: 'grey.50', p: 1.5, borderRadius: 1 }}>
-                <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  💰 Finalização
+              <Box sx={{ 
+                p: 2.5, 
+                bgcolor: 'background.paper', 
+                borderRadius: '16px',
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+              }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 2, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.75rem' }}>
+                  💰 Resumo e Finalização
                 </Typography>
 
-                <Grid container spacing={1.5} alignItems="center">
-                  {/* ─── Campo de desconto — comportamento depende do tipo_desconto da operação ─── */}
-                  {(() => {
-                    const opAtualDesc = operacoes.find(op => op.id_operacao === venda.id_operacao);
-                    const tipoDescOp = opAtualDesc?.tipo_desconto || 'venda';
-                    const limiteOp = parseFloat(opAtualDesc?.limite_desconto_percentual) || 0;
-
-                    if (tipoDescOp === 'item') {
-                      // ── Modo Item: digita % e aplica em todos os itens ao clicar/blur ──
-                      return (
-                        <Grid item xs={6} md={2}>
-                          <TextField
-                            fullWidth
-                            size="small"
-                            type="number"
-                            label="Desc % (todos os itens)"
-                            value={venda._desconto_item_geral ?? ''}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setVenda(prev => ({ ...prev, _desconto_item_geral: v }));
-                            }}
-                            onBlur={(e) => {
-                              const perc = parseFloat(e.target.value) || 0;
-                              if (limiteOp > 0 && perc > limiteOp) {
-                                setSnackDesconto({ open: true, msg: `⚠️ Limite de desconto da operação: ${limiteOp.toFixed(1)}%. Será necessária autorização ao salvar.` });
-                              }
-                              // Aplica o % em cada item individualmente
-                              setVenda(prev => {
-                                const novosItens = prev.itens.map(item => {
-                                  const valorItem = parseFloat(item.quantidade) * parseFloat(item.valor_unitario);
-                                  const descontoVal = (valorItem * perc) / 100;
-                                  return {
-                                    ...item,
-                                    desconto: descontoVal,
-                                    desconto_valor: descontoVal,
-                                    desconto_percentual: perc,
-                                    desconto_tipo_edicao: 'percentual',
-                                    subtotal: valorItem - descontoVal,
-                                  };
-                                });
-                                const novoTotal = novosItens.reduce((acc, it) => acc + parseFloat(it.subtotal || 0), 0);
-                                const taxaEntrega = parseFloat(prev.taxa_entrega) || 0;
-                                return { ...prev, itens: novosItens, desconto: 0, _desconto_item_geral: perc, valor_total: novoTotal + taxaEntrega };
-                              });
-                            }}
-                            onFocus={(e) => e.target.select()}
-                            inputProps={{ min: 0, max: 100, step: 0.01 }}
-                            InputProps={{
-                              startAdornment: <InputAdornment position="start"><span style={{ fontWeight: 'bold', color: '#1976d2' }}>%</span></InputAdornment>,
-                            }}
-                            InputLabelProps={{ shrink: true }}
-                            helperText={`📦 Aplica em todos os ${venda.itens.filter(i => parseFloat(i.quantidade) > 0).length} itens`}
-                            disabled={vendaBloqueadaParaEdicao}
-                          />
-                        </Grid>
-                      );
-                    }
-
-                    // ── Modo Venda (padrão): desconto geral rateado ──
-                    return (
-                  <Grid item xs={6} md={2}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      type="number"
-                      label="Desc Geral"
-                      value={venda.desconto}
-                      onChange={(e) => {
-                        const novoDesc = e.target.value;
-                        setVenda(prev => ({ ...prev, desconto: novoDesc }));
-                        // Aviso de limite de desconto
-                        const opAtual = operacoes.find(op => op.id_operacao === venda.id_operacao);
-                        const limOp = parseFloat(opAtual?.limite_desconto_percentual) || 0;
-                        if (limOp > 0) {
-                          const subtotal = venda.itens.reduce((acc, it) => acc + parseFloat(it.quantidade || 0) * parseFloat(it.valor_unitario || 0), 0);
-                          const descNum = parseFloat(novoDesc) || 0;
-                          const percDesc = venda.tipo_desconto_geral === 'percentual' ? descNum : (subtotal > 0 ? (descNum / subtotal) * 100 : 0);
-                          if (percDesc > limOp) {
-                            setSnackDesconto({ open: true, msg: `⚠️ Limite de desconto da operação: ${limOp.toFixed(1)}%. Será necessária autorização ao salvar.` });
-                          }
-                        }
-                      }}
-                      onBlur={(e) => setVenda(prev => ({ ...prev, desconto: parseFloat(e.target.value) || 0 }))}
-                      onFocus={(e) => e.target.select()}
-                      inputProps={{ min: 0, step: 0.01 }}
-                      helperText={
-                        <Box
-                          component="span"
-                          onClick={() => !vendaBloqueadaParaEdicao && setVenda(prev => ({ ...prev, tipo_desconto_geral: prev.tipo_desconto_geral === 'valor' ? 'percentual' : 'valor' }))}
-                          sx={{ cursor: vendaBloqueadaParaEdicao ? 'default' : 'pointer', color: 'primary.main', fontWeight: 'bold', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.2 }}
-                          title="Clique para alternar entre R$ e %"
-                        >
-                          {venda.tipo_desconto_geral === 'valor'
-                            ? <><span style={{ background: '#1976d2', color: '#fff', borderRadius: 4, padding: '0 4px', fontSize: '0.7rem' }}>R$</span><span style={{ color: '#888', fontSize: '0.7rem' }}>| %</span></>
-                            : <><span style={{ color: '#888', fontSize: '0.7rem' }}>R$ |</span><span style={{ background: '#1976d2', color: '#fff', borderRadius: 4, padding: '0 4px', fontSize: '0.7rem' }}>%</span></>
-                          }
-                        </Box>
-                      }
-                      FormHelperTextProps={{ component: 'div' }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Box
-                              onClick={() => !vendaBloqueadaParaEdicao && setVenda(prev => ({ ...prev, tipo_desconto_geral: prev.tipo_desconto_geral === 'valor' ? 'percentual' : 'valor' }))}
-                              sx={{ cursor: 'pointer', fontWeight: 'bold', color: 'primary.main', userSelect: 'none', minWidth: 20, textAlign: 'center' }}
-                              title="Clique para alternar entre R$ e %"
-                            >
-                              {venda.tipo_desconto_geral === 'valor' ? 'R$' : '%'}
-                            </Box>
-                          </InputAdornment>
-                        ),
-                      }}
-                      InputLabelProps={{ shrink: true }}
-                      disabled={vendaBloqueadaParaEdicao}
-                    />
-                  </Grid>
-                    ); // fim return modo venda
-                  })(/* fim IIFE tipo_desconto */)}
-
-                  <Grid item xs={6} md={2}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      type="number"
-                      label="Taxa Entrega"
-                      value={venda.taxa_entrega}
-                      onChange={(e) => setVenda(prev => ({ ...prev, taxa_entrega: e.target.value }))}
-                      onBlur={(e) => setVenda(prev => ({ ...prev, taxa_entrega: parseFloat(e.target.value) || 0 }))}
-                      onFocus={(e) => e.target.select()}
-                      inputProps={{ min: 0, step: 0.01 }}
-                      InputProps={{
-                        startAdornment: <InputAdornment position="start">R$</InputAdornment>,
-                      }}
-                      InputLabelProps={{ shrink: true }}
-                      disabled={vendaBloqueadaParaEdicao}
-                    />
-                  </Grid>
-
+                <Grid container spacing={3}>
                   {/* 💰 Alerta de Cashback Aplicado */}
                   {venda.aplicar_cashback && venda.cashback_disponivel > 0 && (
                     <Grid item xs={12}>
@@ -6202,77 +6164,250 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                     </Grid>
                   )}
 
-                  <Grid item xs={6} md={2}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="Subtotal"
-                      value={Number(calcularTotal()).toFixed(2)}
-                      InputProps={{
-                        readOnly: true,
-                        startAdornment: <InputAdornment position="start">R$</InputAdornment>,
-                      }}
-                      InputLabelProps={{ shrink: true }}
-                      sx={{
-                        '& .MuiInputBase-input': {
-                          bgcolor: '#f5f5f5',
-                          cursor: 'default'
-                        }
-                      }}
-                    />
+                  {/* Lado Esquerdo - Ajustes */}
+                  <Grid item xs={12} md={5}>
+                    <Box sx={{ p: 2, border: '1px dashed #cbd5e1', borderRadius: '12px', height: '100%' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', display: 'block', mb: 2, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        ⚙️ Ajustes da Venda
+                      </Typography>
+                      <Grid container spacing={2} alignItems="center">
+                        {/* ─── Campo de desconto — comportamento depende do tipo_desconto da operação ─── */}
+                        {(() => {
+                          const opAtualDesc = operacoes.find(op => op.id_operacao === venda.id_operacao);
+                          const tipoDescOp = opAtualDesc?.tipo_desconto || 'venda';
+                          const limiteOp = parseFloat(opAtualDesc?.limite_desconto_percentual) || 0;
+                          const subtotal = calcularTotal();
+
+                          if (tipoDescOp === 'item') {
+                            // ── Modo Item: digita % e aplica em todos os itens ao clicar/blur ──
+                            return (
+                              <Grid item xs={6}>
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  type="number"
+                                  label="Desc % (todos)"
+                                  value={venda._desconto_item_geral ?? ''}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setVenda(prev => ({ ...prev, _desconto_item_geral: v }));
+                                  }}
+                                  onBlur={(e) => {
+                                    const perc = parseFloat(e.target.value) || 0;
+                                    if (limiteOp > 0 && perc > limiteOp) {
+                                      setSnackDesconto({ open: true, msg: `⚠️ Limite de desconto da operação: ${limiteOp.toFixed(1)}%. Será necessária autorização ao salvar.` });
+                                    }
+                                    // Aplica o % em cada item individualmente
+                                    setVenda(prev => {
+                                      const novosItens = prev.itens.map(item => {
+                                        const valorItem = parseFloat(item.quantidade) * parseFloat(item.valor_unitario);
+                                        const descontoVal = (valorItem * perc) / 100;
+                                        return {
+                                          ...item,
+                                          desconto: descontoVal,
+                                          desconto_valor: descontoVal,
+                                          desconto_percentual: perc,
+                                          desconto_tipo_edicao: 'percentual',
+                                          subtotal: valorItem - descontoVal,
+                                        };
+                                      });
+                                      const novoTotal = novosItens.reduce((acc, it) => acc + parseFloat(it.subtotal || 0), 0);
+                                      const taxaEntrega = parseFloat(prev.taxa_entrega) || 0;
+                                      return { ...prev, itens: novosItens, desconto: 0, _desconto_item_geral: perc, valor_total: novoTotal + taxaEntrega };
+                                    });
+                                  }}
+                                  onFocus={(e) => e.target.select()}
+                                  inputProps={{ min: 0, max: 100, step: 0.01 }}
+                                  InputProps={{
+                                    startAdornment: <InputAdornment position="start"><span style={{ fontWeight: 'bold', color: '#1976d2' }}>%</span></InputAdornment>,
+                                  }}
+                                  InputLabelProps={{ shrink: true }}
+                                  helperText={`📦 Aplica em todos os ${venda.itens.filter(i => parseFloat(i.quantidade) > 0).length} itens`}
+                                  disabled={vendaBloqueadaParaEdicao}
+                                />
+                              </Grid>
+                            );
+                          }
+
+                          // ── Modo Venda (padrão): duas caixas distintas de desconto (R$ e %) ──
+                          return (
+                            <>
+                              <Grid item xs={4}>
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  type="number"
+                                  label="Desconto R$"
+                                  value={
+                                    venda.tipo_desconto_geral === 'valor'
+                                      ? venda.desconto
+                                      : (subtotal > 0 ? ((subtotal * parseFloat(venda.desconto || 0)) / 100).toFixed(2) : '0.00')
+                                  }
+                                  onChange={(e) => {
+                                    const novoDesc = e.target.value;
+                                    setVenda(prev => ({ ...prev, desconto: novoDesc, tipo_desconto_geral: 'valor' }));
+                                    // Aviso de limite de desconto
+                                    if (limiteOp > 0) {
+                                      const descNum = parseFloat(novoDesc) || 0;
+                                      const percDesc = subtotal > 0 ? (descNum / subtotal) * 100 : 0;
+                                      if (percDesc > limiteOp) {
+                                        setSnackDesconto({ open: true, msg: `⚠️ Limite de desconto da operação: ${limiteOp.toFixed(1)}%. Será necessária autorização ao salvar.` });
+                                      }
+                                    }
+                                  }}
+                                  onBlur={(e) => setVenda(prev => ({ ...prev, desconto: parseFloat(e.target.value) || 0, tipo_desconto_geral: 'valor' }))}
+                                  onFocus={(e) => e.target.select()}
+                                  inputProps={{ min: 0, step: 0.01 }}
+                                  InputProps={{
+                                    startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                                  }}
+                                  InputLabelProps={{ shrink: true }}
+                                  disabled={vendaBloqueadaParaEdicao}
+                                />
+                              </Grid>
+                              
+                              <Grid item xs={4}>
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  type="number"
+                                  label="Desconto %"
+                                  value={
+                                    venda.tipo_desconto_geral === 'percentual'
+                                      ? venda.desconto
+                                      : (subtotal > 0 ? ((parseFloat(venda.desconto || 0) / subtotal) * 100).toFixed(2) : '0.00')
+                                  }
+                                  onChange={(e) => {
+                                    const novoDesc = e.target.value;
+                                    setVenda(prev => ({ ...prev, desconto: novoDesc, tipo_desconto_geral: 'percentual' }));
+                                    // Aviso de limite de desconto
+                                    if (limiteOp > 0) {
+                                      const descNum = parseFloat(novoDesc) || 0;
+                                      if (descNum > limiteOp) {
+                                        setSnackDesconto({ open: true, msg: `⚠️ Limite de desconto da operação: ${limiteOp.toFixed(1)}%. Será necessária autorização ao salvar.` });
+                                      }
+                                    }
+                                  }}
+                                  onBlur={(e) => setVenda(prev => ({ ...prev, desconto: parseFloat(e.target.value) || 0, tipo_desconto_geral: 'percentual' }))}
+                                  onFocus={(e) => e.target.select()}
+                                  inputProps={{ min: 0, max: 100, step: 0.01 }}
+                                  InputProps={{
+                                    startAdornment: <InputAdornment position="start">%</InputAdornment>,
+                                  }}
+                                  InputLabelProps={{ shrink: true }}
+                                  disabled={vendaBloqueadaParaEdicao}
+                                />
+                              </Grid>
+                            </>
+                          );
+                        })()}
+
+                        <Grid item xs={(() => {
+                          const opAtualDesc = operacoes.find(op => op.id_operacao === venda.id_operacao);
+                          return (opAtualDesc?.tipo_desconto || 'venda') === 'item' ? 6 : 4;
+                        })()}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            type="number"
+                            label="Taxa Entrega"
+                            value={venda.taxa_entrega}
+                            onChange={(e) => setVenda(prev => ({ ...prev, taxa_entrega: e.target.value }))}
+                            onBlur={(e) => setVenda(prev => ({ ...prev, taxa_entrega: parseFloat(e.target.value) || 0 }))}
+                            onFocus={(e) => e.target.select()}
+                            inputProps={{ min: 0, step: 0.01 }}
+                            InputProps={{
+                              startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                            }}
+                            InputLabelProps={{ shrink: true }}
+                            disabled={vendaBloqueadaParaEdicao}
+                          />
+                        </Grid>
+                      </Grid>
+                    </Box>
                   </Grid>
 
-                  <Grid item xs={6} md={2}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="Desc %"
-                      value={(() => {
-                        const subtotal = calcularTotal();
-                        if (!subtotal || subtotal <= 0) return '0.00';
-                        const descontoInput = parseFloat(venda.desconto) || 0;
-                        const descontoValor = venda.tipo_desconto_geral === 'percentual'
-                          ? (subtotal * descontoInput) / 100
-                          : descontoInput;
-                        return ((descontoValor / subtotal) * 100).toFixed(2);
-                      })()}
-                      InputProps={{
-                        readOnly: true,
-                        startAdornment: <InputAdornment position="start">%</InputAdornment>,
-                      }}
-                      InputLabelProps={{ shrink: true }}
-                      sx={{
-                        '& .MuiInputBase-input': {
-                          bgcolor: '#fff3e0',
-                          color: '#e65100',
-                          fontWeight: 'bold',
-                          cursor: 'default'
-                        }
-                      }}
-                    />
-                  </Grid>
+                  {/* Lado Direito - Totais */}
+                  <Grid item xs={12} md={7}>
+                    <Box sx={{ p: 2, bgcolor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', height: '100%' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', display: 'block', mb: 2, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        📊 Resumo Financeiro
+                      </Typography>
+                      <Grid container spacing={2} alignItems="center">
+                        <Grid item xs={4}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Subtotal"
+                            value={Number(calcularTotal()).toFixed(2)}
+                            InputProps={{
+                              readOnly: true,
+                              startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                            }}
+                            InputLabelProps={{ shrink: true }}
+                            sx={{
+                              '& .MuiInputBase-input': {
+                                bgcolor: '#f1f5f9',
+                                cursor: 'default'
+                              }
+                            }}
+                          />
+                        </Grid>
 
-                  <Grid item xs={6} md={2}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="Valor Total"
-                      value={parseFloat(venda.valor_total || 0).toFixed(2)}
-                      InputProps={{
-                        readOnly: true,
-                        startAdornment: <InputAdornment position="start">R$</InputAdornment>,
-                      }}
-                      InputLabelProps={{ shrink: true }}
-                      sx={{
-                        '& .MuiInputBase-input': {
-                          fontWeight: 'bold',
-                          fontSize: '1.1rem',
-                          bgcolor: '#e8f5e9',
-                          color: '#2e7d32',
-                          cursor: 'default'
-                        }
-                      }}
-                    />
+                        <Grid item xs={4}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Desc %"
+                            value={(() => {
+                              const subtotal = calcularTotal();
+                              if (!subtotal || subtotal <= 0) return '0.00';
+                              const descontoInput = parseFloat(venda.desconto) || 0;
+                              const descontoValor = venda.tipo_desconto_geral === 'percentual'
+                                ? (subtotal * descontoInput) / 100
+                                : descontoInput;
+                              return ((descontoValor / subtotal) * 100).toFixed(2);
+                            })()}
+                            InputProps={{
+                              readOnly: true,
+                              startAdornment: <InputAdornment position="start">%</InputAdornment>,
+                            }}
+                            InputLabelProps={{ shrink: true }}
+                            sx={{
+                              '& .MuiInputBase-input': {
+                                bgcolor: '#fff3e0',
+                                color: '#e65100',
+                                fontWeight: 'bold',
+                                cursor: 'default'
+                              }
+                            }}
+                          />
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Valor Total"
+                            value={parseFloat(venda.valor_total || 0).toFixed(2)}
+                            InputProps={{
+                              readOnly: true,
+                              startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                            }}
+                            InputLabelProps={{ shrink: true }}
+                            sx={{
+                              '& .MuiInputBase-input': {
+                                fontWeight: 'bold',
+                                fontSize: '1.1rem',
+                                bgcolor: '#e8f5e9',
+                                color: '#2e7d32',
+                                cursor: 'default'
+                              }
+                            }}
+                          />
+                        </Grid>
+                      </Grid>
+                    </Box>
                   </Grid>
                 </Grid>
               </Box>
@@ -8444,6 +8579,170 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
             setLotePreSelecionado(null);
           }}>
             Cancelar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog para Multi-Seleção de Produtos */}
+      <Dialog
+        open={openMultiSelecao}
+        onClose={() => setOpenMultiSelecao(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: 'primary.main', color: 'white' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <AddShoppingCartIcon />
+            <Typography variant="h6" fontWeight="bold">Adicionar Vários Produtos</Typography>
+          </Box>
+          <IconButton onClick={() => setOpenMultiSelecao(false)} sx={{ color: 'white' }}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          <TextField
+            fullWidth
+            variant="outlined"
+            placeholder="Pesquisar por código, nome, referência ou localização..."
+            value={multiPesquisa}
+            onChange={(e) => setMultiPesquisa(e.target.value)}
+            size="small"
+            sx={{ mb: 2 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon color="primary" />
+                </InputAdornment>
+              ),
+              endAdornment: multiPesquisa && (
+                <InputAdornment position="end">
+                  <IconButton onClick={() => setMultiPesquisa('')} size="small">
+                    <ClearIcon />
+                  </IconButton>
+                </InputAdornment>
+              )
+            }}
+          />
+          <TableContainer sx={{ maxHeight: 400, overflowY: 'auto' }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ width: '50px' }}>Selecionar</TableCell>
+                  <TableCell>Código</TableCell>
+                  <TableCell>Produto</TableCell>
+                  <TableCell align="right" sx={{ width: '130px' }}>Preço Unitário</TableCell>
+                  <TableCell align="center" sx={{ width: '110px' }}>Quantidade</TableCell>
+                  <TableCell align="right">Estoque</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {getProdutosMultiSelecao().map((prod) => {
+                  const idProd = String(prod.id_produto || prod.id || prod.pk || prod.ID);
+                  const isChecked = !!produtosSelecionados[idProd];
+                  const qtd = quantidadesSelecionadas[idProd] !== undefined ? quantidadesSelecionadas[idProd] : 1;
+                  const val = valoresSelecionadas[idProd] !== undefined 
+                    ? valoresSelecionadas[idProd] 
+                    : (prod.valor_venda || prod.preco_venda || prod.preco || 0);
+
+                  // Depósito da operação para obter o estoque
+                  const operacaoSelecionada = operacoes.find(op => String(op.id_operacao) === String(venda.id_operacao));
+                  const depositoBaixaId = operacaoSelecionada?.id_deposito_baixa;
+                  let estoqueVal = parseFloat(prod.estoque_atual || prod.estoque || 0);
+                  if (depositoBaixaId && prod.estoque_por_deposito && Array.isArray(prod.estoque_por_deposito)) {
+                    const estDep = prod.estoque_por_deposito.find(e => Number(e.id_deposito) === Number(depositoBaixaId));
+                    if (estDep) {
+                      estoqueVal = parseFloat(estDep.quantidade_atual ?? estDep.quantidade ?? 0);
+                    }
+                  }
+
+                  return (
+                    <TableRow key={idProd} hover selected={isChecked}>
+                      <TableCell>
+                        <Checkbox
+                          checked={isChecked}
+                          color="primary"
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setProdutosSelecionados(prev => ({ ...prev, [idProd]: checked }));
+                            if (checked) {
+                              if (quantidadesSelecionadas[idProd] === undefined) {
+                                setQuantidadesSelecionadas(prev => ({ ...prev, [idProd]: 1 }));
+                              }
+                              if (valoresSelecionadas[idProd] === undefined) {
+                                setValoresSelecionadas(prev => ({ ...prev, [idProd]: val }));
+                              }
+                            }
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>{prod.codigo_produto || prod.codigo || idProd}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight="bold">
+                          {prod.nome_produto || prod.nome}
+                        </Typography>
+                        {prod.referencia && (
+                          <Typography variant="caption" color="textSecondary" sx={{ mr: 1.5 }}>
+                            Ref: {prod.referencia}
+                          </Typography>
+                        )}
+                        {prod.localizacao && (
+                          <Typography variant="caption" color="textSecondary">
+                            Loc: {prod.localizacao}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
+                        <TextField
+                          type="number"
+                          size="small"
+                          value={val}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value) || 0;
+                            setValoresSelecionadas(prev => ({ ...prev, [idProd]: v }));
+                          }}
+                          inputProps={{ min: 0, step: 0.01 }}
+                          InputProps={{
+                            startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                          }}
+                          sx={{ width: '120px' }}
+                        />
+                      </TableCell>
+                      <TableCell align="center">
+                        <TextField
+                          type="number"
+                          size="small"
+                          value={qtd}
+                          onChange={(e) => {
+                            const q = parseFloat(e.target.value) || 0;
+                            setQuantidadesSelecionadas(prev => ({ ...prev, [idProd]: q }));
+                            if (q > 0 && !isChecked) {
+                              setProdutosSelecionados(prev => ({ ...prev, [idProd]: true }));
+                            }
+                          }}
+                          inputProps={{ min: 1 }}
+                          sx={{ width: '80px' }}
+                        />
+                      </TableCell>
+                      <TableCell align="right" sx={{ color: estoqueVal > 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}>
+                        {estoqueVal.toFixed(2)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenMultiSelecao(false)} variant="outlined">Cancelar</Button>
+          <Button
+            onClick={confirmarMultiSelecao}
+            variant="contained"
+            color="primary"
+            startIcon={<CheckIcon />}
+            disabled={Object.values(produtosSelecionados).filter(Boolean).length === 0}
+          >
+            Adicionar Selecionados ({Object.values(produtosSelecionados).filter(Boolean).length})
           </Button>
         </DialogActions>
       </Dialog>

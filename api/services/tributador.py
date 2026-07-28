@@ -731,7 +731,10 @@ class Tributador:
 
             if is_sn:
                 # Simples Nacional — usa CSOSN + campos SN de PIS/COFINS/IPI
-                res.icms_cst_csosn = trib.csosn or '400'
+                if trib.cst_icms in ['61', '60'] or trib.cst_ibs_cbs == '620':
+                    res.icms_cst_csosn = '500'
+                else:
+                    res.icms_cst_csosn = trib.csosn or '400'
                 res.pis_cst        = trib.cst_pis_sn or '07'
                 res.pis_aliq       = Decimal(str(trib.pis_aliquota_sn or 0))
                 res.cofins_cst     = trib.cst_cofins_sn or '07'
@@ -740,7 +743,7 @@ class Tributador:
                 res.ipi_aliq       = Decimal(str(trib.ipi_aliquota_sn or 0))
             else:
                 # Lucro Presumido / Lucro Real — usa CST + campos Regime Normal
-                res.icms_cst_csosn = trib.cst_icms or '000'
+                res.icms_cst_csosn = trib.cst_icms or '61'
                 res.pis_cst        = trib.cst_pis_cofins or '01'
                 res.pis_aliq       = Decimal(str(trib.pis_aliquota or 0))
                 res.cofins_cst     = trib.cst_pis_cofins or '01'
@@ -749,12 +752,13 @@ class Tributador:
                 res.ipi_aliq       = Decimal(str(trib.ipi_aliquota or 0))
 
             # Campos comuns a ambos os regimes
-            res.icms_aliq = Decimal(str(trib.icms_aliquota or 0))
-            res.ibs_cst   = trib.cst_ibs_cbs or '410'
-            res.ibs_aliq  = Decimal(str(trib.ibs_aliquota or 0))
-            res.cbs_cst   = trib.cst_ibs_cbs or '410'
-            res.cbs_aliq  = Decimal(str(trib.cbs_aliquota or 0))
-            res.is_aliq   = Decimal(str(trib.imposto_seletivo_aliquota or 0))
+            res.icms_aliq     = Decimal(str(trib.icms_aliquota or 0))
+            res.ibs_cst       = trib.cst_ibs_cbs or '620'
+            res.cbs_cst       = trib.cst_ibs_cbs or '620'
+            res.ibs_aliq      = Decimal(str(trib.ibs_aliquota or 0.1))
+            res.cbs_aliq      = Decimal(str(trib.cbs_aliquota or 0.9))
+            res.c_class_trib  = getattr(trib, 'classificacao_fiscal', None) or '620006'
+            res.is_aliq       = Decimal(str(trib.imposto_seletivo_aliquota or 0))
 
         return self._calcular_valores(res, valor_unitario, quantidade)
 

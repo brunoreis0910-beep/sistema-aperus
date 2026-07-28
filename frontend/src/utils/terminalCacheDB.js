@@ -82,13 +82,61 @@ const abrirDB = () =>
 // ─── Helpers genéricos ────────────────────────────────────────────────────────
 
 const salvarLista = async (store, lista) => {
+  if (!Array.isArray(lista) || lista.length === 0) return 0;
   const db = await abrirDB();
-  return new Promise((resolve, reject) => {
-    const tx  = db.transaction(store, 'readwrite');
-    const obj = tx.objectStore(store);
-    lista.forEach(item => obj.put(item));
-    tx.oncomplete = () => resolve(lista.length);
-    tx.onerror    = () => reject(tx.error);
+  return new Promise((resolve) => {
+    try {
+      const tx  = db.transaction(store, 'readwrite');
+      const obj = tx.objectStore(store);
+
+      lista.forEach(item => {
+        if (!item || typeof item !== 'object') return;
+        try {
+          const itemSalvar = JSON.parse(JSON.stringify(item));
+
+          if (store === 'tabelas_comerciais') {
+            itemSalvar.id_tabela = itemSalvar.id_tabela !== undefined ? itemSalvar.id_tabela : (itemSalvar.id_tabela_comercial !== undefined ? itemSalvar.id_tabela_comercial : itemSalvar.id);
+          }
+          if (store === 'produtos') {
+            itemSalvar.id_produto = itemSalvar.id_produto !== undefined ? itemSalvar.id_produto : itemSalvar.id;
+          }
+          if (store === 'clientes') {
+            itemSalvar.id_cliente = itemSalvar.id_cliente !== undefined ? itemSalvar.id_cliente : itemSalvar.id;
+          }
+          if (store === 'formas_pagamento') {
+            itemSalvar.id_forma_pagamento = itemSalvar.id_forma_pagamento !== undefined ? itemSalvar.id_forma_pagamento : itemSalvar.id;
+          }
+          if (store === 'operacoes') {
+            itemSalvar.id_operacao = itemSalvar.id_operacao !== undefined ? itemSalvar.id_operacao : itemSalvar.id;
+          }
+          if (store === 'vendedores') {
+            itemSalvar.id_vendedor = itemSalvar.id_vendedor !== undefined ? itemSalvar.id_vendedor : itemSalvar.id;
+          }
+
+          const keyField = store === 'tabelas_comerciais' ? 'id_tabela' :
+                           store === 'produtos' ? 'id_produto' :
+                           store === 'clientes' ? 'id_cliente' :
+                           store === 'formas_pagamento' ? 'id_forma_pagamento' :
+                           store === 'operacoes' ? 'id_operacao' :
+                           store === 'vendedores' ? 'id_vendedor' : null;
+
+          if (!keyField || itemSalvar[keyField] !== undefined) {
+            obj.put(itemSalvar);
+          }
+        } catch (itemErr) {
+          console.warn(`[CACHE] Item ignorado ao salvar na store ${store}:`, itemErr);
+        }
+      });
+
+      tx.oncomplete = () => resolve(lista.length);
+      tx.onerror    = (e) => {
+        console.warn(`[CACHE] Aviso ao salvar lista na store ${store}:`, tx.error || e);
+        resolve(0);
+      };
+    } catch (err) {
+      console.warn(`[CACHE] Exceção ao abrir transação na store ${store}:`, err);
+      resolve(0);
+    }
   });
 };
 
@@ -115,12 +163,22 @@ const buscarPorId = async (store, id) => {
 };
 
 const salvarSingleton = async (store, dados) => {
+  if (!dados || typeof dados !== 'object') return;
   const db = await abrirDB();
-  return new Promise((resolve, reject) => {
-    const tx  = db.transaction(store, 'readwrite');
-    const req = tx.objectStore(store).put({ chave: 'singleton', ...dados });
-    req.onsuccess = () => resolve();
-    req.onerror   = () => reject(req.error);
+  return new Promise((resolve) => {
+    try {
+      const tx  = db.transaction(store, 'readwrite');
+      const dadosClean = JSON.parse(JSON.stringify(dados));
+      const req = tx.objectStore(store).put({ chave: 'singleton', ...dadosClean });
+      req.onsuccess = () => resolve();
+      req.onerror   = (e) => {
+        console.warn(`[CACHE] Aviso ao salvar singleton na store ${store}:`, tx.error || e);
+        resolve();
+      };
+    } catch (err) {
+      console.warn(`[CACHE] Exceção ao salvar singleton na store ${store}:`, err);
+      resolve();
+    }
   });
 };
 

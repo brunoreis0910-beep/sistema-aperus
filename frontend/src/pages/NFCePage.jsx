@@ -160,7 +160,18 @@ const NFCePage = () => {
             setVendaDetailOpen(true);
         } catch (err) {
             console.error("Erro ao carregar detalhes da venda:", err);
-            const errorMsg = err.response?.data?.details || err.response?.data?.error || err.response?.data?.message || 'Erro ao buscar detalhes da venda.';
+            const d = err.response?.data;
+            let errorMsg = 'Erro ao buscar detalhes da venda.';
+            if (typeof d === 'string') {
+                if (d.includes('<title>')) {
+                    const match = d.match(/<title>(.*?)<\/title>/i);
+                    errorMsg = match ? `Erro no servidor: ${match[1]}` : 'Erro 500 no Servidor ao buscar detalhes.';
+                } else {
+                    errorMsg = d.substring(0, 120);
+                }
+            } else if (d && typeof d === 'object') {
+                errorMsg = d.mensagem || d.message || d.details || d.detail || d.error || err.message || errorMsg;
+            }
             showToast(errorMsg, 'error');
         } finally {
             setLoadingDetailId(null);
@@ -234,14 +245,12 @@ const NFCePage = () => {
         showToast('Solicitando emissão de NFC-e...', 'info');
 
         try {
-            const requestData = {
-                ...csosnConfig.isEnabled && {
-                    observacoes: {
-                        mensagem: csosnConfig.message,
-                        csosns: csosnConfig.selectedCsosns
-                    }
+            const requestData = (typeof csosnConfig !== 'undefined' && csosnConfig?.isEnabled) ? {
+                observacoes: {
+                    mensagem: csosnConfig.message,
+                    csosns: csosnConfig.selectedCsosns
                 }
-            };
+            } : {};
 
             const response = await axiosInstance.post(`/vendas/${vendaId}/emitir_nfce/`, requestData, { timeout: 60000 });
 
@@ -252,7 +261,20 @@ const NFCePage = () => {
             fetchVendas();
         } catch (err) {
             console.error('❌ Erro na emissão:', err);
-            const errorMsg = err.response?.data?.details || err.response?.data?.error || err.response?.data?.message || 'Erro desconhecido ao emitir';
+            const d = err.response?.data;
+            let errorMsg = 'Erro desconhecido ao emitir';
+            if (typeof d === 'string') {
+                if (d.includes('<title>') || d.includes('Server Error')) {
+                    const match = d.match(/<title>(.*?)<\/title>/i);
+                    errorMsg = match ? match[1] : 'Erro 500 interno no Servidor';
+                } else {
+                    errorMsg = d.slice(0, 200);
+                }
+            } else if (d) {
+                errorMsg = d.mensagem || d.message || d.details || d.detail || d.error || err.message || errorMsg;
+            } else {
+                errorMsg = err.message || errorMsg;
+            }
             showToast(`Erro na emissão: ${errorMsg}`, 'error');
         } finally {
             setProcessingId(null);
@@ -687,18 +709,27 @@ const NFCePage = () => {
                                                 {/* Botão Principal */}
                                                 <Button 
                                                     variant="contained" 
-                                                    color={venda.status_nfe === 'EMITIDA' ? "success" : (venda.status_nfe === 'CONTINGENCIA' ? "warning" : "primary")}
+                                                    color={venda.status_nfe === 'EMITIDA' ? "success" : "primary"}
                                                     size="small"
-                                                    startIcon={processingId === venda.id ? <CircularProgress size={20} color="inherit" /> : (venda.status_nfe === 'EMITIDA' || venda.status_nfe === 'CONTINGENCIA' ? <PrintIcon /> : <ReceiptIcon />)}
-                                                    onClick={() => (venda.status_nfe === 'EMITIDA' || venda.status_nfe === 'CONTINGENCIA') ? handleImprimirNFCe(venda.id) : handleEmitirNFCe(venda.id)}
+                                                    startIcon={processingId === venda.id ? <CircularProgress size={20} color="inherit" /> : (venda.status_nfe === 'EMITIDA' ? <PrintIcon /> : <ReceiptIcon />)}
+                                                    onClick={() => (venda.status_nfe === 'EMITIDA' ? handleImprimirNFCe(venda.id) : handleEmitirNFCe(venda.id))}
                                                     disabled={!!processingId || venda.status_nfe === 'CANCELADA'}
                                                     sx={{ minWidth: 130, mr: 0.5 }}
                                                 >
-                                                    {processingId === venda.id ? 'Processando...' : (
+                                                    {processingId === venda.id ? 'Emitindo...' : (
                                                         venda.status_nfe === 'EMITIDA' ? 'Imprimir' : 
-                                                        (venda.status_nfe === 'CONTINGENCIA' ? 'Imprimir (Off)' : 'Emitir')
+                                                        (venda.status_nfe === 'CONTINGENCIA' ? 'Transmitir (Off)' : 'Transmitir SEFAZ')
                                                     )}
                                                 </Button>
+
+                                                {/* Se estiver em Contingência/Offline, exibe ícone para imprimir offline */}
+                                                {venda.status_nfe === 'CONTINGENCIA' && (
+                                                    <Tooltip title="Imprimir Cupom em Contingência (Offline)">
+                                                        <IconButton size="small" color="warning" onClick={() => handleImprimirNFCe(venda.id)} sx={{ mr: 0.5 }}>
+                                                            <PrintIcon fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
 
                                                 {(venda.status_nfe === 'EMITIDA' || venda.status_nfe === 'CONTINGENCIA') && (
                                                     <WhatsAppQuickSend
@@ -750,6 +781,13 @@ const NFCePage = () => {
                     </ListItemIcon>
                     Expandir Cupom
                 </MenuItem>
+                
+                {menuVenda && menuVenda.status_nfe !== 'EMITIDA' && menuVenda.status_nfe !== 'CANCELADA' && (
+                    <MenuItem onClick={() => { handleMenuClose(); handleEmitirNFCe(menuVenda.id); }}>
+                        <ListItemIcon><ReceiptIcon fontSize="small" color="primary" /></ListItemIcon>
+                        Transmitir NFC-e para SEFAZ
+                    </MenuItem>
+                )}
                 <MenuItem onClick={() => handleDownloadXML(menuVenda)} disabled={!menuVenda?.tem_xml && !menuVenda?.chave_nfe}>
                     <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
                     Baixar XML

@@ -1816,14 +1816,15 @@
                             
                             const userRes = await axios.get('/api/user/parametros/');
                             console.log('✅ Parâmetros do usuário recebidos:', userRes.data);
+                            const uData = (userRes.data && typeof userRes.data === 'object') ? userRes.data : {};
                             
                             // Montar dadosVenda inicial com os dados do usuário
                             this.dadosVenda = {
-                                operacao: userRes.data.operacao || null,
-                                vendedor: userRes.data.vendedor || null,
+                                operacao: uData.operacao || null,
+                                vendedor: uData.vendedor || null,
                                 cliente: null, // Cliente será preenchido quando selecionado
                                 usuario: {
-                                    username: userRes.data.usuario?.username || '{% endverbatim %}{{ request.user.username }}{% verbatim %}'
+                                    username: uData.usuario?.username || '{% endverbatim %}{{ request.user.username }}{% verbatim %}'
                                 }
                             };
                             
@@ -2212,13 +2213,21 @@
                          }
 
                     } catch (e) {
-                         // LOG DIAGNÓSTICO: distinguir erro HTTP vs erro de lógica
-                         if (e.response) {
-                             console.error('❌ Erro HTTP na requisição:', e.response.status, e.response.data);
+                         console.error(e);
+                         const d = e.response?.data;
+                         let msg = 'Erro ao emitir';
+                         if (typeof d === 'string') {
+                             if (d.includes('<title>')) {
+                                 const match = d.match(/<title>(.*?)<\/title>/i);
+                                 msg = match ? match[1] : 'Erro no Servidor ao emitir (500)';
+                             } else {
+                                 msg = d.slice(0, 250);
+                             }
+                         } else if (d && typeof d === 'object') {
+                             msg = d.mensagem || d.message || d.details || d.detail || d.error || d.erro || e.message;
                          } else {
-                             console.error('❌ Erro de lógica / rede:', e.message, e);
+                             msg = e.message || msg;
                          }
-                         const msg = e.response?.data?.mensagem || e.message || JSON.stringify(e.response?.data);
                          this.resultModal = { show: true, success: false, message: 'Erro: ' + msg };
                     } finally {
                         this.processing = false;

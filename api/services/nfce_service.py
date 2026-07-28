@@ -262,17 +262,32 @@ class NFCeService:
             if not venda.numero_nfe and venda.id_operacao:
                  try:
                      op_seq = venda.id_operacao
+                     num_atual = None
                      if op_seq.id_numeracao_id:
                          try:
-                             venda.numero_nfe = int(op_seq.id_numeracao.numeracao)
+                             num_atual = int(op_seq.id_numeracao.numeracao)
                          except (ValueError, TypeError):
-                             venda.numero_nfe = op_seq.proximo_numero_nf
+                             num_atual = int(op_seq.proximo_numero_nf or 1)
                      else:
-                         venda.numero_nfe = op_seq.proximo_numero_nf
+                         num_atual = int(op_seq.proximo_numero_nf or 1)
+
+                     venda.numero_nfe = num_atual
                      if op_seq.serie_nf:
                          venda.serie_nfe = op_seq.serie_nf
-                 except:
-                     pass
+
+                     # Incrementa a numeração da operação imediatamente
+                     op_seq.proximo_numero_nf = num_atual + 1
+                     op_seq.save()
+                     if op_seq.id_numeracao_id:
+                         try:
+                             num_obj = op_seq.id_numeracao
+                             num_obj.numeracao = str(num_atual + 1)
+                             num_obj.save()
+                         except Exception as e_num:
+                             logger.error(f"Erro ao incrementar numeracao: {e_num}")
+                     venda.save()
+                 except Exception as e_seq:
+                     logger.error(f"Erro ao atribuir sequencial NFC-e: {e_seq}")
 
             # 1. Build XML
             builder = NfeXmlBuilder(venda, empresa)
@@ -391,20 +406,19 @@ class NFCeService:
                 result['numero'] = venda.numero_nfe
                 result['serie'] = venda.serie_nfe or '1'
                 
-                # Incrementa sequencial da operacao
-                if venda.id_operacao:
+                # Incrementa sequencial da operacao (garante avanço mesmo se proximo_numero_nf == numero_nfe)
+                if venda.id_operacao and venda.numero_nfe:
                     try:
-                        # Atualiza o proximo numero
                         op = venda.id_operacao
-                        # Se o numero usado foi o atual da operacao, incrementa
-                        if op.proximo_numero_nf == venda.numero_nfe: 
-                            op.proximo_numero_nf += 1
+                        if int(op.proximo_numero_nf or 0) <= int(venda.numero_nfe): 
+                            op.proximo_numero_nf = int(venda.numero_nfe) + 1
                             op.save()
                         if op.id_numeracao_id:
                             try:
                                 num_obj = op.id_numeracao
-                                num_obj.numeracao = str(int(num_obj.numeracao) + 1)
-                                num_obj.save()
+                                if int(num_obj.numeracao or 0) <= int(venda.numero_nfe):
+                                    num_obj.numeracao = str(int(venda.numero_nfe) + 1)
+                                    num_obj.save()
                             except Exception as e_num:
                                 logger.error(f"Erro ao incrementar numeracao: {e_num}")
                     except Exception as e:
@@ -419,6 +433,24 @@ class NFCeService:
                 venda.save()
                 return result
             else:
+                # Se a SEFAZ rejeitou/deu erro, garante que a numeração da operação avançou
+                if venda.id_operacao and venda.numero_nfe:
+                    try:
+                        op = venda.id_operacao
+                        if int(op.proximo_numero_nf or 0) <= int(venda.numero_nfe):
+                            op.proximo_numero_nf = int(venda.numero_nfe) + 1
+                            op.save()
+                        if op.id_numeracao_id:
+                            try:
+                                num_obj = op.id_numeracao
+                                if int(num_obj.numeracao or 0) <= int(venda.numero_nfe):
+                                    num_obj.numeracao = str(int(venda.numero_nfe) + 1)
+                                    num_obj.save()
+                            except Exception as e_num:
+                                logger.error(f"Erro ao incrementar numeracao no erro: {e_num}")
+                    except Exception as e_op_err:
+                        logger.error(f"Erro ao atualizar operacao apos erro SEFAZ: {e_op_err}")
+
                 venda.status_nfe = 'ERRO'
                 venda.xml_nfe = xml_signed
                 venda.mensagem_nfe = result.get('mensagem', 'Erro desconhecido na SEFAZ')

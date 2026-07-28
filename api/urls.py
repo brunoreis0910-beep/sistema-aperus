@@ -20,6 +20,7 @@ from .views_faturamento import (
     ValidarEstoqueFiscalView, AjustarItensFaturamentoView, ConverterCupomParaNFeView,
     ListarVendasComFiltrosView
 )
+from .views import UserParametrosView
 from .views_ui import PDVNFCeView
 from cte.api_views import CTeViewSet
 from .views_catalogo import CatalogoViewSet, WhatsAppViewSet
@@ -58,7 +59,7 @@ from .views_cashback import (
     CashbackExpirarView,
     CashbackListView
 )
-from .views_notificacoes import NotificacoesIniciaisView, CashbacksVencendoView, InadimplenciaDetalhadaView, EstoqueCriticoDetalhadoView, FornecedoresEstoqueCriticoView
+from .views_notificacoes import NotificacoesIniciaisView, CashbacksVencendoView, InadimplenciaDetalhadaView, EstoqueCriticoDetalhadoView, FornecedoresEstoqueCriticoView, visualizar_fatura_publica, visualizar_fatura_unificada
 from .views_relatorios_cliente import (
     RelatorioTotalPagamentosView, RelatorioExtratoClienteView,
     RelatorioTotalGastosView, RelatorioVendas12MesesView,
@@ -221,6 +222,7 @@ from .whatsapp_e_aprovacao import (
     DesktopListenerView,
     ResponderAprovacaoView,
     LinkCurtoAprovacaoView,
+    PainelAprovacaoView,
     # Fila e configuração
     fila_whatsapp_view,
     fila_whatsapp_detail,
@@ -322,6 +324,7 @@ from .views import (
 from .views_tenant import saas_mapear_tenant
 from .views_backup import saas_obter_backup_config, saas_salvar_backup_config, saas_forcar_backup
 from .views_importador_saas import importar_dados_para_tenant
+from .views_central_logs import receber_log_erro_tenant, listar_logs_erro, resolver_log_erro
 
 from .viewsets_formapagamento import FormaPagamentoViewSet
 from .views_fornecedor import FornecedorViewSet
@@ -586,6 +589,8 @@ urlpatterns = [
     path('notificacoes/', NotificacoesIniciaisView.as_view(), name='notificacoes-list'),
     path('notificacoes/cashbacks-vencendo/', CashbacksVencendoView.as_view(), name='notificacoes-cashback-vencendo'),
     path('notificacoes/inadimplencia/', InadimplenciaDetalhadaView.as_view(), name='notificacoes-inadimplencia'),
+    path('fatura/<int:pk>/<str:token>/', visualizar_fatura_publica, name='fatura-publica'),
+    path('fatura/unificada/', visualizar_fatura_unificada, name='fatura-unificada'),
     path('notificacoes/estoque-critico/', EstoqueCriticoDetalhadoView.as_view(), name='notificacoes-estoque-critico'),
     path('notificacoes/fornecedores-estoque-critico/', FornecedoresEstoqueCriticoView.as_view(), name='notificacoes-fornecedores'),
     # Tributacao
@@ -597,6 +602,7 @@ urlpatterns = [
     path('calculadoras/peso/', calcular_peso_venda, name='calc-peso'),
     path('calculadoras/variacoes/<int:id_produto_pai>/', listar_variacoes_produto, name='calc-variacoes'),
     path('calculadoras/produtos-pai/', buscar_produtos_pai, name='calc-produtos-pai'),
+    path('user/parametros/', UserParametrosView.as_view(), name='user-parametros'),
     path('calculadoras/parametros/', get_parametros_calculadora, name='calc-parametros'),
     # Assistente IA
     path('ai/status/', AIStatusView.as_view(), name='ai-status'),
@@ -623,7 +629,9 @@ urlpatterns = [
     path('aprovacao/whatsapp-status/', WhatsAppStatusView.as_view(), name='aprovacao-whatsapp-status'),
     path('aprovacao/desktop-listener/', DesktopListenerView.as_view(), name='aprovacao-desktop-listener'),
     path('aprovacao/responder/<int:pk>/<str:token>/<str:resposta>/', ResponderAprovacaoView.as_view(), name='aprovacao-responder'),
+    path('aprovacao/painel/<int:pk>/<str:token>/', PainelAprovacaoView.as_view(), name='aprovacao-painel'),
     # Links curtos para WhatsApp (melhor detecção como link clicável)
+    path('ap/<int:pk>/<str:token>/', PainelAprovacaoView.as_view(), name='aprovacao-painel-curto'),
     path('ap/<int:pk>/<str:token>/<str:acao>/', LinkCurtoAprovacaoView.as_view(), name='aprovacao-link-curto'),
     # WhatsApp Nativo (QR Code, Fila, Config, Status)
     path('whatsapp/fila/', fila_whatsapp_view, name='whatsapp-fila'),
@@ -749,6 +757,11 @@ urlpatterns = [
     path('saas/backup-config/salvar/', saas_salvar_backup_config, name='saas-backup-config-salvar'),
     path('saas/backup-config/forcar/', saas_forcar_backup, name='saas-backup-config-forcar'),
     path('git-webhook-update/', github_webhook_update, name='git-webhook-update'),
+    
+    # Logs centralizados de exceções de clientes (central-logs)
+    path('central-logs/adicionar/', receber_log_erro_tenant, name='receber-log-erro-tenant'),
+    path('central-logs/listar/', listar_logs_erro, name='listar-logs-erro'),
+    path('central-logs/<int:pk>/resolver/', resolver_log_erro, name='resolver-log-erro'),
     
     path('', include(router.urls)),
     # Preferências de Interface do Usuário

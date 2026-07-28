@@ -5,11 +5,6 @@ import os
 from pathlib import Path
 from datetime import timedelta # Para o JWT
 from corsheaders.defaults import default_headers
-from dotenv import load_dotenv
-
-# Carrega o .env unificado central
-load_dotenv('C:\\APERUS\\.env')
-
 from decouple import config, Csv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -23,18 +18,18 @@ else:
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # Agora carregado do arquivo .env
-SECRET_KEY = config('MAE_SECRET_KEY', default=config('SECRET_KEY', default='django-insecure-CHANGE-THIS-IN-PRODUCTION'))
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-CHANGE-THIS-IN-PRODUCTION')
 
 # Chave da API do Google Gemini para IA
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 
 # --- CORREÇÃO DO DEBUG ---
 # DEBUG agora é configurável via .env (True para desenvolvimento, False para produção)
-DEBUG = config('MAE_DEBUG', default=config('DEBUG', default=True), cast=bool)
+DEBUG = config('DEBUG', default=True, cast=bool)
 
 # Permite acesso de localhost e rede local (192.168.x.x, 10.x.x.x)
 # Agora configurável via .env
-ALLOWED_HOSTS = config('MAE_ALLOWED_HOSTS', default=config('ALLOWED_HOSTS', default='localhost,127.0.0.1,testserver'), cast=Csv())
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,testserver', cast=Csv())
 
 # Adiciona IPs específicos da rede local para garantir acesso
 # O '*' permite qualquer domínio (incluindo aperus.com.br via túnel Cloudflare)
@@ -87,6 +82,8 @@ MIDDLEWARE = [
     
     # Middleware de Auditoria (deve vir após autenticação)
     'api.middleware_auditoria.AuditoriaMiddleware',
+    # Monitoramento de Erros Centralizado (SaaS)
+    'api.middleware.error_logger.CentralErroLoggerMiddleware',
 ]
 
 # Usa o nome correto do seu projeto
@@ -130,15 +127,15 @@ else:
     # MySQL para desenvolvimento - credenciais no .env
     DATABASES = {
         'default': {
-            'ENGINE': config('MAE_DB_ENGINE', default=config('DB_ENGINE', default='django.db.backends.mysql')),
-            'NAME': config('MAE_DB_NAME', default=config('DB_NAME', default='sistema_gerencial')),
-            'USER': config('MAE_DB_USER', default=config('DB_USER', default='root')),
+            'ENGINE': config('DB_ENGINE', default='django.db.backends.mysql'),
+            'NAME': config('DB_NAME', default='sistema_gerencial'),
+            'USER': config('DB_USER', default='root'),
             
             # --- SENHA AGORA NO .env ---
-            'PASSWORD': config('MAE_DB_PASSWORD', default=config('DB_PASSWORD', default='')), 
+            'PASSWORD': config('DB_PASSWORD', default=''), 
             
-            'HOST': config('MAE_DB_HOST', default=config('DB_HOST', default='127.0.0.1')),
-            'PORT': config('MAE_DB_PORT', default=config('DB_PORT', default='3306')),
+            'HOST': config('DB_HOST', default='127.0.0.1'),
+            'PORT': config('DB_PORT', default='3306'),
             'CONN_MAX_AGE': 60,  # Reutiliza conexões por 60s (evita overhead de conexão/request)
             'OPTIONS': {
                 'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
@@ -183,23 +180,38 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),    # Duração do refresh token: 7 dias
 }
 
-# --- 3. CONFIGURAÇÃO DO CORS (FECHADO E CONSOLIDADO) ---
-# SEGURANÇA: Acesso restrito a origens específicas
-CORS_ALLOW_ALL_ORIGINS = False
-CORS_ORIGIN_ALLOW_ALL = False
+# --- 3. CONFIGURAÇÃO DO CORS (CORRIGIDO E CONSOLIDADO) ---
+# SEGURANÇA: Em produção, especifique origens permitidas no .env
+# Em desenvolvimento, permite todas as origens
+
+# 🔥 TEMPORÁRIO: Permite TODAS as origens para depuração do APK
+# TODO: Remover após confirmar que o app funciona
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ORIGIN_ALLOW_ALL = True
 
 # Configuração via .env (sobrescreve em produção)
-cors_origins_str = config('MAE_CORS_ALLOWED_ORIGINS', default=config('CORS_ALLOWED_ORIGINS', default=''))
-if cors_origins_str:
-    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins_str.split(',') if origin.strip()]
-else:
-    CORS_ALLOWED_ORIGINS = [
-        "https://central.aperus.com.br",
-        "https://sistema.aperus.com.br",
-        "http://localhost",
-        "https://localhost",
-        "capacitor://localhost",
-    ]
+CORS_ALLOWED_ORIGINS_STR = config('CORS_ALLOWED_ORIGINS', default='')
+
+# Lista explícita de origens permitidas (backup + app mobile)
+CORS_ALLOWED_ORIGINS = [
+    # Web browser (desenvolvimento)
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    
+    # Capacitor app (Android/iOS)
+    "https://localhost",  # ← Capacitor serve via HTTPS localhost
+    "http://localhost",   # ← Fallback HTTP
+    "capacitor://localhost",  # ← Capacitor custom scheme
+    "ionic://localhost",      # ← Ionic custom scheme
+    
+    # Domínio de produção
+    "https://sistema.aperus.com.br",
+    "http://sistema.aperus.com.br",
+]
 
 # Permite envio de cookies e credenciais
 CORS_ALLOW_CREDENTIALS = True
@@ -294,7 +306,7 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = 'media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = r'C:\APERUS\aperus_mae\media'
 
 # Diretórios adicionais de arquivos estáticos
 _frontend_assets_dist = BASE_DIR / 'frontend' / 'dist'
@@ -355,10 +367,6 @@ PASTA_PROJETO_CENTRAL = r"C:\aperus\aperus_mae"
 GITHUB_WEBHOOK_SECRET = config('GITHUB_WEBHOOK_SECRET', default='')
 
 SAAS_MOTHER_URL = config('SAAS_MOTHER_URL', default='http://localhost:8006')
-
-# Chave de criptografia Fernet para campos do banco de dados
-FIELD_ENCRYPTION_KEY = config('FIELD_ENCRYPTION_KEY', default=None)
-
 
 
 

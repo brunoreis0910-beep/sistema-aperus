@@ -304,6 +304,7 @@ class TributacaoProdutoSerializer(serializers.ModelSerializer):
         model = TributacaoProduto
         fields = [
             'cfop',
+            'tipo_tributacao',
             # Regime Normal
             'cst_icms', 'icms_aliquota', 'marketing_icms',
             'cst_ipi', 'ipi_aliquota',
@@ -315,6 +316,8 @@ class TributacaoProdutoSerializer(serializers.ModelSerializer):
             'cst_cofins_sn', 'cofins_aliquota_sn',
             # Reforma Tributária IBS/CBS
             'cst_ibs_cbs', 'ibs_aliquota', 'cbs_aliquota', 'imposto_seletivo_aliquota',
+            # Combustíveis e Gás (Monofásico ICMS 61 / ANP)
+            'cprod_anp', 'desc_anp', 'pglp', 'pgnn', 'pgni', 'vpart', 'ad_rem_icms_ret',
             # Metadados
             'classificacao_fiscal', 'fonte_info',
         ]
@@ -637,7 +640,7 @@ class ContaBancariaSerializer(serializers.ModelSerializer):
         read_only_fields = ['id_conta_bancaria']
 
 class FinanceiroContaSerializer(serializers.ModelSerializer):
-    gerencial = serializers.BooleanField()
+    gerencial = serializers.BooleanField(required=False, default=True)
     cliente = serializers.SerializerMethodField()
     data_documento = serializers.DateField(source='data_emissao', read_only=True)
     id_cliente_fornecedor = serializers.IntegerField(source='id_cliente_fornecedor_id', required=False, allow_null=True)
@@ -646,7 +649,45 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
         model = FinanceiroConta
         fields = '__all__'
         read_only_fields = ['id_conta', 'data_emissao']
+
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            data = data.copy()
+            currency_fields = ['valor_parcela', 'valor_liquidado', 'valor_original', 'valor_juros', 'valor_multa', 'valor_desconto']
+            for field in currency_fields:
+                if field in data and data[field] is not None:
+                    try:
+                        val = float(data[field])
+                        data[field] = f"{round(val, 2):.2f}"
+                    except (ValueError, TypeError):
+                        pass
+        return super().to_internal_value(data)
     
+    def validate(self, attrs):
+        tipo_conta = attrs.get('tipo_conta', getattr(self.instance, 'tipo_conta', ''))
+        forma_pagamento = attrs.get('forma_pagamento', getattr(self.instance, 'forma_pagamento', ''))
+        
+        id_cliente = attrs.get('id_cliente_fornecedor_id') or attrs.get('id_cliente_fornecedor')
+        if not id_cliente and self.instance:
+            id_cliente = self.instance.id_cliente_fornecedor_id
+            
+        if tipo_conta == 'Receber' and id_cliente:
+            from .models import Cliente
+            cli_id = id_cliente.pk if hasattr(id_cliente, 'pk') else id_cliente
+            cliente = Cliente.objects.filter(pk=cli_id).first()
+            if cliente:
+                nome_norm = (forma_pagamento or '').upper().replace('_', ' ').replace('-', ' ').strip()
+                bloqueadas = ['BOLETO', 'A PRAZO', 'CREDIARIO', 'DUPLICATA', 'PROMISSORIA']
+                is_bloqueada = any(b in nome_norm for b in bloqueadas)
+                
+                if is_bloqueada:
+                    if not getattr(cliente, 'permite_venda_prazo', True) or cliente.nome_razao_social.upper() == 'CONSUMIDOR' or cliente.cpf_cnpj == '00000000000':
+                        raise serializers.ValidationError(
+                            f"🚫 Operação Negada: O cliente '{cliente.nome_razao_social}' não tem autorização "
+                            f"para compras faturadas ou boleto. Escolha uma forma de pagamento à vista (Dinheiro, Pix, Cartão)."
+                        )
+        return attrs
+
     def get_cliente(self, obj):
         try:
             val_id = obj.id_cliente_fornecedor_id

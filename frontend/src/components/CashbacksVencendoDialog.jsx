@@ -32,10 +32,11 @@ export default function CashbacksVencendoDialog({ open, onClose }) {
     setError('');
     try {
       const response = await axiosInstance.get('/notificacoes/cashbacks-vencendo/');
-      setCashbacks(response.data);
+      setCashbacks(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
       console.error('Erro ao buscar cashbacks:', err);
       setError('Erro ao carregar cashbacks. Tente novamente.');
+      setCashbacks([]);
     } finally {
       setLoading(false);
     }
@@ -127,7 +128,7 @@ export default function CashbacksVencendoDialog({ open, onClose }) {
             </Alert>
 
             <List>
-              {cashbacks.map((cashback, index) => {
+              {Array.isArray(cashbacks) && cashbacks.map((cashback, index) => {
                 const diasRestantes = getDiasRestantes(cashback.data_validade);
                 const dataValidade = new Date(cashback.data_validade).toLocaleDateString('pt-BR');
                 const temWhatsApp = cashback.whatsapp_cliente || cashback.telefone_cliente;

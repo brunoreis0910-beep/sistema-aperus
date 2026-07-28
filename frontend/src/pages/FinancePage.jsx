@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box, Paper, Typography, Grid, Card, CardContent, Button, Alert,
   CircularProgress, Tabs, Tab, Table, TableBody, TableCell, TableContainer,
@@ -10,6 +10,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import UndoIcon from '@mui/icons-material/Undo';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import AddIcon from '@mui/icons-material/Add';
+import ReceiptIcon from '@mui/icons-material/Receipt';
 import { useAuth } from '../context/AuthContext';
 
 // Função auxiliar para formatar data sem conversão de timezone
@@ -28,6 +29,7 @@ const FinancePage = () => {
   const [tabValue, setTabValue] = useState(0);
   const [contasReceber, setContasReceber] = useState([]);
   const [contasPagar, setContasPagar] = useState([]);
+  const [empresaInfo, setEmpresaInfo] = useState(null);
   const { axiosInstance, user, permissions, isLoading: authLoading } = useAuth();
 
   const [filtros, setFiltros] = useState({
@@ -85,7 +87,14 @@ const FinancePage = () => {
   const fetchFinancialData = async () => {
     try {
       setLoading(true);
-      const contasReceberResponse = await axiosInstance.get('/contas/?tipo_conta=Receber');
+      try {
+        const empresaResponse = await axiosInstance.get('/empresa/');
+        const empInfo = empresaResponse.data.results?.[0] || empresaResponse.data?.[0] || null;
+        setEmpresaInfo(empInfo);
+      } catch (err) {
+        console.error('Erro ao buscar dados da empresa:', err);
+      }
+      const contasReceberResponse = await axiosInstance.get('/contas/?tipo_conta=Receber&page_size=1000');
       const contas_receber = contasReceberResponse.data.results || contasReceberResponse.data || [];
       console.log('📊 Contas Receber:', contas_receber);
       if (contas_receber.length > 0) {
@@ -96,7 +105,7 @@ const FinancePage = () => {
           status_conta: contas_receber[0].status_conta
         });
       }
-      const contasPagarResponse = await axiosInstance.get('/contas/?tipo_conta=Pagar');
+      const contasPagarResponse = await axiosInstance.get('/contas/?tipo_conta=Pagar&page_size=1000');
       const contas_pagar = contasPagarResponse.data.results || contasPagarResponse.data || [];
       console.log('📊 Contas Pagar:', contas_pagar);
       const operacoesResponse = await axiosInstance.get('/operacoes/');
@@ -124,13 +133,426 @@ const FinancePage = () => {
     }
   };
 
+  const valorPorExtenso = (valor) => {
+    if (!valor || valor <= 0) return 'Zero reais';
+    
+    const parts = parseFloat(valor).toFixed(2).split('.');
+    const reais = parseInt(parts[0], 10);
+    const centavos = parseInt(parts[1], 10);
+    
+    const converterDezena = (n) => {
+      const unidades = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove'];
+      const especiais = ['dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+      const dezenas = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+      
+      if (n < 10) return unidades[n];
+      if (n >= 10 && n < 20) return especiais[n - 10];
+      const u = n % 10;
+      const d = Math.floor(n / 10);
+      return dezenas[d] + (u > 0 ? ' e ' + unidades[u] : '');
+    };
+    
+    const converterCentena = (n) => {
+      const centenas = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+      if (n === 100) return 'cem';
+      const c = Math.floor(n / 100);
+      const resto = n % 100;
+      return centenas[c] + (resto > 0 ? ' e ' + converterDezena(resto) : '');
+    };
+    
+    const converterGrupo = (n) => {
+      if (n < 100) return converterDezena(n);
+      return converterCentena(n);
+    };
+    
+    const formatReais = (v) => {
+      if (v === 0) return 'zero reais';
+      if (v === 1) return 'um real';
+      
+      let extenso = '';
+      const milhoes = Math.floor(v / 1000000);
+      let resto = v % 1000000;
+      const milhares = Math.floor(resto / 1000);
+      resto = resto % 1000;
+      
+      if (milhoes > 0) {
+        extenso += converterGrupo(milhoes) + (milhoes === 1 ? ' milhão' : ' milhões');
+        if (resto > 0 || milhares > 0) extenso += ' e ';
+      }
+      
+      if (milhares > 0) {
+        extenso += converterGrupo(milhares) + ' mil';
+        if (resto > 0) extenso += ' e ';
+      }
+      
+      if (resto > 0) {
+        extenso += converterGrupo(resto);
+      }
+      
+      extenso += ' reais';
+      return extenso;
+    };
+    
+    let textoReais = formatReais(reais);
+    let textoCentavos = '';
+    
+    if (centavos > 0) {
+      if (centavos === 1) {
+        textoCentavos = 'um centavo';
+      } else {
+        textoCentavos = converterDezena(centavos) + ' centavos';
+      }
+    }
+    
+    let resultado = textoReais;
+    if (textoCentavos) {
+      resultado += ' e ' + textoCentavos;
+    }
+    
+    resultado = resultado.replace(/^Um mil /, 'Mil ').replace(/^Um mil$/, 'Mil');
+    return resultado.charAt(0).toUpperCase() + resultado.slice(1);
+  };
+
+  const corrigirCaracteresEspeciais = (texto) => {
+    if (!texto) return '';
+    return texto
+      .replace(/├ú/g, 'ã')
+      .replace(/├│/g, 'ó')
+      .replace(/├¡/g, 'í')
+      .replace(/├║/g, 'ú')
+      .replace(/├¬/g, 'ê')
+      .replace(/├┤/g, 'ô')
+      .replace(/├®/g, 'é')
+      .replace(/├б/g, 'á')
+      .replace(/├Б/g, 'Á')
+      .replace(/├в/g, 'â')
+      .replace(/├З/g, 'Ç')
+      .replace(/├з/g, 'ç')
+      .replace(/├╡/g, 'õ')
+      .replace(/├А/g, 'À')
+      .replace(/├а/g, 'à')
+      .replace(/├К/g, 'Ê')
+      .replace(/├к/g, 'ê')
+      .replace(/├Ц/g, 'Ó')
+      .replace(/├д/g, 'ä')
+      .replace(/├®/g, 'é')
+      .replace(/├И/g, 'É')
+      .replace(/├Й/g, 'É')
+      .replace(/├В/g, 'Â')
+      .replace(/├Г/g, 'Ã')
+      .replace(/├Х/g, 'Õ')
+      .replace(/├Ф/g, 'Ô')
+      .replace(/├Ъ/g, 'Ú')
+      .replace(/├Н/g, 'Í')
+      .replace(/├┴/g, 'Á');
+  };
+
+  const imprimirRecibo = (conta) => {
+    let docIdentificacao = '-';
+    let nomeClienteFornecedor = corrigirCaracteresEspeciais(conta.cliente || '-');
+    
+    if (conta.tipo_conta === 'Receber') {
+      const cliObj = clientes.find(c => c.id_cliente === conta.id_cliente_fornecedor);
+      if (cliObj && cliObj.cpf_cnpj) {
+        docIdentificacao = cliObj.cpf_cnpj;
+      }
+    } else {
+      const fornObj = fornecedores.find(f => f.id_fornecedor === conta.id_cliente_fornecedor);
+      if (fornObj && fornObj.cpf_cnpj) {
+        docIdentificacao = fornObj.cpf_cnpj;
+      }
+    }
+    
+    const nomeEmpresa = corrigirCaracteresEspeciais(empresaInfo?.nome_fantasia || empresaInfo?.nome_razao_social || 'APERUS SISTEMAS');
+    const cnpjEmpresa = empresaInfo?.cpf_cnpj || '';
+    const foneEmpresa = empresaInfo?.telefone || '';
+    const enderecoBruto = `${empresaInfo?.endereco || ''}, ${empresaInfo?.numero || ''} ${empresaInfo?.bairro || ''} - ${empresaInfo?.cidade || ''}/${empresaInfo?.estado || ''}`;
+    const enderecoEmpresa = corrigirCaracteresEspeciais(enderecoBruto);
+    
+    const valorPago = parseFloat(conta.valor_liquidado || conta.valor_parcela || 0);
+    const valorExtenso = valorPorExtenso(valorPago);
+    const dataPagtoFormatada = formatarData(conta.data_pagamento || new Date().toISOString().split('T')[0]);
+    const cidadeFormatada = corrigirCaracteresEspeciais(empresaInfo?.cidade || 'Patrocínio');
+    const estadoFormatado = corrigirCaracteresEspeciais(empresaInfo?.estado || 'MG');
+    const localData = `${cidadeFormatada}-${estadoFormatado}, ${dataPagtoFormatada}`;
+    const descricaoConta = corrigirCaracteresEspeciais(conta.descricao || 'Quitação de título');
+    
+    const conteudoHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Recibo - #${conta.id_conta}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            color: #333;
+          }
+          .recibo-container {
+            border: 2px solid #ccc;
+            padding: 30px;
+            max-width: 800px;
+            margin: 0 auto;
+            border-radius: 8px;
+            background-color: #fff;
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #333;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+          }
+          .header-left h2 {
+            margin: 0 0 5px 0;
+            color: #2e7d32;
+          }
+          .header-left p {
+            margin: 2px 0;
+            font-size: 12px;
+            color: #666;
+          }
+          .header-right {
+            text-align: right;
+          }
+          .header-right .valor-box {
+            border: 2px solid #2e7d32;
+            padding: 10px 20px;
+            font-size: 22px;
+            font-weight: bold;
+            color: #2e7d32;
+            border-radius: 4px;
+            background-color: #e8f5e9;
+            display: inline-block;
+          }
+          .recibo-titulo {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+          }
+          .conteudo {
+            font-size: 16px;
+            line-height: 1.8;
+            margin-bottom: 45px;
+            text-align: justify;
+          }
+          .destaque {
+            font-weight: bold;
+            color: #000;
+          }
+          .rodape {
+            margin-top: 50px;
+          }
+          .local-data {
+            text-align: right;
+            margin-bottom: 40px;
+            font-style: italic;
+          }
+          .assinatura-secao {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+          }
+          .assinatura-box {
+            text-align: center;
+            width: 45%;
+          }
+          .linha-assinatura {
+            border-top: 1px solid #000;
+            margin-bottom: 5px;
+          }
+          .assinatura-box p {
+            margin: 0;
+            font-size: 14px;
+            color: #333;
+          }
+          .no-print-btn {
+            display: block;
+            width: 150px;
+            margin: 20px auto 0 auto;
+            padding: 10px;
+            background-color: #2e7d32;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            text-align: center;
+          }
+          @media print {
+            .no-print-btn {
+              display: none;
+            }
+            body {
+              margin: 0;
+              background-color: white;
+            }
+            .recibo-container {
+              border: none;
+              padding: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="recibo-container">
+          <div class="header">
+            <div class="header-left">
+              <h2>${nomeEmpresa}</h2>
+              <p>CNPJ: ${cnpjEmpresa}</p>
+              <p>${enderecoEmpresa}</p>
+              <p>Fone: ${foneEmpresa}</p>
+            </div>
+            <div class="header-right">
+              <div class="valor-box">R$ ${valorPago.toFixed(2)}</div>
+            </div>
+          </div>
+          
+          <div class="recibo-titulo">Recibo de Pagamento</div>
+          
+          <div class="conteudo">
+            Recebemos de <span class="destaque">${nomeClienteFornecedor}</span>, 
+            CPF/CNPJ nº <span class="destaque">${docIdentificacao}</span>, 
+            a importância de <span class="destaque">R$ ${valorPago.toFixed(2)} (${valorExtenso})</span>, 
+            referente a <span class="destaque">${descricaoConta}</span> 
+            (Título ID #${conta.id_conta} / Documento nº ${conta.documento_numero || '-'}).
+            ${conta.saldo_restante && parseFloat(conta.saldo_restante) > 0 ? `
+              <div style="margin-top: 15px; padding: 12px; background-color: #fff8e1; border-left: 5px solid #ffb300; font-size: 0.9em; border-radius: 4px; line-height: 1.4em;">
+                <strong>Aviso de Quitação Parcial:</strong> Este pagamento refere-se a uma baixa parcial. 
+                O saldo restante de <strong>R$ ${parseFloat(conta.saldo_restante).toFixed(2)}</strong> foi desmembrado em um novo título pendente.
+              </div>
+            ` : ''}
+          </div>
+          
+          <div class="rodape">
+            <div class="local-data">${localData}</div>
+            
+            <div class="assinatura-secao">
+              <div class="assinatura-box">
+                <div class="linha-assinatura"></div>
+                <p>Recebedor (Emitente)</p>
+              </div>
+              <div class="assinatura-box">
+                <div class="linha-assinatura"></div>
+                <p>Pagador</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <button class="no-print-btn" onclick="window.print()">Imprimir Recibo</button>
+        
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 500);
+          }
+        </script>
+      </body>
+      </html>
+    `;
+    
+    const printWindow = window.open('', '_blank', 'width=850,height=600');
+    if (printWindow) {
+      printWindow.document.write(conteudoHtml);
+      printWindow.document.close();
+      printWindow.focus();
+    }
+  };
+
+  const recalcularValoresBaixa = (novosCampos, contaCustom) => {
+    setFormBaixa(prev => {
+      const formAtualizado = { ...prev, ...novosCampos };
+      const conta = contaCustom || contaBaixa;
+      if (!conta) return formAtualizado;
+
+      const valorPrincipalOriginal = parseFloat(conta.valor_parcela || conta.valor_original || 0);
+      if (formAtualizado.valorPrincipalPago === undefined || formAtualizado.valorPrincipalPago === null) {
+        formAtualizado.valorPrincipalPago = valorPrincipalOriginal.toFixed(2);
+      }
+      
+      const valorPrincipal = parseFloat(formAtualizado.valorPrincipalPago || 0);
+      let juros = parseFloat(formAtualizado.juros || 0);
+      let multa = parseFloat(formAtualizado.multa || 0);
+      let desconto = parseFloat(formAtualizado.desconto || 0);
+
+      if (formAtualizado.autoCalcular) {
+        const venc = new Date(conta.data_vencimento + 'T00:00:00');
+        const pag = new Date(formAtualizado.data_pagamento + 'T00:00:00');
+        const diffTime = pag - venc;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        juros = 0;
+        multa = 0;
+        desconto = 0;
+
+        if (diffDays > 0) {
+          multa = valorPrincipal * (parseFloat(formAtualizado.taxaMulta || 0) / 100);
+          juros = valorPrincipal * (parseFloat(formAtualizado.taxaJuros || 0) / 30 / 100) * diffDays;
+        } else if (diffDays < 0) {
+          desconto = valorPrincipal * (parseFloat(formAtualizado.taxaDesconto || 0) / 30 / 100) * Math.abs(diffDays);
+        }
+        
+        formAtualizado.juros = juros.toFixed(2);
+        formAtualizado.multa = multa.toFixed(2);
+        formAtualizado.desconto = desconto.toFixed(2);
+      }
+
+      const valorFinal = valorPrincipal + juros + multa - desconto;
+      formAtualizado.valor_pago = valorFinal.toFixed(2);
+
+      return formAtualizado;
+    });
+  };
+
   const abrirModalBaixa = (conta) => {
     setContaBaixa(conta);
+    const autoCalc = localStorage.getItem('aperus_financeiro_auto_calcular') === 'true';
+    const txJuros = parseFloat(localStorage.getItem('aperus_financeiro_taxa_juros') || '1.0');
+    const txMulta = parseFloat(localStorage.getItem('aperus_financeiro_multa') || '2.0');
+    const txDesconto = parseFloat(localStorage.getItem('aperus_financeiro_taxa_desconto') || '1.0');
+
+    // Perform initial auto calculation if enabled
+    let juros = 0;
+    let multa = 0;
+    let desconto = 0;
+    const dataPagamento = new Date().toISOString().split('T')[0];
+    const valorPrincipal = parseFloat(conta.valor_parcela || conta.valor_original || 0);
+
+    if (autoCalc && conta) {
+      const venc = new Date(conta.data_vencimento + 'T00:00:00');
+      const pag = new Date(dataPagamento + 'T00:00:00');
+      const diffTime = pag - venc;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays > 0) {
+        multa = valorPrincipal * (txMulta / 100);
+        juros = valorPrincipal * (txJuros / 30 / 100) * diffDays;
+      } else if (diffDays < 0) {
+        desconto = valorPrincipal * (txDesconto / 30 / 100) * Math.abs(diffDays);
+      }
+    }
+
+    const valorPago = valorPrincipal + juros + multa - desconto;
+
     setFormBaixa({
-      data_pagamento: new Date().toISOString().split('T')[0],
-      valor_pago: conta.valor_parcela || conta.valor_original || conta.valor || 0,
+      data_pagamento: dataPagamento,
+      valorPrincipalPago: valorPrincipal.toFixed(2),
+      valor_pago: valorPago.toFixed(2),
       forma_pagamento: '',
-      id_conta_bancaria: contasBancarias.length > 0 ? contasBancarias[0].id_conta_bancaria : ''
+      id_conta_bancaria: contasBancarias.length > 0 ? contasBancarias[0].id_conta_bancaria : '',
+      juros: juros.toFixed(2),
+      multa: multa.toFixed(2),
+      desconto: desconto.toFixed(2),
+      autoCalcular: autoCalc,
+      taxaJuros: txJuros,
+      taxaMulta: txMulta,
+      taxaDesconto: txDesconto
     });
     setOpenBaixa(true);
   };
@@ -152,19 +574,43 @@ const FinancePage = () => {
       // Determinar qual campo usar baseado no tipo de conta
       const campoContaBancaria = contaBaixa.tipo_conta === 'Receber' ? 'id_conta_cobranca' : 'id_conta_baixa';
 
-      await axiosInstance.patch(`/contas/${contaBaixa.id_conta}/`, {
+      // Salva preferências no localStorage
+      localStorage.setItem('aperus_financeiro_auto_calcular', formBaixa.autoCalcular);
+      localStorage.setItem('aperus_financeiro_taxa_juros', formBaixa.taxaJuros);
+      localStorage.setItem('aperus_financeiro_multa', formBaixa.taxaMulta);
+      localStorage.setItem('aperus_financeiro_taxa_desconto', formBaixa.taxaDesconto);
+
+      const response = await axiosInstance.patch(`/contas/${contaBaixa.id_conta}/`, {
         status_conta: 'Paga',
         data_pagamento: formBaixa.data_pagamento,
         valor_liquidado: parseFloat(formBaixa.valor_pago),
         saldo_devedor: 0,
         forma_pagamento: formBaixa.forma_pagamento,
-        [campoContaBancaria]: formBaixa.id_conta_bancaria
+        [campoContaBancaria]: formBaixa.id_conta_bancaria,
+        valor_juros: parseFloat(formBaixa.juros || 0),
+        valor_multa: parseFloat(formBaixa.multa || 0),
+        valor_desconto: parseFloat(formBaixa.desconto || 0)
       });
 
       setSuccess('✅ Baixa realizada com sucesso!');
       setTimeout(() => setSuccess(''), 3000);
       setOpenBaixa(false);
       await fetchFinancialData();
+
+      if (window.confirm("Baixa realizada com sucesso!\n\nDeseja gerar e imprimir o recibo deste pagamento?")) {
+        const principalPago = parseFloat(formBaixa.valorPrincipalPago || 0);
+        const originalParcela = parseFloat(contaBaixa.valor_parcela || 0);
+        const saldoRestante = originalParcela - principalPago;
+
+        const contaParaRecibo = {
+          ...contaBaixa,
+          ...response.data,
+          valor_liquidado: parseFloat(formBaixa.valor_pago),
+          data_pagamento: formBaixa.data_pagamento,
+          saldo_restante: saldoRestante > 0.01 ? saldoRestante : 0
+        };
+        imprimirRecibo(contaParaRecibo);
+      }
 
     } catch (err) {
       console.error('❌ Erro ao dar baixa:', err);
@@ -201,9 +647,15 @@ const FinancePage = () => {
       setTimeout(() => setError(''), 3000);
       return;
     }
+    
+    const contasParaBaixar = contasReceber.filter(c => contasSelecionadas.includes(c.id_conta))
+      .concat(contasPagar.filter(c => contasSelecionadas.includes(c.id_conta)));
+      
+    const totalValorSelecionado = contasParaBaixar.reduce((sum, c) => sum + parseFloat(c.valor_parcela || c.valor_original || 0), 0);
+
     setFormBaixa({
       data_pagamento: new Date().toISOString().split('T')[0],
-      valor_pago: 0,
+      valor_pago: totalValorSelecionado,
       forma_pagamento: '',
       id_conta_bancaria: contasBancarias.length > 0 ? contasBancarias[0].id_conta_bancaria : ''
     });
@@ -224,29 +676,93 @@ const FinancePage = () => {
     try {
       setLoading(true);
 
-      // Buscar detalhes das contas selecionadas para determinar o tipo
-      const contasParaBaixar = contasReceber.filter(c => contasSelecionadas.includes(c.id_conta));
+      const contasParaBaixar = contasReceber.filter(c => contasSelecionadas.includes(c.id_conta))
+        .concat(contasPagar.filter(c => contasSelecionadas.includes(c.id_conta)));
+
+      const totalValorSelecionado = contasParaBaixar.reduce((sum, c) => sum + parseFloat(c.valor_parcela || c.valor_original || 0), 0);
+      const valorPagoInformado = parseFloat(formBaixa.valor_pago);
+
+      if (isNaN(valorPagoInformado) || valorPagoInformado <= 0) {
+        setError('O valor pago deve ser maior que zero');
+        setLoading(false);
+        return;
+      }
+
+      const primeiroClienteId = contasParaBaixar[0]?.id_cliente_fornecedor;
+      const todosMesmoCliente = contasParaBaixar.every(c => c.id_cliente_fornecedor === primeiroClienteId);
+
+      if (valorPagoInformado < totalValorSelecionado && !todosMesmoCliente) {
+        setError('A baixa parcial em bloco só é permitida se todas as contas pertencerem ao mesmo cliente.');
+        setLoading(false);
+        return;
+      }
+
+      if (valorPagoInformado > totalValorSelecionado) {
+        setError(`O valor pago (R$ ${valorPagoInformado.toFixed(2)}) não pode ser maior que o valor total selecionado (R$ ${totalValorSelecionado.toFixed(2)}).`);
+        setLoading(false);
+        return;
+      }
 
       let sucessos = 0;
       let erros = 0;
 
-      for (const conta of contasParaBaixar) {
-        try {
+      // Se for baixa parcial (valor pago < total selecionado e mesmo cliente), faz a distribuição FIFO
+      if (valorPagoInformado < totalValorSelecionado) {
+        const contasOrdenadas = [...contasParaBaixar].sort((a, b) => new Date(a.data_vencimento) - new Date(b.data_vencimento));
+        let saldoParaDistribuir = valorPagoInformado;
+
+        for (const conta of contasOrdenadas) {
+          const valorConta = parseFloat(conta.valor_parcela || conta.valor_original || 0);
           const campoContaBancaria = conta.tipo_conta === 'Receber' ? 'id_conta_cobranca' : 'id_conta_baixa';
 
-          await axiosInstance.patch(`/contas/${conta.id_conta}/`, {
-            status_conta: 'Paga',
-            data_pagamento: formBaixa.data_pagamento,
-            valor_liquidado: parseFloat(conta.valor_parcela || conta.valor_original || 0),
-            saldo_devedor: 0,
-            forma_pagamento: formBaixa.forma_pagamento,
-            [campoContaBancaria]: formBaixa.id_conta_bancaria
-          });
+          if (saldoParaDistribuir <= 0) {
+            continue;
+          }
 
-          sucessos++;
-        } catch (err) {
-          console.error(`❌ Erro ao dar baixa na conta ${conta.id_conta}:`, err);
-          erros++;
+          let valorPagamentoConta = 0;
+          if (saldoParaDistribuir >= valorConta) {
+            valorPagamentoConta = valorConta;
+            saldoParaDistribuir -= valorConta;
+          } else {
+            valorPagamentoConta = saldoParaDistribuir;
+            saldoParaDistribuir = 0;
+          }
+
+          try {
+            await axiosInstance.patch(`/contas/${conta.id_conta}/`, {
+              status_conta: 'Paga',
+              data_pagamento: formBaixa.data_pagamento,
+              valor_liquidado: valorPagamentoConta,
+              saldo_devedor: 0,
+              forma_pagamento: formBaixa.forma_pagamento,
+              [campoContaBancaria]: formBaixa.id_conta_bancaria
+            });
+            sucessos++;
+          } catch (err) {
+            console.error(`❌ Erro ao dar baixa na conta ${conta.id_conta}:`, err);
+            erros++;
+          }
+        }
+      } else {
+        // Baixa integral
+        for (const conta of contasParaBaixar) {
+          try {
+            const campoContaBancaria = conta.tipo_conta === 'Receber' ? 'id_conta_cobranca' : 'id_conta_baixa';
+
+            await axiosInstance.patch(`/contas/${conta.id_conta}/`, {
+              status_conta: 'Paga',
+              data_pagamento: formBaixa.data_pagamento,
+              valor_liquidado: parseFloat(conta.valor_parcela || conta.valor_original || 0),
+              saldo_devedor: 0,
+              forma_pagamento: formBaixa.forma_pagamento,
+              [campoContaBancaria]: formBaixa.id_conta_bancaria
+            });
+
+            sucessos++;
+          } catch (err) {
+            console.error(`❌ Erro ao dar baixa na conta ${conta.id_conta}:`, err);
+            erros++;
+          }
         }
       }
 
@@ -255,6 +771,21 @@ const FinancePage = () => {
       setOpenBaixaBloco(false);
       setContasSelecionadas([]);
       await fetchFinancialData();
+
+      if (sucessos > 0 && window.confirm("Baixa em bloco concluída!\n\nDeseja gerar e imprimir o recibo deste pagamento?")) {
+        const contaParaRecibo = {
+          tipo_conta: contasParaBaixar[0]?.tipo_conta,
+          cliente: contasParaBaixar[0]?.cliente,
+          id_cliente_fornecedor: contasParaBaixar[0]?.id_cliente_fornecedor,
+          descricao: `Recebimento em bloco de ${sucessos} parcela(s)`,
+          valor_liquidado: valorPagoInformado,
+          data_pagamento: formBaixa.data_pagamento,
+          id_conta: 'Bloco',
+          documento_numero: 'Bloco-' + Date.now().toString().slice(-4),
+          saldo_restante: valorPagoInformado < totalValorSelecionado ? (totalValorSelecionado - valorPagoInformado) : 0
+        };
+        imprimirRecibo(contaParaRecibo);
+      }
 
     } catch (err) {
       console.error('❌ Erro ao dar baixa em bloco:', err);
@@ -1013,9 +1544,17 @@ const FinancePage = () => {
                           size="small"
                           onClick={() => estornarConta(conta)}
                           title="Estornar"
-                          sx={{ color: '#FF9800' }}
+                          sx={{ color: '#FF9800', mr: 1 }}
                         >
                           <UndoIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => imprimirRecibo(conta)}
+                          title="Imprimir Recibo"
+                          sx={{ color: '#2196F3' }}
+                        >
+                          <ReceiptIcon />
                         </IconButton>
                       </TableCell>
                     </TableRow>
@@ -1114,9 +1653,17 @@ const FinancePage = () => {
                           size="small"
                           onClick={() => estornarConta(conta)}
                           title="Estornar"
-                          sx={{ color: '#FF9800' }}
+                          sx={{ color: '#FF9800', mr: 1 }}
                         >
                           <UndoIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => imprimirRecibo(conta)}
+                          title="Imprimir Recibo"
+                          sx={{ color: '#2196F3' }}
+                        >
+                          <ReceiptIcon />
                         </IconButton>
                       </TableCell>
                     </TableRow>
@@ -1510,20 +2057,114 @@ const FinancePage = () => {
             label="Data do Pagamento"
             type="date"
             value={formBaixa.data_pagamento}
-            onChange={(e) => setFormBaixa({ ...formBaixa, data_pagamento: e.target.value })}
+            onChange={(e) => recalcularValoresBaixa({ data_pagamento: e.target.value })}
             InputLabelProps={{ shrink: true }}
+            sx={{ mb: 2 }}
+          />
+
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <Checkbox
+              checked={!!formBaixa.autoCalcular}
+              onChange={(e) => recalcularValoresBaixa({ autoCalcular: e.target.checked })}
+            />
+            <Typography variant="body2">Calcular juros/desconto automaticamente por atraso/antecipação</Typography>
+          </Box>
+
+          {formBaixa.autoCalcular && (
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+              <Grid item xs={4}>
+                <TextField
+                  fullWidth
+                  label="Juros (%/mês)"
+                  type="number"
+                  inputProps={{ step: '0.01' }}
+                  value={formBaixa.taxaJuros}
+                  onChange={(e) => recalcularValoresBaixa({ taxaJuros: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={4}>
+                <TextField
+                  fullWidth
+                  label="Multa (%)"
+                  type="number"
+                  inputProps={{ step: '0.1' }}
+                  value={formBaixa.taxaMulta}
+                  onChange={(e) => recalcularValoresBaixa({ taxaMulta: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={4}>
+                <TextField
+                  fullWidth
+                  label="Desconto (%/mês)"
+                  type="number"
+                  inputProps={{ step: '0.01' }}
+                  value={formBaixa.taxaDesconto}
+                  onChange={(e) => recalcularValoresBaixa({ taxaDesconto: e.target.value })}
+                />
+              </Grid>
+            </Grid>
+          )}
+
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Grid item xs={4}>
+              <TextField
+                fullWidth
+                label="Juros (R$)"
+                type="number"
+                inputProps={{ step: '0.01' }}
+                disabled={formBaixa.autoCalcular}
+                value={formBaixa.juros}
+                onChange={(e) => recalcularValoresBaixa({ juros: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={4}>
+              <TextField
+                fullWidth
+                label="Multa (R$)"
+                type="number"
+                inputProps={{ step: '0.01' }}
+                disabled={formBaixa.autoCalcular}
+                value={formBaixa.multa}
+                onChange={(e) => recalcularValoresBaixa({ multa: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={4}>
+              <TextField
+                fullWidth
+                label="Desconto (R$)"
+                type="number"
+                inputProps={{ step: '0.01' }}
+                disabled={formBaixa.autoCalcular}
+                value={formBaixa.desconto}
+                onChange={(e) => recalcularValoresBaixa({ desconto: e.target.value })}
+              />
+            </Grid>
+          </Grid>
+
+          <TextField
+            fullWidth
+            label="Valor Principal Pago"
+            type="number"
+            inputProps={{ step: '0.01' }}
+            value={formBaixa.valorPrincipalPago}
+            onChange={(e) => recalcularValoresBaixa({ valorPrincipalPago: e.target.value })}
             sx={{ mb: 2 }}
           />
 
           <TextField
             fullWidth
-            label="Valor Pago"
+            label="Valor Pago Total (Lançamento)"
             type="number"
-            inputProps={{ step: '0.01' }}
+            disabled
             value={formBaixa.valor_pago}
-            onChange={(e) => setFormBaixa({ ...formBaixa, valor_pago: e.target.value })}
-            sx={{ mb: 2 }}
+            sx={{ mb: 2, '& .MuiInputBase-input.Mui-disabled': { color: 'green', fontWeight: 'bold' } }}
           />
+
+          {contaBaixa && parseFloat(formBaixa.valorPrincipalPago) < parseFloat(contaBaixa.valor_parcela || contaBaixa.valor_original || 0) && parseFloat(formBaixa.valorPrincipalPago) > 0 && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <strong>Baixa Parcial Detectada:</strong> Será liquidado R$ {parseFloat(formBaixa.valorPrincipalPago).toFixed(2)} do valor principal e gerada uma nova conta pendente com a diferença de <strong>R$ {(parseFloat(contaBaixa.valor_parcela || contaBaixa.valor_original || 0) - parseFloat(formBaixa.valorPrincipalPago)).toFixed(2)}</strong>.
+            </Alert>
+          )}
 
           <FormControl fullWidth sx={{ mb: 2 }}>
             <InputLabel>Forma de Pagamento</InputLabel>
@@ -1718,13 +2359,46 @@ const FinancePage = () => {
       <Dialog open={openBaixaBloco} onClose={() => setOpenBaixaBloco(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Dar Baixa em Bloco ({contasSelecionadas.length} conta(s))</DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Você está dando baixa em {contasSelecionadas.length} conta(s) simultaneamente.
-            Total: R$ {contasReceber
-              .filter(c => contasSelecionadas.includes(c.id_conta))
-              .reduce((sum, c) => sum + parseFloat(c.valor_parcela || 0), 0)
-              .toFixed(2)}
-          </Alert>
+          {(() => {
+            const contasParaBaixar = contasReceber.filter(c => contasSelecionadas.includes(c.id_conta))
+              .concat(contasPagar.filter(c => contasSelecionadas.includes(c.id_conta)));
+            const totalValorSelecionado = contasParaBaixar.reduce((sum, c) => sum + parseFloat(c.valor_parcela || c.valor_original || 0), 0);
+            const primeiroClienteId = contasParaBaixar[0]?.id_cliente_fornecedor;
+            const todosMesmoCliente = contasParaBaixar.every(c => c.id_cliente_fornecedor === primeiroClienteId);
+            const nomeCliente = todosMesmoCliente ? (contasParaBaixar[0]?.cliente || '-') : 'Clientes Diversos';
+
+            return (
+              <>
+                <Box sx={{ p: 2, backgroundColor: '#f5f5f5', borderRadius: 1, mb: 2 }}>
+                  <Typography><strong>Cliente/Fornecedor:</strong> {nomeCliente}</Typography>
+                  <Typography><strong>Total Selecionado:</strong> R$ {totalValorSelecionado.toFixed(2)}</Typography>
+                </Box>
+
+                {!todosMesmoCliente && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    As contas selecionadas pertencem a clientes diferentes. A baixa parcial em bloco está desabilitada. As contas serão baixadas integralmente.
+                  </Alert>
+                )}
+
+                {todosMesmoCliente && parseFloat(formBaixa.valor_pago) < totalValorSelecionado && parseFloat(formBaixa.valor_pago) > 0 && (
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    <strong>Baixa Parcial em Bloco Detectada:</strong> O valor de R$ {parseFloat(formBaixa.valor_pago).toFixed(2)} será distribuído entre as contas (as mais antigas primeiro). O saldo restante de R$ {(totalValorSelecionado - parseFloat(formBaixa.valor_pago)).toFixed(2)} gerará diferenças automáticas nas parcelas parcialmente pagas.
+                  </Alert>
+                )}
+
+                <TextField
+                  fullWidth
+                  label="Valor Pago"
+                  type="number"
+                  inputProps={{ step: '0.01' }}
+                  value={formBaixa.valor_pago}
+                  disabled={!todosMesmoCliente}
+                  onChange={(e) => setFormBaixa({ ...formBaixa, valor_pago: e.target.value })}
+                  sx={{ mb: 2 }}
+                />
+              </>
+            );
+          })()}
 
           <TextField
             fullWidth

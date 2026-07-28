@@ -36,7 +36,7 @@ class CobrancaPixSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = [
             'txid', 'qr_code_payload', 'qr_code_imagem_base64', 'end_to_end_id',
-            'expira_em', 'gerado_em', 'pago_em',
+            'expira_em', 'criado_em', 'pago_em',
         ]
 
 
@@ -87,7 +87,7 @@ class CobrancaPixViewSet(viewsets.ModelViewSet):
             qs = qs.filter(id_cliente=id_cliente)
         if id_venda:
             qs = qs.filter(id_venda=id_venda)
-        return qs.order_by('-gerado_em')
+        return qs.order_by('-criado_em')
 
     @action(detail=False, methods=['post'])
     def gerar(self, request):
@@ -103,15 +103,38 @@ class CobrancaPixViewSet(viewsets.ModelViewSet):
 
         svc = PixService(config)
         try:
-            cobranca = svc.gerar(
+            res = svc.gerar(
                 valor=d['valor'],
                 descricao=d.get('descricao', ''),
-                nome_pagador=d.get('nome_pagador', ''),
-                cpf_cnpj_pagador=d.get('cpf_cnpj_pagador', ''),
-                id_cliente=d.get('id_cliente'),
-                id_venda=d.get('id_venda'),
-                expiracao_segundos=d.get('expiracao_segundos', 3600),
+                pagador_nome=d.get('nome_pagador', ''),
+                pagador_cpf=d.get('cpf_cnpj_pagador', ''),
+                validade_segundos=d.get('expiracao_segundos', 3600),
             )
+            if not res.get('sucesso'):
+                return Response({'erro': res.get('erro', 'Erro ao gerar cobrança')}, status=400)
+
+            # Salva no banco de dados!
+            cobranca = CobrancaPix.objects.create(
+                config_pix=config,
+                valor=d['valor'],
+                descricao=d.get('descricao', ''),
+                pagador_nome=d.get('nome_pagador', ''),
+                pagador_cpf_cnpj=d.get('cpf_cnpj_pagador', ''),
+                id_venda=d.get('id_venda'),
+                status=res.get('status', 'ATIVA'),
+                txid=res.get('txid'),
+                qr_code_payload=res.get('qr_code_payload'),
+                qr_code_imagem_base64=res.get('qr_code_imagem_base64'),
+                link_visualizacao=res.get('link_visualizacao'),
+                criado_por=request.user,
+                validade_segundos=d.get('expiracao_segundos', 3600),
+            )
+
+            # Atualiza expira_em no modelo
+            from django.utils import timezone
+            cobranca.expira_em = cobranca.criado_em + timezone.timedelta(seconds=cobranca.validade_segundos)
+            cobranca.save()
+
             return Response(CobrancaPixSerializer(cobranca).data, status=201)
         except Exception as exc:
             logger.exception('Erro ao gerar Pix')
@@ -167,8 +190,8 @@ class WebhookPixView(APIView):
 
         # Salva o log bruto
         WebhookPixLog.objects.create(
-            headers=dict(request.headers),
-            payload=dados,
+            payload_raw=json.dumps(dados),
+            ip_origem=request.META.get('REMOTE_ADDR')
         )
 
         # Processa cada pix no array

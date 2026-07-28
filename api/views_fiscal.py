@@ -282,6 +282,8 @@ class TipoTributacaoViewSet(viewsets.ModelViewSet):
             qs = qs.filter(nome__icontains=p['nome'])
         if p.get('ativo') is not None:
             qs = qs.filter(ativo=p['ativo'].lower() in ('true', '1', 'yes'))
+        if p.get('regime_tributario'):
+            qs = qs.filter(regime_tributario=p['regime_tributario'])
         return qs
 
     @action(detail=True, methods=['post'])

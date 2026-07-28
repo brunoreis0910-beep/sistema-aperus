@@ -4,8 +4,14 @@ from rest_framework.permissions import IsAuthenticated
 from datetime import date, timedelta
 from django.db.models import Sum, F, Q, Avg, Count
 from django.utils import timezone
+import hashlib
+from django.shortcuts import render
+from django.http import Http404, HttpResponseForbidden
 
-from api.models import FinanceiroConta, Estoque, Cashback, Cliente, VendaItem, Compra, Fornecedor, SaaSCliente, SaaSClienteContrato, EmpresaConfig
+from api.models import FinanceiroConta, Estoque, Cashback, Cliente, VendaItem, Venda, Compra, Fornecedor, SaaSCliente, SaaSClienteContrato, EmpresaConfig
+from api.models_pix import ConfiguracaoPix
+from api.services.pix_service import PixService
+from django.urls import reverse
 
 class NotificacoesIniciaisView(APIView):
     def get(self, request):
@@ -44,7 +50,7 @@ class NotificacoesIniciaisView(APIView):
 
         # 1. Contas a Receber Vencidas
         receber_vencidas = FinanceiroConta.objects.filter(
-            tipo_conta='Receber',
+            tipo_conta__iexact='receber',
             status_conta='Pendente',
             data_vencimento__lt=hoje
         )
@@ -257,7 +263,10 @@ class CashbacksVencendoView(APIView):
 class InadimplenciaDetalhadaView(APIView):
     """
     GET /api/notificacoes/inadimplencia/
-    Retorna detalhes de contas a receber vencidas agrupadas por cliente
+    Retorna detalhes de contas a receber vencidas agrupadas por cliente com produtos e documentos.
+    
+    POST /api/notificacoes/inadimplencia/
+    Gera link de cobrança Pix dinâmico para uma parcela/conta específica.
     """
     permission_classes = [IsAuthenticated]
 
@@ -265,10 +274,21 @@ class InadimplenciaDetalhadaView(APIView):
         try:
             hoje = date.today()
             contas_vencidas = FinanceiroConta.objects.filter(
-                tipo_conta='Receber',
+                tipo_conta__iexact='receber',
                 status_conta='Pendente',
                 data_vencimento__lt=hoje
             ).select_related('id_cliente_fornecedor').order_by('id_cliente_fornecedor', 'data_vencimento')
+
+            # Buscar vendas de origem para obter os produtos comprados
+            venda_ids = [c.id_venda_origem for c in contas_vencidas if c.id_venda_origem]
+            vendas_map = {}
+            if venda_ids:
+                vendas_qs = Venda.objects.filter(id_venda__in=venda_ids).prefetch_related('itens__id_produto')
+                for v in vendas_qs:
+                    vendas_map[v.id_venda] = {
+                        'documento': v.numero_documento or f"Venda #{v.id_venda}",
+                        'produtos': [item.id_produto.descricao for item in v.itens.all() if item.id_produto]
+                    }
 
             # Agrupar por cliente
             clientes_dict = {}
@@ -282,9 +302,21 @@ class InadimplenciaDetalhadaView(APIView):
                         'whatsapp': cliente.whatsapp if cliente else '',
                         'telefone': cliente.telefone if cliente else '',
                         'total_devido': 0,
-                        'parcelas': []
+                        'parcelas': [],
+                        'link_fatura_unificada': ''
                     }
+                
                 dias_atraso = (hoje - conta.data_vencimento).days
+                
+                # Resgatar informações da venda associada (produtos e documento oficial)
+                venda_info = vendas_map.get(conta.id_venda_origem, {}) if conta.id_venda_origem else {}
+                doc_num = conta.documento_numero or venda_info.get('documento') or f"Lançamento #{conta.id_conta}"
+                prods = venda_info.get('produtos', [])
+
+                token_fatura = hashlib.md5(f"aperus_fatura_{conta.id_conta}".encode()).hexdigest()[:10]
+                url_path = reverse('fatura-publica', args=[conta.id_conta, token_fatura])
+                link_fatura = request.build_absolute_uri(url_path)
+
                 clientes_dict[id_cli]['total_devido'] += float(conta.valor_parcela or 0)
                 clientes_dict[id_cli]['parcelas'].append({
                     'id_conta': conta.id_conta,
@@ -293,11 +325,61 @@ class InadimplenciaDetalhadaView(APIView):
                     'data_vencimento': conta.data_vencimento.isoformat(),
                     'dias_atraso': dias_atraso,
                     'parcela': f"{conta.parcela_numero or 1}/{conta.parcela_total or 1}",
-                    'documento': conta.documento_numero or '',
+                    'documento': doc_num,
+                    'produtos': prods,
+                    'link_fatura': link_fatura
                 })
+
+            for client_id, cdata in clientes_dict.items():
+                if cdata['parcelas']:
+                    ids_list = [str(p['id_conta']) for p in cdata['parcelas']]
+                    ids_str = ",".join(ids_list)
+                    token_unificada = hashlib.md5(f"aperus_unificada_{ids_str}".encode()).hexdigest()[:10]
+                    url_path_unif = reverse('fatura-unificada') + f"?ids={ids_str}&token={token_unificada}"
+                    cdata['link_fatura_unificada'] = request.build_absolute_uri(url_path_unif)
 
             resultado = sorted(clientes_dict.values(), key=lambda x: x['total_devido'], reverse=True)
             return Response(resultado)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    def post(self, request):
+        try:
+            id_conta = request.data.get('id_conta')
+            if not id_conta:
+                return Response({'error': 'ID da conta não informado.'}, status=400)
+            
+            try:
+                conta = FinanceiroConta.objects.get(pk=id_conta)
+            except FinanceiroConta.DoesNotExist:
+                return Response({'error': 'Conta não encontrada.'}, status=404)
+            
+            # Buscar configuração Pix ativa
+            config = ConfiguracaoPix.objects.filter(ativo=True).first()
+            if not config:
+                return Response({'error': 'Nenhuma configuração Pix ativa encontrada no sistema.'}, status=400)
+            
+            # Gerar via PixService
+            svc = PixService(config)
+            cliente = conta.id_cliente_fornecedor
+            nome_pagador = cliente.nome_razao_social if cliente else 'Cliente Aperus'
+            cpf_cnpj_pagador = cliente.cpf_cnpj if cliente else ''
+            
+            cobranca = svc.gerar(
+                valor=conta.valor_parcela,
+                descricao=f"Pgto {conta.descricao[:50]}",
+                nome_pagador=nome_pagador,
+                cpf_cnpj_pagador=cpf_cnpj_pagador,
+                id_cliente=cliente.id_cliente if cliente else None,
+                id_venda=conta.id_venda_origem,
+                expiracao_segundos=86400 * 7, # Vencimento em 7 dias
+            )
+            
+            return Response({
+                'sucesso': True,
+                'copia_e_cola': cobranca.qr_code_payload,
+                'status': cobranca.status
+            })
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
@@ -468,4 +550,196 @@ class FornecedoresEstoqueCriticoView(APIView):
             import traceback
             traceback.print_exc()
             return Response({'error': str(e)}, status=500)
+
+
+def visualizar_fatura_publica(request, pk, token):
+    # Validar token de segurança
+    expected_token = hashlib.md5(f"aperus_fatura_{pk}".encode()).hexdigest()[:10]
+    if token != expected_token:
+        return HttpResponseForbidden("Link de cobrança inválido ou expirado.")
+    
+    try:
+        conta = FinanceiroConta.objects.get(pk=pk)
+    except FinanceiroConta.DoesNotExist:
+        raise Http404("Fatura não encontrada.")
+    
+    # Detalhes da venda de origem
+    venda = None
+    produtos = []
+    if conta.id_venda_origem:
+        try:
+            venda = Venda.objects.prefetch_related('itens__id_produto').get(pk=conta.id_venda_origem)
+            produtos = [
+                {
+                    'descricao': item.id_produto.descricao,
+                    'quantidade': float(item.quantidade),
+                    'valor_unitario': float(item.valor_unitario),
+                    'valor_total': float(item.quantidade * item.valor_unitario)
+                }
+                for item in venda.itens.all() if item.id_produto
+            ]
+        except Venda.DoesNotExist:
+            pass
+
+    # Empresa Config
+    empresa = EmpresaConfig.objects.first()
+    
+    # Tentar obter ou gerar Pix dinâmico
+    copia_e_cola = ""
+    qr_code_base64 = ""
+    chave_manual = ""
+    
+    config = ConfiguracaoPix.objects.filter(ativo=True).first()
+    if config:
+        if config.psp == 'MANUAL':
+            chave_manual = config.chave_pix
+        else:
+            try:
+                # Verificar se já existe uma cobrança Pix recente gerada para esta venda/cliente
+                cobranca = CobrancaPix.objects.filter(
+                    id_venda=conta.id_venda_origem,
+                    valor=conta.valor_parcela,
+                    status='ATIVA'
+                ).first()
+                
+                if not cobranca:
+                    svc = PixService(config)
+                    cliente = conta.id_cliente_fornecedor
+                    nome_pagador = cliente.nome_razao_social if cliente else 'Cliente Aperus'
+                    cpf_cnpj_pagador = cliente.cpf_cnpj if cliente else ''
+                    
+                    cobranca = svc.gerar(
+                        valor=conta.valor_parcela,
+                        descricao=f"Pgto {conta.descricao[:50]}",
+                        nome_pagador=nome_pagador,
+                        cpf_cnpj_pagador=cpf_cnpj_pagador,
+                        id_cliente=cliente.id_cliente if cliente else None,
+                        id_venda=conta.id_venda_origem,
+                        expiracao_segundos=86400 * 7,
+                    )
+                
+                copia_e_cola = cobranca.qr_code_payload
+                qr_code_base64 = cobranca.qr_code_imagem_base64
+            except Exception as e:
+                print(f"Erro ao obter/gerar Pix dinamico: {e}")
+                # Fallback para chave manual se houver erro ou manual configurada
+                chave_manual = config.chave_pix
+
+    context = {
+        'conta': conta,
+        'venda': venda,
+        'produtos': produtos,
+        'empresa': empresa,
+        'copia_e_cola': copia_e_cola,
+        'qr_code_base64': qr_code_base64,
+        'chave_manual': chave_manual,
+        'hoje': date.today(),
+    }
+    return render(request, 'api/fatura_publica.html', context)
+
+
+def visualizar_fatura_unificada(request):
+    ids_str = request.GET.get('ids', '')
+    token = request.GET.get('token', '')
+    
+    if not ids_str or not token:
+        return HttpResponseForbidden("Link de cobrança incompleto.")
+        
+    # Validar token
+    expected_token = hashlib.md5(f"aperus_unificada_{ids_str}".encode()).hexdigest()[:10]
+    if token != expected_token:
+        return HttpResponseForbidden("Link de cobrança inválido ou expirado.")
+        
+    try:
+        id_list = [int(x) for x in ids_str.split(',') if x.strip().isdigit()]
+    except ValueError:
+        return HttpResponseForbidden("Lista de faturas inválida.")
+        
+    contas = FinanceiroConta.objects.filter(pk__in=id_list).select_related('id_cliente_fornecedor')
+    if not contas.exists():
+        raise Http404("Faturas não encontradas.")
+        
+    total_devido = sum(float(c.valor_parcela) for c in contas)
+    
+    # Detalhes das vendas de origem
+    venda_ids = [c.id_venda_origem for c in contas if c.id_venda_origem]
+    vendas_map = {}
+    if venda_ids:
+        try:
+            vendas_qs = Venda.objects.prefetch_related('itens__id_produto').filter(id_venda__in=venda_ids)
+            for v in vendas_qs:
+                vendas_map[v.id_venda] = {
+                    'documento': v.numero_documento or f"Venda #{v.id_venda}",
+                    'produtos': [
+                        {
+                            'descricao': item.id_produto.descricao,
+                            'quantidade': float(item.quantidade),
+                            'valor_unitario': float(item.valor_unitario),
+                            'valor_total': float(item.quantidade * item.valor_unitario)
+                        }
+                        for item in v.itens.all() if item.id_produto
+                    ]
+                }
+        except Exception:
+            pass
+
+    detalhes_contas = []
+    for conta in contas:
+        venda_info = vendas_map.get(conta.id_venda_origem, {}) if conta.id_venda_origem else {}
+        doc_num = conta.documento_numero or venda_info.get('documento') or f"Lançamento #{conta.id_conta}"
+        prods = venda_info.get('produtos', [])
+        detalhes_contas.append({
+            'conta': conta,
+            'documento': doc_num,
+            'produtos': prods,
+            'valor': float(conta.valor_parcela),
+            'vencimento': conta.data_vencimento
+        })
+
+    # Empresa Config
+    empresa = EmpresaConfig.objects.first()
+    
+    # Tentar obter ou gerar Pix dinâmico para o valor total
+    copia_e_cola = ""
+    qr_code_base64 = ""
+    chave_manual = ""
+    
+    config = ConfiguracaoPix.objects.filter(ativo=True).first()
+    if config:
+        if config.psp == 'MANUAL':
+            chave_manual = config.chave_pix
+        else:
+            try:
+                svc = PixService(config)
+                cliente = contas.first().id_cliente_fornecedor
+                nome_pagador = cliente.nome_razao_social if cliente else 'Cliente Aperus'
+                cpf_cnpj_pagador = cliente.cpf_cnpj if cliente else ''
+                
+                cobranca = svc.gerar(
+                    valor=total_devido,
+                    descricao=f"Pgto Unificado Aperus faturas",
+                    nome_pagador=nome_pagador,
+                    cpf_cnpj_pagador=cpf_cnpj_pagador,
+                    id_cliente=cliente.id_cliente if cliente else None,
+                    id_venda=None,
+                    expiracao_segundos=86400 * 7,
+                )
+                
+                copia_e_cola = cobranca.qr_code_payload
+                qr_code_base64 = cobranca.qr_code_imagem_base64
+            except Exception as e:
+                print(f"Erro ao obter/gerar Pix dinamico unificado: {e}")
+                chave_manual = config.chave_pix
+
+    context = {
+        'contas_detalhadas': detalhes_contas,
+        'total_devido': round(total_devido, 2),
+        'empresa': empresa,
+        'copia_e_cola': copia_e_cola,
+        'qr_code_base64': qr_code_base64,
+        'chave_manual': chave_manual,
+        'cliente': contas.first().id_cliente_fornecedor,
+        'hoje': date.today(),
+    }
+    return render(request, 'api/fatura_unificada.html', context)
 

@@ -496,7 +496,20 @@
 
                     } catch (e) {
                          console.error(e);
-                         const msg = e.response?.data?.mensagem || e.message || JSON.stringify(e.response?.data);
+                         const d = e.response?.data;
+                         let msg = 'Erro ao processar venda';
+                         if (typeof d === 'string') {
+                             if (d.includes('<title>')) {
+                                 const match = d.match(/<title>(.*?)<\/title>/i);
+                                 msg = match ? match[1] : 'Erro interno no Servidor (500)';
+                             } else {
+                                 msg = d.slice(0, 200);
+                             }
+                         } else if (d && typeof d === 'object') {
+                             msg = d.mensagem || d.message || d.details || d.detail || d.error || d.erro || e.message;
+                         } else {
+                             msg = e.message || msg;
+                         }
                          this.resultModal = { show: true, success: false, message: 'Erro: ' + msg };
                     } finally {
                         this.processing = false;

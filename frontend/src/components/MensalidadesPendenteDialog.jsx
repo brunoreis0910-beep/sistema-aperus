@@ -59,6 +59,7 @@ export default function MensalidadesPendenteDialog({ open, onClose, onRefreshNot
     } catch (err) {
       console.error('Erro ao buscar mensalidades:', err);
       setError(err.response?.data?.error || err.message || 'Erro ao carregar dados do financeiro central.');
+      setMensalidades([]);
     } finally {
       setLoading(false);
     }
@@ -82,8 +83,8 @@ export default function MensalidadesPendenteDialog({ open, onClose, onRefreshNot
     return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
-  const pendentes = mensalidades.filter(m => m.status_pagamento === 'PENDENTE' || m.status_pagamento === 'VENCIDO');
-  const pagas = mensalidades.filter(m => m.status_pagamento === 'PAGO');
+  const pendentes = Array.isArray(mensalidades) ? mensalidades.filter(m => m.status_pagamento === 'PENDENTE' || m.status_pagamento === 'VENCIDO') : [];
+  const pagas = Array.isArray(mensalidades) ? mensalidades.filter(m => m.status_pagamento === 'PAGO') : [];
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>

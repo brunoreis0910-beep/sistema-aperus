@@ -119,7 +119,7 @@ export default function NotificationBell() {
             <ListItemText primary="Oba! Tudo sob controle." />
           </MenuItem>
         ) : (
-          notificacoes.map((notif) => (
+          Array.isArray(notificacoes) && notificacoes.map((notif) => (
             <MenuItem key={notif.id} onClick={() => handleNotificacaoClick(notif)} sx={{ whiteSpace: 'normal', py: 1.5 }}>
               <ListItemIcon>
                 {iconMap[notif.icon] || <InfoIcon />}

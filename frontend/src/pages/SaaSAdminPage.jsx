@@ -16,7 +16,7 @@ import {
   SystemUpdate as UpdateIcon, Terminal as LogIcon, Delete as DeleteIcon,
   Storage as StorageIcon, Bolt as BoltIcon, Campaign as CampaignIcon,
   Save as SaveIcon, Send as SendIcon, Link as LinkIcon, WhatsApp as WhatsAppIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon, BugReport as BugReportIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
@@ -167,6 +167,7 @@ const SaaSAdminPage = () => {
   const [contasBancarias, setContasBancarias] = useState([]);
   const [mensalidades, setMensalidades] = useState([]);
   const [planos, setPlanos] = useState([]);
+  const [centralLogs, setCentralLogs] = useState([]);
 
   // Filtros de mensalidades
   const [filtroContaBancaria, setFiltroContaBancaria] = useState('');
@@ -377,7 +378,7 @@ const SaaSAdminPage = () => {
   const carregarDados = useCallback(async () => {
     setLoading(true);
     try {
-      const [resCli, resMens, resVers, resHist, resConfig, resCom, resBancarias, resContas, resPlanos] = await Promise.all([
+      const [resCli, resMens, resVers, resHist, resConfig, resCom, resBancarias, resContas, resPlanos, resLogs] = await Promise.all([
         axiosInstance.get('/saas-clientes/'),
         axiosInstance.get('/saas-mensalidades/'),
         axiosInstance.get('/saas-versoes/'),
@@ -386,7 +387,11 @@ const SaaSAdminPage = () => {
         axiosInstance.get('/saas-comunicados/'),
         axiosInstance.get('/configuracoes-bancarias/?ativo=true'),
         axiosInstance.get('/contas-bancarias/'),
-        axiosInstance.get('/saas/planos/')
+        axiosInstance.get('/saas/planos/'),
+        axiosInstance.get('/central-logs/listar/').catch(err => {
+          console.warn("Não foi possível carregar logs centralizados", err);
+          return { data: [] };
+        })
       ]);
       
       const clientsData = resCli.data?.results ?? resCli.data ?? [];
@@ -405,6 +410,7 @@ const SaaSAdminPage = () => {
       setConfiguracoesBancarias(resBancarias.data?.results ?? resBancarias.data ?? []);
       setContasBancarias(resContas.data?.results ?? resContas.data ?? []);
       setPlanos(resPlanos.data ?? []);
+      setCentralLogs(resLogs.data ?? []);
       
       // Calculate Stats
       const active = clientsData.filter(c => c.status_licenca === 'ATIVO').length;
@@ -470,7 +476,8 @@ const SaaSAdminPage = () => {
     { label: "Planos SaaS", icon: <MoneyIcon />, show: true },
     { label: "Terminais Ativos", icon: <LogIcon />, show: true },
     { label: "Links de Acesso", icon: <LinkIcon />, show: true },
-    { label: "Backup Agendado", icon: <StorageIcon />, show: true }
+    { label: "Backup Agendado", icon: <StorageIcon />, show: true },
+    { label: "Central de Logs", icon: <BugReportIcon />, show: true }
   ].filter(t => t.show);
 
   const activeTabName = tabs[tabValue]?.label || "Clientes SaaS";
@@ -2031,6 +2038,7 @@ const SaaSAdminPage = () => {
                   <Tabs value={subTabValue} onChange={(e, val) => setSubTabValue(val)} indicatorColor="primary" textColor="primary" variant="fullWidth">
                     <Tab label="Atualizar em Lote" icon={<UpdateIcon />} iconPosition="start" />
                     <Tab label="Atualizar por Cliente" icon={<ClientIcon />} iconPosition="start" />
+                    <Tab label="Erros de Execução" icon={<LogIcon />} iconPosition="start" />
                   </Tabs>
                 </Box>
 
@@ -2295,6 +2303,93 @@ const SaaSAdminPage = () => {
                       </TableContainer>
                     </CardContent>
                   </Card>
+                )}
+
+                {subTabValue === 2 && (
+                  <Stack spacing={3}>
+                    <Card variant="outlined" sx={{ borderRadius: 3 }}>
+                      <CardContent>
+                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                          <Typography variant="h6" fontWeight={700}>
+                            Logs de Exceções dos Clientes (Tenants)
+                          </Typography>
+                          <Button variant="outlined" size="small" onClick={carregarDados}>
+                            Atualizar Logs
+                          </Button>
+                        </Box>
+                        <Divider sx={{ mb: 2 }} />
+                        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+                          <Table size="small">
+                            <TableHead sx={{ bgcolor: 'action.hover' }}>
+                              <TableRow>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Cliente / Schema</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Tipo de Erro</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Mensagem</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Data / Hora</TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 'bold' }}>Ações</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {Array.isArray(centralLogs) && centralLogs.map((log) => (
+                                <TableRow key={log.id} hover>
+                                  <TableCell sx={{ fontWeight: 500 }}>{log.tenant_schema}</TableCell>
+                                  <TableCell>
+                                    <Chip label={log.tipo_excecao} size="small" color="error" variant="outlined" sx={{ fontWeight: 'bold' }} />
+                                  </TableCell>
+                                  <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {log.mensagem_erro}
+                                  </TableCell>
+                                  <TableCell>{fmtDataHora(log.criado_em)}</TableCell>
+                                  <TableCell align="right">
+                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                      <IconButton 
+                                        size="small" 
+                                        color="primary" 
+                                        title="Ver Traceback Completo"
+                                        onClick={() => setLogModal({ 
+                                          open: true, 
+                                          title: `Traceback de Erro - ${log.tenant_schema} (${log.tipo_excecao})`, 
+                                          log: `URL Afetada: ${log.url_afetada || 'N/A'}\n\n${log.traceback_completo}` 
+                                        })}
+                                      >
+                                        <LogIcon fontSize="small" />
+                                      </IconButton>
+                                      <Button 
+                                        size="small" 
+                                        color="success" 
+                                        variant="contained"
+                                        onClick={async () => {
+                                          const obs = window.prompt("Adicionar observação de suporte (opcional):");
+                                          if (obs !== null) {
+                                            try {
+                                              await axiosInstance.post(`/central-logs/${log.id}/resolver/`, { observacao_suporte: obs });
+                                              showToast("Log de erro resolvido com sucesso!", "success");
+                                              carregarDados();
+                                            } catch (err) {
+                                              showToast("Erro ao resolver log de erro.", "error");
+                                            }
+                                          }
+                                        }}
+                                      >
+                                        Resolver
+                                      </Button>
+                                    </Stack>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              {(!Array.isArray(centralLogs) || centralLogs.length === 0) && (
+                                <TableRow>
+                                  <TableCell colSpan={5} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                                    Nenhum log de erro de execução não resolvido.
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </CardContent>
+                    </Card>
+                  </Stack>
                 )}
               </Grid>
             </Grid>
@@ -3009,6 +3104,106 @@ const SaaSAdminPage = () => {
 
               </Grid>
             </Paper>
+          </Box>
+        )}
+
+        {/* TAB 8 - CENTRAL DE LOGS */}
+        {activeTabName === "Central de Logs" && (
+          <Box sx={{ p: 3 }}>
+            <Card variant="outlined" sx={{ borderRadius: 3 }}>
+              <CardContent>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Box display="flex" alignItems="center" gap={1.5}>
+                    <BugReportIcon color="error" sx={{ fontSize: 32 }} />
+                    <Box>
+                      <Typography variant="h6" fontWeight={700}>
+                        Central de Logs de Erros de Execução (Tenants)
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Monitoramento em tempo real de exceções e erros de execução reportados pelos sistemas clientes
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Button variant="outlined" size="small" onClick={carregarDados} startIcon={<RefreshIcon />}>
+                    Atualizar Logs
+                  </Button>
+                </Box>
+                <Divider sx={{ mb: 3 }} />
+
+                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+                  <Table size="small">
+                    <TableHead sx={{ bgcolor: 'action.hover' }}>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 'bold' }}>Cliente / Schema</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>Tipo de Erro</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>Mensagem</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>Data / Hora</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Ações</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {Array.isArray(centralLogs) && centralLogs.map((log) => (
+                        <TableRow key={log.id} hover>
+                          <TableCell sx={{ fontWeight: 500 }}>
+                            <Chip label={log.tenant_schema} size="small" color="primary" variant="outlined" sx={{ fontWeight: 'bold' }} />
+                          </TableCell>
+                          <TableCell>
+                            <Chip label={log.tipo_excecao} size="small" color="error" variant="filled" sx={{ fontWeight: 'bold' }} />
+                          </TableCell>
+                          <TableCell sx={{ maxWidth: 350, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {log.mensagem_erro}
+                          </TableCell>
+                          <TableCell>{fmtDataHora(log.criado_em)}</TableCell>
+                          <TableCell align="right">
+                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                              <IconButton 
+                                size="small" 
+                                color="primary" 
+                                title="Ver Traceback Completo"
+                                onClick={() => setLogModal({ 
+                                  open: true, 
+                                  title: `Traceback de Erro - ${log.tenant_schema} (${log.tipo_excecao})`, 
+                                  log: `URL Afetada: ${log.url_afetada || 'N/A'}\n\n${log.traceback_completo}` 
+                                })}
+                              >
+                                <LogIcon fontSize="small" />
+                              </IconButton>
+                              <Button 
+                                size="small" 
+                                color="success" 
+                                variant="contained"
+                                onClick={async () => {
+                                  const obs = window.prompt("Adicionar observação de suporte (opcional):");
+                                  if (obs !== null) {
+                                    try {
+                                      await axiosInstance.post(`/central-logs/${log.id}/resolver/`, { observacao_suporte: obs });
+                                      showToast("Log de erro resolvido com sucesso!", "success");
+                                      carregarDados();
+                                    } catch (err) {
+                                      showToast("Erro ao resolver log de erro.", "error");
+                                    }
+                                  }
+                                }}
+                              >
+                                Resolver
+                              </Button>
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {(!Array.isArray(centralLogs) || centralLogs.length === 0) && (
+                        <TableRow>
+                          <TableCell colSpan={5} align="center" sx={{ py: 5, color: 'text.secondary' }}>
+                            <Typography variant="body1" fontWeight={600}>Nenhum log de erro de execução pendente.</Typography>
+                            <Typography variant="caption" color="text.secondary">Todos os sistemas clientes estão operando normalmente sem exceções registradas.</Typography>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </CardContent>
+            </Card>
           </Box>
         )}
       </Paper>

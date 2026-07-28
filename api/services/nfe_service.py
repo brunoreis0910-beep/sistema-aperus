@@ -92,15 +92,29 @@ class NFeService:
         if not venda_obj.numero_nfe and venda_obj.id_operacao:
              try:
                  op = venda_obj.id_operacao
+                 num_atual = None
                  if op.id_numeracao_id:
                      try:
-                         venda_obj.numero_nfe = int(op.id_numeracao.numeracao)
+                         num_atual = int(op.id_numeracao.numeracao)
                      except (ValueError, TypeError):
-                         venda_obj.numero_nfe = op.proximo_numero_nf
+                         num_atual = int(op.proximo_numero_nf or 1)
                  else:
-                     venda_obj.numero_nfe = op.proximo_numero_nf
+                     num_atual = int(op.proximo_numero_nf or 1)
+
+                 venda_obj.numero_nfe = num_atual
                  if op.serie_nf:
                      venda_obj.serie_nfe = op.serie_nf
+
+                 # Incrementa imediatamente a numeração da operação ao atribuir
+                 op.proximo_numero_nf = num_atual + 1
+                 op.save()
+                 if op.id_numeracao_id:
+                     try:
+                         num_obj = op.id_numeracao
+                         num_obj.numeracao = str(num_atual + 1)
+                         num_obj.save()
+                     except Exception as e_num:
+                         logger.error(f"Erro ao incrementar numeracao NFe: {e_num}")
                  venda_obj.save()
                  logger.info(f"Número NFe atribuído: {venda_obj.numero_nfe} (Série {venda_obj.serie_nfe})")
              except Exception as e:
@@ -504,17 +518,18 @@ class NFeService:
                     logger.error(f"Erro ao montar XML de distribuição: {e_xml}")
 
                 # Incrementa sequencial da operacao
-                if venda.id_operacao:
+                if venda.id_operacao and venda.numero_nfe:
                     try:
                         op = venda.id_operacao
-                        if op.proximo_numero_nf == venda.numero_nfe: 
-                            op.proximo_numero_nf += 1
+                        if int(op.proximo_numero_nf or 0) <= int(venda.numero_nfe): 
+                            op.proximo_numero_nf = int(venda.numero_nfe) + 1
                             op.save()
                         if op.id_numeracao_id:
                             try:
                                 num_obj = op.id_numeracao
-                                num_obj.numeracao = str(int(num_obj.numeracao) + 1)
-                                num_obj.save()
+                                if int(num_obj.numeracao or 0) <= int(venda.numero_nfe):
+                                    num_obj.numeracao = str(int(venda.numero_nfe) + 1)
+                                    num_obj.save()
                             except Exception as e_num:
                                 logger.error(f"Erro ao incrementar numeracao: {e_num}")
                     except Exception as e:
@@ -531,7 +546,24 @@ class NFeService:
                 result['mensagem'] = "NFe Emitida com Sucesso (Via Nativa)"
                 return result
             else:
-                # ERRO na emissão - Salvar mensagem para o usuário ver
+                # ERRO na emissão - Garante que a numeração da operação avançou
+                if venda.id_operacao and venda.numero_nfe:
+                    try:
+                        op = venda.id_operacao
+                        if int(op.proximo_numero_nf or 0) <= int(venda.numero_nfe):
+                            op.proximo_numero_nf = int(venda.numero_nfe) + 1
+                            op.save()
+                        if op.id_numeracao_id:
+                            try:
+                                num_obj = op.id_numeracao
+                                if int(num_obj.numeracao or 0) <= int(venda.numero_nfe):
+                                    num_obj.numeracao = str(int(venda.numero_nfe) + 1)
+                                    num_obj.save()
+                            except Exception as e_num:
+                                logger.error(f"Erro ao incrementar numeracao no erro NFe: {e_num}")
+                    except Exception as e_op_err:
+                        logger.error(f"Erro ao atualizar operacao apos erro SEFAZ NFe: {e_op_err}")
+
                 venda.status_nfe = 'ERRO'
                 venda.xml_nfe = xml_signed
                 venda.mensagem_nfe = result.get('mensagem') or result.get('xMotivo') or f"Erro cStat {result.get('cStat', 'desconhecido')}"
