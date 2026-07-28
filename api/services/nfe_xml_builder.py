@@ -1415,58 +1415,18 @@ class NfeXmlBuilder:
         # NT 2025.002 - IBSCBSTot gerado para TODOS os modelos (55 e 65)
         v_nf_tot_val = total_fiscal  # Total fiscal (sem diária de hospedagem)
         
-        if should_generate_reform:  # IBSCBSTot desativado para Schema 4.00 (evita Rejeição 215)
+        if should_generate_reform:
             # Tag Principal: IBSCBSTot
             ibs_cbs_tot = ET.SubElement(total, f"{{{self.ns}}}IBSCBSTot")
             
             # vBCIBSCBS
             ET.SubElement(ibs_cbs_tot, f"{{{self.ns}}}vBCIBSCBS").text = "{:.2f}".format(total_vbc_reforma)
             
-            # gIBS
-            g_ibs = ET.SubElement(ibs_cbs_tot, f"{{{self.ns}}}gIBS")
-            
-            # gIBSUF
-            g_ibs_uf = ET.SubElement(g_ibs, f"{{{self.ns}}}gIBSUF")
-            ET.SubElement(g_ibs_uf, f"{{{self.ns}}}vDif").text = "0.00"
-            ET.SubElement(g_ibs_uf, f"{{{self.ns}}}vDevTrib").text = "0.00"
-            ET.SubElement(g_ibs_uf, f"{{{self.ns}}}vIBSUF").text = "{:.2f}".format(total_vibs_uf)
-            
-            # gIBSMun
-            g_ibs_mun = ET.SubElement(g_ibs, f"{{{self.ns}}}gIBSMun")
-            ET.SubElement(g_ibs_mun, f"{{{self.ns}}}vDif").text = "0.00"
-            ET.SubElement(g_ibs_mun, f"{{{self.ns}}}vDevTrib").text = "0.00"
-            ET.SubElement(g_ibs_mun, f"{{{self.ns}}}vIBSMun").text = "{:.2f}".format(total_vibs_mun)
-            
-            # vIBS Total
-            ET.SubElement(g_ibs, f"{{{self.ns}}}vIBS").text = "{:.2f}".format(total_vibs)
-            
-            # CredPres
-            ET.SubElement(g_ibs, f"{{{self.ns}}}vCredPres").text = "0.00"
-            ET.SubElement(g_ibs, f"{{{self.ns}}}vCredPresCondSus").text = "0.00"
-            
-            # gCBS
-            g_cbs = ET.SubElement(ibs_cbs_tot, f"{{{self.ns}}}gCBS")
-            ET.SubElement(g_cbs, f"{{{self.ns}}}vDif").text = "0.00"
-            ET.SubElement(g_cbs, f"{{{self.ns}}}vDevTrib").text = "0.00"
-            ET.SubElement(g_cbs, f"{{{self.ns}}}vCBS").text = "{:.2f}".format(total_vcbs)
-            ET.SubElement(g_cbs, f"{{{self.ns}}}vCredPres").text = "0.00"
-            ET.SubElement(g_cbs, f"{{{self.ns}}}vCredPresCondSus").text = "0.00"
-            
-            # gMono (Full zeros)
-            g_mono = ET.SubElement(ibs_cbs_tot, f"{{{self.ns}}}gMono")
-            ET.SubElement(g_mono, f"{{{self.ns}}}vIBSMono").text = "0.00"
-            ET.SubElement(g_mono, f"{{{self.ns}}}vCBSMono").text = "0.00"
-            ET.SubElement(g_mono, f"{{{self.ns}}}vIBSMonoReten").text = "0.00"
-            ET.SubElement(g_mono, f"{{{self.ns}}}vCBSMonoReten").text = "0.00"
-            ET.SubElement(g_mono, f"{{{self.ns}}}vIBSMonoRet").text = "0.00"
-            ET.SubElement(g_mono, f"{{{self.ns}}}vCBSMonoRet").text = "0.00"
-            
-            # Atualiza vNFTot somando novos impostos
+            # Atualiza vNFTot
             v_nf_tot_val += (total_vibs + total_vcbs)
-
-        # vNFTot (Novo Total Final) - REMOVIDO PARA ESQUEMA 4.0
-        # if total_vbc_reforma > 0 or float(self.venda.valor_total) > 0:
-            # ET.SubElement(total, f"{{{self.ns}}}vNFTot").text = "{:.2f}".format(v_nf_tot_val)
+            
+            # vNFTot (Novo Total Final) - Obrigatório se tiver IBSCBSTot
+            ET.SubElement(total, f"{{{self.ns}}}vNFTot").text = "{:.2f}".format(v_nf_tot_val)
 
         # --- transp ---
         transp = ET.SubElement(infNFe, f"{{{self.ns}}}transp")
