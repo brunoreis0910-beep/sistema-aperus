@@ -440,6 +440,15 @@ def create_exchange(request):
             if not data_vencimento:
                 data_vencimento = date.today() + timedelta(days=30)
             
+            # Buscar nome da forma de pagamento
+            nome_forma_pagamento = None
+            if id_tipo_pagamento:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT nome_forma FROM formas_pagamento WHERE id_forma_pagamento = %s", [id_tipo_pagamento])
+                    row = cursor.fetchone()
+                    if row:
+                        nome_forma_pagamento = row[0]
+
             if diferenca > 0:
                 # Criar cobrança (cliente deve pagar)
                 tipo_ajuste = 'cobranca'
@@ -452,22 +461,21 @@ def create_exchange(request):
                             tipo_conta, id_cliente_fornecedor, descricao,
                             valor_parcela, status_conta, data_emissao, data_vencimento,
                             gerencial, parcela_numero, parcela_total,
-                            id_conta, id_tipo_pagamento, id_centro_custo, id_condicao_pagamento
-                        ) VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s)
+                            id_conta_cobranca, forma_pagamento, id_centro_custo
+                        ) VALUES (%s, %s, %s, %s, %s, CURDATE(), %s, %s, %s, %s, %s, %s, %s)
                     """, [
-                        'receber',  # tipo_conta para cobrança
+                        'Receber',  # tipo_conta para cobrança
                         validated_data.get('id_cliente'),
                         descricao,
                         diferenca,
-                        'pendente',
+                        'Pendente',
                         data_vencimento,
                         1,  # gerencial
                         1,  # parcela_numero
                         numero_parcelas,  # parcela_total
                         id_conta,
-                        id_tipo_pagamento,
-                        id_centro_custo,
-                        id_condicao_pagamento
+                        nome_forma_pagamento,
+                        id_centro_custo
                     ])
                     id_financeiro = cursor.lastrowid
                     
@@ -482,23 +490,23 @@ def create_exchange(request):
                     cursor.execute("""
                         INSERT INTO financeiro_contas (
                             tipo_conta, id_cliente_fornecedor, descricao,
-                            valor_parcela, status_conta, data_emissao,
+                            valor_parcela, status_conta, data_emissao, data_vencimento,
                             gerencial, parcela_numero, parcela_total,
-                            id_conta, id_tipo_pagamento, id_centro_custo, id_condicao_pagamento
-                        ) VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s)
+                            id_conta_cobranca, forma_pagamento, id_centro_custo
+                        ) VALUES (%s, %s, %s, %s, %s, CURDATE(), %s, %s, %s, %s, %s, %s, %s)
                     """, [
-                        'credito',  # tipo_conta para crédito
+                        'Pagar',  # tipo_conta para crédito
                         validated_data.get('id_cliente'),
                         descricao,
                         valor_credito,
-                        'disponivel',
+                        'Pendente',
+                        data_vencimento,
                         1,  # gerencial
                         1,  # parcela_numero
                         numero_parcelas,  # parcela_total
                         id_conta,
-                        id_tipo_pagamento,
-                        id_centro_custo,
-                        id_condicao_pagamento
+                        nome_forma_pagamento,
+                        id_centro_custo
                     ])
                     id_financeiro = cursor.lastrowid
             
@@ -678,9 +686,8 @@ def get_payment_options(request):
         with connection.cursor() as cursor:
             # Buscar contas bancárias
             cursor.execute("""
-                SELECT id_conta, nome_conta, tipo_conta
-                FROM contas
-                WHERE ativo = 1
+                SELECT id_conta_bancaria, nome_conta, tipo_conta
+                FROM contas_bancarias
                 ORDER BY nome_conta
             """)
             contas = [
@@ -688,12 +695,11 @@ def get_payment_options(request):
                 for row in cursor.fetchall()
             ]
             
-            # Buscar tipos de pagamento
+            # Buscar formas de pagamento (tipos_pagamento)
             cursor.execute("""
-                SELECT id_tipo_pagamento, nome_tipo_pagamento
-                FROM tipos_pagamento
-                WHERE ativo = 1
-                ORDER BY nome_tipo_pagamento
+                SELECT id_forma_pagamento, nome_forma
+                FROM formas_pagamento
+                ORDER BY nome_forma
             """)
             tipos_pagamento = [
                 {'id': row[0], 'nome': row[1]}
@@ -703,8 +709,7 @@ def get_payment_options(request):
             # Buscar centros de custo
             cursor.execute("""
                 SELECT id_centro_custo, nome_centro_custo
-                FROM centros_custo
-                WHERE ativo = 1
+                FROM centro_custo
                 ORDER BY nome_centro_custo
             """)
             centros_custo = [
@@ -712,19 +717,18 @@ def get_payment_options(request):
                 for row in cursor.fetchall()
             ]
             
-            # Buscar condições de pagamento
+            # Buscar condições de pagamento (construído dinamicamente a partir das formas de pagamento)
             cursor.execute("""
-                SELECT id_condicao_pagamento, nome_condicao, dias_prazo, numero_parcelas
-                FROM condicoes_pagamento
-                WHERE ativo = 1
-                ORDER BY nome_condicao
+                SELECT id_forma_pagamento, nome_forma, dias_vencimento
+                FROM formas_pagamento
+                ORDER BY nome_forma
             """)
             condicoes_pagamento = [
                 {
                     'id': row[0], 
                     'nome': row[1], 
-                    'dias_prazo': row[2],
-                    'numero_parcelas': row[3]
+                    'dias_prazo': row[2] or 0,
+                    'numero_parcelas': 1
                 }
                 for row in cursor.fetchall()
             ]
