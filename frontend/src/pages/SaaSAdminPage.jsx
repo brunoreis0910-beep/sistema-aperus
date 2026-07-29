@@ -176,6 +176,7 @@ const SaaSAdminPage = () => {
   const [sefazTemplates, setSefazTemplates] = useState(null);
   const [loadingSefaz, setLoadingSefaz] = useState(false);
   const [sefazDoc, setSefazDoc] = useState('nfce');
+  const [sefazUf, setSefazUf] = useState('MG');
 
   // Filtros de mensalidades
   const [filtroContaBancaria, setFiltroContaBancaria] = useState('');
@@ -488,7 +489,7 @@ const SaaSAdminPage = () => {
   const carregarStatusSefaz = useCallback(async (isManual = false) => {
     if (isManual) setLoadingSefaz(true);
     try {
-      const res = await axiosInstance.get('/saas/monitor-sefaz/');
+      const res = await axiosInstance.get('/saas/monitor-sefaz/', { params: { uf: sefazUf } });
       const data = res.data;
       setSefazStatus(data);
       if (data.templates) {
@@ -499,11 +500,11 @@ const SaaSAdminPage = () => {
       if (prevStatus && novoStatus !== prevStatus) {
         if (novoStatus === 'CONTINGENCIA' || novoStatus === 'OSCILACAO') {
           const speakText = novoStatus === 'CONTINGENCIA'
-            ? "Atenção equipe Aperus! A SEFAZ de Minas Gerais acabou de entrar em Contingência. Disparo de comunicado aos clientes iniciado."
-            : "Atenção equipe Aperus! Identificada oscilação nos serviços da SEFAZ de Minas Gerais. Monitoramento ativo.";
+            ? `Atenção equipe Aperus! A SEFAZ de ${sefazUf} acabou de entrar em Contingência. Disparo de comunicado aos clientes iniciado.`
+            : `Atenção equipe Aperus! Identificada oscilação nos serviços da SEFAZ de ${sefazUf}. Monitoramento ativo.`;
           falarAlerta(speakText);
         } else if (novoStatus === 'NORMAL' && (prevStatus === 'CONTINGENCIA' || prevStatus === 'OSCILACAO')) {
-          falarAlerta("Atenção equipe! O status da SEFAZ de Minas Gerais retornou ao normal.");
+          falarAlerta(`Atenção equipe! O status da SEFAZ de ${sefazUf} retornou ao normal.`);
         }
       }
       setPrevStatus(novoStatus);
@@ -515,7 +516,7 @@ const SaaSAdminPage = () => {
     } finally {
       if (isManual) setLoadingSefaz(false);
     }
-  }, [axiosInstance, prevStatus, showToast, falarAlerta]);
+  }, [axiosInstance, prevStatus, showToast, falarAlerta, sefazUf]);
 
   useEffect(() => {
     carregarStatusSefaz();
@@ -528,7 +529,7 @@ const SaaSAdminPage = () => {
   const forcarConsultaSefaz = async () => {
     setLoadingSefaz(true);
     try {
-      const res = await axiosInstance.post('/saas/monitor-sefaz/', { acao: 'consultar_agora' });
+      const res = await axiosInstance.post('/saas/monitor-sefaz/', { acao: 'consultar_agora', uf: sefazUf });
       if (res.data.status === 'sucesso') {
         const data = res.data.config;
         setSefazStatus(data);
@@ -3373,24 +3374,39 @@ const SaaSAdminPage = () => {
 
                     <Divider sx={{ my: 3 }} />
 
-                    {/* SELETOR DE DOCUMENTO */}
-                    <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
+                    {/* SELETOR DE ESTADO E DOCUMENTO */}
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" alignItems="center" sx={{ mb: 4 }}>
+                      <FormControl size="small" sx={{ minWidth: 160 }}>
+                        <InputLabel id="sefaz-uf-label">Estado Monitorado</InputLabel>
+                        <Select
+                          labelId="sefaz-uf-label"
+                          value={sefazUf}
+                          label="Estado Monitorado"
+                          onChange={(e) => setSefazUf(e.target.value)}
+                          sx={{ borderRadius: 2, fontWeight: 600 }}
+                        >
+                          {['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'].map(uf => (
+                            <MenuItem key={uf} value={uf} sx={{ fontWeight: 500 }}>{uf} - Status</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+
                       <Tabs
                         value={sefazDoc}
                         onChange={(e, val) => { if (val) setSefazDoc(val); }}
                         textColor="primary"
                         indicatorColor="primary"
-                        sx={{ borderBottom: 1, borderColor: 'divider', width: '100%', maxWidth: 500 }}
+                        sx={{ borderBottom: 1, borderColor: 'divider', minWidth: 250 }}
                       >
-                        <Tab label="NFC-e (MG)" value="nfce" sx={{ fontWeight: 700 }} />
-                        <Tab label="NF-e (MG)" value="nfe" sx={{ fontWeight: 700 }} />
-                        <Tab label="CT-e (MG)" value="cte" sx={{ fontWeight: 700 }} />
+                        <Tab label="NFC-e" value="nfce" sx={{ fontWeight: 700 }} />
+                        <Tab label="NF-e" value="nfe" sx={{ fontWeight: 700 }} />
+                        <Tab label="CT-e" value="cte" sx={{ fontWeight: 700 }} />
                       </Tabs>
-                    </Box>
+                    </Stack>
 
                     {(() => {
-                      const activeDocData = (sefazStatus?.documentos && sefazStatus.documentos[sefazDoc]) ? sefazStatus.documentos[sefazDoc] : (
-                        sefazDoc === 'nfce' ? {
+                      const activeDocData = (sefazStatus?.documentos && sefazStatus.documentos[sefazUf] && sefazStatus.documentos[sefazUf][sefazDoc]) ? sefazStatus.documentos[sefazUf][sefazDoc] : (
+                        (sefazUf === 'MG' && sefazDoc === 'nfce') ? {
                           status_atual: sefazStatus?.status_atual || 'NORMAL',
                           tempo_resposta: sefazStatus?.tempo_resposta || 0,
                           ultimo_erro: sefazStatus?.ultimo_erro || '',
@@ -3453,7 +3469,7 @@ const SaaSAdminPage = () => {
                           {/* REAL-TIME RESPONSE TIME GRAPH */}
                           <Box sx={{ mt: 4 }}>
                             <Typography variant="subtitle2" fontWeight={700} color="text.secondary" mb={2}>
-                              Tempo de Resposta nas Últimas 30 Consultas (ms) - {sefazDoc.toUpperCase()}
+                              Tempo de Resposta nas Últimas 30 Consultas (ms) - {sefazDoc.toUpperCase()} ({sefazUf.toUpperCase()})
                             </Typography>
                             <Box sx={{ width: '100%', height: 220 }}>
                               {activeDocData.tempos_resposta && activeDocData.tempos_resposta.length > 0 ? (
