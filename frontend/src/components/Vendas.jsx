@@ -4073,34 +4073,54 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   // Editar venda
   const editarVenda = async (vendaParaEditar) => {
     console.log('✏️ Editando venda:', vendaParaEditar);
-
-    // Verificar se a venda já foi paga (financeiro baixado)
     const idVenda = vendaParaEditar.id || vendaParaEditar.id_venda;
-    const status = statusFinanceiro[idVenda];
+    if (!idVenda) return;
 
-    if (status && status.temFinanceiro && status.valorPago > 0) {
-      setVendaBloqueadaParaEdicao(true);
-      console.log('🔒 Venda bloqueada para edição - possui pagamentos:', {
-        valorPago: status.valorPago,
-        valorTotal: status.valorTotal,
-        status: status.status
+    try {
+      setLoading(true);
+      // Buscar venda completa com itens detalhados do backend
+      const res = await axiosInstance.get(`/vendas/${idVenda}/`);
+      const vendaCompleta = res.data;
+      console.log('✅ Venda completa carregada para edição:', vendaCompleta);
+
+      // Verificar se a venda já foi paga (financeiro baixado)
+      const status = statusFinanceiro[idVenda];
+
+      if (status && status.temFinanceiro && status.valorPago > 0) {
+        setVendaBloqueadaParaEdicao(true);
+        console.log('🔒 Venda bloqueada para edição - possui pagamentos:', {
+          valorPago: status.valorPago,
+          valorTotal: status.valorTotal,
+          status: status.status
+        });
+      } else {
+        setVendaBloqueadaParaEdicao(false);
+      }
+
+      setVenda({
+        id: vendaCompleta.id,
+        id_operacao: vendaCompleta.id_operacao,
+        id_cliente: vendaCompleta.id_cliente,
+        id_vendedor: vendaCompleta.id_vendedor || '',
+        observacoes: vendaCompleta.observacoes || '',
+        desconto: parseFloat(vendaCompleta.desconto) || 0,
+        taxa_entrega: parseFloat(vendaCompleta.taxa_entrega) || 0,
+        valor_total: parseFloat(vendaCompleta.valor_total) || 0,
+        itens: (vendaCompleta.itens || []).map(item => ({
+          ...item,
+          id_produto: item.id_produto || item.produto_id,
+          quantidade: parseFloat(item.quantidade) || 0,
+          valor_unitario: parseFloat(item.valor_unitario) || 0,
+          desconto: parseFloat(item.desconto || item.desconto_valor || 0)
+        }))
       });
-    } else {
-      setVendaBloqueadaParaEdicao(false);
+      setModo('nova');
+    } catch (err) {
+      console.error('❌ Erro ao buscar detalhes da venda para edição:', err);
+      setError('Não foi possível carregar os detalhes da venda para edição.');
+    } finally {
+      setLoading(false);
     }
-
-    setVenda({
-      id: vendaParaEditar.id || vendaParaEditar.id_venda,
-      id_operacao: vendaParaEditar.id_operacao,
-      id_cliente: vendaParaEditar.id_cliente,
-      id_vendedor: vendaParaEditar.id_vendedor || '',
-      observacoes: vendaParaEditar.observacoes || '',
-      desconto: parseFloat(vendaParaEditar.desconto) || 0,
-      taxa_entrega: parseFloat(vendaParaEditar.taxa_entrega) || 0,
-      valor_total: parseFloat(vendaParaEditar.valor_total) || 0,
-      itens: vendaParaEditar.itens || []
-    });
-    setModo('nova');
   };
 
   // Excluir venda
