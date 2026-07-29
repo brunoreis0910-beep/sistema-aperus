@@ -16,8 +16,9 @@ import {
   SystemUpdate as UpdateIcon, Terminal as LogIcon, Delete as DeleteIcon,
   Storage as StorageIcon, Bolt as BoltIcon, Campaign as CampaignIcon,
   Save as SaveIcon, Send as SendIcon, Link as LinkIcon, WhatsApp as WhatsAppIcon,
-  Settings as SettingsIcon, BugReport as BugReportIcon
+  Settings as SettingsIcon, BugReport as BugReportIcon, Speed as SpeedIcon, VolumeUp as VolumeUpIcon
 } from '@mui/icons-material';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
 import { buscarCNPJ, buscarCEP, formatTelefone } from '../utils/cnpjCepUtils';
@@ -168,6 +169,13 @@ const SaaSAdminPage = () => {
   const [mensalidades, setMensalidades] = useState([]);
   const [planos, setPlanos] = useState([]);
   const [centralLogs, setCentralLogs] = useState([]);
+  
+  // Monitoramento SEFAZ State
+  const [sefazStatus, setSefazStatus] = useState(null);
+  const [prevStatus, setPrevStatus] = useState(null);
+  const [sefazTemplates, setSefazTemplates] = useState(null);
+  const [loadingSefaz, setLoadingSefaz] = useState(false);
+  const [sefazDoc, setSefazDoc] = useState('nfce');
 
   // Filtros de mensalidades
   const [filtroContaBancaria, setFiltroContaBancaria] = useState('');
@@ -443,6 +451,118 @@ const SaaSAdminPage = () => {
     carregarDados();
   }, [carregarDados]);
 
+  const falarAlerta = useCallback((texto) => {
+    try {
+      window.speechSynthesis.cancel();
+      const msg = new SpeechSynthesisUtterance(texto);
+      msg.lang = 'pt-BR';
+      msg.rate = 1.0;
+      
+      const voices = window.speechSynthesis.getVoices();
+      const ptVoices = voices.filter(v => v.lang.includes('pt-BR') || v.lang.includes('pt_BR'));
+      
+      if (ptVoices.length > 0) {
+        // Priorizar Google português ou voz natural/neural do navegador
+        const preferred = ptVoices.find(v => 
+          v.name.toLowerCase().includes('google') || 
+          v.name.toLowerCase().includes('natural') || 
+          v.name.toLowerCase().includes('neural')
+        );
+        if (preferred) {
+          msg.voice = preferred;
+        } else {
+          const microsoft = ptVoices.find(v => v.name.toLowerCase().includes('microsoft'));
+          if (microsoft) {
+            msg.voice = microsoft;
+          } else {
+            msg.voice = ptVoices[0];
+          }
+        }
+      }
+      window.speechSynthesis.speak(msg);
+    } catch (e) {
+      console.error("Erro ao reproduzir sintese de voz:", e);
+    }
+  }, []);
+
+  const carregarStatusSefaz = useCallback(async (isManual = false) => {
+    if (isManual) setLoadingSefaz(true);
+    try {
+      const res = await axiosInstance.get('/saas/monitor-sefaz/');
+      const data = res.data;
+      setSefazStatus(data);
+      if (data.templates) {
+        setSefazTemplates(data.templates);
+      }
+      
+      const novoStatus = data.status_atual;
+      if (prevStatus && novoStatus !== prevStatus) {
+        if (novoStatus === 'CONTINGENCIA' || novoStatus === 'OSCILACAO') {
+          const speakText = novoStatus === 'CONTINGENCIA'
+            ? "Atenção equipe Aperus! A SEFAZ de Minas Gerais acabou de entrar em Contingência. Disparo de comunicado aos clientes iniciado."
+            : "Atenção equipe Aperus! Identificada oscilação nos serviços da SEFAZ de Minas Gerais. Monitoramento ativo.";
+          falarAlerta(speakText);
+        } else if (novoStatus === 'NORMAL' && (prevStatus === 'CONTINGENCIA' || prevStatus === 'OSCILACAO')) {
+          falarAlerta("Atenção equipe! O status da SEFAZ de Minas Gerais retornou ao normal.");
+        }
+      }
+      setPrevStatus(novoStatus);
+      if (isManual) {
+        showToast('Status do monitor SEFAZ atualizado.', 'success');
+      }
+    } catch (err) {
+      console.error('Erro ao buscar status SEFAZ:', err);
+    } finally {
+      if (isManual) setLoadingSefaz(false);
+    }
+  }, [axiosInstance, prevStatus, showToast, falarAlerta]);
+
+  useEffect(() => {
+    carregarStatusSefaz();
+    const interval = setInterval(() => {
+      carregarStatusSefaz();
+    }, 30000); // Poll status every 30 seconds
+    return () => clearInterval(interval);
+  }, [carregarStatusSefaz]);
+
+  const forcarConsultaSefaz = async () => {
+    setLoadingSefaz(true);
+    try {
+      const res = await axiosInstance.post('/saas/monitor-sefaz/', { acao: 'consultar_agora' });
+      if (res.data.status === 'sucesso') {
+        const data = res.data.config;
+        setSefazStatus(data);
+        if (data.templates) {
+          setSefazTemplates(data.templates);
+        }
+        showToast(res.data.mensagem || 'Consulta realizada com sucesso.', 'success');
+      }
+    } catch (err) {
+      showToast('Erro ao forçar consulta do monitor SEFAZ.', 'error');
+    } finally {
+      setLoadingSefaz(false);
+    }
+  };
+
+  const salvarTemplatesSefaz = async () => {
+    setLoadingSefaz(true);
+    try {
+      const res = await axiosInstance.post('/saas/monitor-sefaz/', {
+        acao: 'atualizar_templates',
+        templates: sefazTemplates
+      });
+      if (res.data.status === 'sucesso') {
+        const data = res.data.config;
+        setSefazStatus(data);
+        showToast(res.data.mensagem || 'Templates atualizados com sucesso.', 'success');
+      }
+    } catch (err) {
+      showToast('Erro ao atualizar templates de contingência.', 'error');
+    } finally {
+      setLoadingSefaz(false);
+    }
+  };
+
   const consultarStatusMensalidade = async (m) => {
     setLoadingUpdate(prev => ({ ...prev, [m.id_mensalidade]: true }));
     try {
@@ -477,7 +597,8 @@ const SaaSAdminPage = () => {
     { label: "Terminais Ativos", icon: <LogIcon />, show: true },
     { label: "Links de Acesso", icon: <LinkIcon />, show: true },
     { label: "Backup Agendado", icon: <StorageIcon />, show: true },
-    { label: "Central de Logs", icon: <BugReportIcon />, show: true }
+    { label: "Central de Logs", icon: <BugReportIcon />, show: true },
+    { label: "Monitoramento SEFAZ", icon: <SpeedIcon />, show: true }
   ].filter(t => t.show);
 
   const activeTabName = tabs[tabValue]?.label || "Clientes SaaS";
@@ -3204,6 +3325,354 @@ const SaaSAdminPage = () => {
                 </TableContainer>
               </CardContent>
             </Card>
+          </Box>
+        )}
+
+        {/* TAB 9 - MONITORAMENTO SEFAZ */}
+        {activeTabName === "Monitoramento SEFAZ" && (
+          <Box sx={{ p: 3 }}>
+            <Grid container spacing={3}>
+              {/* STATUS CARD */}
+              <Grid item xs={12}>
+                <Card variant="outlined" sx={{ borderRadius: 3, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+                  <CardContent>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
+                      <Box display="flex" alignItems="center" gap={2}>
+                        <SpeedIcon color="primary" sx={{ fontSize: 40 }} />
+                        <Box>
+                          <Typography variant="h6" fontWeight={700}>
+                            Monitoramento SEFAZ (TecnoSpeed)
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Status em tempo real de contingência e oscilações para NFC-e (MG)
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Stack direction="row" spacing={2} alignItems="center">
+                        <Button 
+                          variant="outlined" 
+                          size="small" 
+                          startIcon={<VolumeUpIcon />}
+                          onClick={() => {
+                            falarAlerta("Atenção equipe! Teste de alerta de voz do monitor de contingência da SEFAZ realizado com sucesso.");
+                          }}
+                        >
+                          Testar Alerta de Voz
+                        </Button>
+                        <Button 
+                          variant="contained" 
+                          size="small" 
+                          onClick={forcarConsultaSefaz} 
+                          disabled={loadingSefaz}
+                          startIcon={loadingSefaz ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+                        >
+                          Consultar Agora
+                        </Button>
+                      </Stack>
+                    </Box>
+
+                    <Divider sx={{ my: 3 }} />
+
+                    {/* SELETOR DE DOCUMENTO */}
+                    <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
+                      <Tabs
+                        value={sefazDoc}
+                        onChange={(e, val) => { if (val) setSefazDoc(val); }}
+                        textColor="primary"
+                        indicatorColor="primary"
+                        sx={{ borderBottom: 1, borderColor: 'divider', width: '100%', maxWidth: 500 }}
+                      >
+                        <Tab label="NFC-e (MG)" value="nfce" sx={{ fontWeight: 700 }} />
+                        <Tab label="NF-e (MG)" value="nfe" sx={{ fontWeight: 700 }} />
+                        <Tab label="CT-e (MG)" value="cte" sx={{ fontWeight: 700 }} />
+                      </Tabs>
+                    </Box>
+
+                    {(() => {
+                      const activeDocData = (sefazStatus?.documentos && sefazStatus.documentos[sefazDoc]) ? sefazStatus.documentos[sefazDoc] : (
+                        sefazDoc === 'nfce' ? {
+                          status_atual: sefazStatus?.status_atual || 'NORMAL',
+                          tempo_resposta: sefazStatus?.tempo_resposta || 0,
+                          ultimo_erro: sefazStatus?.ultimo_erro || '',
+                          ultima_atualizacao: sefazStatus?.ultima_atualizacao || null,
+                          tempos_resposta: sefazStatus?.tempos_resposta || []
+                        } : {
+                          status_atual: 'NORMAL',
+                          tempo_resposta: 0,
+                          ultimo_erro: '',
+                          ultima_atualizacao: null,
+                          tempos_resposta: []
+                        }
+                      );
+
+                      return (
+                        <>
+                          <Grid container spacing={3}>
+                            <Grid item xs={12} md={4}>
+                              <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', borderRadius: 2, bgcolor: 'action.hover' }}>
+                                <Typography variant="overline" color="text.secondary" fontWeight={600}>Status Atual</Typography>
+                                <Box my={1.5}>
+                                  {activeDocData.status_atual === 'NORMAL' ? (
+                                    <Chip label="NORMAL" color="success" sx={{ fontWeight: 700, px: 2, py: 1 }} />
+                                  ) : activeDocData.status_atual === 'OSCILACAO' ? (
+                                    <Chip label="OSCILAÇÃO / LENTO" color="warning" sx={{ fontWeight: 700, px: 2, py: 1 }} />
+                                  ) : activeDocData.status_atual === 'CONTINGENCIA' ? (
+                                    <Chip label="CONTINGÊNCIA ATIVA" color="error" sx={{ fontWeight: 700, px: 2, py: 1 }} />
+                                  ) : (
+                                    <Chip label="INDETERMINADO" sx={{ fontWeight: 700, px: 2, py: 1 }} />
+                                  )}
+                                </Box>
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  Última atualização: {activeDocData.ultima_atualizacao ? new Date(activeDocData.ultima_atualizacao).toLocaleString() : 'Sem dados'}
+                                </Typography>
+                              </Paper>
+                            </Grid>
+
+                            <Grid item xs={12} md={4}>
+                              <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', borderRadius: 2, bgcolor: 'action.hover' }}>
+                                <Typography variant="overline" color="text.secondary" fontWeight={600}>Tempo de Resposta</Typography>
+                                <Typography variant="h3" fontWeight={700} my={1} color="text.primary">
+                                  {activeDocData.tempo_resposta || 0} <span style={{ fontSize: '18px', fontWeight: 400 }}>ms</span>
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  Retorno da API de monitoramento
+                                </Typography>
+                              </Paper>
+                            </Grid>
+
+                            <Grid item xs={12} md={4}>
+                              <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', borderRadius: 2, bgcolor: 'action.hover', minHeight: '100px' }}>
+                                <Typography variant="overline" color="text.secondary" fontWeight={600}>Mensagem de Erro</Typography>
+                                <Typography variant="body2" color="error" sx={{ mt: 1, wordBreak: 'break-word', fontWeight: 500 }}>
+                                  {activeDocData.ultimo_erro || "Nenhuma falha registrada"}
+                                </Typography>
+                              </Paper>
+                            </Grid>
+                          </Grid>
+
+                          {/* REAL-TIME RESPONSE TIME GRAPH */}
+                          <Box sx={{ mt: 4 }}>
+                            <Typography variant="subtitle2" fontWeight={700} color="text.secondary" mb={2}>
+                              Tempo de Resposta nas Últimas 30 Consultas (ms) - {sefazDoc.toUpperCase()}
+                            </Typography>
+                            <Box sx={{ width: '100%', height: 220 }}>
+                              {activeDocData.tempos_resposta && activeDocData.tempos_resposta.length > 0 ? (
+                                <ResponsiveContainer>
+                                  <AreaChart
+                                    data={activeDocData.tempos_resposta.map(p => ({
+                                      time: new Date(p.datahora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                                      tempo: p.tempo,
+                                      status: p.status
+                                    }))}
+                                    margin={{ top: 10, right: 30, left: -20, bottom: 0 }}
+                                  >
+                                    <defs>
+                                      <linearGradient id="colorTempo" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#1976d2" stopOpacity={0.4}/>
+                                        <stop offset="95%" stopColor="#1976d2" stopOpacity={0.0}/>
+                                      </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.06)" />
+                                    <XAxis 
+                                      dataKey="time" 
+                                      tick={{ fontSize: 10 }} 
+                                      stroke="rgba(0,0,0,0.4)"
+                                    />
+                                    <YAxis 
+                                      tick={{ fontSize: 10 }} 
+                                      stroke="rgba(0,0,0,0.4)"
+                                      unit=" ms"
+                                    />
+                                    <ChartTooltip 
+                                      contentStyle={{ 
+                                        backgroundColor: '#fff', 
+                                        border: '1px solid rgba(0,0,0,0.1)', 
+                                        borderRadius: 8,
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+                                      }}
+                                    />
+                                    <Area 
+                                      type="monotone" 
+                                      dataKey="tempo" 
+                                      stroke="#1976d2" 
+                                      strokeWidth={2}
+                                      fillOpacity={1} 
+                                      fill="url(#colorTempo)" 
+                                      name="Tempo de resposta"
+                                    />
+                                  </AreaChart>
+                                </ResponsiveContainer>
+                              ) : (
+                                <Box display="flex" justifyContent="center" alignItems="center" height="100%" bgcolor="action.hover" borderRadius={2} border="1px dashed rgba(0,0,0,0.1)">
+                                  <Typography variant="caption" color="text.secondary">Aguardando dados de consulta para gerar o gráfico...</Typography>
+                                </Box>
+                              )}
+                            </Box>
+                          </Box>
+                        </>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* TEMPLATES CONFIGURATION */}
+              <Grid item xs={12} md={7}>
+                <Card variant="outlined" sx={{ borderRadius: 3, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+                  <CardContent>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                      <Typography variant="subtitle1" fontWeight={700}>
+                        Templates de Mensagens & Alertas
+                      </Typography>
+                      <Button 
+                        variant="contained" 
+                        color="success" 
+                        size="small" 
+                        onClick={salvarTemplatesSefaz} 
+                        disabled={loadingSefaz}
+                        startIcon={<SaveIcon />}
+                      >
+                        Salvar Templates
+                      </Button>
+                    </Box>
+                    <Divider sx={{ mb: 3 }} />
+
+                    {sefazTemplates ? (
+                      <Stack spacing={3}>
+                        {['CONTINGENCIA', 'OSCILACAO', 'NORMAL'].map((key) => (
+                          <Paper variant="outlined" p={2} sx={{ p: 2, borderRadius: 2 }} key={key}>
+                            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
+                              <Typography variant="subtitle2" fontWeight={700} color={key === 'CONTINGENCIA' ? 'error.main' : key === 'OSCILACAO' ? 'warning.main' : 'success.main'}>
+                                {key === 'CONTINGENCIA' ? '🚨 Contingência Oficial Ativada' : key === 'OSCILACAO' ? '⚠️ Instabilidade / Oscilação' : '✅ Retorno ao Fluxo Normal'}
+                              </Typography>
+                            </Box>
+                            
+                            <Stack spacing={2}>
+                              <TextField
+                                label="Título do Alerta"
+                                size="small"
+                                fullWidth
+                                value={sefazTemplates[key]?.titulo || ''}
+                                onChange={(e) => {
+                                  const newVal = e.target.value;
+                                  setSefazTemplates(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], titulo: newVal }
+                                  }));
+                                }}
+                              />
+                              <TextField
+                                label="Mensagem do Alerta (Suporta HTML/Markdown simples)"
+                                size="small"
+                                multiline
+                                rows={3}
+                                fullWidth
+                                helperText="Variáveis disponíveis: {uf}, {documento}, {hora_evento}"
+                                value={sefazTemplates[key]?.mensagem || ''}
+                                onChange={(e) => {
+                                  const newVal = e.target.value;
+                                  setSefazTemplates(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], mensagem: newVal }
+                                  }));
+                                }}
+                              />
+                              <Stack direction="row" spacing={3}>
+                                <FormControlLabel
+                                  control={
+                                    <Switch 
+                                      checked={Boolean(sefazTemplates[key]?.enviar_whatsapp)} 
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        setSefazTemplates(prev => ({
+                                          ...prev,
+                                          [key]: { ...prev[key], enviar_whatsapp: checked }
+                                        }));
+                                      }}
+                                    />
+                                  }
+                                  label="Disparar WhatsApp (Clientes da UF)"
+                                />
+                                <FormControlLabel
+                                  control={
+                                    <Switch 
+                                      checked={Boolean(sefazTemplates[key]?.enviar_notificacao)} 
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        setSefazTemplates(prev => ({
+                                          ...prev,
+                                          [key]: { ...prev[key], enviar_notificacao: checked }
+                                        }));
+                                      }}
+                                    />
+                                  }
+                                  label="Mostrar no Mural de Avisos"
+                                />
+                              </Stack>
+                            </Stack>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Box display="flex" justifyContent="center" py={4}>
+                        <CircularProgress size={30} />
+                      </Box>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* LOGS HISTORY */}
+              <Grid item xs={12} md={5}>
+                <Card variant="outlined" sx={{ borderRadius: 3, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+                  <CardContent>
+                    <Typography variant="subtitle1" fontWeight={700} mb={2}>
+                      Histórico de Eventos
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+
+                    <TableContainer sx={{ maxHeight: '550px' }}>
+                      <Table size="small">
+                        <TableHead sx={{ bgcolor: 'action.hover' }}>
+                          <TableRow>
+                            <TableCell>Data/Hora</TableCell>
+                            <TableCell>Transição</TableCell>
+                            <TableCell>Tempo</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {sefazStatus?.historico && sefazStatus.historico.length > 0 ? (
+                            sefazStatus.historico.map((log, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell sx={{ fontSize: '12px' }}>
+                                  {new Date(log.datahora).toLocaleString()}
+                                </TableCell>
+                                <TableCell>
+                                  <Stack direction="row" spacing={0.5} alignItems="center">
+                                    <Chip label={log.status_anterior} size="small" color={log.status_anterior === 'NORMAL' ? 'success' : log.status_anterior === 'OSCILACAO' ? 'warning' : 'error'} sx={{ fontSize: '9px', height: '18px' }} />
+                                    <span>➔</span>
+                                    <Chip label={log.status_novo} size="small" color={log.status_novo === 'NORMAL' ? 'success' : log.status_novo === 'OSCILACAO' ? 'warning' : 'error'} sx={{ fontSize: '9px', height: '18px' }} />
+                                  </Stack>
+                                </TableCell>
+                                <TableCell sx={{ fontSize: '12px' }}>
+                                  {log.tempo_resposta || 0} ms
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={3} align="center">
+                                <Typography variant="caption" color="text.secondary">Nenhum evento registrado no histórico.</Typography>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
           </Box>
         )}
       </Paper>
