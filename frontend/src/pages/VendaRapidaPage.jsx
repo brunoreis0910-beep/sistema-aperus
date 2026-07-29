@@ -147,6 +147,11 @@ const VendaRapidaPage = () => {
   const [senhaSupervisorEstoque, setSenhaSupervisorEstoque] = useState('');
   const [itemPendenteEstoque, setItemPendenteEstoque] = useState(null);
   const [estoqueAutorizado, setEstoqueAutorizado] = useState(false);
+  const [creditoCliente, setCreditoCliente] = useState(0);
+  const [showCreditoModal, setShowCreditoModal] = useState(false);
+  const [usarCredito, setUsarCredito] = useState(false);
+  const [decisaoCreditoTomada, setDecisaoCreditoTomada] = useState(false);
+  const [origemModalCredito, setOrigemModalCredito] = useState('selecao');
   const [condicoesSelecionadas, setCondicoesSelecionadas] = useState([]);
   const [formaPagamentoAtual, setFormaPagamentoAtual] = useState(null);
   const [valorCondicaoAtual, setValorCondicaoAtual] = useState('');
@@ -799,6 +804,35 @@ const VendaRapidaPage = () => {
       } catch (e) {
         console.warn("⚠️ Não foi possível buscar dados atualizados do cliente, usando o objeto atual.", e);
       }
+    }
+
+    // Buscar crédito de troca/devolução disponível do cliente usando a rota específica
+    let creditoDisponivel = 0;
+    if (servidorOkRef.current && clienteSelecionado?.id_cliente) {
+      try {
+        console.log('💳 [CREDITO] Buscando créditos de troca/devolução do cliente...');
+        const creditosResponse = await axiosInstance.get(`/creditos/cliente/${clienteSelecionado.id_cliente}/saldo/`);
+        if (typeof creditosResponse.data === 'string' && creditosResponse.data.includes('<!doctype html>')) {
+          console.warn('⚠️ Rota de créditos não implementada no backend (retornou HTML)');
+          creditoDisponivel = 0;
+        } else {
+          const dadosCredito = creditosResponse.data;
+          console.log('📋 [CREDITO] Dados de crédito:', dadosCredito);
+          creditoDisponivel = parseFloat(dadosCredito.saldo_total || 0);
+          console.log('💰 [CREDITO] Total de crédito de troca disponível: R$', creditoDisponivel.toFixed(2));
+        }
+      } catch (creditoErr) {
+        console.warn('⚠️ [CREDITO] Erro ao buscar créditos:', creditoErr.message);
+        creditoDisponivel = 0;
+      }
+    }
+    setCreditoCliente(creditoDisponivel);
+    setUsarCredito(false);
+    setDecisaoCreditoTomada(false);
+    if (creditoDisponivel > 0) {
+      setOrigemModalCredito('selecao');
+      // Pequeno timeout para garantir que o estado seja registrado e o modal renderize corretamente
+      setTimeout(() => setShowCreditoModal(true), 100);
     }
 
     console.log('🔍 Operação atual:', operacao);
@@ -2711,6 +2745,16 @@ const VendaRapidaPage = () => {
         return;
       }
 
+      // Verificar se cliente tem crédito disponível E ainda não foi decidido usar ou não
+      if (creditoCliente > 0 && !decisaoCreditoTomada) {
+        console.log('💰 Cliente possui crédito de R$', creditoCliente.toFixed(2));
+        console.log('❓ Perguntando ao usuário se deseja usar o crédito...');
+        setOrigemModalCredito('finalizacao');
+        setShowCreditoModal(true);
+        setLoading(false);
+        return;
+      }
+
       // Validar condições de pagamento
       const totalCondicoes = condicoesSelecionadas.reduce((acc, c) => acc + c.valor, 0);
       if (Math.abs(totalCondicoes - valorTotal) > 0.01) {
@@ -2740,6 +2784,14 @@ const VendaRapidaPage = () => {
 
       console.log('[ESTOQUE] Itens para baixa de estoque:', itensParaEnvio.map(i => `Prod ${i.id_produto}: ${i.quantidade} unidades`).join(', '));
 
+      let creditoAplicado = 0;
+      let descontoFinal = parseFloat(descontoGeral) || 0;
+      if (usarCredito && creditoCliente > 0) {
+        creditoAplicado = Math.min(creditoCliente, valorTotal);
+        descontoFinal += creditoAplicado;
+        console.log(`[CREDITO] Aplicando crédito de R$ ${creditoAplicado} como desconto. Desconto final: R$ ${descontoFinal}`);
+      }
+
       // Criar venda com itens
       dadosVenda = {
         id_operacao: operacao.id_operacao,
@@ -2748,7 +2800,7 @@ const VendaRapidaPage = () => {
         numero_documento: numeroDocumento,
         data: new Date().toLocaleDateString('pt-BR'),
         itens: itensParaEnvio,  // Enviar itens junto
-        desconto: descontoGeral.toString()
+        desconto: descontoFinal.toFixed(2)
       };
 
       console.log('[VENDA] Dados da venda completa:', dadosVenda);
@@ -2800,6 +2852,22 @@ const VendaRapidaPage = () => {
       console.log('[ESTOQUE] Estoque foi baixado automaticamente pelo backend');
 
       const idVenda = resVenda.data.id_venda || resVenda.data.id;
+
+      // Se foi usado crédito, registrar a utilização no backend
+      if (usarCredito && creditoAplicado > 0) {
+        try {
+          console.log('[CREDITO] Registrando utilizacao de credito...');
+          await axiosInstance.post('/creditos/utilizar/', {
+            id_cliente: cliente?.id_cliente,
+            id_venda: idVenda,
+            valor: creditoAplicado
+          });
+          console.log('[CREDITO] Utilizacao registrada com sucesso');
+          setCreditoCliente(prev => Math.max(0, prev - creditoAplicado));
+        } catch (creditoErr) {
+          console.error('⚠️ [CREDITO] Erro ao registrar utilização de crédito:', creditoErr);
+        }
+      }
 
       console.log('[VENDA] Atualizando proximo numero da operacao...');
 
@@ -3020,10 +3088,13 @@ const VendaRapidaPage = () => {
     setDescontoItem(0);
     setIdProdutoSelecionado(null);
     setGrupoProdutoSelecionado(null);
-    // Resetar flags de autorização
+    // Resetar flags de autorização e crédito
     setLimiteAutorizado(false);
     setAtrasoAutorizado(false);
     setEstoqueAutorizado(false);
+    setCreditoCliente(0);
+    setUsarCredito(false);
+    setDecisaoCreditoTomada(false);
 
     // 🔹 RESETAR CLIENTE PARA CONSUMIDOR FINAL NA PRÓXIMA VENDA
     if (clientePadraoRef.current) {
@@ -4610,6 +4681,12 @@ const VendaRapidaPage = () => {
                   <Typography variant="caption" display="block" color="text.secondary">
                     Utilizado: R$ {parseFloat(limiteInfo?.limiteUtilizado ?? cliente?.saldo_devedor ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — Disponível: R$ {parseFloat(limiteInfo?.limiteDisponivel ?? (cliente?.limite_credito ? (cliente.limite_credito - (cliente?.saldo_devedor || 0)) : 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </Typography>
+                  {creditoCliente > 0 && (
+                    <Typography variant="subtitle2" display="block" color="success.main" sx={{ mt: 1, fontWeight: 'bold' }}>
+                      💰 Crédito Disponível: R$ {parseFloat(creditoCliente).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {usarCredito && " (Será Aplicado)"}
+                    </Typography>
+                  )}
                 </Paper>
               </Grid>
               <Grid item xs={6}>
@@ -4912,6 +4989,82 @@ const VendaRapidaPage = () => {
             }}
           >
             Confirmar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Crédito Disponível */}
+      <Dialog
+        open={showCreditoModal}
+        onClose={() => {
+          console.log('🚫 Modal de crédito fechado');
+          setShowCreditoModal(false);
+          setUsarCredito(false);
+          setLoading(false);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ backgroundColor: '#2E7D32', color: 'white', fontWeight: 'bold' }}>
+          💰 Crédito Disponível
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 3, textAlign: 'center' }}>
+            <Alert severity="info" sx={{ mb: 3 }}>
+              <strong>Cliente possui crédito disponível!</strong>
+            </Alert>
+
+            <Typography variant="h4" align="center" sx={{ mb: 3, color: 'success.main', fontWeight: 'bold' }}>
+              R$ {creditoCliente.toFixed(2)}
+            </Typography>
+
+            <Typography variant="body1" align="center" sx={{ mb: 2 }}>
+              Deseja utilizar o crédito como desconto nesta venda?
+            </Typography>
+
+            <Typography variant="body2" color="text.secondary" align="center">
+              O crédito será aplicado automaticamente como desconto e deduzido do saldo do cliente.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('❌ CLIQUE: Não usar o crédito');
+              setShowCreditoModal(false);
+              setUsarCredito(false);
+              setDecisaoCreditoTomada(true);
+              if (origemModalCredito === 'finalizacao') {
+                setTimeout(() => finalizarVenda(), 100);
+              }
+            }}
+            color="inherit"
+            variant="outlined"
+            size="large"
+            sx={{ minWidth: 150 }}
+          >
+            Não usar crédito
+          </Button>
+          <Button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('✅ CLIQUE: Usar o crédito');
+              setShowCreditoModal(false);
+              setUsarCredito(true);
+              setDecisaoCreditoTomada(true);
+              if (origemModalCredito === 'finalizacao') {
+                setTimeout(() => finalizarVenda(), 100);
+              }
+            }}
+            variant="contained"
+            color="success"
+            size="large"
+            sx={{ minWidth: 150 }}
+          >
+            Usar crédito
           </Button>
         </DialogActions>
       </Dialog>

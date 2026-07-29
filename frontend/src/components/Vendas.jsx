@@ -324,6 +324,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   const [showCreditoModal, setShowCreditoModal] = useState(false);
   const [usarCredito, setUsarCredito] = useState(false);
   const [decisaoCreditoTomada, setDecisaoCreditoTomada] = useState(false);
+  const [origemModalCredito, setOrigemModalCredito] = useState('selecao');
 
   // Estados para cashback do cliente
   const [showCashbackModal, setShowCashbackModal] = useState(false);
@@ -924,7 +925,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       let creditoDisponivel = 0;
       try {
         console.log('💳 Buscando créditos do cliente...');
-        const creditosResponse = await axiosInstance.get(`/creditos/cliente/${idCliente}/saldo`);
+        const creditosResponse = await axiosInstance.get(`/creditos/cliente/${idCliente}/saldo/`);
 
         // Verifica se a resposta é HTML (erro 404 redirecionando para index)
         if (typeof creditosResponse.data === 'string' && creditosResponse.data.includes('<!doctype html>')) {
@@ -955,6 +956,10 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       });
       setCreditoCliente(creditoDisponivel);
       setShowLimiteInfo(true);
+      if (creditoDisponivel > 0) {
+        setOrigemModalCredito('selecao');
+        setTimeout(() => setShowCreditoModal(true), 100);
+      }
     } catch (err) {
       console.error('❌ Erro ao buscar limite do cliente:', err);
       console.error('❌ Detalhes:', err.response?.data);
@@ -2427,6 +2432,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       if (creditoCliente > 0 && !decisaoCreditoTomada) {
         console.log('💰 Cliente possui crédito de R$', creditoCliente.toFixed(2));
         console.log('❓ Perguntando ao usuário se deseja usar o crédito...');
+        setOrigemModalCredito('finalizacao');
         setShowCreditoModal(true);
         setLoading(false);
         return;
@@ -5284,6 +5290,12 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                   }}>
                     Disponível: R$ {limiteCliente.limiteDisponivel.toFixed(2)}
                   </Typography>
+                  {creditoCliente > 0 && (
+                    <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 'bold' }}>
+                      💰 Crédito Disponível: R$ {parseFloat(creditoCliente).toFixed(2)}
+                      {usarCredito && " (Será Aplicado)"}
+                    </Typography>
+                  )}
                 </Box>
               </Alert>
             </Grid>
@@ -7392,7 +7404,9 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
               setShowCreditoModal(false);
               setUsarCredito(false);
               setDecisaoCreditoTomada(true);
-              setTimeout(() => salvarVenda(), 100);
+              if (origemModalCredito === 'finalizacao') {
+                setTimeout(() => salvarVenda(), 100);
+              }
             }}
             color="inherit"
             variant="outlined"
@@ -7409,7 +7423,9 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
               setShowCreditoModal(false);
               setUsarCredito(true);
               setDecisaoCreditoTomada(true);
-              setTimeout(() => salvarVenda(), 100);
+              if (origemModalCredito === 'finalizacao') {
+                setTimeout(() => salvarVenda(), 100);
+              }
             }}
             variant="contained"
             color="success"
