@@ -4115,6 +4115,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         }))
       });
       setModo('nova');
+      setOpenModalNovaVenda(true);
     } catch (err) {
       console.error('❌ Erro ao buscar detalhes da venda para edição:', err);
       setError('Não foi possível carregar os detalhes da venda para edição.');
