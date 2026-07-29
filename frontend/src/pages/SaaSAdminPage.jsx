@@ -16,7 +16,8 @@ import {
   SystemUpdate as UpdateIcon, Terminal as LogIcon, Delete as DeleteIcon,
   Storage as StorageIcon, Bolt as BoltIcon, Campaign as CampaignIcon,
   Save as SaveIcon, Send as SendIcon, Link as LinkIcon, WhatsApp as WhatsAppIcon,
-  Settings as SettingsIcon, BugReport as BugReportIcon, Speed as SpeedIcon, VolumeUp as VolumeUpIcon
+  Settings as SettingsIcon, BugReport as BugReportIcon, Speed as SpeedIcon, VolumeUp as VolumeUpIcon,
+  Dns as DnsIcon
 } from '@mui/icons-material';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../context/AuthContext';
@@ -177,6 +178,10 @@ const SaaSAdminPage = () => {
   const [loadingSefaz, setLoadingSefaz] = useState(false);
   const [sefazDoc, setSefazDoc] = useState('nfce');
   const [sefazUf, setSefazUf] = useState('MG');
+
+  // Cockpit de Infraestrutura State
+  const [infraStatus, setInfraStatus] = useState(null);
+  const [loadingInfra, setLoadingInfra] = useState(false);
 
   // Filtros de mensalidades
   const [filtroContaBancaria, setFiltroContaBancaria] = useState('');
@@ -545,6 +550,44 @@ const SaaSAdminPage = () => {
     }
   };
 
+  const carregarStatusInfra = useCallback(async (isManual = false) => {
+    if (isManual) setLoadingInfra(true);
+    try {
+      const res = await axiosInstance.get('/saas/monitor-infra/');
+      setInfraStatus(res.data);
+      if (isManual) {
+        showToast('Métricas de infraestrutura atualizadas.', 'success');
+      }
+    } catch (err) {
+      console.error('Erro ao buscar status de infraestrutura:', err);
+    } finally {
+      if (isManual) setLoadingInfra(false);
+    }
+  }, [axiosInstance, showToast]);
+
+  const forcarConsultaInfra = async () => {
+    setLoadingInfra(true);
+    try {
+      const res = await axiosInstance.post('/saas/monitor-infra/', { acao: 'consultar_agora' });
+      if (res.data.status === 'sucesso') {
+        setInfraStatus(res.data.config);
+        showToast(res.data.mensagem || 'Consulta realizada com sucesso.', 'success');
+      }
+    } catch (err) {
+      showToast('Erro ao forçar consulta de infraestrutura.', 'error');
+    } finally {
+      setLoadingInfra(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarStatusInfra();
+    const interval = setInterval(() => {
+      carregarStatusInfra();
+    }, 60000); // Poll status every 60 seconds
+    return () => clearInterval(interval);
+  }, [carregarStatusInfra]);
+
   const salvarTemplatesSefaz = async () => {
     setLoadingSefaz(true);
     try {
@@ -599,7 +642,8 @@ const SaaSAdminPage = () => {
     { label: "Links de Acesso", icon: <LinkIcon />, show: true },
     { label: "Backup Agendado", icon: <StorageIcon />, show: true },
     { label: "Central de Logs", icon: <BugReportIcon />, show: true },
-    { label: "Monitoramento SEFAZ", icon: <SpeedIcon />, show: true }
+    { label: "Monitoramento SEFAZ", icon: <SpeedIcon />, show: true },
+    { label: "Cockpit de Infraestrutura", icon: <DnsIcon />, show: true }
   ].filter(t => t.show);
 
   const activeTabName = tabs[tabValue]?.label || "Clientes SaaS";
@@ -3689,6 +3733,303 @@ const SaaSAdminPage = () => {
                 </Card>
               </Grid>
             </Grid>
+          </Box>
+        )}
+
+        {activeTabName === "Cockpit de Infraestrutura" && (
+          <Box sx={{ mt: 3 }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+              <Box>
+                <Typography variant="h5" fontWeight={700} color="primary.main">
+                  Cockpit de Infraestrutura & Telemetria
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Monitoramento em tempo real de hardware, armazenamento e banco de dados dos clientes.
+                </Typography>
+              </Box>
+              <Stack direction="row" spacing={2} alignItems="center">
+                <Chip 
+                  label={infraStatus?.thread_ativa ? "Monitor Ativo (5m)" : "Monitor Inativo"} 
+                  color={infraStatus?.thread_ativa ? "success" : "warning"}
+                  variant="outlined"
+                  sx={{ fontWeight: 700 }}
+                />
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => carregarStatusInfra(true)}
+                  disabled={loadingInfra}
+                  startIcon={loadingInfra ? <CircularProgress size={20} color="inherit" /> : <RefreshIcon />}
+                >
+                  Atualizar Métricas
+                </Button>
+              </Stack>
+            </Box>
+
+            {infraStatus?.system ? (
+              <Grid container spacing={3}>
+                {/* 1. MÉTROLOGIA HARDWARE CARDS */}
+                <Grid item xs={12} md={4}>
+                  <Card variant="outlined" sx={{ borderRadius: 3, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                    <CardContent sx={{ textAlign: 'center', p: 3 }}>
+                      <Typography variant="overline" color="text.secondary" fontWeight={700}>Uso de CPU</Typography>
+                      <Box sx={{ position: 'relative', display: 'inline-flex', my: 2 }}>
+                        <CircularProgress 
+                          variant="determinate" 
+                          value={infraStatus.system.cpu_percent} 
+                          size={100} 
+                          thickness={5}
+                          color={infraStatus.system.cpu_percent > 85 ? "error" : infraStatus.system.cpu_percent > 70 ? "warning" : "primary"}
+                        />
+                        <Box sx={{ top: 0, left: 0, bottom: 0, right: 0, position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Typography variant="h6" component="div" fontWeight={800} color="text.primary">
+                            {infraStatus.system.cpu_percent}%
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                        Carga média processamento
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                  <Card variant="outlined" sx={{ borderRadius: 3, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', bgcolor: infraStatus.system.ram_percent > 85 ? 'rgba(211, 47, 47, 0.02)' : 'inherit' }}>
+                    <CardContent sx={{ textAlign: 'center', p: 3 }}>
+                      <Typography variant="overline" color="text.secondary" fontWeight={700}>Memória RAM Servidor</Typography>
+                      <Box sx={{ position: 'relative', display: 'inline-flex', my: 2 }}>
+                        <CircularProgress 
+                          variant="determinate" 
+                          value={infraStatus.system.ram_percent} 
+                          size={100} 
+                          thickness={5}
+                          color={infraStatus.system.ram_percent > 85 ? "error" : infraStatus.system.ram_percent > 70 ? "warning" : "success"}
+                        />
+                        <Box sx={{ top: 0, left: 0, bottom: 0, right: 0, position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Typography variant="h6" component="div" fontWeight={800} color="text.primary">
+                            {infraStatus.system.ram_percent}%
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                        {infraStatus.system.ram_used_gb} GB usados de {infraStatus.system.ram_total_gb} GB
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                  <Card variant="outlined" sx={{ borderRadius: 3, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', bgcolor: infraStatus.system.disk_percent > 85 ? 'rgba(211, 47, 47, 0.02)' : 'inherit' }}>
+                    <CardContent sx={{ textAlign: 'center', p: 3 }}>
+                      <Typography variant="overline" color="text.secondary" fontWeight={700}>Armazenamento C:\</Typography>
+                      <Box sx={{ position: 'relative', display: 'inline-flex', my: 2 }}>
+                        <CircularProgress 
+                          variant="determinate" 
+                          value={infraStatus.system.disk_percent} 
+                          size={100} 
+                          thickness={5}
+                          color={infraStatus.system.disk_percent > 85 ? "error" : infraStatus.system.disk_percent > 70 ? "warning" : "info"}
+                        />
+                        <Box sx={{ top: 0, left: 0, bottom: 0, right: 0, position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Typography variant="h6" component="div" fontWeight={800} color="text.primary">
+                            {infraStatus.system.disk_percent}%
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                        {infraStatus.system.disk_free_gb} GB livres de {infraStatus.system.disk_total_gb} GB
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                {/* 2. GRÁFICO HISTÓRICO HW E RANKING BANCOS */}
+                <Grid item xs={12} md={7}>
+                  <Card variant="outlined" sx={{ borderRadius: 3, p: 3 }}>
+                    <Typography variant="subtitle1" fontWeight={700} mb={2}>
+                      Histórico de Telemetria (Últimas 24 Horas)
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                    <Box sx={{ width: '100%', height: 260 }}>
+                      {infraStatus.historico && infraStatus.historico.length > 0 ? (
+                        <ResponsiveContainer>
+                          <AreaChart
+                            data={infraStatus.historico.map(p => ({
+                              time: new Date(p.datahora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                              cpu: p.cpu_percent,
+                              ram: p.ram_percent
+                            }))}
+                            margin={{ top: 10, right: 30, left: -20, bottom: 0 }}
+                          >
+                            <defs>
+                              <linearGradient id="colorCpu" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#1976d2" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#1976d2" stopOpacity={0.0}/>
+                              </linearGradient>
+                              <linearGradient id="colorRam" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#2e7d32" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#2e7d32" stopOpacity={0.0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.06)" />
+                            <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="rgba(0,0,0,0.4)" />
+                            <YAxis tick={{ fontSize: 10 }} stroke="rgba(0,0,0,0.4)" unit="%" />
+                            <ChartTooltip />
+                            <Area type="monotone" dataKey="cpu" stroke="#1976d2" strokeWidth={2} fillOpacity={1} fill="url(#colorCpu)" name="CPU" />
+                            <Area type="monotone" dataKey="ram" stroke="#2e7d32" strokeWidth={2} fillOpacity={1} fill="url(#colorRam)" name="RAM" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+                          <Typography variant="caption" color="text.secondary">Nenhum dado histórico registrado.</Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} md={5}>
+                  <Card variant="outlined" sx={{ borderRadius: 3, p: 3, height: '100%' }}>
+                    <Typography variant="subtitle1" fontWeight={700} mb={2}>
+                      Bancos Globais & Sistema
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead sx={{ bgcolor: 'action.hover' }}>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 700 }}>Banco de Dados</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700 }}>Tamanho</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          <TableRow hover>
+                            <TableCell sx={{ fontWeight: 600 }}>Central Mãe (aperus_central)</TableCell>
+                            <TableCell align="right">{infraStatus.databases?.aperus_central || 0.0} MB</TableCell>
+                          </TableRow>
+                          <TableRow hover>
+                            <TableCell sx={{ fontWeight: 600 }}>Filial / PDV (sistema_gerencial)</TableCell>
+                            <TableCell align="right">{infraStatus.databases?.sistema_gerencial || 0.0} MB</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+
+                    <Typography variant="subtitle2" fontWeight={700} mt={3} mb={1.5}>
+                      Crescimento/Ranking de Clientes (Tenants)
+                    </Typography>
+                    <TableContainer sx={{ maxHeight: 180 }}>
+                      <Table size="small">
+                        <TableHead sx={{ bgcolor: 'action.hover' }}>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 700 }}>Cliente</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700 }}>Banco (MB)</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700 }}>Arquivos (MB)</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {infraStatus.tenants && infraStatus.tenants.length > 0 ? (
+                            [...infraStatus.tenants]
+                              .sort((a, b) => (b.db_size_mb + b.folder_size_mb) - (a.db_size_mb + a.folder_size_mb))
+                              .map(t => (
+                                <TableRow key={t.id_saas_cliente} hover>
+                                  <TableCell sx={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {t.nome_fantasia}
+                                  </TableCell>
+                                  <TableCell align="right">{t.db_size_mb} MB</TableCell>
+                                  <TableCell align="right">{t.folder_size_mb} MB</TableCell>
+                                </TableRow>
+                              ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={3} align="center">Sem tenants mapeados</TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Card>
+                </Grid>
+
+                {/* 3. LISTAGEM COMPLETA DOS TENANTS */}
+                <Grid item xs={12}>
+                  <Card variant="outlined" sx={{ borderRadius: 3 }}>
+                    <CardContent sx={{ p: 3 }}>
+                      <Typography variant="subtitle1" fontWeight={700} mb={2}>
+                        Clientes SaaS - Mapeamento de Recursos
+                      </Typography>
+                      <Divider sx={{ mb: 2 }} />
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead sx={{ bgcolor: 'action.hover' }}>
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 700 }}>ID</TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>Razão Social / Fantasia</TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>CNPJ</TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>Schema MySQL</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 700 }}>Espaço Banco (MySQL)</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 700 }}>Espaço Arquivos (Disco)</TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>Licença</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {infraStatus.tenants && infraStatus.tenants.length > 0 ? (
+                              infraStatus.tenants.map(t => (
+                                <TableRow key={t.id_saas_cliente} hover>
+                                  <TableCell>{t.id_saas_cliente}</TableCell>
+                                  <TableCell>
+                                    <Typography variant="body2" fontWeight={600}>{t.nome_fantasia}</Typography>
+                                  </TableCell>
+                                  <TableCell>{t.cnpj}</TableCell>
+                                  <TableCell><code>{t.db_name || 'N/A'}</code></TableCell>
+                                  <TableCell align="right">
+                                    <Chip 
+                                      label={`${t.db_size_mb} MB`} 
+                                      size="small" 
+                                      color={t.db_size_mb > 500 ? "error" : t.db_size_mb > 150 ? "warning" : "default"}
+                                      sx={{ fontWeight: 600 }}
+                                    />
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    <Chip 
+                                      label={`${t.folder_size_mb} MB`} 
+                                      size="small" 
+                                      color={t.folder_size_mb > 1000 ? "error" : t.folder_size_mb > 300 ? "warning" : "default"}
+                                      sx={{ fontWeight: 600 }}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Chip 
+                                      label={t.status_licenca} 
+                                      size="small" 
+                                      color={t.status_licenca === 'ATIVO' ? 'success' : 'error'}
+                                      sx={{ fontWeight: 700, fontSize: '10px' }}
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            ) : (
+                              <TableRow>
+                                <TableCell colSpan={7} align="center">
+                                  Nenhum cliente cadastrado no SaaS central.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+              </Grid>
+            ) : (
+              <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" py={8}>
+                <CircularProgress size={40} sx={{ mb: 2 }} />
+                <Typography variant="body2" color="text.secondary">Carregando telemetria e espaço em disco do servidor...</Typography>
+              </Box>
+            )}
           </Box>
         )}
       </Paper>
