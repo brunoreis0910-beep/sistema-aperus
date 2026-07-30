@@ -3,7 +3,7 @@ import {
   Box, Typography, Card, CardContent, Button, Table, TableBody, TableCell, 
   TableContainer, TableHead, TableRow, Paper, Chip, Stack, TextField, 
   Dialog, DialogTitle, DialogContent, DialogActions, Grid, IconButton, 
-  Tooltip, CircularProgress, MenuItem
+  Tooltip, CircularProgress, MenuItem, Divider
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SendIcon from '@mui/icons-material/Send';
