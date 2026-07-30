@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'indigo'; // Wait, let's make sure it's 'axios'!
-import axiosInstance from 'axios'; // We use 'axios' library
+import axios from 'axios';
+const axiosLib = axios;
 import { 
   Box, Container, Paper, Typography, TextField, Button, 
   CircularProgress, Alert, Divider, Stack, Grid, Stepper, Step, StepLabel
@@ -10,9 +10,6 @@ import SignatureIcon from '@mui/icons-material/Gesture';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import SecurityIcon from '@mui/icons-material/Security';
 import EmailIcon from '@mui/icons-material/Email';
-
-// Import local axios directly
-import axiosLib from 'axios';
 
 const getApiBaseUrl = () => {
   const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(window.location.hostname);
