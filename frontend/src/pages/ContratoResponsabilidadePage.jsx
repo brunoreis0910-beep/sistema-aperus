@@ -40,6 +40,7 @@ export default function ContratoResponsabilidadePage() {
     cliente_nome: '',
     cliente_documento: '',
     cliente_whatsapp: '',
+    cliente_email: '',
     texto_contrato: DEFAULT_TEMPLATE
   });
   const [submitting, setSubmitting] = useState(false);
@@ -66,8 +67,8 @@ export default function ContratoResponsabilidadePage() {
   }, []);
 
   const handleCreate = async () => {
-    if (!novoContrato.cliente_nome || !novoContrato.texto_contrato) {
-      showToast('Nome do cliente e o texto do contrato são obrigatórios.', 'warning');
+    if (!novoContrato.cliente_nome || !novoContrato.cliente_documento || !novoContrato.cliente_email || !novoContrato.texto_contrato) {
+      showToast('Nome, CPF/CNPJ, E-mail e Conteúdo do contrato são obrigatórios.', 'warning');
       return;
     }
     
@@ -77,6 +78,7 @@ export default function ContratoResponsabilidadePage() {
         cliente_nome: novoContrato.cliente_nome,
         cliente_documento: novoContrato.cliente_documento,
         cliente_whatsapp: novoContrato.cliente_whatsapp,
+        cliente_email: novoContrato.cliente_email,
         texto_contrato: novoContrato.texto_contrato
       });
       showToast('Contrato de responsabilidade criado com sucesso!', 'success');
@@ -85,6 +87,7 @@ export default function ContratoResponsabilidadePage() {
         cliente_nome: '',
         cliente_documento: '',
         cliente_whatsapp: '',
+        cliente_email: '',
         texto_contrato: DEFAULT_TEMPLATE
       });
       carregarContratos();
@@ -204,7 +207,7 @@ export default function ContratoResponsabilidadePage() {
             <TableHead sx={{ bgcolor: 'grey.50' }}>
               <TableRow>
                 <TableCell>Cliente</TableCell>
-                <TableCell>WhatsApp</TableCell>
+                <TableCell>Contato</TableCell>
                 <TableCell align="center">Criado em</TableCell>
                 <TableCell align="center">Assinado em</TableCell>
                 <TableCell align="center">Situação</TableCell>
@@ -222,7 +225,17 @@ export default function ContratoResponsabilidadePage() {
                       </Typography>
                     )}
                   </TableCell>
-                  <TableCell>{c.cliente_whatsapp || 'Não informado'}</TableCell>
+                  <TableCell>
+                    {c.cliente_whatsapp && (
+                      <Typography variant="body2">{c.cliente_whatsapp}</Typography>
+                    )}
+                    {c.cliente_email && (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {c.cliente_email}
+                      </Typography>
+                    )}
+                    {!c.cliente_whatsapp && !c.cliente_email && 'Não informado'}
+                  </TableCell>
                   <TableCell align="center">
                     {new Date(c.criado_em).toLocaleDateString('pt-BR')}
                   </TableCell>
@@ -322,14 +335,24 @@ export default function ContratoResponsabilidadePage() {
                 onChange={(e) => setNovoContrato({ ...novoContrato, cliente_documento: e.target.value })}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={12} sm={6}>
               <TextField
-                label="WhatsApp do Cliente (Com DDD)"
+                label="WhatsApp do Cliente"
                 fullWidth
                 size="small"
                 value={novoContrato.cliente_whatsapp}
                 onChange={(e) => setNovoContrato({ ...novoContrato, cliente_whatsapp: e.target.value })}
                 placeholder="Ex: 34999999999"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="E-mail do Cliente *"
+                fullWidth
+                size="small"
+                value={novoContrato.cliente_email}
+                onChange={(e) => setNovoContrato({ ...novoContrato, cliente_email: e.target.value })}
+                placeholder="Ex: cliente@email.com"
               />
             </Grid>
             <Grid item xs={12}>

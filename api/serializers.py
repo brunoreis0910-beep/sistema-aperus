@@ -2437,6 +2437,9 @@ class ContratoResponsabilidadeSerializer(serializers.ModelSerializer):
         from .models import ContratoResponsabilidade
         model = ContratoResponsabilidade
         fields = '__all__'
+        extra_kwargs = {
+            'token_validacao': {'write_only': True, 'required': False},
+        }
 
 
 

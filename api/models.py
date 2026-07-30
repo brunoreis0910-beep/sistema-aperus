@@ -6375,6 +6375,7 @@ class ContratoResponsabilidade(models.Model):
     cliente_nome = models.CharField(max_length=255)
     cliente_documento = models.CharField(max_length=20, blank=True)
     cliente_whatsapp = models.CharField(max_length=20, blank=True)
+    cliente_email = models.CharField(max_length=255, blank=True, null=True)
     texto_contrato = models.TextField()
     criado_em = models.DateTimeField(auto_now_add=True)
     assinado_em = models.DateTimeField(null=True, blank=True)
@@ -6383,6 +6384,8 @@ class ContratoResponsabilidade(models.Model):
     assinatura_desenho = models.TextField(blank=True, null=True, help_text="Desenho em Base64")
     status = models.CharField(max_length=20, default='PENDENTE') # 'PENDENTE', 'ASSINADO'
     ip_assinatura = models.CharField(max_length=45, blank=True, null=True)
+    token_validacao = models.CharField(max_length=6, blank=True, null=True)
+    token_expira = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         db_table = 'contrato_responsabilidade'

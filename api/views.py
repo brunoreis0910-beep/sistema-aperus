@@ -8102,7 +8102,7 @@ class ContratoResponsabilidadeViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_permissions(self):
-        if self.action in ['retrieve', 'assinar']:
+        if self.action in ['retrieve', 'assinar', 'validar_documento_enviar_token', 'confirmar_token']:
             return [permissions.AllowAny()]
         return super().get_permissions()
 
@@ -8117,11 +8117,96 @@ class ContratoResponsabilidadeViewSet(viewsets.ModelViewSet):
         return super().get_object()
 
     @action(detail=True, methods=['post'], permission_classes=[AllowAny])
+    def validar_documento_enviar_token(self, request, pk=None):
+        try:
+            contrato = self.get_object()
+            documento_informado = request.data.get('documento', '').strip()
+            
+            if not documento_informado:
+                return Response({'error': 'CPF/CNPJ é obrigatório.'}, status=400)
+                
+            def limpar_doc(val):
+                return ''.join(c for c in val if c.isdigit())
+                
+            doc_limpo_informado = limpar_doc(documento_informado)
+            doc_limpo_contrato = limpar_doc(contrato.cliente_documento)
+            
+            if not doc_limpo_contrato or doc_limpo_informado != doc_limpo_contrato:
+                return Response({'error': 'CPF/CNPJ incorreto. O documento informado não confere com o contrato.'}, status=400)
+                
+            if not contrato.cliente_email:
+                return Response({'error': 'Este contrato não possui e-mail cadastrado para validação de assinatura.'}, status=400)
+                
+            # Gerar token de 6 dígitos
+            import random
+            token = ''.join(random.choices('0123456789', k=6))
+            
+            from django.utils import timezone
+            contrato.token_validacao = token
+            contrato.token_expira = timezone.now() + timezone.timedelta(minutes=15)
+            contrato.save()
+            
+            # Envia o e-mail OTP
+            envio_ok = enviar_email_token(contrato.cliente_email, token)
+            if not envio_ok:
+                return Response({'error': 'Falha ao enviar e-mail com o token. Verifique as configurações SMTP ou tente novamente.'}, status=500)
+                
+            # Mascarar e-mail para exibição
+            email = contrato.cliente_email
+            parts = email.split('@')
+            name, domain = parts[0], parts[1]
+            if len(name) <= 2:
+                masked_name = name[0] + '*' * (len(name) - 1)
+            else:
+                masked_name = name[0] + '*' * (len(name) - 2) + name[-1]
+            email_mascarado = f"{masked_name}@{domain}"
+            
+            return Response({
+                'success': True,
+                'message': 'Token enviado com sucesso!',
+                'email_mascarado': email_mascarado
+            }, status=200)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny])
+    def confirmar_token(self, request, pk=None):
+        try:
+            contrato = self.get_object()
+            token_informado = request.data.get('token', '').strip()
+            
+            if not token_informado:
+                return Response({'error': 'O código token é obrigatório.'}, status=400)
+                
+            from django.utils import timezone
+            if not contrato.token_validacao or not contrato.token_expira or timezone.now() > contrato.token_expira:
+                return Response({'error': 'Nenhum token ativo ou o tempo limite de 15 minutos expirou. Por favor, solicite um novo código.'}, status=400)
+                
+            if token_informado != contrato.token_validacao:
+                return Response({'error': 'Código incorreto. Verifique seu e-mail e tente novamente.'}, status=400)
+                
+            return Response({'success': True, 'message': 'Código validado com sucesso!'}, status=200)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny])
     def assinar(self, request, pk=None):
         try:
             contrato = self.get_object()
             if contrato.status == 'ASSINADO':
                 return Response({'error': 'Contrato já assinado.'}, status=400)
+
+            # Para assinar, o token deve ser informado e válido (como segunda camada de verificação no submit)
+            token_informado = request.data.get('token', '').strip()
+            if not token_informado:
+                return Response({'error': 'Token de validação do e-mail é obrigatório para assinar.'}, status=400)
+                
+            from django.utils import timezone
+            if not contrato.token_validacao or token_informado != contrato.token_validacao:
+                return Response({'error': 'Token inválido ou expirado.'}, status=400)
+                
+            if contrato.token_expira and timezone.now() > contrato.token_expira:
+                return Response({'error': 'Token expirado. Por favor, solicite um novo código.'}, status=400)
 
             nome = request.data.get('nome')
             cpf = request.data.get('cpf')
@@ -8130,12 +8215,15 @@ class ContratoResponsabilidadeViewSet(viewsets.ModelViewSet):
             if not nome or not cpf:
                 return Response({'error': 'Nome e CPF são obrigatórios.'}, status=400)
 
-            from django.utils import timezone
             contrato.assinado_por_nome = nome
             contrato.assinado_por_cpf = cpf
             contrato.assinatura_desenho = assinatura
             contrato.assinado_em = timezone.now()
             contrato.status = 'ASSINADO'
+            
+            # Limpar o token após uso para que não seja reutilizado
+            contrato.token_validacao = None
+            contrato.token_expira = None
             
             x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
             if x_forwarded_for:

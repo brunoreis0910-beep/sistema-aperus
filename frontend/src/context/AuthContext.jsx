@@ -139,8 +139,14 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setPermissions({});
 
-    // Navega apenas se nao estiver ja na pagina de login
-    if (location.pathname !== '/login') {
+    // Navega apenas se nao estiver em uma pagina publica ou de login
+    const publicRoutes = [
+      '/login', '/login-simple', '/login-clean', '/auto-login', 
+      '/auto-login-dev', '/configuracao-ip', '/cotacao-resposta', 
+      '/cadastro-cliente', '/assinar-contrato'
+    ];
+    const isPublicRoute = publicRoutes.some(route => location.pathname.startsWith(route));
+    if (!isPublicRoute) {
       navigate('/login', { replace: true });
     }
   };
