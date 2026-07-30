@@ -111,7 +111,7 @@ export default function ContratoResponsabilidadePage() {
 
   const getAssinarUrl = (uuid) => {
     const origin = window.location.origin;
-    return `${origin}/#/assinar-contrato/${uuid}`;
+    return `${origin}/assinar-contrato/${uuid}`;
   };
 
   const handleCopiarLink = (uuid) => {
