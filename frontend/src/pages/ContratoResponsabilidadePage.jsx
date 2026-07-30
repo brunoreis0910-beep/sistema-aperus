@@ -51,7 +51,9 @@ export default function ContratoResponsabilidadePage() {
     try {
       setLoading(true);
       const res = await axiosInstance.get('/contratos-responsabilidade/');
-      setContratos(res.data?.results ?? res.data ?? []);
+      const data = res.data;
+      const list = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []);
+      setContratos(list);
     } catch (err) {
       showToast('Erro ao carregar contratos.', 'error');
     } finally {
@@ -129,12 +131,12 @@ export default function ContratoResponsabilidadePage() {
     window.open(waUrl, '_blank');
   };
 
-  const contratosFiltrados = contratos.filter(c => {
+  const contratosFiltrados = Array.isArray(contratos) ? contratos.filter(c => {
     const bateBusca = c.cliente_nome?.toLowerCase().includes(busca.toLowerCase()) || 
                       c.cliente_documento?.includes(busca);
     const bateStatus = filtroStatus === 'TODOS' || c.status === filtroStatus;
     return bateBusca && bateStatus;
-  });
+  }) : [];
 
   const fmtMoeda = (val) => {
     if (!val) return 'R$ 0,00';
