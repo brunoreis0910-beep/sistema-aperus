@@ -319,6 +319,10 @@ from .views import (
     saas_solicitar_upgrade,
     saas_aprovar_upgrade,
     saas_rejeitar_upgrade,
+    saas_monitor_sefaz_status,
+    saas_monitor_infra,
+    central_gerar_voz,
+    ContratoResponsabilidadeViewSet,
 )
 
 from .views_tenant import saas_mapear_tenant
@@ -415,6 +419,7 @@ router.register(r'saas-versoes', VersaoSistemaViewSet, basename='saas-versao')
 router.register(r'saas-historico-atualizacoes', HistoricoAtualizacaoViewSet, basename='saas-historico-atualizacao')
 router.register(r'saas-agendamento', ConfiguracaoAgendamentoViewSet, basename='saas-agendamento')
 router.register(r'saas-comunicados', ComunicadoSaaSViewSet, basename='saas-comunicados')
+router.register(r'contratos-responsabilidade', ContratoResponsabilidadeViewSet, basename='contrato-responsabilidade')
 # PCP — Planejamento e Controle de Produção
 router.register(r'pcp/ordens', OrdemProducaoViewSet, basename='pcp-ordem')
 router.register(r'pcp/composicoes', ComposicaoProdutoViewSet, basename='pcp-composicao')
@@ -756,6 +761,10 @@ urlpatterns = [
     path('saas/backup-config/', saas_obter_backup_config, name='saas-backup-config-obter'),
     path('saas/backup-config/salvar/', saas_salvar_backup_config, name='saas-backup-config-salvar'),
     path('saas/backup-config/forcar/', saas_forcar_backup, name='saas-backup-config-forcar'),
+    path('saas/monitor-sefaz/', saas_monitor_sefaz_status, name='saas-monitor-sefaz'),
+    path('saas/monitor-infra/', saas_monitor_infra, name='saas-monitor-infra'),
+    path('central/metricas-hardware/', saas_monitor_infra, name='central-metricas-hardware'),
+    path('central/gerar-voz/', central_gerar_voz, name='central-gerar-voz'),
     path('git-webhook-update/', github_webhook_update, name='git-webhook-update'),
     
     # Logs centralizados de exceções de clientes (central-logs)

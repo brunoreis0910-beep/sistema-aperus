@@ -133,6 +133,8 @@ import HotelPMSPage from './pages/HotelPMSPage'
 import SaaSAdminPage from './pages/SaaSAdminPage'
 import ConfigContratoPadraoPage from './pages/ConfigContratoPadraoPage'
 import MeuContratoPage from './pages/MeuContratoPage'
+import ContratoResponsabilidadePage from './pages/ContratoResponsabilidadePage'
+import AssinarContratoPublico from './pages/AssinarContratoPublico'
 import GerenciadorBloqueioSaaS from './components/GerenciadorBloqueioSaaS'
 import MapeamentoTenantPage from './pages/MapeamentoTenantPage'
 import { useEffect } from 'react'
@@ -211,6 +213,7 @@ export default function App() {
                   <Route path='/configuracao-ip' element={<ConfiguracaoIP />} />
                   <Route path='/cotacao-resposta/:token' element={<CotacaoRespostaPublica />} />
                   <Route path='/cadastro-cliente' element={<CadastroClienteRemoto />} />
+                  <Route path='/assinar-contrato/:uuid' element={<AssinarContratoPublico />} />
 
                   {/* Rotas de Debug e Testes (desenvolvimento) */}
                   <Route path='/demo' element={<UltraWideDemo />} />
@@ -333,6 +336,7 @@ export default function App() {
                     <Route path='saas-central' element={<SaaSAdminPage />} />
                     <Route path='saas-contrato-config' element={<ConfigContratoPadraoPage />} />
                     <Route path='meu-contrato' element={<MeuContratoPage />} />
+                    <Route path='contrato-responsabilidade' element={<ContratoResponsabilidadePage />} />
                   </Route>
 
                   <Route path='*' element={<Navigate to='/' replace />} />

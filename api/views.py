@@ -290,94 +290,6 @@ class FinanceiroContaViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
-    def partial_update(self, request, *args, **kwargs):
-        from decimal import Decimal
-        import decimal
-        from django.db import transaction
-        
-        instance = self.get_object()
-        status_conta = request.data.get('status_conta')
-        valor_liquidado_val = request.data.get('valor_liquidado')
-        
-        if status_conta == 'Paga' and valor_liquidado_val is not None:
-            try:
-                valor_liquidado = Decimal(str(valor_liquidado_val))
-            except (ValueError, TypeError, decimal.InvalidOperation):
-                valor_liquidado = instance.valor_parcela
-                
-            original_valor = instance.valor_parcela
-            
-            # Obtém juros, multa e desconto enviados
-            juros_val = request.data.get('valor_juros')
-            multa_val = request.data.get('valor_multa')
-            desconto_val = request.data.get('valor_desconto')
-            
-            try:
-                juros = Decimal(str(juros_val)) if juros_val is not None else Decimal('0.00')
-            except (ValueError, TypeError, decimal.InvalidOperation):
-                juros = Decimal('0.00')
-                
-            try:
-                multa = Decimal(str(multa_val)) if multa_val is not None else Decimal('0.00')
-            except (ValueError, TypeError, decimal.InvalidOperation):
-                multa = Decimal('0.00')
-                
-            try:
-                desconto = Decimal(str(desconto_val)) if desconto_val is not None else Decimal('0.00')
-            except (ValueError, TypeError, decimal.InvalidOperation):
-                desconto = Decimal('0.00')
-                
-            # Calcula o valor principal pago (deduz juros/multa e soma o desconto concedido)
-            valor_principal_pago = valor_liquidado - juros - multa + desconto
-            
-            # Se for baixa parcial (valor principal pago maior que 0 e menor que o valor total)
-            if Decimal('0.00') < valor_principal_pago < original_valor:
-                with transaction.atomic():
-                    diferenca = original_valor - valor_principal_pago
-                    
-                    # 1. Ajusta o valor_parcela para o valor principal pago na conta atual
-                    mutable_data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
-                    mutable_data['valor_parcela'] = float(valor_principal_pago)
-                    
-                    serializer = self.get_serializer(instance, data=mutable_data, partial=True)
-                    serializer.is_valid(raise_exception=True)
-                    self.perform_update(serializer)
-                    
-                    # 2. Cria a nova conta para o saldo restante
-                    # Copia todos os campos relevantes
-                    FinanceiroConta.objects.create(
-                        tipo_conta=instance.tipo_conta,
-                        id_cliente_fornecedor=instance.id_cliente_fornecedor,
-                        descricao=f"SALDO RESTANTE - {instance.descricao}",
-                        valor_parcela=diferenca,
-                        valor_liquidado=Decimal('0.00'),
-                        valor_juros=Decimal('0.00'),
-                        valor_multa=Decimal('0.00'),
-                        valor_desconto=Decimal('0.00'),
-                        data_emissao=instance.data_emissao,
-                        data_vencimento=instance.data_vencimento,
-                        status_conta='Pendente',
-                        forma_pagamento=instance.forma_pagamento,
-                        id_venda_origem=instance.id_venda_origem,
-                        id_compra_origem=instance.id_compra_origem,
-                        id_os_origem=instance.id_os_origem,
-                        id_operacao=instance.id_operacao,
-                        id_departamento=instance.id_departamento,
-                        id_centro_custo=instance.id_centro_custo,
-                        id_conta_cobranca=instance.id_conta_cobranca,
-                        documento_numero=instance.documento_numero,
-                        parcela_numero=instance.parcela_numero,
-                        parcela_total=instance.parcela_total,
-                        id_aluguel_origem=instance.id_aluguel_origem,
-                        gerencial=instance.gerencial,
-                        id_safra=instance.id_safra,
-                        id_contrato_agricola=instance.id_contrato_agricola
-                    )
-                    
-                    return Response(serializer.data)
-                    
-        return super().partial_update(request, *args, **kwargs)
-
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 
@@ -4952,6 +4864,292 @@ class ComunicadoSaaSViewSet(viewsets.ModelViewSet):
         return models.ComunicadoSaaS.objects.none()
 
 
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def saas_monitor_sefaz_status(request):
+    """
+    GET: Retorna o status atual do monitor e os templates configurados.
+    POST: Permite forçar uma atualização imediata do monitor ou atualizar as configurações/templates.
+    """
+    from api.services.tecnospeed_monitor import carregar_config, salvar_config, checar_status_tecnospeed, processar_transicao_status
+    from django.utils import timezone
+
+    if request.method == 'GET':
+        uf = request.query_params.get('uf', 'MG').upper()
+        config = carregar_config()
+        
+        if "documentos" not in config:
+            config["documentos"] = {}
+            
+        if uf not in config["documentos"] or not config["documentos"][uf]:
+            config["documentos"][uf] = {}
+            for doc in ["nfce", "nfe", "cte"]:
+                status_novo, tempo, erro = checar_status_tecnospeed(uf, doc)
+                config["documentos"][uf][doc] = {
+                    "status_atual": status_novo,
+                    "ultimo_erro": erro,
+                    "tempo_resposta": tempo,
+                    "ultima_atualizacao": timezone.now().isoformat(),
+                    "comunicado_ativo_id": None,
+                    "tempos_resposta": [{
+                        "datahora": timezone.now().isoformat(),
+                        "tempo": tempo,
+                        "status": status_novo
+                    }]
+                }
+            salvar_config(config)
+            
+        import threading
+        config["thread_ativa"] = any(t.name == "SefazMonitorThread" for t in threading.enumerate())
+        config["uf_atual"] = uf
+        return Response(config, status=200)
+        
+    elif request.method == 'POST':
+        if not request.user or not request.user.is_authenticated:
+            return Response({"error": "Não autorizado"}, status=401)
+            
+        acao = request.data.get('acao')
+        
+        if acao == 'consultar_agora':
+            uf = request.data.get('uf', 'MG').upper()
+            config = carregar_config()
+            
+            if "documentos" not in config:
+                config["documentos"] = {}
+                
+            if uf not in config["documentos"]:
+                config["documentos"][uf] = {}
+                
+            for doc in ["nfce", "nfe", "cte"]:
+                if doc not in config["documentos"][uf]:
+                    config["documentos"][uf][doc] = {
+                        "status_atual": "NORMAL",
+                        "ultimo_erro": "",
+                        "tempo_resposta": 0,
+                        "ultima_atualizacao": "",
+                        "comunicado_ativo_id": None,
+                        "tempos_resposta": []
+                    }
+                
+                doc_config = config["documentos"][uf][doc]
+                status_anterior = doc_config.get("status_atual", "NORMAL")
+                
+                status_novo, tempo, erro = checar_status_tecnospeed(uf, doc)
+                
+                if status_novo != "INDETERMINADO":
+                    doc_config["tempo_resposta"] = tempo
+                    doc_config["ultimo_erro"] = erro
+                    doc_config["ultima_atualizacao"] = timezone.now().isoformat()
+                    
+                    if "tempos_resposta" not in doc_config:
+                        doc_config["tempos_resposta"] = []
+                    doc_config["tempos_resposta"].append({
+                        "datahora": timezone.now().isoformat(),
+                        "tempo": tempo,
+                        "status": status_novo
+                    })
+                    doc_config["tempos_resposta"] = doc_config["tempos_resposta"][-30:]
+                    
+                    if status_novo != status_anterior:
+                        doc_config["status_atual"] = status_novo
+                        config["documentos"][uf][doc] = doc_config
+                        salvar_config(config)
+                        processar_transicao_status(uf, doc, status_anterior, status_novo, tempo, erro)
+                    else:
+                        config["documentos"][uf][doc] = doc_config
+                        salvar_config(config)
+            
+            # Retrocompatibilidade
+            if uf in config["documentos"] and "nfce" in config["documentos"][uf]:
+                nfce_cfg = config["documentos"][uf]["nfce"]
+                config["status_atual"] = nfce_cfg.get("status_atual", "NORMAL")
+                config["ultimo_erro"] = nfce_cfg.get("ultimo_erro", "")
+                config["tempo_resposta"] = nfce_cfg.get("tempo_resposta", 0)
+                config["ultima_atualizacao"] = nfce_cfg.get("ultima_atualizacao", "")
+                config["tempos_resposta"] = nfce_cfg.get("tempos_resposta", [])
+                config["comunicado_ativo_id"] = nfce_cfg.get("comunicado_ativo_id")
+                salvar_config(config)
+                
+            config = carregar_config()
+            return Response({
+                "status": "sucesso",
+                "mensagem": f"Consulta instantânea para todos os documentos da UF {uf} realizada com sucesso.",
+                "config": config
+            }, status=200)
+            
+        elif acao == 'atualizar_templates':
+            novos_templates = request.data.get('templates')
+            if not novos_templates:
+                return Response({"error": "Templates ausentes"}, status=400)
+                
+            config = carregar_config()
+            for key in ['NORMAL', 'OSCILACAO', 'CONTINGENCIA']:
+                if key in novos_templates:
+                    # Garantir campos com o tipo correto
+                    t_new = novos_templates[key]
+                    if 'titulo' in t_new: config['templates'][key]['titulo'] = t_new['titulo']
+                    if 'mensagem' in t_new: config['templates'][key]['mensagem'] = t_new['mensagem']
+                    if 'enviar_whatsapp' in t_new: config['templates'][key]['enviar_whatsapp'] = bool(t_new['enviar_whatsapp'])
+                    if 'enviar_notificacao' in t_new: config['templates'][key]['enviar_notificacao'] = bool(t_new['enviar_notificacao'])
+                    
+            salvar_config(config)
+            return Response({
+                "status": "sucesso",
+                "mensagem": "Templates de contingência atualizados com sucesso.",
+                "config": config
+            }, status=200)
+            
+        return Response({"error": "Ação inválida ou não especificada"}, status=400)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def saas_monitor_infra(request):
+    """
+    GET: Retorna as métricas de infraestrutura do servidor e bancos.
+    POST: Permite forçar uma atualização imediata das métricas.
+    """
+    if not request.user or not request.user.is_authenticated:
+        return Response({"error": "Não autorizado"}, status=401)
+        
+    from api.services.infra_monitor import carregar_config_infra, salvar_config_infra
+    import threading
+    import os
+    
+    if request.method == 'GET':
+        config = carregar_config_infra()
+        config["thread_ativa"] = any(t.name == "InfraMonitorThread" for t in threading.enumerate())
+        return Response(config, status=200)
+        
+    elif request.method == 'POST':
+        acao = request.data.get('acao')
+        if acao == 'consultar_agora':
+            # Executa coleta manual síncrona
+            import psutil
+            from django.utils import timezone
+            from api.services.infra_monitor import get_mysql_db_sizes, get_dir_size
+            
+            mem = psutil.virtual_memory()
+            disk = psutil.disk_usage('C:\\')
+            cpu = psutil.cpu_percent(interval=1)
+            
+            system_metrics = {
+                "cpu_percent": round(cpu, 1),
+                "ram_total_gb": round(mem.total / (1024**3), 2),
+                "ram_used_gb": round(mem.used / (1024**3), 2),
+                "ram_percent": mem.percent,
+                "disk_total_gb": round(disk.total / (1024**3), 2),
+                "disk_free_gb": round(disk.free / (1024**3), 2),
+                "disk_percent": disk.percent
+            }
+            
+            db_sizes = get_mysql_db_sizes()
+            
+            from api.models import SaaSCliente
+            tenants_data = []
+            clientes = list(SaaSCliente.objects.all())
+            
+            for client in clientes:
+                schema = client.schema_name
+                db_name = f"aperus_{schema}" if client.banco_criado else None
+                db_size = db_sizes.get(db_name, 0.0) if db_name else 0.0
+                
+                folder_paths = [
+                    os.path.join(r"C:\APERUS\arquivos_clientes", f"aperus_{schema}"),
+                    os.path.join(r"C:\APERUS\arquivos_clientes", schema)
+                ]
+                
+                folder_size = 0.0
+                for path in folder_paths:
+                    if os.path.exists(path):
+                        folder_size = get_dir_size(path)
+                        break
+                        
+                tenants_data.append({
+                    "id_saas_cliente": client.id_saas_cliente,
+                    "nome_fantasia": client.nome_fantasia,
+                    "schema_name": schema,
+                    "cnpj": client.cnpj,
+                    "status_licenca": client.status_licenca,
+                    "db_name": db_name,
+                    "db_size_mb": db_size,
+                    "folder_size_mb": folder_size
+                })
+                
+            config = carregar_config_infra()
+            config["system"] = system_metrics
+            config["databases"] = {
+                "aperus_central": db_sizes.get("aperus_central", 0.0),
+                "sistema_gerencial": db_sizes.get("sistema_gerencial", 0.0)
+            }
+            config["tenants"] = tenants_data
+            
+            if "historico" not in config:
+                config["historico"] = []
+                
+            config["historico"].append({
+                "datahora": timezone.now().isoformat(),
+                "cpu_percent": system_metrics["cpu_percent"],
+                "ram_percent": system_metrics["ram_percent"],
+                "disk_percent": system_metrics["disk_percent"]
+            })
+            config["historico"] = config["historico"][-288:]
+            
+            salvar_config_infra(config)
+            config["thread_ativa"] = any(t.name == "InfraMonitorThread" for t in threading.enumerate())
+            
+            return Response({
+                "status": "sucesso",
+                "mensagem": "Telemetria de hardware e tamanho de bancos atualizada com sucesso.",
+                "config": config
+            }, status=200)
+            
+        return Response({"error": "Ação inválida ou não especificada"}, status=400)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def central_gerar_voz(request):
+    """
+    Gera áudio MP3 a partir de um texto usando edge-tts.
+    """
+    from django.http import HttpResponse
+    texto = request.GET.get('texto', '')
+    if not texto:
+        return HttpResponse("Texto não fornecido", status=400)
+        
+    voice = request.GET.get('voice', 'pt-BR-FranciscaNeural')
+    
+    async def get_audio():
+        import edge_tts
+        communicate = edge_tts.Communicate(texto, voice)
+        audio_data = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_data += chunk["data"]
+        return audio_data
+
+    try:
+        import asyncio
+        from asgiref.sync import async_to_sync
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+        if loop.is_running():
+            audio_bytes = async_to_sync(get_audio)()
+        else:
+            audio_bytes = loop.run_until_complete(get_audio())
+            
+        response = HttpResponse(audio_bytes, content_type='audio/mpeg')
+        response['Content-Length'] = len(audio_bytes)
+        return response
+    except Exception as e:
+        return HttpResponse(f"Erro ao gerar voz: {str(e)}", status=500)
+
+
 # ─── Public API Endpoints for Client Instances ────────────────────────────────
 
 @api_view(['GET'])
@@ -7896,3 +8094,57 @@ def saas_editar_plano(request, plano_id):
         return Response({'error': 'Plano não localizado.'}, status=404)
     except Exception as e:
         return Response({'error': str(e)}, status=500)
+
+
+class ContratoResponsabilidadeViewSet(viewsets.ModelViewSet):
+    queryset = models.ContratoResponsabilidade.objects.all().order_by('-criado_em')
+    serializer_class = serializers.ContratoResponsabilidadeSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in ['retrieve', 'assinar']:
+            return [permissions.AllowAny()]
+        return super().get_permissions()
+
+    def get_object(self):
+        pk = self.kwargs.get('pk')
+        import uuid
+        try:
+            val_uuid = uuid.UUID(pk)
+            return models.ContratoResponsabilidade.objects.get(uuid=val_uuid)
+        except (ValueError, models.ContratoResponsabilidade.DoesNotExist):
+            pass
+        return super().get_object()
+
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny])
+    def assinar(self, request, pk=None):
+        try:
+            contrato = self.get_object()
+            if contrato.status == 'ASSINADO':
+                return Response({'error': 'Contrato já assinado.'}, status=400)
+
+            nome = request.data.get('nome')
+            cpf = request.data.get('cpf')
+            assinatura = request.data.get('assinatura')
+
+            if not nome or not cpf:
+                return Response({'error': 'Nome e CPF são obrigatórios.'}, status=400)
+
+            from django.utils import timezone
+            contrato.assinado_por_nome = nome
+            contrato.assinado_por_cpf = cpf
+            contrato.assinatura_desenho = assinatura
+            contrato.assinado_em = timezone.now()
+            contrato.status = 'ASSINADO'
+            
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip = x_forwarded_for.split(',')[0].strip()
+            else:
+                ip = request.META.get('REMOTE_ADDR')
+            contrato.ip_assinatura = ip
+
+            contrato.save()
+            return Response({'success': True, 'message': 'Contrato assinado com sucesso!'}, status=200)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)

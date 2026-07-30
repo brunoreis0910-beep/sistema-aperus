@@ -2432,6 +2432,13 @@ class GabaritoCustomizadoSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ContratoResponsabilidadeSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import ContratoResponsabilidade
+        model = ContratoResponsabilidade
+        fields = '__all__'
+
+
 
 
 

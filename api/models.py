@@ -6370,6 +6370,26 @@ class UserPreferencia(models.Model):
         return f"{self.user.username} - {self.chave}"
 
 
+class ContratoResponsabilidade(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+    cliente_nome = models.CharField(max_length=255)
+    cliente_documento = models.CharField(max_length=20, blank=True)
+    cliente_whatsapp = models.CharField(max_length=20, blank=True)
+    texto_contrato = models.TextField()
+    criado_em = models.DateTimeField(auto_now_add=True)
+    assinado_em = models.DateTimeField(null=True, blank=True)
+    assinado_por_nome = models.CharField(max_length=255, blank=True)
+    assinado_por_cpf = models.CharField(max_length=20, blank=True)
+    assinatura_desenho = models.TextField(blank=True, null=True, help_text="Desenho em Base64")
+    status = models.CharField(max_length=20, default='PENDENTE') # 'PENDENTE', 'ASSINADO'
+    ip_assinatura = models.CharField(max_length=45, blank=True, null=True)
+
+    class Meta:
+        db_table = 'contrato_responsabilidade'
+        managed = True
+        ordering = ['-criado_em']
+
+
 
 
 

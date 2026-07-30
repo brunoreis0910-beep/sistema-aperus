@@ -180,6 +180,120 @@ const DashboardLayoutClean = () => {
     }
   };
 
+  // --- MONITORAMENTO SEFAZ GLOBAL ---
+  const prevSefazStatusRef = React.useRef(null);
+
+  const falarAlertaGlobal = async (texto) => {
+    try {
+      const apiBase = axiosInstance.defaults.baseURL || '/api';
+      const cleanBase = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
+      const audioUrl = `${cleanBase}/central/gerar-voz/?texto=${encodeURIComponent(texto)}`;
+      const audio = new Audio(audioUrl);
+      
+      audio.addEventListener('error', () => {
+        falarAlertaNativoGlobal(texto);
+      });
+      
+      await audio.play();
+    } catch (err) {
+      console.warn("Falha ao usar voz neural do servidor, recorrendo à voz do navegador:", err);
+      falarAlertaNativoGlobal(texto);
+    }
+  };
+
+  const falarAlertaNativoGlobal = (texto) => {
+    try {
+      window.speechSynthesis.cancel();
+      const msg = new SpeechSynthesisUtterance(texto);
+      msg.lang = 'pt-BR';
+      msg.rate = 1.0;
+      
+      const voices = window.speechSynthesis.getVoices();
+      const vozNatural = voices.find(v => 
+        (v.lang.includes('pt-BR') || v.lang.includes('pt_BR')) && 
+        (v.name.toLowerCase().includes('natural') || 
+         v.name.toLowerCase().includes('online') || 
+         v.name.toLowerCase().includes('neural'))
+      );
+
+      if (vozNatural) {
+        msg.voice = vozNatural;
+      } else {
+        const ptVoices = voices.filter(v => v.lang.includes('pt-BR') || v.lang.includes('pt_BR'));
+        if (ptVoices.length > 0) {
+          const preferred = ptVoices.find(v => v.name.toLowerCase().includes('google'));
+          msg.voice = preferred || ptVoices[0];
+        }
+      }
+      window.speechSynthesis.speak(msg);
+    } catch (e) {
+      console.error("Erro ao reproduzir sintese de voz nativa global:", e);
+    }
+  };
+
+  React.useEffect(() => {
+    if (!user || !empresaConfig) return;
+    
+    const uf = (empresaConfig.estado || 'MG').toUpperCase();
+    
+    const checarSefazGlobal = async () => {
+      try {
+        const res = await axiosInstance.get('/saas/monitor-sefaz/', { params: { uf } });
+        const data = res.data;
+        
+        if (!data.documentos || !data.documentos[uf]) return;
+        
+        const docTypes = ["nfce", "nfe", "cte"];
+        const currentStatuses = {};
+        docTypes.forEach(doc => {
+          if (data.documentos[uf][doc]) {
+            currentStatuses[doc] = data.documentos[uf][doc].status_atual || 'NORMAL';
+          }
+        });
+        
+        const prevStatus = prevSefazStatusRef.current;
+        
+        if (prevStatus) {
+          docTypes.forEach(doc => {
+            const statusAnt = prevStatus[doc] || 'NORMAL';
+            const statusNovo = currentStatuses[doc] || 'NORMAL';
+            
+            if (statusNovo !== statusAnt) {
+              const docLabel = doc.toUpperCase();
+              if (statusNovo === 'CONTINGENCIA' || statusNovo === 'OSCILACAO') {
+                const text = statusNovo === 'CONTINGENCIA'
+                  ? `Atenção! O serviço de ${docLabel} de ${uf} acabou de entrar em Contingência.`
+                  : `Atenção! Identificada oscilação nos serviços de ${docLabel} de ${uf}.`;
+                falarAlertaGlobal(text);
+              } else if (statusNovo === 'NORMAL' && (statusAnt === 'CONTINGENCIA' || statusAnt === 'OSCILACAO')) {
+                falarAlertaGlobal(`Atenção! O status de ${docLabel} de ${uf} retornou ao normal.`);
+              }
+            }
+          });
+        }
+        
+        prevSefazStatusRef.current = currentStatuses;
+      } catch (err) {
+        console.error("Erro ao checar SEFAZ global no layout:", err);
+      }
+    };
+
+    // Primeira checagem após 5 segundos
+    const delayTimer = setTimeout(() => {
+      checarSefazGlobal();
+    }, 5000);
+
+    // E a cada 45 segundos
+    const interval = setInterval(() => {
+      checarSefazGlobal();
+    }, 45000);
+
+    return () => {
+      clearTimeout(delayTimer);
+      clearInterval(interval);
+    };
+  }, [axiosInstance, user, empresaConfig]);
+
   const mapMenuItemToFeature = (keyOrPath) => {
     if (!keyOrPath) return null;
     if (['venda-rapida', 'pdv-nfce', 'nfce', '/venda-rapida', '/nfce', 'api/pdv-nfce/', 'pdv-nfce'].includes(keyOrPath)) {
@@ -351,6 +465,7 @@ const DashboardLayoutClean = () => {
         { label: 'Pix Dinâmico', path: '/pix', icon: <QrCodeIcon sx={{ color: '#fff' }} /> },
         { label: 'Contratos de Recorrência', path: '/recorrencia', icon: <RecorrenciaIcon sx={{ color: '#fff' }} /> },
         { label: 'Análise de Churn', path: '/churn', icon: <ChurnIcon sx={{ color: '#fff' }} /> },
+        { label: 'Contrato de Responsabilidade', path: '/contrato-responsabilidade', icon: <RecorrenciaIcon sx={{ color: '#fff' }} /> },
       ],
     };
   }, [gabaritos, can]);
@@ -1358,6 +1473,10 @@ const DashboardLayoutClean = () => {
                 <MenuItem onClick={() => { setOpcoesMenuAnchor(null); navigate('/churn'); }}>
                   <ChurnIcon sx={{ mr: 1, color: '#C62828' }} />
                   Análise de Churn
+                </MenuItem>
+                <MenuItem onClick={() => { setOpcoesMenuAnchor(null); navigate('/contrato-responsabilidade'); }}>
+                  <RecorrenciaIcon sx={{ mr: 1, color: '#D84315' }} />
+                  Contrato de Responsabilidade
                 </MenuItem>
               </Menu>
             </Box>
