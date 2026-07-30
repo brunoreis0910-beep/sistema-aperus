@@ -457,7 +457,26 @@ const SaaSAdminPage = () => {
     carregarDados();
   }, [carregarDados]);
 
-  const falarAlerta = useCallback((texto) => {
+  const falarAlerta = useCallback(async (texto) => {
+    try {
+      const apiBase = axiosInstance.defaults.baseURL || '/api';
+      const cleanBase = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
+      const audioUrl = `${cleanBase}/central/gerar-voz/?texto=${encodeURIComponent(texto)}`;
+      const audio = new Audio(audioUrl);
+      
+      // Caso ocorra qualquer erro ao tentar reproduzir o áudio (ex: backend indisponível)
+      audio.addEventListener('error', () => {
+        falarAlertaNativo(texto);
+      });
+      
+      await audio.play();
+    } catch (err) {
+      console.warn("Falha ao usar voz neural do servidor, recorrendo à voz do navegador:", err);
+      falarAlertaNativo(texto);
+    }
+  }, []);
+
+  const falarAlertaNativo = (texto) => {
     try {
       window.speechSynthesis.cancel();
       const msg = new SpeechSynthesisUtterance(texto);
@@ -465,31 +484,29 @@ const SaaSAdminPage = () => {
       msg.rate = 1.0;
       
       const voices = window.speechSynthesis.getVoices();
-      const ptVoices = voices.filter(v => v.lang.includes('pt-BR') || v.lang.includes('pt_BR'));
       
-      if (ptVoices.length > 0) {
-        // Priorizar Google português ou voz natural/neural do navegador
-        const preferred = ptVoices.find(v => 
-          v.name.toLowerCase().includes('google') || 
-          v.name.toLowerCase().includes('natural') || 
-          v.name.toLowerCase().includes('neural')
-        );
-        if (preferred) {
-          msg.voice = preferred;
-        } else {
-          const microsoft = ptVoices.find(v => v.name.toLowerCase().includes('microsoft'));
-          if (microsoft) {
-            msg.voice = microsoft;
-          } else {
-            msg.voice = ptVoices[0];
-          }
+      // 1. Procura por vozes Neurais/Naturais do Windows/Microsoft/Google em PT-BR
+      const vozNatural = voices.find(v => 
+        (v.lang.includes('pt-BR') || v.lang.includes('pt_BR')) && 
+        (v.name.toLowerCase().includes('natural') || 
+         v.name.toLowerCase().includes('online') || 
+         v.name.toLowerCase().includes('neural'))
+      );
+
+      if (vozNatural) {
+        msg.voice = vozNatural;
+      } else {
+        const ptVoices = voices.filter(v => v.lang.includes('pt-BR') || v.lang.includes('pt_BR'));
+        if (ptVoices.length > 0) {
+          const preferred = ptVoices.find(v => v.name.toLowerCase().includes('google'));
+          msg.voice = preferred || ptVoices[0];
         }
       }
       window.speechSynthesis.speak(msg);
     } catch (e) {
-      console.error("Erro ao reproduzir sintese de voz:", e);
+      console.error("Erro ao reproduzir sintese de voz nativa:", e);
     }
-  }, []);
+  };
 
   const carregarStatusSefaz = useCallback(async (isManual = false) => {
     if (isManual) setLoadingSefaz(true);
@@ -499,6 +516,14 @@ const SaaSAdminPage = () => {
       setSefazStatus(data);
       if (data.templates) {
         setSefazTemplates(data.templates);
+      }
+      
+      // Buscar comunicados do mural em tempo real para sumir/aparecer alertas sem atualizar a página
+      try {
+        const resCom = await axiosInstance.get('/saas-comunicados/');
+        setComunicados(resCom.data?.results ?? resCom.data ?? []);
+      } catch (comErr) {
+        console.warn("Erro ao atualizar comunicados do mural:", comErr);
       }
       
       const novoStatus = data.status_atual;
@@ -521,7 +546,7 @@ const SaaSAdminPage = () => {
     } finally {
       if (isManual) setLoadingSefaz(false);
     }
-  }, [axiosInstance, prevStatus, showToast, falarAlerta, sefazUf]);
+  }, [axiosInstance, prevStatus, showToast, falarAlerta, sefazUf, setComunicados]);
 
   useEffect(() => {
     carregarStatusSefaz();
