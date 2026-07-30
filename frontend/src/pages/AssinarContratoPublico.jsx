@@ -46,7 +46,7 @@ export default function AssinarContratoPublico() {
   const [validatingToken, setValidatingToken] = useState(false);
 
   const canvasRef = useRef(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const drawingRef = useRef(false);
   const [hasSignature, setHasSignature] = useState(false);
 
   useEffect(() => {
@@ -69,35 +69,6 @@ export default function AssinarContratoPublico() {
     fetchContrato();
   }, [uuid]);
 
-  useEffect(() => {
-    if (passo !== 3 || status !== 'PENDENTE' || loading || error) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    ctx.strokeStyle = '#0F172A';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    const resizeCanvas = () => {
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width;
-      canvas.height = 200;
-      ctx.strokeStyle = '#0F172A';
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.fillStyle = '#F8FAFC';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    };
-
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-
-    return () => window.removeEventListener('resize', resizeCanvas);
-  }, [passo, status, loading, error]);
-
   const getCoordinates = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -115,32 +86,76 @@ export default function AssinarContratoPublico() {
     };
   };
 
-  const startDrawing = (e) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (passo !== 3 || status !== 'PENDENTE' || loading || error) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const { x, y } = getCoordinates(e);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    setIsDrawing(true);
-  };
 
-  const draw = (e) => {
-    if (!isDrawing) return;
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const { x, y } = getCoordinates(e);
-    ctx.lineTo(x, y);
-    ctx.stroke();
-    setHasSignature(true);
-  };
+    ctx.strokeStyle = '#0F172A';
+    ctx.lineWidth = 2; // Linha mais fina e elegante (antes era 3)
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-  const stopDrawing = () => {
-    setIsDrawing(false);
-  };
+    const resizeCanvas = () => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = 200;
+      ctx.strokeStyle = '#0F172A';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    };
+
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // Manipuladores de desenho usando refs para evitar stale closures
+    const startDraw = (e) => {
+      e.preventDefault();
+      const { x, y } = getCoordinates(e);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      drawingRef.current = true;
+    };
+
+    const doDraw = (e) => {
+      if (!drawingRef.current) return;
+      e.preventDefault();
+      const { x, y } = getCoordinates(e);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      setHasSignature(true);
+    };
+
+    const endDraw = () => {
+      drawingRef.current = false;
+    };
+
+    // Associa eventos de touch de forma não passiva para evitar swipes/rolagem da tela do celular
+    canvas.addEventListener('touchstart', startDraw, { passive: false });
+    canvas.addEventListener('touchmove', doDraw, { passive: false });
+    canvas.addEventListener('touchend', endDraw, { passive: false });
+
+    // Associa eventos de mouse padrão
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', doDraw);
+    canvas.addEventListener('mouseup', endDraw);
+    canvas.addEventListener('mouseleave', endDraw);
+
+    return () => {
+      window.removeEventListener('resize', resizeCanvas);
+      canvas.removeEventListener('touchstart', startDraw);
+      canvas.removeEventListener('touchmove', doDraw);
+      canvas.removeEventListener('touchend', endDraw);
+      canvas.removeEventListener('mousedown', startDraw);
+      canvas.removeEventListener('mousemove', doDraw);
+      canvas.removeEventListener('mouseup', endDraw);
+      canvas.removeEventListener('mouseleave', endDraw);
+    };
+  }, [passo, status, loading, error]);
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
@@ -445,13 +460,6 @@ export default function AssinarContratoPublico() {
                   >
                     <canvas
                       ref={canvasRef}
-                      onMouseDown={startDrawing}
-                      onMouseMove={draw}
-                      onMouseUp={stopDrawing}
-                      onMouseLeave={stopDrawing}
-                      onTouchStart={startDrawing}
-                      onTouchMove={draw}
-                      onTouchEnd={stopDrawing}
                       style={{ display: 'block', cursor: 'crosshair', width: '100%' }}
                     />
                   </Box>

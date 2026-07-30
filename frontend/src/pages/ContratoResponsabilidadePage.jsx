@@ -8,6 +8,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import SendIcon from '@mui/icons-material/Send';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LinkIcon from '@mui/icons-material/Link';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -132,6 +133,52 @@ export default function ContratoResponsabilidadePage() {
     const texto = `Olá ${contrato.cliente_nome}! Segue o link para leitura e assinatura eletrônica do nosso Contrato de Responsabilidade e Licenciamento Aperus: ${urlAssinatura}`;
     const waUrl = `https://api.whatsapp.com/send?phone=${ddi}&text=${encodeURIComponent(texto)}`;
     window.open(waUrl, '_blank');
+  };
+
+  const handlePrint = (contrato) => {
+    if (!contrato) return;
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Contrato Assinado - ${contrato.cliente_nome}</title>
+          <style>
+            body { font-family: sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; }
+            .header { text-align: center; font-weight: bold; font-size: 18px; margin-bottom: 20px; text-transform: uppercase; }
+            .divider { border-bottom: 1px solid #cbd5e1; margin: 20px 0; }
+            .text { white-space: pre-wrap; margin-bottom: 40px; font-size: 14px; text-align: justify; font-family: monospace; }
+            .signature-box { border: 1px solid #cbd5e1; padding: 20px; border-radius: 6px; background-color: #f8fafc; max-width: 500px; margin-top: 30px; page-break-inside: avoid; }
+            .signature-img { max-height: 70px; display: block; margin-bottom: 15px; border-bottom: 1px solid #94a3b8; padding-bottom: 10px; }
+            .meta { font-size: 12px; color: #475569; }
+            .meta p { margin: 4px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="header">Termo de Responsabilidade e Prestação de Serviços</div>
+          <div class="divider"></div>
+          <div class="text">${contrato.texto_contrato}</div>
+          <div class="divider"></div>
+          <div class="signature-box">
+            <div style="font-weight: bold; font-size: 14px; margin-bottom: 10px;">Assinado Eletronicamente por:</div>
+            \${contrato.assinatura_desenho ? \`<img src="\${contrato.assinatura_desenho}" class="signature-img" />\` : '<div class="signature-img" style="height: 40px; line-height: 40px; font-style: italic;">Assinado Eletronicamente</div>'}
+            <div class="meta">
+              <p><strong>Nome:</strong> \${contrato.assinado_por_nome}</p>
+              <p><strong>CPF/CNPJ:</strong> \${contrato.assinado_por_cpf}</p>
+              <p><strong>Data/Hora:</strong> \${new Date(contrato.assinado_em).toLocaleString('pt-BR')}</p>
+              <p><strong>IP de Assinatura:</strong> \${contrato.ip_assinatura}</p>
+              <p><strong>ID de Autenticidade:</strong> \${contrato.uuid}</p>
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const contratosFiltrados = Array.isArray(contratos) ? contratos.filter(c => {
@@ -376,57 +423,107 @@ export default function ContratoResponsabilidadePage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={openView} onClose={() => setOpenView(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 'bold' }}>
-          Contrato Assinado - {contratoSelecionado?.cliente_nome}
+      <Dialog open={openView} onClose={() => setOpenView(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Visualização de Contrato Assinado</span>
+          <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => handlePrint(contratoSelecionado)}>
+            Imprimir / Salvar PDF
+          </Button>
         </DialogTitle>
-        <DialogContent dividers>
+        <DialogContent dividers sx={{ bgcolor: 'grey.100', py: 4 }}>
           {contratoSelecionado && (
-            <Box>
-              <Typography variant="body2" fontWeight={600} gutterBottom>
-                Assinado por: {contratoSelecionado.assinado_por_nome}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                CPF: {contratoSelecionado.assinado_por_cpf}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Assinado em: {new Date(contratoSelecionado.assinado_em).toLocaleString('pt-BR')}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                IP de Assinatura: {contratoSelecionado.ip_assinatura}
-              </Typography>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
-                Assinatura Digital Capturada:
-              </Typography>
-              <Box 
-                sx={{ 
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 2, 
-                  bgcolor: '#F8FAFC',
-                  p: 2,
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center'
-                }}
-              >
-                {contratoSelecionado.assinatura_desenho ? (
-                  <img 
-                    src={contratoSelecionado.assinatura_desenho} 
-                    alt="Assinatura Digital" 
-                    style={{ maxWidth: '100%', height: 'auto', border: '1px solid #e2e8f0', borderRadius: '4px' }} 
-                  />
-                ) : (
-                  <Typography variant="body2" color="text.secondary">Assinatura em formato texto apenas.</Typography>
-                )}
+            <Paper 
+              variant="outlined" 
+              sx={{ 
+                p: 5, 
+                mx: 'auto', 
+                maxWidth: '800px', 
+                boxShadow: 2, 
+                bgcolor: '#FFF', 
+                borderRadius: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between'
+              }}
+            >
+              <Box>
+                <Typography variant="h6" fontWeight="bold" align="center" sx={{ textTransform: 'uppercase', mb: 3 }}>
+                  Termo de Responsabilidade e Prestação de Serviços
+                </Typography>
+                <Divider sx={{ mb: 3 }} />
+                
+                <Typography 
+                  variant="body2" 
+                  sx={{ 
+                    whiteSpace: 'pre-wrap', 
+                    textAlign: 'justify', 
+                    fontFamily: 'monospace', 
+                    fontSize: '0.85rem', 
+                    lineHeight: 1.6,
+                    mb: 4 
+                  }}
+                >
+                  {contratoSelecionado.texto_contrato}
+                </Typography>
               </Box>
-            </Box>
+
+              <Box>
+                <Divider sx={{ my: 3 }} />
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <Box 
+                      sx={{ 
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 2, 
+                        bgcolor: '#F8FAFC',
+                        p: 3,
+                        maxWidth: '500px'
+                      }}
+                    >
+                      <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
+                        Assinado Eletronicamente por:
+                      </Typography>
+                      {contratoSelecionado.assinatura_desenho ? (
+                        <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', pb: 1.5, mb: 1.5 }}>
+                          <img 
+                            src={contratoSelecionado.assinatura_desenho} 
+                            alt="Assinatura" 
+                            style={{ maxHeight: '60px', width: 'auto', display: 'block' }} 
+                          />
+                        </Box>
+                      ) : (
+                        <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', pb: 1.5, mb: 1.5 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                            Assinatura Eletrônica Registrada
+                          </Typography>
+                        </Box>
+                      )}
+                      <Stack spacing={0.5}>
+                        <Typography variant="caption" color="text.secondary">
+                          <strong>Nome:</strong> {contratoSelecionado.assinado_por_nome}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          <strong>CPF/CNPJ:</strong> {contratoSelecionado.assinado_por_cpf}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          <strong>Data/Hora:</strong> {new Date(contratoSelecionado.assinado_em).toLocaleString('pt-BR')}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          <strong>IP de Assinatura:</strong> {contratoSelecionado.ip_assinatura}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all' }}>
+                          <strong>Autenticidade (UUID):</strong> {contratoSelecionado.uuid}
+                        </Typography>
+                      </Stack>
+                    </Box>
+                  </Grid>
+                </Grid>
+              </Box>
+            </Paper>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ p: 2 }}>
           <Button onClick={() => setOpenView(false)}>Fechar</Button>
         </DialogActions>
       </Dialog>
