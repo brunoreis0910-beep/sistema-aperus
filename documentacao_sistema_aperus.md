@@ -86,6 +86,10 @@ O sistema possui uma rica modelagem de dados dividida em subsistemas:
 * O backend de cada tenant executa periodicamente um ping contra o endpoint `/api/saas/status-financeiro-saas/` da Central Mãe.
 * Se a licença estiver expirada ou bloqueada por inadimplência, a API local bloqueia as rotas de faturamento e redireciona os operadores.
 
+### 📊 Telemetria e Monitoramento de Recursos
+* A Central Mãe executa um serviço em segundo plano de telemetria utilizando a biblioteca `psutil` para ler a saúde do servidor físico (Uso de RAM, CPU e espaço livre em disco no `C:\`).
+* Esse monitoramento inclui a leitura contínua do tamanho dos arquivos de banco de dados SQLite de cada tenant em `arquivos_clientes`, prevenindo gargalos de armazenamento e detectando comportamentos anômalos.
+
 ---
 
 ## 5. Fluxo de Assinatura Digital (Contrato de Responsabilidade)
@@ -120,7 +124,30 @@ sequenceDiagram
 
 ---
 
-## 6. Comandos e Manutenção do Servidor (Administração)
+## 6. Regras de Ouro de Negócio (Fiscal e Crédito)
+
+Para manter a consistência fiscal e a segurança financeira nas operações do ERP:
+* **Abas Tributárias Estáticas:** O cálculo tributário do PDV e faturamento é chaveado de forma estática com base no perfil tributário da empresa (Simples Nacional vs. Regime Normal/Lucro Presumido ou Real). Isso garante que o preenchimento de campos como CSOSN ou CST de ICMS respeite as abas e regramentos do regime ativo da empresa.
+* **Trava de Venda a Prazo para Consumidor Final:** Vendas faturadas a prazo são bloqueadas se o cliente for identificado como "Consumidor Final" genérico ou se não possuir limite de crédito pré-aprovado (`CreditoCliente`) com saldo disponível ativo no sistema.
+
+---
+
+## 7. Variáveis de Ambiente (.env)
+
+Cada projeto (`SistemaAperus`, `aperus_mae` e instâncias de clientes) possui um arquivo `.env` para carregar as chaves de configuração locais:
+
+| Chave | Exemplo | Descrição |
+| :--- | :--- | :--- |
+| `PORT` | `8005` (Filial), `8006` (Mãe), `8007` (Tenant) | Porta TCP em que a instância local do Django irá escutar. |
+| `SEFAZ_UF` | `MG` / `SP` | Estado de emissão fiscal padrão para checagem de status. |
+| `WHATSAPP_TOKEN` | `EAAG...` | Token de autenticação da API Cloud da Meta para disparo de mensagens. |
+| `WHATSAPP_DESKTOP_LISTENER_ENABLED` | `False` / `True` | Se habilitado, tenta interceptar e disparar pelo WhatsApp Desktop nativo. |
+| `MAINTENANCE_MODE` | `False` / `True` | Se `True`, bloqueia todas as rotas e exibe tela de manutenção no frontend. |
+| `DATABASE_URL` | `sqlite:///db.sqlite3` / `postgres://...` | String de conexão para o banco de dados. |
+
+---
+
+## 8. Comandos e Manutenção do Servidor (Administração)
 
 O sistema roda sob o ecossistema do **Windows Services**. A manutenção de backend e frontend requer os seguintes passos:
 
