@@ -331,8 +331,21 @@ class NfeXmlBuilder:
         
         ET.SubElement(ide, f"{{{self.ns}}}finNFe").text = fin_nfe
         # indFinal: 0=Normal (B2B), 1=Consumidor Final
-        # Para notas de crédito/débito (5, 6, 7) e complementar/ajuste (2, 3), indFinal=0 é mais adequado
-        ind_final = "0" if fin_nfe in ('2', '3', '5', '6', '7') else "1"
+        # Regra geral: se o destinatário for CPF ou CNPJ sem IE (Não Contribuinte), indFinal DEVE ser 1.
+        # Caso contrário (Contribuinte), se for Nota de Ajuste/Complemento/Crédito (2, 3, 5, 6, 7), o padrão B2B (0) é mais adequado.
+        ind_final = "1"
+        if self.venda.id_cliente:
+            c = self.venda.id_cliente
+            doc_cli = ''.join(filter(str.isdigit, c.cpf_cnpj or ''))
+            ie_limpa = ''.join(filter(str.isdigit, c.inscricao_estadual or ''))
+            is_cnpj = len(doc_cli) > 11
+            has_ie = bool(ie_limpa and len(ie_limpa) > 4)
+            if is_cnpj and has_ie:
+                ind_final = "0"
+            else:
+                ind_final = "1"
+        else:
+            ind_final = "1"
         ET.SubElement(ide, f"{{{self.ns}}}indFinal").text = ind_final
         ET.SubElement(ide, f"{{{self.ns}}}indPres").text = "1"
         ET.SubElement(ide, f"{{{self.ns}}}procEmi").text = "0"
@@ -506,7 +519,19 @@ class NfeXmlBuilder:
                       if fone_clean:
                            ET.SubElement(enderDest, f"{{{self.ns}}}fone").text = fone_clean[:14] # Limit NFe pattern
 
-                 ET.SubElement(dest, f"{{{self.ns}}}indIEDest").text = "9"
+                 # --- indIEDest e IE ---
+                 ind_ie_dest = "9"
+                 ie_limpa = ''.join(filter(str.isdigit, c.inscricao_estadual or ''))
+                 if len(doc_cli) > 11 and ie_limpa:
+                     ie_upper = ie_limpa.upper().strip()
+                     if "ISENTO" in ie_upper:
+                         ind_ie_dest = "2"
+                     elif len(ie_limpa) > 4:
+                         ind_ie_dest = "1"
+                         ET.SubElement(dest, f"{{{self.ns}}}IE").text = ie_limpa
+                 else:
+                     ind_ie_dest = "9"
+                 ET.SubElement(dest, f"{{{self.ns}}}indIEDest").text = ind_ie_dest
 
         # --- Totais Accumulators ---
         total_vbc = 0.0
