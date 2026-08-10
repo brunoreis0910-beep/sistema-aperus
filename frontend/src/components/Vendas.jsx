@@ -2222,7 +2222,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         valor_total: valorTotal
       };
     });
-  }, [venda.itens.length, venda.desconto, venda.taxa_entrega]);
+  };
 
   // Importar Nota de Origem para Nota Complementar ou Devolução
   const handleImportarNotaOrigem = async () => {

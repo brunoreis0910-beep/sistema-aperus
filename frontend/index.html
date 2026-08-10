@@ -25,7 +25,33 @@
   <div id="root"></div>
   <script>
     (function() {
-      console.log('--- INJECTOR FISCAL ATIVOS v2 ---');
+      console.log('--- INJECTOR FISCAL ATIVOS v3 (DINÂMICO) ---');
+      
+      function getDynamicApiUrl() {
+          const tenantUrl = localStorage.getItem('tenant_api_url');
+          if (tenantUrl) return tenantUrl.replace(/\/api\/?$/, '');
+
+          const pageProtocol = window.location.protocol;
+          const pageHostname = window.location.hostname;
+          
+          if (pageProtocol === 'https:' && pageHostname !== 'localhost' && pageHostname !== '127.0.0.1') {
+              return window.location.origin;
+          }
+
+          const ipManual = localStorage.getItem('servidor_ip');
+          if (ipManual) {
+              const port = (window.location.port && !['3000', '5173', '8005', '8006'].includes(window.location.port)) ? window.location.port : '8005';
+              return `http://${ipManual}:${port}`;
+          }
+
+          if (window.location.port) {
+              if (['3000', '5173'].includes(window.location.port)) {
+                  return `http://${pageHostname}:8005`;
+              }
+              return window.location.origin;
+          }
+          return window.location.origin;
+      }
       
       function injectBtn() {
           // --- INJEÇÃO: Painel Fiscal (Menu Lateral) ---
@@ -98,7 +124,7 @@
                         
                         clone.onclick = function(e) {
                             e.preventDefault(); e.stopPropagation();
-                            window.open('http://localhost:8005/api/fiscal/', '_blank');
+                            window.open(`${getDynamicApiUrl()}/api/fiscal/`, '_blank');
                         };
                         
                         // Inserir APÓS o item Produtos
@@ -134,7 +160,7 @@
              if(anchor && anchor.parentElement) {
                  const container = document.createElement('div');
                  container.innerHTML = `
-                    <a href="http://localhost:8005/api/fiscal/" target="_blank" id="page-fiscal-btn" style="
+                    <a href="${getDynamicApiUrl()}/api/fiscal/" target="_blank" id="page-fiscal-btn" style="
                         display: flex; 
                         align-items: center; 
                         justify-content: center;
@@ -216,7 +242,7 @@
                       btn.onclick = (e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          window.open(`http://localhost:8005/api/vendas/${vendaId}/imprimir_danfe/`, '_blank');
+                          window.open(`${getDynamicApiUrl()}/api/vendas/${vendaId}/imprimir_danfe/`, '_blank');
                       };
 
                       // 6. Insert at beginning of cell
