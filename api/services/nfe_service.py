@@ -92,10 +92,17 @@ class NFeService:
         fin_nfe = "1"
         if venda_obj.id_operacao:
             op_fin = str(getattr(venda_obj.id_operacao, 'finalidade_emissao', '') or '').strip()
-            if op_fin in ('1', '2', '3', '4', '5', '6', '7'):
+            nome_op = (venda_obj.id_operacao.nome_operacao or '').upper()
+            if op_fin in ('2', '3', '4', '5', '6', '7'):
                 fin_nfe = op_fin
-            elif 'DEVOLU' in (venda_obj.id_operacao.nome_operacao or '').upper():
+            elif 'DEVOLU' in nome_op:
                 fin_nfe = "4"
+            elif 'COMPLEM' in nome_op:
+                fin_nfe = "2"
+            elif 'AJUSTE' in nome_op:
+                fin_nfe = "3"
+            else:
+                fin_nfe = op_fin if op_fin == '1' else '1'
 
         if fin_nfe in ('2', '4'):
             has_ref = False

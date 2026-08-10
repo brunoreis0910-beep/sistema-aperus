@@ -259,11 +259,17 @@ class NfeXmlBuilder:
         fin_nfe = "1"  # Normal por padrão
         if self.venda.id_operacao:
             op_fin = str(getattr(self.venda.id_operacao, 'finalidade_emissao', '') or '').strip()
-            if op_fin in ('1', '2', '3', '4', '5', '6', '7'):
+            nome_op = (self.venda.id_operacao.nome_operacao or '').upper()
+            if op_fin in ('2', '3', '4', '5', '6', '7'):
                 fin_nfe = op_fin
-            elif 'DEVOLU' in (self.venda.id_operacao.nome_operacao or '').upper():
-                # Fallback para operações antigas sem o campo preenchido
+            elif 'DEVOLU' in nome_op:
                 fin_nfe = "4"
+            elif 'COMPLEM' in nome_op:
+                fin_nfe = "2"
+            elif 'AJUSTE' in nome_op:
+                fin_nfe = "3"
+            else:
+                fin_nfe = op_fin if op_fin == '1' else '1'
 
         # natOp: descrição da natureza da operação derivada da finalidade
         _NAT_OP_MAP = {
