@@ -1850,6 +1850,20 @@ class VendaView(APIView):
 
         operacao = get_object_or_404(Operacao, pk=id_operacao)
 
+        # Validar Chave de Acesso Referenciada para Complementar (2) ou Devolução (4)
+        is_complementar = operacao.finalidade_emissao == '2' or 'COMPLEM' in (operacao.nome_operacao or '').upper()
+        is_devolucao = operacao.finalidade_emissao == '4' or 'DEVOLU' in (operacao.nome_operacao or '').upper()
+        if is_complementar or is_devolucao:
+            chave_ref = (payload.get('chave_nfe_referenciada') or '').strip().replace(' ', '')
+            import re as std_re
+            chave_ref_clean = std_re.sub(r'\D', '', chave_ref)
+            if len(chave_ref_clean) != 44:
+                desc = 'Complementar' if is_complementar else 'de Devolução'
+                return Response(
+                    {'detail': f'Para emissão de nota {desc}, informe a chave de acesso referenciada válida (44 dígitos).'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
         sale_date = parse_date_flexible(data_in) or timezone.now().date()
         
         # Capturar numero_documento do payload (vem do frontend)
@@ -2273,6 +2287,22 @@ class VendaView(APIView):
             if 'valor_total' in payload and 'itens' not in payload:
                 venda.valor_total = Decimal(str(payload['valor_total']))
             
+            # Validar Chave de Acesso Referenciada para Complementar (2) ou Devolução (4)
+            operacao = venda.id_operacao
+            if operacao:
+                is_complementar = operacao.finalidade_emissao == '2' or 'COMPLEM' in (operacao.nome_operacao or '').upper()
+                is_devolucao = operacao.finalidade_emissao == '4' or 'DEVOLU' in (operacao.nome_operacao or '').upper()
+                if is_complementar or is_devolucao:
+                    chave_ref = (venda.chave_nfe_referenciada or '').strip().replace(' ', '')
+                    import re as std_re
+                    chave_ref_clean = std_re.sub(r'\D', '', chave_ref)
+                    if len(chave_ref_clean) != 44:
+                        desc = 'Complementar' if is_complementar else 'de Devolução'
+                        return Response(
+                            {'detail': f'Para emissão de nota {desc}, informe a chave de acesso referenciada válida (44 dígitos).'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
             venda.save()
             logging.info(f'[PATCH VENDA] Venda {venda_id} atualizada com sucesso')
             

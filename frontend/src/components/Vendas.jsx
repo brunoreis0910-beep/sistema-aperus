@@ -211,7 +211,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     taxa_entrega: 0,
     valor_total: 0,
     itens: [],
-    venda_futura_origem: null // ID da venda de origem quando for entrega
+    venda_futura_origem: null, // ID da venda de origem quando for entrega
+    chave_nfe_referenciada: '' // Chave da nota complementar/devolução
   });
 
   // Item sendo adicionado (declarado antes dos useEffects para evitar TDZ)
@@ -577,6 +578,10 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     cond_veic: '1', c_mod: '', c_cor_denatran: '01', lota: '', tp_rest: '0'
   };
   const [veiculoDadosForm, setVeiculoDadosForm] = useState({ ...veiculoDadosVazios });
+
+  // Busca e importação de nota referenciada
+  const [numOrigemBusca, setNumOrigemBusca] = useState('');
+  const [buscandoOrigem, setBuscandoOrigem] = useState(false);
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -2217,14 +2222,133 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         valor_total: valorTotal
       };
     });
-  };
-
-  // Recalcular quando itens, desconto ou taxa_entrega mudarem
-  useEffect(() => {
-    if (venda.itens && venda.itens.length > 0) {
-      calcularTotais();
-    }
   }, [venda.itens.length, venda.desconto, venda.taxa_entrega]);
+
+  // Importar Nota de Origem para Nota Complementar ou Devolução
+  const handleImportarNotaOrigem = async () => {
+    if (!numOrigemBusca.trim()) {
+      setError('❌ Informe o número do documento ou NF-e de origem.');
+      return;
+    }
+    setBuscandoOrigem(true);
+    setError('');
+    setSuccess('');
+    try {
+      console.log(`[Importar Origem] Buscando venda com número: ${numOrigemBusca}`);
+      const res = await axiosInstance.get(`/vendas/?numero_documento=${encodeURIComponent(numOrigemBusca.trim())}`);
+      
+      let vendaOrigemObj = null;
+      if (res.data && res.data.results && res.data.results.length > 0) {
+        vendaOrigemObj = res.data.results.find(v => v.status_nfe === 'EMITIDA') || res.data.results[0];
+      } else if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+        vendaOrigemObj = res.data.find(v => v.status_nfe === 'EMITIDA') || res.data[0];
+      }
+      
+      if (!vendaOrigemObj) {
+        const resSearch = await axiosInstance.get(`/vendas/?search=${encodeURIComponent(numOrigemBusca.trim())}`);
+        if (resSearch.data && resSearch.data.results && resSearch.data.results.length > 0) {
+          vendaOrigemObj = resSearch.data.results.find(v => v.status_nfe === 'EMITIDA') || resSearch.data.results[0];
+        } else if (resSearch.data && Array.isArray(resSearch.data) && resSearch.data.length > 0) {
+          vendaOrigemObj = resSearch.data.find(v => v.status_nfe === 'EMITIDA') || resSearch.data[0];
+        }
+      }
+
+      if (!vendaOrigemObj) {
+        setError(`❌ Nenhuma venda ou NF-e encontrada com o número/documento "${numOrigemBusca}".`);
+        setBuscandoOrigem(false);
+        return;
+      }
+
+      const idVendaOrigem = vendaOrigemObj.id_venda || vendaOrigemObj.id;
+      console.log(`[Importar Origem] Buscando detalhes da venda ID: ${idVendaOrigem}`);
+      const resDetalhes = await axiosInstance.get(`/vendas/${idVendaOrigem}/`);
+      const vendaDetalhada = resDetalhes.data;
+
+      if (!vendaDetalhada) {
+        setError('❌ Falha ao carregar detalhes da nota de origem.');
+        setBuscandoOrigem(false);
+        return;
+      }
+
+      // Mapear itens da venda detalhada
+      const novosItens = (vendaDetalhada.itens || []).map(item => {
+        const descVal = parseFloat(item.desconto_valor || item.desconto || 0);
+        const descPerc = parseFloat(item.desconto_percentual || 0);
+        const totalVal = parseFloat(item.valor_total || item.subtotal || 0);
+        const unitVal = parseFloat(item.valor_unitario || 0);
+        const quant = parseFloat(item.quantidade || 0);
+
+        return {
+          id_produto: item.id_produto || item.produto_id,
+          produto_id: item.id_produto || item.produto_id,
+          produto_nome: item.produto_nome || item.produto || item.nome_produto || '',
+          nome_produto: item.produto_nome || item.produto || item.nome_produto || '',
+          codigo_produto: item.codigo_produto || item.codigo || '',
+          quantidade: quant,
+          valor_unitario: unitVal,
+          desconto: descVal,
+          desconto_valor: descVal,
+          desconto_percentual: descPerc,
+          subtotal: totalVal,
+          ncm_codigo: item.ncm_codigo || '',
+          cest_codigo: item.cest_codigo || '',
+          cfop: item.cfop || '',
+          c_benef: item.c_benef || '',
+          icms_cst_csosn: item.icms_cst_csosn || '',
+          icms_modalidade_bc: item.icms_modalidade_bc || '',
+          icms_reducao_bc_perc: item.icms_reducao_bc_perc || 0,
+          icms_bc: item.icms_bc || 0,
+          icms_aliq: item.icms_aliq || 0,
+          valor_icms: item.valor_icms || 0,
+          icmsst_bc: item.icmsst_bc || 0,
+          icmsst_aliq: item.icmsst_aliq || 0,
+          valor_icms_st: item.valor_icms_st || 0,
+          pis_cst: item.pis_cst || '',
+          pis_aliq: item.pis_aliq || 0,
+          pis_bc: item.pis_bc || 0,
+          valor_pis: item.valor_pis || 0,
+          cofins_cst: item.cofins_cst || '',
+          cofins_aliq: item.cofins_aliq || 0,
+          cofins_bc: item.cofins_bc || 0,
+          valor_cofins: item.valor_cofins || 0,
+          ipi_cst: item.ipi_cst || '',
+          ipi_aliq: item.ipi_aliq || 0,
+          ipi_bc: item.ipi_bc || 0,
+          valor_ipi: item.valor_ipi || 0,
+          ibs_cst: item.ibs_cst || '',
+          ibs_aliq: item.ibs_aliq || 0,
+          ibs_bc: item.ibs_bc || 0,
+          valor_ibs: item.valor_ibs || 0,
+          cbs_cst: item.cbs_cst || '',
+          cbs_aliq: item.cbs_aliq || 0,
+          cbs_bc: item.cbs_bc || 0,
+          valor_cbs: item.valor_cbs || 0
+        };
+      });
+
+      const novoClienteId = vendaDetalhada.id_cliente?.id_cliente || vendaDetalhada.id_cliente?.id || vendaDetalhada.id_cliente || '';
+
+      setVenda(prev => ({
+        ...prev,
+        id_cliente: String(novoClienteId),
+        chave_nfe_referenciada: vendaDetalhada.chave_nfe || '',
+        itens: novosItens
+      }));
+
+      if (novoClienteId) {
+        setDecisaoCashbackTomada(false);
+        buscarLimiteCliente(novoClienteId);
+        verificarCashbackCliente(novoClienteId);
+      }
+
+      setSuccess(`✅ Nota de origem encontrada! ${vendaDetalhada.itens?.length || 0} produtos e a chave de acesso foram carregados com sucesso.`);
+    } catch (err) {
+      console.error('[Importar Origem] Erro:', err);
+      setError('❌ Erro ao comunicar com o servidor ou ao processar dados da nota.');
+    } finally {
+      setBuscandoOrigem(false);
+    }
+  };
 
   // Salvar venda
   const salvarVenda = async () => {
@@ -2238,6 +2362,24 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         setError('Preencha todos os campos obrigatórios');
         setLoading(false);
         return;
+      }
+
+      // Validar Chave de Acesso Referenciada se a finalidade da operação for Complementar (2) ou Devolução (4)
+      const operacaoSelecionada = operacoes.find(op => String(op.id_operacao) === String(venda.id_operacao));
+      if (operacaoSelecionada) {
+        const finalidade = operacaoSelecionada.finalidade_emissao || '';
+        const nomeOp = (operacaoSelecionada.nome_operacao || '').toUpperCase();
+        const isComplementar = finalidade === '2' || nomeOp.includes('COMPLEM');
+        const isDevolucao = finalidade === '4' || nomeOp.includes('DEVOLU');
+        if (isComplementar || isDevolucao) {
+          const chave = (venda.chave_nfe_referenciada || '').replace(/\D/g, '');
+          if (chave.length !== 44) {
+            const desc = isComplementar ? 'Complementar' : 'de Devolução';
+            setError(`❌ Para emissão de nota ${desc}, informe a chave de acesso referenciada válida (44 dígitos).`);
+            setLoading(false);
+            return;
+          }
+        }
       }
 
       // Filtrar itens com quantidade > 0 (para entrega futura, permite deixar itens zerados)
@@ -2265,8 +2407,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       }
 
       // ===== VERIFICAÇÃO DE LIMITE DE CRÉDITO =====
-      // Verificar configuração da operação
-      const operacaoSelecionada = operacoes.find(op => op.id_operacao === venda.id_operacao);
+      // Verificar configuração da operação (já carregada em operacaoSelecionada acima)
 
       // ===== VERIFICAÇÃO DE LIMITE DE DESCONTO =====
       const limiteDesconto = parseFloat(operacaoSelecionada?.limite_desconto_percentual) || 0;
@@ -3396,7 +3537,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         desconto: parseFloat(vendaCompleta.desconto) || 0,
         taxa_entrega: parseFloat(vendaCompleta.taxa_entrega) || 0,
         valor_total: parseFloat(vendaCompleta.valor_total) || 0,
-        itens: vendaCompleta.itens || []
+        itens: vendaCompleta.itens || [],
+        chave_nfe_referenciada: vendaCompleta.chave_nfe_referenciada || ''
       });
 
       console.log('🔄 Operação atualizada para conversão:', operacaoVendaPadrao);
@@ -3996,7 +4138,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       _desconto_item_geral: 0,
       taxa_entrega: 0,
       valor_total: 0,
-      itens: []
+      itens: [],
+      chave_nfe_referenciada: ''
     });
     setNovoItem({
       id_produto: '',
@@ -4112,7 +4255,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
           quantidade: parseFloat(item.quantidade) || 0,
           valor_unitario: parseFloat(item.valor_unitario) || 0,
           desconto: parseFloat(item.desconto || item.desconto_valor || 0)
-        }))
+        })),
+        chave_nfe_referenciada: vendaCompleta.chave_nfe_referenciada || ''
       });
       setModo('nova');
       setOpenModalNovaVenda(true);
@@ -5176,6 +5320,60 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                         )}
                       </FormControl>
                     </Grid>
+                  )}
+
+                  {(() => {
+                    const operacaoSelecionada = operacoes.find(op => String(op.id_operacao) === String(venda.id_operacao));
+                    const finalidade = operacaoSelecionada?.finalidade_emissao || '';
+                    const nomeOp = (operacaoSelecionada?.nome_operacao || '').toUpperCase();
+                    const isComplementarOuDevolucao = finalidade === '2' || finalidade === '4' || nomeOp.includes('DEVOLU') || nomeOp.includes('COMPLEM');
+                    return isComplementarOuDevolucao;
+                  })() && (
+                    <>
+                      <Grid item xs={12} md={6}>
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Importar Nota de Origem (Nº Doc/Nº Venda)"
+                            placeholder="Ex: 12345"
+                            value={numOrigemBusca}
+                            disabled={vendaBloqueadaParaEdicao || buscandoOrigem}
+                            onChange={(e) => setNumOrigemBusca(e.target.value)}
+                            helperText="Busque pelo número do documento ou ID para carregar itens e chave"
+                          />
+                          <Button
+                            variant="contained"
+                            color="secondary"
+                            onClick={handleImportarNotaOrigem}
+                            disabled={vendaBloqueadaParaEdicao || buscandoOrigem}
+                            sx={{ height: 40, minWidth: 100 }}
+                          >
+                            {buscandoOrigem ? <CircularProgress size={20} color="inherit" /> : 'Importar'}
+                          </Button>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={6}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Chave de Acesso Referenciada *"
+                          placeholder="Chave de 44 dígitos da nota original..."
+                          value={venda.chave_nfe_referenciada || ''}
+                          disabled={vendaBloqueadaParaEdicao}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '').substring(0, 44);
+                            setVenda(prev => ({ ...prev, chave_nfe_referenciada: val }));
+                          }}
+                          error={!venda.chave_nfe_referenciada || venda.chave_nfe_referenciada.length !== 44}
+                          helperText={
+                            (!venda.chave_nfe_referenciada || venda.chave_nfe_referenciada.length !== 44)
+                              ? "Informe a chave de acesso de 44 dígitos numéricos."
+                              : ""
+                          }
+                        />
+                      </Grid>
+                    </>
                   )}
 
                   <Grid item xs={12} md={4}>

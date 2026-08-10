@@ -88,6 +88,29 @@ class NFeService:
                         "mensagem": f"Rejeição BA02-35: Uma NF-e de saída não pode referenciar chaves de acesso de {doc_type} (Chave: {chave})."
                     }
 
+        # --- VALIDATION FOR COMPLEMENTAR AND DEVOLUÇÃO (Requires refNFe) ---
+        fin_nfe = "1"
+        if venda_obj.id_operacao:
+            op_fin = str(getattr(venda_obj.id_operacao, 'finalidade_emissao', '') or '').strip()
+            if op_fin in ('1', '2', '3', '4', '5', '6', '7'):
+                fin_nfe = op_fin
+            elif 'DEVOLU' in (venda_obj.id_operacao.nome_operacao or '').upper():
+                fin_nfe = "4"
+
+        if fin_nfe in ('2', '4'):
+            has_ref = False
+            for chave in chaves_referenciadas:
+                chave_clean = re.sub(r'\D', '', chave)
+                if len(chave_clean) == 44:
+                    has_ref = True
+                    break
+            if not has_ref:
+                tipo_desc = "Complementar" if fin_nfe == "2" else "de Devolução"
+                return {
+                    "sucesso": False,
+                    "mensagem": f"Rejeição: Para emitir uma NF-e {tipo_desc} (finalidade {fin_nfe}), é obrigatório informar a chave de acesso da nota referenciada (44 dígitos)."
+                }
+
         # Ensure Sequential Numbering (Assign before generating INI)
         if not venda_obj.numero_nfe and venda_obj.id_operacao:
              try:

@@ -486,7 +486,15 @@ class DanfeGenerator:
         self._rect(5, y-h, 130, h)
         self._text(6, y-3, "INFORMAÇÕES COMPLEMENTARES", 5)
         
-        obs = f"{self.venda.observacao_contribuinte or ''} {self.venda.observacao_fisco or ''}"
+        obs_parts = []
+        if getattr(self.venda, 'chave_nfe_referenciada', None):
+            obs_parts.append(f"NFe REFERENCIADA: {self.venda.chave_nfe_referenciada}")
+        if getattr(self.venda, 'observacao_contribuinte', None):
+            obs_parts.append(self.venda.observacao_contribuinte)
+        if getattr(self.venda, 'observacao_fisco', None):
+            obs_parts.append(self.venda.observacao_fisco)
+        obs = " - ".join(obs_parts)
+
         # Wrap text simples
         import textwrap
         lines = textwrap.wrap(obs, 90)

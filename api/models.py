@@ -571,6 +571,16 @@ class Operacao(models.Model):
         help_text="Se TRUE, valida o estoque fiscal antes de autorizar a emissão (diferente do estoque gerencial)"
     )
 
+    # Finalidade de emissão da NF-e
+    finalidade_emissao = models.CharField(
+        max_length=1,
+        blank=True,
+        null=True,
+        default='1',
+        db_column='finalidade_emissao',
+        help_text="Finalidade de emissão da NF-e (finNFe): 1-Normal, 2-Complementar, 3-Ajuste, 4-Devolução, 5-Crédito, 6-Débito Pgto Antecipado, 7-Débito Perda Estoque"
+    )
+
     class Meta:
         managed = True
         db_table = 'operacoes'
