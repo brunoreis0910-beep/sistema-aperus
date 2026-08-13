@@ -5449,13 +5449,19 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                         </MenuItem>
                         {operacoes.length > 0 ? operacoes
                           .filter(op => {
-                            // Se initialModel foi fornecido (ex: NF-e = '55'), mostrar só operações desse modelo
-                            if (initialModel) return String(op.modelo_documento) === String(initialModel);
+                            const transacao = op.transacao || op.tipo_transacao || op.tipo_operacao || op.tipo || '';
+                            const isSaida = transacao === '' || transacao.toLowerCase().includes('saida') || transacao.toLowerCase().includes('saída') || transacao.toUpperCase() === 'S';
+
+                            // Se initialModel foi fornecido (ex: NF-e = '55'), mostrar SÓ operações de Modelo 55 E de Saída!
+                            if (initialModel) {
+                              const ehModelo55 = String(op.modelo_documento) === String(initialModel) || String(op.modelo_nf) === String(initialModel);
+                              return ehModelo55 && isSaida;
+                            }
+
                             // Sem initialModel: ignorar modelo 55 (NF-e usa tela própria)
-                            if (String(op.modelo_documento) === '55') return false;
+                            if (String(op.modelo_documento) === '55' || String(op.modelo_nf) === '55') return false;
+
                             // Filtrar apenas operações de Saída quando não há initialModel específico
-                            const transacao = op.transacao || op.tipo_transacao || '';
-                            const isSaida = transacao === '' || transacao.toLowerCase() === 'saída' || transacao.toLowerCase() === 'saida';
                             return isSaida;
                           })
                           .map(op => {

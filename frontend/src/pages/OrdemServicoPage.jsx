@@ -6752,18 +6752,28 @@ const OrdemServicoPage = () => {
                 onChange={(e) => setSelectedNFeOperation(e.target.value)}
                 label="Operação *"
               >
-                {/* Agora usa todasOperacoes para poder acessar Modelos 55, que não estão na lista 'operacoes' (apenas serviços) */}
+                {/* Exibe apenas Operações de NF-e Modelo 55 que sejam de Saída */}
                 {todasOperacoes
-                  .filter(op => op.modelo_documento === '55')
+                  .filter(op => {
+                    const ehModelo55 = String(op.modelo_documento) === '55' || String(op.modelo_nf) === '55';
+                    const transacao = op.transacao || op.tipo_transacao || op.tipo_operacao || op.tipo || '';
+                    const isSaida = transacao === '' || transacao.toLowerCase().includes('saida') || transacao.toLowerCase().includes('saída') || transacao.toUpperCase() === 'S';
+                    return ehModelo55 && isSaida;
+                  })
                   .map((op) => (
                     <MenuItem key={op.id_operacao} value={op.id_operacao}>
-                      {op.nome_operacao} (NFe)
+                      {op.nome_operacao || op.nome} (NFe - Saída)
                     </MenuItem>
                   ))}
                   
-                {todasOperacoes.filter(op => op.modelo_documento === '55').length === 0 && 
+                {todasOperacoes.filter(op => {
+                  const ehModelo55 = String(op.modelo_documento) === '55' || String(op.modelo_nf) === '55';
+                  const transacao = op.transacao || op.tipo_transacao || op.tipo_operacao || op.tipo || '';
+                  const isSaida = transacao === '' || transacao.toLowerCase().includes('saida') || transacao.toLowerCase().includes('saída') || transacao.toUpperCase() === 'S';
+                  return ehModelo55 && isSaida;
+                }).length === 0 && 
                   <MenuItem disabled>
-                    Nenhuma operação de NFe (Modelo 55) encontrada.
+                    Nenhuma operação de NFe (Modelo 55 - Saída) encontrada.
                   </MenuItem>
                 }
               </Select>
