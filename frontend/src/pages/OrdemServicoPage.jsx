@@ -2103,9 +2103,17 @@ const OrdemServicoPage = () => {
       return;
     }
 
-    const valor = parseFloat(valorPagamentoTemp);
+    let valor = parseFloat(valorPagamentoTemp);
+    if (isNaN(valor) || valor <= 0) {
+      const restante = calcularValorRestante();
+      if (restante > 0) {
+        valor = restante;
+        setValorPagamentoTemp(restante.toFixed(2));
+      }
+    }
+
     if (!valor || valor <= 0) {
-      setError('Informe um valor válido');
+      setError('Informe um valor válido para o pagamento');
       return;
     }
 
@@ -6065,7 +6073,16 @@ const OrdemServicoPage = () => {
                     <InputLabel>Forma de Pagamento *</InputLabel>
                     <Select
                       value={formaPagamentoTemp}
-                      onChange={(e) => setFormaPagamentoTemp(e.target.value)}
+                      onChange={(e) => {
+                        const sel = e.target.value;
+                        setFormaPagamentoTemp(sel);
+                        if (sel && (!valorPagamentoTemp || parseFloat(valorPagamentoTemp) <= 0)) {
+                          const restante = calcularValorRestante();
+                          if (restante > 0) {
+                            setValorPagamentoTemp(restante.toFixed(2));
+                          }
+                        }
+                      }}
                       label="Forma de Pagamento *"
                     >
                       <MenuItem value="">Selecione...</MenuItem>
