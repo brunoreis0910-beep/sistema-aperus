@@ -2661,7 +2661,9 @@ const OrdemServicoPage = () => {
           assinatura = assinaturaBase64;
         }
 
-        if (tipoImpressao === 'a4_simples') {
+        if (tipoImpressao === 'meia_folha' || tipoImpressao === 'a5') {
+          conteudo = gerarConteudoImpressaoMeiaFolha(ordemCompleta, fotos, assinatura);
+        } else if (tipoImpressao === 'a4_simples') {
           conteudo = gerarConteudoImpressao(ordemCompleta);
         } else {
           conteudo = gerarConteudoImpressaoComFotos(ordemCompleta, fotos, assinatura);
@@ -2808,6 +2810,260 @@ const OrdemServicoPage = () => {
         ` : ''}
       </div>
     `;
+  };
+
+  const gerarHtmlFinanceiroCondicoes = (ordem, modoCompacto = false) => {
+    let listaPagamentos = [];
+
+    if (ordem.financeiro && Array.isArray(ordem.financeiro) && ordem.financeiro.length > 0) {
+      listaPagamentos = ordem.financeiro.map((fin, idx) => ({
+        parcela: fin.numero_parcela || (idx + 1),
+        forma: fin.forma_pagamento_nome || fin.forma_pagamento || 'N/A',
+        vencimento: fin.data_vencimento ? new Date(fin.data_vencimento).toLocaleDateString('pt-BR') : 'À vista',
+        valor: parseFloat(fin.valor_parcela || fin.valor_original || 0),
+        status: fin.status_conta || 'Pendente'
+      }));
+    } else if ((formasPagamentoSelecionadas || []).length > 0) {
+      let idxParcela = 1;
+      const dataEmissao = new Date();
+      (formasPagamentoSelecionadas || []).forEach(fp => {
+        const qtdParcelas = parseInt(fp.parcelas) || 1;
+        const vlrParcela = parseFloat(fp.valor) / qtdParcelas;
+        for (let i = 0; i < qtdParcelas; i++) {
+          const venc = new Date(dataEmissao);
+          venc.setDate(venc.getDate() + (fp.dias_vencimento || 0) + (i * 30));
+          listaPagamentos.push({
+            parcela: idxParcela++,
+            forma: fp.nome_forma || 'N/A',
+            vencimento: venc.toLocaleDateString('pt-BR'),
+            valor: vlrParcela,
+            status: 'Pendente'
+          });
+        }
+      });
+    }
+
+    if (listaPagamentos.length === 0) {
+      const condicaoTexto = ordem.condicao_pagamento || ordem.forma_pagamento_nome || 'À Vista';
+      return `
+        <div style="margin: 14px 0; padding: 10px 14px; border: 1px dashed #1565c0; border-radius: 6px; background-color: #f0f7ff; font-size: 0.9em; page-break-inside: avoid;">
+          <strong style="color: #1565c0;">💳 Condições de Pagamento:</strong> ${condicaoTexto}
+        </div>
+      `;
+    }
+
+    if (modoCompacto) {
+      const parcelasRows = listaPagamentos.map(p => `
+        <tr>
+          <td style="padding: 4px; text-align: center; border: 1px solid #cbd5e1; font-weight: bold;">${p.parcela}ª</td>
+          <td style="padding: 4px; border: 1px solid #cbd5e1;">${p.forma}</td>
+          <td style="padding: 4px; text-align: center; border: 1px solid #cbd5e1;">${p.vencimento}</td>
+          <td style="padding: 4px; text-align: right; border: 1px solid #cbd5e1; font-weight: bold;">R$ ${p.valor.toFixed(2)}</td>
+        </tr>
+      `).join('');
+
+      return `
+        <div style="margin: 10px 0; page-break-inside: avoid;">
+          <div style="font-weight: bold; color: #1565c0; font-size: 0.85em; margin-bottom: 4px; border-bottom: 2px solid #1565c0; padding-bottom: 2px;">
+            💳 CONDIÇÕES DE PAGAMENTO / PARCELAS
+          </div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.8em;">
+            <thead>
+              <tr style="background: #e3f2fd; color: #0d47a1;">
+                <th style="padding: 4px; text-align: center; border: 1px solid #cbd5e1; width: 12%;">Parc.</th>
+                <th style="padding: 4px; text-align: left; border: 1px solid #cbd5e1;">Forma</th>
+                <th style="padding: 4px; text-align: center; border: 1px solid #cbd5e1; width: 25%;">Vencimento</th>
+                <th style="padding: 4px; text-align: right; border: 1px solid #cbd5e1; width: 25%;">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${parcelasRows}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    const parcelasCards = listaPagamentos.map(p => {
+      const isPaga = p.status === 'Paga';
+      const isParcial = p.status === 'Parcial';
+      const statusBadge = isPaga 
+        ? `<span style="background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; padding: 2px 7px; border-radius: 10px; font-size: 0.78em; font-weight: bold;">✓ Paga</span>`
+        : isParcial
+        ? `<span style="background: #fff3e0; color: #e65100; border: 1px solid #ffe082; padding: 2px 7px; border-radius: 10px; font-size: 0.78em; font-weight: bold;">⚡ Parcial</span>`
+        : `<span style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 2px 7px; border-radius: 10px; font-size: 0.78em; font-weight: bold;">⏳ Pendente</span>`;
+
+      return `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
+          <div>
+            <div style="font-weight: bold; font-size: 0.88em; color: #1e293b;">
+              Parcela ${p.parcela} — ${p.forma}
+            </div>
+            <div style="font-size: 0.8em; color: #64748b; margin-top: 2px;">
+              Vencimento: <strong>${p.vencimento}</strong>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-weight: bold; font-size: 0.95em; color: #0f172a;">R$ ${p.valor.toFixed(2)}</div>
+            <div style="margin-top: 3px;">${statusBadge}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div style="margin: 20px 0; padding: 14px 16px; border: 2px solid #1976d2; border-radius: 8px; background: #f8fafc; page-break-inside: avoid;">
+        <h3 style="color: #1565c0; margin: 0 0 12px 0; font-size: 1.05em; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+          <span>💳 CONDIÇÕES DE PAGAMENTO / PARCELAMENTO</span>
+          <span style="font-size: 0.85em; font-weight: normal; color: #475569;">Total: ${listaPagamentos.length} ${listaPagamentos.length === 1 ? 'parcela' : 'parcelas'}</span>
+        </h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px;">
+          ${parcelasCards}
+        </div>
+      </div>
+    `;
+  };
+
+  const gerarConteudoImpressaoMeiaFolha = (ordem, fotos, assinatura) => {
+    const rodapeTexto = configImpressao.observacao_rodape || '';
+    const nomeCliente = ordem.cliente_nome || ordem.nome_cliente || 'N/A';
+    const nomeTecnico = ordem.tecnico_nome || ordem.nome_tecnico || ordem.vendedor_nome || 'N/A';
+    const statusInfo = getStatusInfo(ordem);
+    const empresa = ordem.empresa_info || {};
+
+    const itensHtml = [];
+    let subtotalProd = 0;
+    let subtotalServ = 0;
+
+    (ordem.itens_produtos || []).forEach(item => {
+      const qty = parseFloat(item.quantidade || 0);
+      const vlr = parseFloat(item.valor_unitario || 0);
+      const desc = parseFloat(item.desconto || 0);
+      const total = qty * vlr - desc;
+      subtotalProd += total;
+      itensHtml.push(`
+        <tr>
+          <td style="padding: 3px 5px; text-align: center;"><span style="background:#4caf50;color:white;padding:1px 4px;border-radius:2px;font-size:0.7em;">PROD</span></td>
+          <td style="padding: 3px 5px;">${item.produto_nome || item.descricao || 'Produto'}</td>
+          <td style="padding: 3px 5px; text-align: center;">${qty.toFixed(2)}</td>
+          <td style="padding: 3px 5px; text-align: right;">R$ ${vlr.toFixed(2)}</td>
+          <td style="padding: 3px 5px; text-align: right;"><strong>R$ ${total.toFixed(2)}</strong></td>
+        </tr>`);
+    });
+
+    (ordem.itens_servicos || []).forEach(item => {
+      const qty = parseFloat(item.quantidade || 0);
+      const vlr = parseFloat(item.valor_unitario || 0);
+      const desc = parseFloat(item.desconto || 0);
+      const total = qty * vlr - desc;
+      subtotalServ += total;
+      const descServico = item.descricao_servico || item.servico_nome || 'Serviço';
+      itensHtml.push(`
+        <tr>
+          <td style="padding: 3px 5px; text-align: center;"><span style="background:#2196f3;color:white;padding:1px 4px;border-radius:2px;font-size:0.7em;">SERV</span></td>
+          <td style="padding: 3px 5px;">${descServico}</td>
+          <td style="padding: 3px 5px; text-align: center;">${qty.toFixed(2)}</td>
+          <td style="padding: 3px 5px; text-align: right;">R$ ${vlr.toFixed(2)}</td>
+          <td style="padding: 3px 5px; text-align: right;"><strong>R$ ${total.toFixed(2)}</strong></td>
+        </tr>`);
+    });
+
+    const totalGeral = parseFloat(ordem.valor_total_os || 0) || (subtotalProd + subtotalServ);
+
+    const checklistHtml = gerarHtmlChecklistImpressao(ordem, true);
+    const financeiroHtml = gerarHtmlFinanceiroCondicoes(ordem, true);
+
+    const assinaturaHtml = assinatura ? `
+      <div style="margin-top: 10px; text-align: center; page-break-inside: avoid;">
+        <img src="${assinatura}" alt="Assinatura" style="max-width: 220px; max-height: 50px; border-bottom: 1px solid #333;" />
+        <div style="font-size: 0.75em; color: #555; margin-top: 2px;">Assinatura do Cliente</div>
+      </div>` : `
+      <div style="margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: center; page-break-inside: avoid;">
+        <div style="border-top: 1px solid #333; padding-top: 2px; font-size: 0.72em;">Assinatura do Cliente</div>
+        <div style="border-top: 1px solid #333; padding-top: 2px; font-size: 0.72em;">Assinatura do Técnico</div>
+      </div>`;
+
+    return `<!DOCTYPE html>
+<html><head>
+  <title>OS-${ordem.id_os || ''} — Meia Folha</title>
+  <meta charset="UTF-8">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;padding:6mm;font-size:11px;line-height:1.35;color:#1e293b;background:#fff;}
+    .meia-container{max-width:148mm;margin:0 auto;border:1px solid #cbd5e1;padding:8px;border-radius:4px;}
+    .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1e40af;padding-bottom:6px;margin-bottom:8px;}
+    .empresa-title{font-size:1.1em;font-weight:bold;color:#1e3a8a;}
+    .os-badge{background:#1e40af;color:#fff;padding:4px 10px;border-radius:4px;font-size:1.1em;font-weight:bold;text-align:right;}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;padding:6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;font-size:0.88em;}
+    .lbl{font-weight:bold;color:#3b82f6;}
+    table{width:100%;border-collapse:collapse;margin:6px 0;font-size:0.85em;}
+    th{background:#2563eb;color:white;padding:4px;font-size:0.8em;text-transform:uppercase;}
+    td{border:1px solid #e2e8f0;padding:4px;}
+    tbody tr:nth-child(even){background:#f8fafc;}
+    .total-bar{display:flex;justify-content:space-between;align-items:center;background:#1e40af;color:white;padding:6px 10px;border-radius:4px;font-weight:bold;font-size:1.05em;margin:8px 0;}
+    .sec-box{margin:6px 0;padding:5px 8px;border:1px solid #e2e8f0;border-radius:4px;background:#fafafa;font-size:0.85em;}
+    .footer-text{margin-top:8px;text-align:center;color:#64748b;font-size:0.75em;border-top:1px solid #e2e8f0;padding-top:4px;}
+    @media print{
+      body{padding:0;}
+      .meia-container{border:none;padding:0;max-width:100%;}
+      @page{size:A5 landscape;margin:5mm;}
+    }
+  </style>
+</head><body>
+  <div class="meia-container">
+    <div class="header">
+      <div>
+        <div class="empresa-title">${empresa.nome || 'SISTEMA APERUS'}</div>
+        ${empresa.cnpj ? `<div style="font-size:0.8em;color:#475569;">CNPJ: ${empresa.cnpj} | Fone: ${empresa.telefone || 'N/A'}</div>` : ''}
+      </div>
+      <div class="os-badge">
+        OS-${ordem.id_os || '---'}
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div><span class="lbl">Cliente:</span> <strong>${nomeCliente}</strong></div>
+      <div><span class="lbl">Data:</span> ${ordem.data_abertura ? new Date(ordem.data_abertura).toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</div>
+      <div><span class="lbl">Técnico:</span> ${nomeTecnico}</div>
+      <div><span class="lbl">Status:</span> <strong style="color:${getStatusColor(statusInfo.cor)};">${statusInfo.nome}</strong></div>
+      ${ordem.cliente_telefone ? `<div><span class="lbl">Telefone:</span> ${ordem.cliente_telefone}</div>` : ''}
+      ${ordem.solicitante ? `<div><span class="lbl">Solicitante:</span> ${ordem.solicitante}</div>` : ''}
+    </div>
+
+    ${ordem.descricao_problema ? `<div class="sec-box"><strong>📝 Descrição / Obs:</strong> ${ordem.descricao_problema}</div>` : ''}
+    ${ordem.laudo_tecnico ? `<div class="sec-box" style="background:#fff8e1;border-color:#ffe082;"><strong style="color:#b45309;">🔧 Laudo Técnico:</strong> ${ordem.laudo_tecnico}</div>` : ''}
+
+    ${checklistHtml}
+
+    <div style="font-weight:bold;color:#1e40af;margin-top:6px;font-size:0.9em;">🛠️ ITENS E SERVIÇOS</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:10%">Tipo</th>
+          <th style="width:48%">Descrição</th>
+          <th style="width:10%;text-align:center">Qtd</th>
+          <th style="width:14%;text-align:right">Unit.</th>
+          <th style="width:18%;text-align:right">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itensHtml.length > 0 ? itensHtml.join('') : '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:8px;">Nenhum item adicionado</td></tr>'}
+      </tbody>
+    </table>
+
+    <div class="total-bar">
+      <span>VALOR TOTAL DA OS</span>
+      <span>R$ ${totalGeral.toFixed(2)}</span>
+    </div>
+
+    ${financeiroHtml}
+    ${assinaturaHtml}
+
+    <div class="footer-text">
+      Impresso em: ${new Date().toLocaleString('pt-BR')} ${rodapeTexto ? ` | ${rodapeTexto}` : ''}
+    </div>
+  </div>
+</body></html>`;
   };
 
   const gerarConteudoImpressao = (ordem) => {
@@ -2963,51 +3219,8 @@ const OrdemServicoPage = () => {
       `;
     }
 
-    // Buscar informações de financeiro
-    let financeiroHtml = '';
-    if (ordem.financeiro && Array.isArray(ordem.financeiro) && ordem.financeiro.length > 0) {
-      const financeiroItens = ordem.financeiro.map(fin => {
-        const valor = parseFloat(fin.valor_parcela || 0);
-        const status = fin.status_conta || 'Pendente';
-        const statusClass = status === 'Paga' ? 'pago' : status === 'Parcial' ? 'parcial' : 'pendente';
-        const vencimento = fin.data_vencimento ? new Date(fin.data_vencimento).toLocaleDateString('pt-BR') : 'N/A';
-        const formaPagamento = fin.forma_pagamento_nome || fin.forma_pagamento || 'N/A';
-
-        return `
-          <tr>
-            <td style="text-align: center;">${fin.numero_parcela || 1}</td>
-            <td>${formaPagamento}</td>
-            <td style="text-align: center;">${vencimento}</td>
-            <td style="text-align: right;">R$ ${valor.toFixed(2)}</td>
-            <td style="text-align: center;">
-              <span class="status-financeiro ${statusClass}">${status}</span>
-            </td>
-          </tr>
-        `;
-      }).join('');
-
-      financeiroHtml = `
-        <div style="margin: 20px 0;">
-          <h3 style="color: #2196F3; display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 1.3em;">💰</span> Financeiro
-          </h3>
-          <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
-            <thead>
-              <tr style="background-color: #2196F3; color: white;">
-                <th style="border: 1px solid #ddd; padding: 10px; text-align: center; width: 10%;">Parcela</th>
-                <th style="border: 1px solid #ddd; padding: 10px; width: 25%;">Forma Pagamento</th>
-                <th style="border: 1px solid #ddd; padding: 10px; text-align: center; width: 15%;">Vencimento</th>
-                <th style="border: 1px solid #ddd; padding: 10px; text-align: right; width: 20%;">Valor</th>
-                <th style="border: 1px solid #ddd; padding: 10px; text-align: center; width: 15%;">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${financeiroItens}
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
+    // Buscar informações de financeiro e condições de pagamento
+    const financeiroHtml = gerarHtmlFinanceiroCondicoes(ordem);
 
     return `
       <!DOCTYPE html>
@@ -3399,6 +3612,8 @@ const OrdemServicoPage = () => {
   </table>
 
   <div class="total">💰 VALOR TOTAL: R$ ${totalGeral.toFixed(2)}</div>
+
+  ${gerarHtmlFinanceiroCondicoes(ordem)}
 
   ${fotosHtml}
   ${assinaturaHtml}

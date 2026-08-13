@@ -154,6 +154,9 @@ const ModuloCard = ({ modulo, axiosInstance, gabaritos }) => {
                     {modulo.key === 'ordem_servico' && (
                       <MenuItem value="a4_fotos">📸 A4 com Fotos e Assinatura</MenuItem>
                     )}
+                    {modulo.key === 'ordem_servico' && (
+                      <MenuItem value="meia_folha">📄 Meia Folha / A5 (Compacto com Condições de Pagamento)</MenuItem>
+                    )}
                     <MenuItem value="personalizado">✨ Gabarito Customizado</MenuItem>
                   </Select>
                 </FormControl>
