@@ -108,8 +108,47 @@ class DevolucaoSerializer(serializers.ModelSerializer):
         
         # Atualizar valor total da devolução
         devolucao.valor_total_devolucao = valor_total
+
+        # Se for Devolução de Compra com Operação Fiscal, criar registro em vendas para emissão NF-e SEFAZ
+        if devolucao.tipo == 'compra' and devolucao.id_operacao and not devolucao.id_venda:
+            try:
+                from django.db import connection
+                with connection.cursor() as cursor:
+                    # Garantir que exista um cliente id correspondente ao fornecedor
+                    id_forn = devolucao.id_fornecedor
+                    cursor.execute("""
+                        INSERT INTO vendas (
+                            id_cliente, id_operacao, data_venda, valor_total,
+                            observacao, chave_nfe_referenciada, status_nfe, status_venda
+                        ) VALUES (%s, %s, NOW(), %s, %s, %s, 'PENDENTE', 'PENDENTE')
+                    """, [
+                        id_forn,
+                        devolucao.id_operacao,
+                        valor_total,
+                        devolucao.observacoes or f'Devolução referente à compra #{devolucao.id_compra}',
+                        devolucao.chave_nfe_referenciada or ''
+                    ])
+                    venda_id = cursor.lastrowid
+                    devolucao.id_venda = venda_id
+
+                    # Criar itens da venda para a NF-e
+                    for dev_item in devolucao.itens.all():
+                        cursor.execute("""
+                            INSERT INTO venda_itens (
+                                id_venda, id_produto, quantidade, valor_unitario, valor_total, cfop
+                            ) VALUES (%s, %s, %s, %s, %s, %s)
+                        """, [
+                            venda_id,
+                            dev_item.id_produto,
+                            dev_item.quantidade_devolvida,
+                            dev_item.valor_unitario,
+                            dev_item.valor_total,
+                            dev_item.cfop or '5202'
+                        ])
+            except Exception as e_venda:
+                print(f"Aviso ao gerar Venda de Devolucao: {e_venda}")
+
         devolucao.save()
-        
         return devolucao
     
     def update(self, instance, validated_data):

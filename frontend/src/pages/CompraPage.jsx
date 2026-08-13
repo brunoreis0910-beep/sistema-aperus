@@ -1782,40 +1782,45 @@ function CompraPage() {
     }
   };
 
-  // Edita compra
-  const editarCompra = async (compra) => {
+  // Edita compra ou devolução
+  const editarCompra = async (compraOuId) => {
     try {
-      // Busca os detalhes completos da compra
-      const response = await axiosInstance.get(`/compras/${compra.id_compra || compra.id}/`)
-      const compraCompleta = response.data
-      
-      // Preenche o formulário com os dados da compra
-      // Restaura a representação original da NF: reverte a expansão de fração
-      const itensRestaurados = (compraCompleta.itens || []).map(item => {
-        const fracao = parseFloat(item.fracao_memorizada) || 1;
-        const qtdNoEstoque = parseFloat(item.quantidade) || 0; // Esta é a quantidade que foi para o estoque
-        const valorCustoEstoque = parseFloat(item.valor_unitario) || 0; // Custo unitário no estoque
+      const isDevolucao = typeof compraOuId === 'object'
+        ? (compraOuId.is_devolucao || (compraOuId.operacao_nome || '').toUpperCase().includes('DEVOLU'))
+        : String(compraOuId).startsWith('DEV');
 
-        // Se a fração é maior que 1, significa que a quantidade e o valor foram convertidos.
+      if (isDevolucao) {
+        const rowObj = typeof compraOuId === 'object' ? compraOuId : { id_compra: String(compraOuId).replace('DEV-', '') };
+        abrirModalDevolucaoCompra(rowObj);
+        return;
+      }
+
+      const id = typeof compraOuId === 'object' ? (compraOuId.id_compra || compraOuId.id) : compraOuId;
+      const response = await axiosInstance.get(`/compras/${id}/`)
+      const compraCompleta = response.data
+
+      // Mapeia os itens da compra e lê a fração salva no cache/API se existir
+      const itensRestaurados = (compraCompleta.itens || []).map(item => {
+        const qtdNoEstoque = parseFloat(item.quantidade) || 0;
+        const valorCustoEstoque = parseFloat(item.valor_unitario) || 0;
+        const fracao = parseFloat(item.fracao_memorizada || 1);
+
+        // Se o produto foi cadastrado com uma fração de embalagem (ex: fracao > 1),
+        // a quantidade no banco foi salva expandida em unidades (Ex: 12 unidades).
         // Precisamos reverter para os valores da Nota Fiscal.
         if (fracao > 1) {
-          // Quantidade da NF = Quantidade do Estoque / Fração
           const qtdNF = parseFloat((qtdNoEstoque / fracao).toFixed(6));
-          // Valor Unitário da NF = Custo Unitário do Estoque * Fração
-          // Trunca para 6 casas decimais em vez de arredondar
           const valorUnitNFCalculado = valorCustoEstoque * fracao;
           const valorUnitNF = Math.trunc(valorUnitNFCalculado * 1000000) / 1000000;
 
           return {
             ...item,
-            quantidade: qtdNF, // Restaura a quantidade original da NF (ex: 2 caixas)
-            valor_unitario: valorUnitNF, // Restaura o valor unitário original da NF (ex: R$ 60,00 por caixa)
-            fracao_memorizada: fracao, // Mantém a fração (ex: 6 unidades por caixa)
-            // A quantidade_com_fracao é recalculada no save, não precisa restaurar aqui
+            quantidade: qtdNF,
+            valor_unitario: valorUnitNF,
+            fracao_memorizada: fracao,
           };
         }
 
-        // Se não houve expansão (fração é 1), os valores já estão corretos.
         return {
           ...item,
           quantidade: qtdNoEstoque,
@@ -1834,13 +1839,9 @@ function CompraPage() {
         itens: itensRestaurados
       })
       
-      // Define que está editando
       setEditandoId(compraCompleta.id_compra || compraCompleta.id)
       setMostrarFormulario(true)
-      
-      // Rola a página para o topo onde está o formulário
       window.scrollTo({ top: 0, behavior: 'smooth' })
-      
       setSucesso('📝 Compra carregada para edição')
       setTimeout(() => setSucesso(null), 3000)
     } catch (error) {
@@ -1849,9 +1850,32 @@ function CompraPage() {
     }
   }
 
-  // Exclui compra
-  const excluirCompra = async (id) => {
+  // Exclui compra ou devolução
+  const excluirCompra = async (compraOuId) => {
     try {
+      const isDevolucao = typeof compraOuId === 'object'
+        ? (compraOuId.is_devolucao || (compraOuId.operacao_nome || '').toUpperCase().includes('DEVOLU'))
+        : String(compraOuId).startsWith('DEV') || String(compraOuId).startsWith('NFE');
+
+      if (isDevolucao) {
+        if (!window.confirm('Deseja realmente excluir esta Devolução?')) return;
+        const idDev = typeof compraOuId === 'object' ? (compraOuId.id_devolucao || compraOuId.id_compra || compraOuId.id) : compraOuId;
+        const cleanDevId = String(idDev).replace('DEV-', '').replace('NFE-', '');
+        
+        try {
+          await axiosInstance.delete(`/devolucoes/${cleanDevId}/`);
+        } catch (e) {
+          if (typeof compraOuId === 'object' && compraOuId.id_venda) {
+            await axiosInstance.delete(`/vendas/${compraOuId.id_venda}/`);
+          }
+        }
+        setSucesso('✅ Devolução excluída com sucesso!');
+        carregarDados();
+        setTimeout(() => setSucesso(null), 3000);
+        return;
+      }
+
+      const id = typeof compraOuId === 'object' ? (compraOuId.id_compra || compraOuId.id) : compraOuId;
       // Primeiro verifica se há financeiro pago
       const responseFinanceiro = await axiosInstance.get(`/financeiro/?id_compra_origem=${id}`)
       const contas = Array.isArray(responseFinanceiro.data) 
@@ -1867,13 +1891,11 @@ function CompraPage() {
         const mensagem = `⚠️ Esta compra possui ${contasPagas.length} conta(s) já paga(s) no valor total de R$ ${totalPago.toFixed(2)}.\n\nPara excluir esta compra, você precisa primeiro:\n1. Ir ao módulo Financeiro\n2. Estornar os ${contasPagas.length} pagamento(s)\n3. Depois voltar e excluir a compra\n\nDeseja ir para o Financeiro agora?`
         
         if (window.confirm(mensagem)) {
-          // Redireciona para o financeiro
           window.location.href = '/#/financeiro'
         }
         return
       }
       
-      // Se não há contas pagas, pede confirmação normal
       if (!window.confirm('Deseja realmente excluir esta compra?')) return
 
       await axiosInstance.delete(`/compras/${id}/`)
@@ -1882,8 +1904,6 @@ function CompraPage() {
       setTimeout(() => setSucesso(null), 3000)
     } catch (error) {
       console.error('Erro ao excluir:', error)
-      
-      // Trata erro 403 (compra com contas pagas)
       if (error.response?.status === 403) {
         const mensagem = error.response?.data?.detail || error.response?.data?.error || 'Não é permitido excluir esta compra'
         setErro(`❌ ${mensagem}`)
