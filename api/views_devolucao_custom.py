@@ -604,7 +604,7 @@ def buscar_compra_view(request, id_compra):
             real_id_compra = compra[0]
             chave_nfe_compra = compra[6]
 
-            # Buscar itens da compra
+            # Buscar itens da compra com impostos do XML/entrada
             if chave_nfe_compra:
                 cursor.execute("""
                     SELECT
@@ -625,7 +625,12 @@ def buscar_compra_view(request, id_compra):
                               AND UPPER(dop.nome_operacao) LIKE '%%COMPRA%%'
                               AND dv.status_nfe != 'CANCELADA'
                               AND dvi.id_produto = ci.id_produto
-                        ), 0) as quantidade_devolvida
+                        ), 0) as quantidade_devolvida,
+                        COALESCE(ci.cfop, '') as cfop,
+                        COALESCE(ci.vpis, 0) as vpis,
+                        COALESCE(ci.vcofins, 0) as vcofins,
+                        COALESCE(ci.vibs, 0) as vibs,
+                        COALESCE(ci.vcbs, 0) as vcbs
                     FROM compra_itens ci
                     JOIN produtos p ON ci.id_produto = p.id_produto
                     WHERE ci.id_compra = %s
@@ -640,7 +645,12 @@ def buscar_compra_view(request, id_compra):
                         ci.quantidade,
                         ci.valor_unitario,
                         ci.valor_total,
-                        0 as quantidade_devolvida
+                        0 as quantidade_devolvida,
+                        COALESCE(ci.cfop, '') as cfop,
+                        COALESCE(ci.vpis, 0) as vpis,
+                        COALESCE(ci.vcofins, 0) as vcofins,
+                        COALESCE(ci.vibs, 0) as vibs,
+                        COALESCE(ci.vcbs, 0) as vcbs
                     FROM compra_itens ci
                     JOIN produtos p ON ci.id_produto = p.id_produto
                     WHERE ci.id_compra = %s
@@ -662,6 +672,11 @@ def buscar_compra_view(request, id_compra):
                         'quantidade_disponivel': quantidade_disponivel,
                         'valor_unitario'      : float(item[5]),
                         'valor_total'         : float(item[6]),
+                        'cfop'                : item[8] or '',
+                        'vpis'                : float(item[9] or 0),
+                        'vcofins'             : float(item[10] or 0),
+                        'vibs'                : float(item[11] or 0),
+                        'vcbs'                : float(item[12] or 0),
                     })
 
             compra_data = {

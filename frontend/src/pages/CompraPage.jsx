@@ -210,6 +210,22 @@ function CompraPage() {
     }
   };
 
+  // Auto-atualiza a Observação Fiscal conforme seleção total ou parcial de produtos
+  useEffect(() => {
+    if (!compraParaDevolucao || itensDevolucaoCompra.length === 0) return;
+
+    const numNota = compraParaDevolucao.numero_documento || compraParaDevolucao.numero_nota || compraParaDevolucao.id_compra || '';
+    const todosSelecionados = itensDevolucaoCompra.length > 0 && itensDevolucaoCompra.every(i => i.selecionado);
+    const todasQuantidadesIntegrais = itensDevolucaoCompra.every(i => Math.abs(i.quantidade_devolver - i.quantidade_disponivel) < 0.001);
+    const ehTotal = todosSelecionados && todasQuantidadesIntegrais;
+
+    if (ehTotal) {
+      setObservacoesDevolucao(`Devolução referente à NF-e nº ${numNota}`);
+    } else {
+      setObservacoesDevolucao(`Devolução parcial referente à NF-e nº ${numNota}`);
+    }
+  }, [itensDevolucaoCompra, compraParaDevolucao]);
+
   const confirmarDevolucaoCompra = async () => {
     const itensSelecionados = itensDevolucaoCompra
       .filter(i => i.selecionado && i.quantidade_devolver > 0)
