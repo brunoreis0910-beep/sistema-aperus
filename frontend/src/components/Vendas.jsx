@@ -2316,28 +2316,83 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     });
   };
 
-  // Importar Nota de Origem para Nota Complementar ou Devolução
+  // Importar Nota de Origem para Nota Complementar ou Devolução (Vendas e Compras)
   const handleImportarNotaOrigem = async () => {
     if (!numOrigemBusca.trim()) {
-      setError('❌ Informe o número do documento ou NF-e de origem.');
+      setError('❌ Informe a Chave de Acesso (44 dígitos), ID ou número do documento de origem.');
       return;
     }
     setBuscandoOrigem(true);
     setError('');
     setSuccess('');
+    const targetQuery = numOrigemBusca.trim();
+
     try {
-      console.log(`[Importar Origem] Buscando venda com número: ${numOrigemBusca}`);
-      const res = await axiosInstance.get(`/vendas/?numero_documento=${encodeURIComponent(numOrigemBusca.trim())}`);
-      
+      console.log(`[Importar Origem] Buscando origem com termo: ${targetQuery}`);
+
+      let compraData = null;
       let vendaOrigemObj = null;
+
+      // 1. Tentar buscar direto via endpoint de busca inteligente (suporta Compras e Vendas por ID, Nº ou Chave NFe)
+      try {
+        const resDev = await axiosInstance.get(`/devolucoes/buscar_compra/${encodeURIComponent(targetQuery)}/`);
+        if (resDev.data && (resDev.data.id_compra || resDev.data.id_venda)) {
+          compraData = resDev.data;
+        }
+      } catch (eDev) {}
+
+      if (!compraData) {
+        try {
+          const resDevVenda = await axiosInstance.get(`/devolucoes/buscar_venda/${encodeURIComponent(targetQuery)}/`);
+          if (resDevVenda.data && (resDevVenda.data.id_compra || resDevVenda.data.id_venda)) {
+            compraData = resDevVenda.data;
+          }
+        } catch (eDev2) {}
+      }
+
+      // Se encontrou dados estruturados (Compra ou Venda)
+      if (compraData) {
+        const novosItens = (compraData.itens || []).map(item => ({
+          id_produto: item.id_produto,
+          produto_id: item.id_produto,
+          produto_nome: item.nome_produto || item.produto_nome || '',
+          nome_produto: item.nome_produto || item.produto_nome || '',
+          codigo_produto: item.codigo_produto || '',
+          quantidade: parseFloat(item.quantidade_disponivel || item.quantidade_original || item.quantidade || 0),
+          valor_unitario: parseFloat(item.valor_unitario || 0),
+          subtotal: parseFloat(item.valor_total || (item.quantidade * item.valor_unitario) || 0),
+          cfop: item.cfop || '',
+        }));
+
+        const novoClienteFornecedorId = compraData.id_cliente || compraData.id_fornecedor || '';
+        const chaveRef = compraData.chave_nfe_origem || compraData.chave_nfe || '';
+
+        setVenda(prev => ({
+          ...prev,
+          id_cliente: String(novoClienteFornecedorId || prev.id_cliente),
+          chave_nfe_referenciada: chaveRef,
+          itens: novosItens.length > 0 ? novosItens : prev.itens
+        }));
+
+        if (novoClienteFornecedorId) {
+          buscarLimiteCliente(novoClienteFornecedorId);
+        }
+
+        setSuccess(`✅ Nota/Compra de origem encontrada! ${novosItens.length} produto(s) e a chave de acesso foram carregados com sucesso.`);
+        setBuscandoOrigem(false);
+        return;
+      }
+
+      // 2. Fallback padrão em /vendas/
+      const res = await axiosInstance.get(`/vendas/?numero_documento=${encodeURIComponent(targetQuery)}`);
       if (res.data && res.data.results && res.data.results.length > 0) {
         vendaOrigemObj = res.data.results.find(v => v.status_nfe === 'EMITIDA') || res.data.results[0];
       } else if (res.data && Array.isArray(res.data) && res.data.length > 0) {
         vendaOrigemObj = res.data.find(v => v.status_nfe === 'EMITIDA') || res.data[0];
       }
-      
+
       if (!vendaOrigemObj) {
-        const resSearch = await axiosInstance.get(`/vendas/?search=${encodeURIComponent(numOrigemBusca.trim())}`);
+        const resSearch = await axiosInstance.get(`/vendas/?search=${encodeURIComponent(targetQuery)}`);
         if (resSearch.data && resSearch.data.results && resSearch.data.results.length > 0) {
           vendaOrigemObj = resSearch.data.results.find(v => v.status_nfe === 'EMITIDA') || resSearch.data.results[0];
         } else if (resSearch.data && Array.isArray(resSearch.data) && resSearch.data.length > 0) {
@@ -2346,7 +2401,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       }
 
       if (!vendaOrigemObj) {
-        setError(`❌ Nenhuma venda ou NF-e encontrada com o número/documento "${numOrigemBusca}".`);
+        setError(`❌ Nenhuma venda, compra ou NF-e encontrada com o número/documento/chave "${targetQuery}".`);
         setBuscandoOrigem(false);
         return;
       }
