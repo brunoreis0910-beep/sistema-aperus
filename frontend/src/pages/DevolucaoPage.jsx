@@ -454,49 +454,52 @@ const DevolucaoPage = () => {
           />
         </Grid>
         
+        <Grid item xs={12} md={6}>
+          <TextField
+            select
+            fullWidth
+            label="Operação Fiscal (Emissão de Nota Fiscal Modelo 55)"
+            value={operacaoId}
+            onChange={(e) => setOperacaoId(e.target.value)}
+            helperText="Selecione a Operação Modelo 55 para emitir NF-e Fiscal de Devolução"
+          >
+            <MenuItem value="">Nenhuma (Devolução Apenas Gerencial Interna)</MenuItem>
+            {operacoes
+              .filter(op => {
+                const trans = (op.transacao || op.tipo_transacao || op.tipo || '').toLowerCase();
+                const mod = String(op.modelo_documento || op.modelo_nf || '');
+                return mod === '55' || trans.includes('devoluc');
+              })
+              .map((op) => (
+                <MenuItem key={op.id_operacao} value={op.id_operacao}>
+                  {op.nome_operacao || op.nome} {op.modelo_documento ? `(NF-e Mod. ${op.modelo_documento})` : ''}
+                </MenuItem>
+              ))}
+          </TextField>
+        </Grid>
+        
         {tipoDevolucao === 'venda' && (
-          <>
-            <Grid item xs={12} md={6}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Typography sx={{ fontWeight: 'bold' }}>Gerar Crédito para o Cliente?</Typography>
-                <Button
-                  variant={gerarCredito ? 'contained' : 'outlined'}
-                  color="success"
-                  onClick={() => setGerarCredito(true)}
-                  sx={{ minWidth: 80 }}
-                >
-                  Sim
-                </Button>
-                <Button
-                  variant={!gerarCredito ? 'contained' : 'outlined'}
-                  color="error"
-                  onClick={() => setGerarCredito(false)}
-                  sx={{ minWidth: 80 }}
-                >
-                  Não
-                </Button>
-              </Box>
-            </Grid>
-            
-            {gerarCredito && (
-              <Grid item xs={12} md={6}>
-                <TextField
-                  select
-                  fullWidth
-                  required
-                  label="Operação de Devolução"
-                  value={operacaoId}
-                  onChange={(e) => setOperacaoId(e.target.value)}
-                >
-                  {operacoes.map((op) => (
-                    <MenuItem key={op.id_operacao} value={op.id_operacao}>
-                      {op.nome_operacao}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-            )}
-          </>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, height: '100%' }}>
+              <Typography sx={{ fontWeight: 'bold' }}>Gerar Crédito para o Cliente?</Typography>
+              <Button
+                variant={gerarCredito ? 'contained' : 'outlined'}
+                color="success"
+                onClick={() => setGerarCredito(true)}
+                sx={{ minWidth: 80 }}
+              >
+                Sim
+              </Button>
+              <Button
+                variant={!gerarCredito ? 'contained' : 'outlined'}
+                color="error"
+                onClick={() => setGerarCredito(false)}
+                sx={{ minWidth: 80 }}
+              >
+                Não
+              </Button>
+            </Box>
+          </Grid>
         )}
       </Grid>
     </Box>
