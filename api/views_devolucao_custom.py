@@ -484,6 +484,8 @@ def buscar_venda_view(request, id_venda):
                 'nome_cliente'  : venda[4],
                 'valor_total'   : float(venda[5]),
                 'status_venda'  : venda[6],
+                'chave_nfe_origem': venda[7] or '',
+                'chave_nfe'     : venda[7] or '',
                 'itens'         : itens,
             }
 
@@ -495,27 +497,34 @@ def buscar_venda_view(request, id_venda):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def buscar_compra_view(request, id_compra):
-    """Buscar dados de uma compra para devolucao (procura em compras e vendas/NFe)"""
+    """Buscar dados de uma compra para devolucao (aceita ID, Numero da Nota ou Chave NFe 44 digitos)"""
+    import re as _re
     try:
+        clean_key = _re.sub(r'\D', '', str(id_compra)) or str(id_compra)
+        raw_val = str(id_compra).strip()
+
         with connection.cursor() as cursor:
-            # 1. Tentar buscar em compras primeiro
+            # 1. Tentar buscar em compras primeiro por ID, numero_nota ou chave_nfe
             cursor.execute("""
                 SELECT
                     c.id_compra,
                     c.numero_nota,
                     c.data_movimento_entrada,
                     c.id_fornecedor,
-                    f.nome_razao_social as nome_fornecedor,
+                    COALESCE(f.nome_razao_social, 'Fornecedor Desconhecido') as nome_fornecedor,
                     COALESCE(c.valor_total_nota, 0) as valor_total,
-                    c.chave_nfe
+                    c.chave_nfe,
+                    COALESCE(f.cpf_cnpj, '') as doc_fornecedor
                 FROM compras c
                 LEFT JOIN fornecedores f ON c.id_fornecedor = f.id_fornecedor
-                WHERE CAST(c.id_compra AS CHAR) = %s OR CAST(c.numero_nota AS CHAR) = %s
-            """, [str(id_compra), str(id_compra)])
+                WHERE CAST(c.id_compra AS CHAR) = %s 
+                   OR CAST(c.numero_nota AS CHAR) = %s 
+                   OR c.chave_nfe = %s 
+                   OR c.chave_nfe = %s
+            """, [raw_val, raw_val, raw_val, clean_key])
 
             compra = cursor.fetchone()
 
@@ -527,13 +536,17 @@ def buscar_compra_view(request, id_compra):
                         v.numero_documento,
                         v.data_venda,
                         v.id_cliente,
-                        c.nome_razao_social as nome_cliente,
+                        COALESCE(c.nome_razao_social, 'Cliente') as nome_cliente,
                         COALESCE((SELECT SUM(vi.valor_total) FROM venda_itens vi WHERE vi.id_venda = v.id_venda), 0) as valor_total,
-                        v.chave_nfe
+                        v.chave_nfe,
+                        COALESCE(c.cpf_cnpj, '') as doc_cliente
                     FROM vendas v
                     LEFT JOIN clientes c ON v.id_cliente = c.id_cliente
-                    WHERE CAST(v.id_venda AS CHAR) = %s OR CAST(v.numero_documento AS CHAR) = %s OR CAST(v.numero_nfe AS CHAR) = %s
-                """, [str(id_compra), str(id_compra), str(id_compra)])
+                    WHERE CAST(v.id_venda AS CHAR) = %s 
+                       OR CAST(v.numero_documento AS CHAR) = %s 
+                       OR CAST(v.numero_nfe AS CHAR) = %s
+                       OR v.chave_nfe = %s
+                """, [raw_val, raw_val, raw_val, clean_key])
                 venda_as_compra = cursor.fetchone()
 
                 if venda_as_compra:
@@ -570,18 +583,21 @@ def buscar_compra_view(request, id_compra):
 
                     compra_data = {
                         'id_compra': venda_as_compra[0],
+                        'id_venda': venda_as_compra[0],
                         'numero_documento': venda_as_compra[1],
                         'data_compra': venda_as_compra[2].strftime('%Y-%m-%d') if venda_as_compra[2] else None,
                         'id_fornecedor': venda_as_compra[3],
                         'nome_fornecedor': venda_as_compra[4],
+                        'doc_fornecedor': venda_as_compra[7],
                         'valor_total': float(venda_as_compra[5]),
-                        'chave_nfe': venda_as_compra[6],
+                        'chave_nfe_origem': venda_as_compra[6] or '',
+                        'chave_nfe': venda_as_compra[6] or '',
                         'itens': itens
                     }
                     return Response(compra_data)
 
                 return Response(
-                    {'error': f'Compra/Nota ID "{id_compra}" não encontrada.'},
+                    {'error': f'Compra/Nota com chave ou ID "{id_compra}" não encontrada.'},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
@@ -655,8 +671,10 @@ def buscar_compra_view(request, id_compra):
                 'data_compra': compra[2].strftime('%Y-%m-%d') if compra[2] else None,
                 'id_fornecedor': compra[3],
                 'nome_fornecedor': compra[4],
+                'doc_fornecedor': compra[7] or '',
                 'valor_total': float(compra[5]),
-                'chave_nfe': compra[6],
+                'chave_nfe_origem': compra[6] or '',
+                'chave_nfe': compra[6] or '',
                 'itens': itens
             }
 

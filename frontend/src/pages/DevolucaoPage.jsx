@@ -305,11 +305,9 @@ const DevolucaoPage = () => {
           <TextField
             fullWidth
             required
-            label={tipoDevolucao === 'venda' ? 'ID da NF-e / Venda (Consta na aba NF-e)' : 'ID da Compra / Entrada'}
-            placeholder={tipoDevolucao === 'venda' ? 'Ex: ID 123 (coluna ID na aba NF-e)' : 'Ex: ID 456 ou Nº da Nota de Entrada'}
-            helperText={tipoDevolucao === 'venda' 
-              ? 'Informe a ID numérica exibida na aba NF-e (ou número da nota)' 
-              : 'Informe a ID da compra/entrada ou número da nota fiscal'}
+            label={tipoDevolucao === 'venda' ? 'Chave de Acesso (44 dígitos), ID ou Nº da Nota' : 'Chave de Acesso da NF-e (44 dígitos), ID ou Nº da Compra'}
+            placeholder="Cole a Chave de Acesso (44 dígitos), ID ou Nº do Documento"
+            helperText="Cole a Chave de Acesso da NF-e de Origem (44 dígitos), a ID ou o Nº do Documento"
             value={documentoId}
             onChange={(e) => setDocumentoId(e.target.value)}
             InputProps={{
@@ -329,26 +327,42 @@ const DevolucaoPage = () => {
     <Box>
       {documentoData && (
         <>
-          <Card sx={{ mb: 3 }}>
+          <Card sx={{ mb: 3, bgcolor: '#f4f6f9', borderLeft: '4px solid #1976d2' }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                {tipoDevolucao === 'venda' ? 'Dados da Venda' : 'Dados da Compra'}
+              <Typography variant="h6" gutterBottom color="primary" fontWeight="bold">
+                {tipoDevolucao === 'venda' ? '📄 Dados da Venda / NF-e de Origem' : '📦 Dados da Compra / Fornecedor'}
               </Typography>
               <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
+                <Grid item xs={12} md={4}>
                   <Typography variant="body2" color="text.secondary">
-                    Documento: {documentoData.numero_documento || documentoData.numero_nota}
+                    <strong>Nº Documento / Nota:</strong> {documentoData.numero_documento || documentoData.numero_nota || 'N/A'}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Data: {new Date(documentoData.data_venda || documentoData.data_movimento_entrada).toLocaleDateString()}
+                    <strong>ID Interna:</strong> #{documentoData.id_compra || documentoData.id_venda}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Data:</strong> {documentoData.data_compra || documentoData.data_venda ? new Date(documentoData.data_compra || documentoData.data_venda).toLocaleDateString('pt-BR') : '-'}
                   </Typography>
                 </Grid>
-                <Grid item xs={12} md={6}>
+                <Grid item xs={12} md={4}>
                   <Typography variant="body2" color="text.secondary">
-                    {tipoDevolucao === 'venda' ? 'Cliente' : 'Fornecedor'}: {documentoData.nome_cliente || documentoData.nome_fornecedor}
+                    <strong>{tipoDevolucao === 'venda' ? 'Cliente' : 'Fornecedor'}:</strong> {documentoData.nome_fornecedor || documentoData.nome_cliente || 'N/A'}
                   </Typography>
+                  {(documentoData.doc_fornecedor || documentoData.cpf_cnpj_cliente) && (
+                    <Typography variant="body2" color="text.secondary">
+                      <strong>CNPJ / CPF:</strong> {documentoData.doc_fornecedor || documentoData.cpf_cnpj_cliente}
+                    </Typography>
+                  )}
                   <Typography variant="body2" color="text.secondary">
-                    Valor Total: R$ {(documentoData.valor_total || documentoData.valor_total_nota).toFixed(2)}
+                    <strong>Valor Total:</strong> R$ {parseFloat(documentoData.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Typography variant="body2" color="primary" fontWeight="bold">
+                    🔑 Chave de Acesso de Origem (SEFAZ):
+                  </Typography>
+                  <Typography variant="caption" sx={{ wordBreak: 'break-all', fontFamily: 'monospace', bgcolor: '#fff', p: 0.5, borderRadius: 1, border: '1px solid #e0e0e0', display: 'block', mt: 0.5 }}>
+                    {documentoData.chave_nfe_origem || documentoData.chave_nfe || 'Chave não informada / Nota interna'}
                   </Typography>
                 </Grid>
               </Grid>
