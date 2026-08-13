@@ -548,14 +548,16 @@ function CompraPage() {
         : (prodRes.data?.results || [])
       setProdutos(produtosData)
       
-      // Filtrar apenas operações de entrada
+      // Incluir operações de Entrada e Devolução na aba de Compras
       const operacoesData = Array.isArray(operRes.data)
         ? operRes.data
         : (operRes.data?.results || [])
-      const operacoesEntrada = operacoesData.filter(op =>
-        op.transacao && op.transacao.toLowerCase() === 'entrada'
-      )
-      setOperacoes(operacoesEntrada)
+      const operacoesPermitidas = operacoesData.filter(op => {
+        const trans = (op.transacao || op.tipo_transacao || op.tipo || '').toLowerCase();
+        const nome = (op.nome_operacao || op.nome || '').toLowerCase();
+        return trans === 'entrada' || trans.includes('devoluc') || nome.includes('devolu');
+      });
+      setOperacoes(operacoesPermitidas);
       
       const comprasData = comprasRes.data?.results || comprasRes.data || []
       console.log('🔍 Compras carregadas:', comprasData)
