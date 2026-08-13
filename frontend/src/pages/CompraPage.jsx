@@ -3618,6 +3618,28 @@ function CompraPage() {
                               <TrendingUpIcon />
                             </IconButton>
                           </Tooltip>
+                          <Tooltip title="Gerar Devolução desta Compra">
+                            <IconButton
+                              color="secondary"
+                              onClick={() => {
+                                const targetId = compra.id_compra || compra.id;
+                                navigate('/devolucoes/nova', { 
+                                  state: { 
+                                    documentoId: String(targetId),
+                                    tipoDevolucao: 'compra'
+                                  } 
+                                });
+                              }}
+                              sx={{
+                                '&:hover': {
+                                  bgcolor: 'secondary.light',
+                                  color: 'white',
+                                },
+                              }}
+                            >
+                              <AutorenewIcon />
+                            </IconButton>
+                          </Tooltip>
                           <Tooltip title="Excluir compra">
                             <IconButton
                               color="error"
