@@ -261,10 +261,21 @@ function CompraPage() {
       toast.success('✅ Devolução de Compra registrada com sucesso!');
       setOpenModalDevolucao(false);
 
-      if (operacaoDevolucaoId) {
-        toast.info('🚀 Redirecionando para a aba de NF-e para emissão e transmissão SEFAZ...');
-        navigate('/nfe');
+      const idVendaGerada = res.data?.id_venda || res.data?.venda_id || res.data?.id_venda_gerada || res.data?.id_devolucao;
+
+      if (operacaoDevolucaoId && idVendaGerada) {
+        setDialogNFeDevolucao({
+          open: true,
+          vendaId: idVendaGerada,
+          numeroDoc: compraParaDevolucao.numero_documento || compraParaDevolucao.numero_nota || `#${compraParaDevolucao.id_compra}`,
+          fornecedorNome: compraParaDevolucao.nome_fornecedor || compraParaDevolucao.fornecedor_nome || '',
+          chaveNFe: compraParaDevolucao.chave_nfe_origem || compraParaDevolucao.chave_nfe || '',
+          statusEmissao: 'pendente',
+          mensagemSefaz: 'Clique abaixo para Transmitir a NF-e de Devolução para a SEFAZ.',
+          protocolo: ''
+        });
       }
+      carregarDados();
     } catch (err) {
       console.error('Erro ao registrar devolução de compra:', err);
       const msg = err.response?.data?.error || err.response?.data?.detail || 'Erro ao registrar devolução.';
@@ -272,6 +283,62 @@ function CompraPage() {
     } finally {
       setLoadingDevolucao(false);
     }
+  };
+
+  // Estado para Modal de Transmissão SEFAZ na Tela de Compras
+  const [dialogNFeDevolucao, setDialogNFeDevolucao] = useState({
+    open: false,
+    vendaId: null,
+    numeroDoc: '',
+    fornecedorNome: '',
+    chaveNFe: '',
+    statusEmissao: 'pendente',
+    mensagemSefaz: '',
+    protocolo: ''
+  });
+
+  const handleTransmitirNFeSefaz = async (vendaIdTarget) => {
+    setDialogNFeDevolucao(prev => ({
+      ...prev,
+      statusEmissao: 'enviando',
+      mensagemSefaz: '📡 Assinando XML e transmitindo lote para a SEFAZ...'
+    }));
+    try {
+      const res = await axiosInstance.post(`/vendas/${vendaIdTarget}/emitir_nfe/`);
+      const data = res.data;
+      if (data.sucesso || data.status === 'autorizada' || data.cStat === 100) {
+        setDialogNFeDevolucao(prev => ({
+          ...prev,
+          statusEmissao: 'autorizada',
+          mensagemSefaz: `🟢 NF-e Autorizada com Sucesso! ${data.xMotivo || 'Autorizado o uso da NF-e'}`,
+          chaveNFe: data.chave_nfe || prev.chaveNFe,
+          protocolo: data.nProt || data.protocolo || ''
+        }));
+        toast.success('🟢 NF-e de Devolução Autorizada pela SEFAZ!');
+        carregarDados();
+      } else {
+        const erroSefaz = data.error || data.xMotivo || data.mensagem || 'Rejeição da SEFAZ';
+        setDialogNFeDevolucao(prev => ({
+          ...prev,
+          statusEmissao: 'rejeitada',
+          mensagemSefaz: `❌ Rejeição SEFAZ: ${erroSefaz}`
+        }));
+        toast.error(`❌ ${erroSefaz}`);
+      }
+    } catch (err) {
+      const erroMsg = err.response?.data?.details || err.response?.data?.error || err.message || 'Erro de conexão com SEFAZ';
+      setDialogNFeDevolucao(prev => ({
+        ...prev,
+        statusEmissao: 'rejeitada',
+        mensagemSefaz: `❌ Erro de Transmissão: ${erroMsg}`
+      }));
+      toast.error(`❌ ${erroMsg}`);
+    }
+  };
+
+  const handleImprimirDanfeDevolucao = (vendaIdTarget) => {
+    const windowUrl = `${axiosInstance.defaults.baseURL || '/api'}/vendas/${vendaIdTarget}/imprimir_danfe/`;
+    window.open(windowUrl, '_blank');
   };
 
   // Estados do Consultor de NF-es da SEFAZ
@@ -6214,6 +6281,76 @@ function CompraPage() {
           >
             Confirmar e Emitir Devolução de Compra
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog para Transmissão SEFAZ e Impressão de DANFE na Tela de Compras */}
+      <Dialog
+        open={dialogNFeDevolucao.open}
+        onClose={() => setDialogNFeDevolucao(prev => ({ ...prev, open: false }))}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: '#1565c0', color: '#ffffff', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>📡 Transmissão NF-e SEFAZ (Modelo 55)</span>
+          <IconButton onClick={() => setDialogNFeDevolucao(prev => ({ ...prev, open: false }))} sx={{ color: '#ffffff' }}>
+            <ClearIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Card sx={{ mb: 2, bgcolor: '#f4f6f9', borderLeft: '4px solid #1565c0' }}>
+            <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+              <Typography variant="body2">
+                <strong>Destinatário / Fornecedor:</strong> {dialogNFeDevolucao.fornecedorNome || 'N/A'}
+              </Typography>
+              <Typography variant="body2">
+                <strong>Nº Documento:</strong> {dialogNFeDevolucao.numeroDoc}
+              </Typography>
+              {dialogNFeDevolucao.chaveNFe && (
+                <Typography variant="caption" sx={{ wordBreak: 'break-all', fontFamily: 'monospace', color: '#1565c0', display: 'block', mt: 0.5 }}>
+                  Chave SEFAZ: {dialogNFeDevolucao.chaveNFe}
+                </Typography>
+              )}
+            </CardContent>
+          </Card>
+
+          <Alert
+            severity={
+              dialogNFeDevolucao.statusEmissao === 'autorizada' ? 'success' :
+              dialogNFeDevolucao.statusEmissao === 'rejeitada' ? 'error' :
+              dialogNFeDevolucao.statusEmissao === 'enviando' ? 'info' : 'warning'
+            }
+            sx={{ mb: 2 }}
+          >
+            {dialogNFeDevolucao.statusEmissao === 'enviando' && <CircularProgress size={20} sx={{ mr: 1, verticalAlign: 'middle' }} />}
+            {dialogNFeDevolucao.mensagemSefaz}
+          </Alert>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
+          <Button onClick={() => setDialogNFeDevolucao(prev => ({ ...prev, open: false }))} color="inherit">
+            Fechar
+          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {dialogNFeDevolucao.statusEmissao === 'autorizada' && (
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={() => handleImprimirDanfeDevolucao(dialogNFeDevolucao.vendaId)}
+              >
+                📄 Imprimir DANFE PDF
+              </Button>
+            )}
+            {dialogNFeDevolucao.statusEmissao !== 'autorizada' && (
+              <Button
+                variant="contained"
+                color="success"
+                disabled={dialogNFeDevolucao.statusEmissao === 'enviando'}
+                onClick={() => handleTransmitirNFeSefaz(dialogNFeDevolucao.vendaId)}
+              >
+                🚀 Transmitir para SEFAZ
+              </Button>
+            )}
+          </Box>
         </DialogActions>
       </Dialog>
 
