@@ -61,16 +61,24 @@ const DevolucaoPage = () => {
     
     try {
       const client = axiosInstance || axios;
-      const endpoint = tipoDevolucao === 'venda' 
+      const primaryEndpoint = tipoDevolucao === 'venda' 
         ? `/devolucoes/buscar_venda/${documentoId}/`
         : `/devolucoes/buscar_compra/${documentoId}/`;
       
+      const secondaryEndpoint = tipoDevolucao === 'venda'
+        ? `/devolucoes/buscar_compra/${documentoId}/`
+        : `/devolucoes/buscar_venda/${documentoId}/`;
+
       let response;
       try {
-        response = await client.get(endpoint);
+        response = await client.get(primaryEndpoint);
       } catch (e1) {
-        // Fallback tentar com prefixo /api se endpoint direto falhar
-        response = await client.get(`/api${endpoint}`);
+        try {
+          response = await client.get(secondaryEndpoint);
+          setTipoDevolucao(tipoDevolucao === 'venda' ? 'compra' : 'venda');
+        } catch (e2) {
+          throw e1;
+        }
       }
 
       setDocumentoData(response.data);

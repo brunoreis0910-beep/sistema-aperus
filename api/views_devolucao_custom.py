@@ -477,6 +477,7 @@ def buscar_venda_view(request, id_venda):
 
             venda_data = {
                 'id_venda'      : venda[0],
+                'id_compra'     : venda[0],
                 'numero_documento': venda[1],
                 'data_venda'    : venda[2],
                 'id_cliente'    : venda[3],
@@ -649,6 +650,7 @@ def buscar_compra_view(request, id_compra):
 
             compra_data = {
                 'id_compra': compra[0],
+                'id_venda': compra[0],
                 'numero_documento': compra[1],
                 'data_compra': compra[2].strftime('%Y-%m-%d') if compra[2] else None,
                 'id_fornecedor': compra[3],
