@@ -214,13 +214,17 @@ const DevolucaoPage = () => {
         <Grid item xs={12} md={6}>
           <TextField
             fullWidth
-            label={tipoDevolucao === 'venda' ? 'ID da Venda' : 'ID da Compra'}
+            required
+            label={tipoDevolucao === 'venda' ? 'ID da NF-e / Venda (Consta na aba NF-e)' : 'ID da Compra / Entrada'}
+            placeholder={tipoDevolucao === 'venda' ? 'Ex: ID 123 (coluna ID na aba NF-e)' : 'Ex: ID 456 ou Nº da Nota de Entrada'}
+            helperText={tipoDevolucao === 'venda' 
+              ? 'Informe a ID numérica exibida na aba NF-e (ou número da nota)' 
+              : 'Informe a ID da compra/entrada ou número da nota fiscal'}
             value={documentoId}
             onChange={(e) => setDocumentoId(e.target.value)}
-            type="number"
             InputProps={{
               endAdornment: (
-                <IconButton onClick={buscarDocumento} disabled={loading}>
+                <IconButton onClick={buscarDocumento} disabled={loading} color="primary">
                   <Search />
                 </IconButton>
               )

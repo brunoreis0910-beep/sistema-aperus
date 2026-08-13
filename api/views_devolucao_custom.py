@@ -379,8 +379,8 @@ def buscar_venda_view(request, id_venda):
                     v.chave_nfe
                 FROM vendas v
                 LEFT JOIN clientes c ON v.id_cliente = c.id_cliente
-                WHERE v.id_venda = %s
-            """, [id_venda])
+                WHERE CAST(v.id_venda AS CHAR) = %s OR CAST(v.numero_documento AS CHAR) = %s OR CAST(v.numero_nfe AS CHAR) = %s
+            """, [str(id_venda), str(id_venda), str(id_venda)])
 
             venda = cursor.fetchone()
 
@@ -496,8 +496,8 @@ def buscar_compra_view(request, id_compra):
                     c.chave_nfe
                 FROM compras c
                 LEFT JOIN fornecedores f ON c.id_fornecedor = f.id_fornecedor
-                WHERE c.id_compra = %s
-            """, [id_compra])
+                WHERE CAST(c.id_compra AS CHAR) = %s OR CAST(c.numero_nota AS CHAR) = %s
+            """, [str(id_compra), str(id_compra)])
 
             compra = cursor.fetchone()
 
