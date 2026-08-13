@@ -9,11 +9,12 @@ import {
 import {
   ArrowBack, Add, Remove, Search, CheckCircle, Cancel
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const DevolucaoPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { axiosInstance } = useAuth();
   const [activeStep, setActiveStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -35,7 +36,66 @@ const DevolucaoPage = () => {
   
   useEffect(() => {
     carregarOperacoes();
-  }, []);
+
+    // Auto-carregar documento caso fornecido via estado da navegação (ex: vindo da aba NFe)
+    if (location.state?.documentoId) {
+      const docIdStr = String(location.state.documentoId);
+      const tipoStr = location.state.tipoDevolucao || 'venda';
+      setDocumentoId(docIdStr);
+      setTipoDevolucao(tipoStr);
+      executarBuscaDireta(docIdStr, tipoStr);
+    }
+  }, [location.state]);
+
+  const executarBuscaDireta = async (targetId, targetTipo) => {
+    if (!targetId) return;
+    setLoading(true);
+    setError('');
+    
+    try {
+      const client = axiosInstance || axios;
+      const primaryEndpoint = targetTipo === 'venda' 
+        ? `/devolucoes/buscar_venda/${targetId}/`
+        : `/devolucoes/buscar_compra/${targetId}/`;
+      
+      const secondaryEndpoint = targetTipo === 'venda'
+        ? `/devolucoes/buscar_compra/${targetId}/`
+        : `/devolucoes/buscar_venda/${targetId}/`;
+
+      let response;
+      try {
+        response = await client.get(primaryEndpoint);
+      } catch (e1) {
+        try {
+          response = await client.get(secondaryEndpoint);
+          setTipoDevolucao(targetTipo === 'venda' ? 'compra' : 'venda');
+        } catch (e2) {
+          throw e1;
+        }
+      }
+
+      setDocumentoData(response.data);
+      const itensIniciais = (response.data.itens || []).map(item => ({
+        ...item,
+        quantidade_devolver: 0,
+        selecionado: false,
+        motivo_item: ''
+      }));
+      setItensSelecionados(itensIniciais);
+      
+      if (itensIniciais.length === 0) {
+        setError('Documento encontrado, mas não possui itens disponíveis para devolução.');
+      } else {
+        setActiveStep(1);
+      }
+    } catch (err) {
+      console.error('Erro na busca direta do documento:', err);
+      const msg = err.response?.data?.error || err.response?.data?.detail || `Nenhum documento encontrado com o ID "${targetId}".`;
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   const carregarOperacoes = async () => {
     try {

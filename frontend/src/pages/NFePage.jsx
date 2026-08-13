@@ -62,7 +62,8 @@ import {
   Edit as EditIcon,
   Visibility as VisibilityIcon,
   WhatsApp as WhatsAppIcon,
-  Email as EmailIcon
+  Email as EmailIcon,
+  Autorenew as AutorenewIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
@@ -1147,6 +1148,25 @@ const NFePage = () => {
                     <MenuItem onClick={() => { setEmailDialog({ open: true, venda: menuVenda }); handleMenuClose(); }}>
                         <ListItemIcon><EmailIcon fontSize="small" color="primary" /></ListItemIcon>
                         Enviar por E-mail
+                    </MenuItem>
+                )}
+
+                {menuVenda && (
+                    <MenuItem 
+                        onClick={() => {
+                            const targetId = menuVenda.id_venda || menuVenda.id;
+                            navigate('/devolucoes/nova', { 
+                                state: { 
+                                    documentoId: String(targetId),
+                                    tipoDevolucao: 'venda'
+                                } 
+                            });
+                            handleMenuClose();
+                        }}
+                        sx={{ fontWeight: 600, color: '#1976d2' }}
+                    >
+                        <ListItemIcon><AutorenewIcon fontSize="small" color="primary" /></ListItemIcon>
+                        Gerar Devolução desta Nota
                     </MenuItem>
                 )}
                 
