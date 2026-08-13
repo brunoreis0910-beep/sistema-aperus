@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container, Paper, Typography, Box, Button, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, IconButton,
@@ -124,7 +124,7 @@ const DevolucoesListPage = () => {
         <Button
           variant="contained"
           startIcon={<Add />}
-          onClick={() => navigate('/api/devolucoes/nova')}
+          onClick={() => navigate('/devolucoes/nova')}
         >
           Nova Devolução
         </Button>
