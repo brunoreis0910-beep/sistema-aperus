@@ -2401,10 +2401,70 @@ const OrdemServicoPage = () => {
     setOpenNFeDialog(true);
   };
 
+  const validarClienteParaNFe = (clienteData) => {
+    const pendencias = [];
+    if (!clienteData) {
+      return ['Cliente não cadastrado ou não informado na OS'];
+    }
+
+    const nome = (clienteData.nome_razao_social || clienteData.nome || clienteData.razao_social || '').trim();
+    const cpfCnpj = String(clienteData.cpf_cnpj || clienteData.cnpj || clienteData.cpf || '').replace(/\D/g, '');
+    const cep = String(clienteData.cep || '').replace(/\D/g, '');
+    const logradouro = (clienteData.logradouro || clienteData.endereco || '').trim();
+    const numero = (clienteData.numero || '').trim();
+    const bairro = (clienteData.bairro || '').trim();
+    const cidade = (clienteData.cidade || clienteData.municipio || '').trim();
+    const uf = (clienteData.uf || clienteData.estado || '').trim();
+
+    if (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14)) {
+      pendencias.push('CPF/CNPJ (exige 11 ou 14 dígitos)');
+    }
+
+    if (!nome || ['CONSUMIDOR', 'CONSUMIDOR FINAL', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', ''].includes(nome.toUpperCase())) {
+      pendencias.push('Razão Social / Nome Completo');
+    }
+
+    if (!cep || cep.length !== 8) {
+      pendencias.push('CEP (8 dígitos)');
+    }
+
+    if (!logradouro) {
+      pendencias.push('Endereço / Logradouro');
+    }
+
+    if (!numero) {
+      pendencias.push('Número (Informe S/N se não houver)');
+    }
+
+    if (!bairro) {
+      pendencias.push('Bairro');
+    }
+
+    if (!cidade) {
+      pendencias.push('Cidade / Município');
+    }
+
+    if (!uf || uf.length !== 2) {
+      pendencias.push('UF / Estado (2 letras, ex: MG, SP)');
+    }
+
+    return pendencias;
+  };
+
   const confirmarEmissaoNFe = async () => {
     if (!currentOrderForNFe || !selectedNFeOperation) {
         setError('Selecione uma operação para continuar.');
         return;
+    }
+
+    const clienteOS = clientes.find(c => String(c.id_cliente) === String(currentOrderForNFe.id_cliente));
+    const pends = validarClienteParaNFe(clienteOS);
+    if (pends.length > 0) {
+      setOpenNFeDialog(false);
+      setClienteParaEditar(clienteOS);
+      setOpenNovoClienteModal(true);
+      setError(`⚠️ Cliente com dados incompletos para a NF-e: ${pends.join(', ')}. Atualize o cadastro do cliente e tente novamente.`);
+      return;
     }
 
     try {

@@ -85,6 +85,7 @@ import WifiOffIcon from '@mui/icons-material/WifiOff';
 import promocaoService from '../services/promocaoService';
 import WhatsAppQuickSend, { useWhatsAppTemplates } from './WhatsAppQuickSend';
 import { CalculadoraRevestimento, CalculadoraTinta, BotoesCalculadora } from './CalculadorasConstrucao';
+import ClienteFormModal from './ClienteFormModal';
 
 console.log('📦 [Vendas.jsx] INÍCIO DO CARREGAMENTO DO MÓDULO');
 console.log('📦 [Vendas.jsx] Versão: v3.0 - Com logs de depuração detalhados');
@@ -347,6 +348,74 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   const [showCreditoModal, setShowCreditoModal] = useState(false);
   const [usarCredito, setUsarCredito] = useState(false);
   const [decisaoCreditoTomada, setDecisaoCreditoTomada] = useState(false);
+
+  // Estado para Alerta Inteligente de Cliente Incompleto em Vendas
+  const [clienteIncompletoNFeDialog, setClienteIncompletoNFeDialog] = useState({
+    open: false,
+    cliente: null,
+    pendencias: []
+  });
+  const [openClienteFormModalVendas, setOpenClienteFormModalVendas] = useState(false);
+  const [clienteParaEditarVendas, setClienteParaEditarVendas] = useState(null);
+
+  const validarClienteParaNFe = (clienteData) => {
+    const pendencias = [];
+    if (!clienteData) {
+      return ['Cliente não cadastrado ou não informado na venda'];
+    }
+
+    const nome = (clienteData.nome_razao_social || clienteData.nome || clienteData.razao_social || '').trim();
+    const cpfCnpj = String(clienteData.cpf_cnpj || clienteData.cnpj || clienteData.cpf || '').replace(/\D/g, '');
+    const cep = String(clienteData.cep || '').replace(/\D/g, '');
+    const logradouro = (clienteData.logradouro || clienteData.endereco || '').trim();
+    const numero = (clienteData.numero || '').trim();
+    const bairro = (clienteData.bairro || '').trim();
+    const cidade = (clienteData.cidade || clienteData.municipio || '').trim();
+    const uf = (clienteData.uf || clienteData.estado || '').trim();
+
+    if (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14)) {
+      pendencias.push('CPF/CNPJ (exige 11 ou 14 dígitos)');
+    }
+
+    if (!nome || ['CONSUMIDOR', 'CONSUMIDOR FINAL', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', ''].includes(nome.toUpperCase())) {
+      pendencias.push('Razão Social / Nome Completo');
+    }
+
+    if (!cep || cep.length !== 8) {
+      pendencias.push('CEP (8 dígitos)');
+    }
+
+    if (!logradouro) {
+      pendencias.push('Endereço / Logradouro');
+    }
+
+    if (!numero) {
+      pendencias.push('Número (Informe S/N se não houver)');
+    }
+
+    if (!bairro) {
+      pendencias.push('Bairro');
+    }
+
+    if (!cidade) {
+      pendencias.push('Cidade / Município');
+    }
+
+    if (!uf || uf.length !== 2) {
+      pendencias.push('UF / Estado (2 letras, ex: MG, SP)');
+    }
+
+    return pendencias;
+  };
+
+  const handleClienteSalvoEmVendas = async (clienteSalvo) => {
+    setOpenClienteFormModalVendas(false);
+    setSuccess(`Cadastro de ${clienteSalvo.nome_razao_social || 'cliente'} atualizado com sucesso!`);
+    await carregarClientes();
+    if (clienteSalvo?.id_cliente || clienteSalvo?.id) {
+      setVenda(prev => ({ ...prev, id_cliente: String(clienteSalvo.id_cliente || clienteSalvo.id) }));
+    }
+  };
   const [origemModalCredito, setOrigemModalCredito] = useState('selecao');
 
   // Estados para cashback do cliente
@@ -2384,6 +2453,25 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         setError('Preencha todos os campos obrigatórios');
         setLoading(false);
         return;
+      }
+
+      // Validação Inteligente do Cliente para NF-e (Modelo 55)
+      const operacaoSel = operacoes.find(op => String(op.id_operacao) === String(venda.id_operacao));
+      const ehModelo55 = (operacaoSel && String(operacaoSel.modelo_documento) === '55') || String(initialModel) === '55' || String(venda.modelo_nf) === '55';
+
+      if (ehModelo55 && venda.id_cliente) {
+        const cliObj = clientes.find(c => String(c.id_cliente || c.id) === String(venda.id_cliente));
+        const pends = validarClienteParaNFe(cliObj);
+        if (pends.length > 0) {
+          setLoading(false);
+          setClienteParaEditarVendas(cliObj);
+          setClienteIncompletoNFeDialog({
+            open: true,
+            cliente: cliObj,
+            pendencias: pends
+          });
+          return;
+        }
       }
 
       // Validar Chave de Acesso Referenciada se a finalidade da operação for Complementar (2) ou Devolução (4)
@@ -9568,10 +9656,66 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
             startIcon={<CheckIcon />}
             disabled={Object.values(produtosSelecionados).filter(Boolean).length === 0}
           >
-            Adicionar Selecionados ({Object.values(produtosSelecionados).filter(Boolean).length})
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Dialog Alerta Inteligente: Cliente Incompleto em Vendas */}
+      <Dialog
+        open={clienteIncompletoNFeDialog.open}
+        onClose={() => setClienteIncompletoNFeDialog(prev => ({ ...prev, open: false }))}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'warning.main', fontWeight: 'bold' }}>
+          <WarningIcon color="warning" />
+          Cliente com dados incompletos
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 1.5, fontWeight: 500 }}>
+            Para prosseguir com a emissão da NF-e (Modelo 55), atualize o cadastro do cliente:
+            <strong style={{ color: '#1565c0', marginLeft: '6px' }}>
+              {clienteIncompletoNFeDialog.cliente?.nome_razao_social || clienteIncompletoNFeDialog.cliente?.nome || 'Cliente'}
+            </strong>
+          </Typography>
+
+          <Box sx={{ bgcolor: '#fff8e1', border: '1px solid #ffe082', borderRadius: 2, p: 2, mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ color: '#b45309', fontWeight: 'bold', mb: 1 }}>
+              📋 Campos obrigatórios pendentes para a NF-e:
+            </Typography>
+            {clienteIncompletoNFeDialog.pendencias.map((p, idx) => (
+              <Typography key={idx} variant="body2" sx={{ color: '#c2410c', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                • {p}
+              </Typography>
+            ))}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setClienteIncompletoNFeDialog(prev => ({ ...prev, open: false }))} color="inherit">
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<EditIcon />}
+            onClick={() => {
+              setClienteIncompletoNFeDialog(prev => ({ ...prev, open: false }));
+              setClienteParaEditarVendas(clienteIncompletoNFeDialog.cliente);
+              setOpenClienteFormModalVendas(true);
+            }}
+          >
+            Editar e Salvar Cadastro do Cliente
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal de Cadastro Completo de Cliente em Vendas */}
+      <ClienteFormModal
+        open={openClienteFormModalVendas}
+        onClose={() => setOpenClienteFormModalVendas(false)}
+        clienteToEdit={clienteParaEditarVendas}
+        onSaved={handleClienteSalvoEmVendas}
+      />
 
     </Box>
   );
