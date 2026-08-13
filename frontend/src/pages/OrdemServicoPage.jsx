@@ -2228,17 +2228,26 @@ const OrdemServicoPage = () => {
         }
       }
 
-      // Atualizar status da OS se estiver editando
-      if (modoEdicao && ordemAtual) {
+      // Atualizar status da OS e marcar gera_financeiro = true
+      const statusSelecionado = statusList.find(s => s.id_status === status);
+      if (ordemAtual?.id_os) {
         await atualizarStatusOS(ordemAtual.id_os, status);
-
-        // Marcar que financeiro foi gerado
-        await axiosInstance.patch(`/ordem-servico/${ordemAtual.id_os}/`, { gera_financeiro: true });
+        await axiosInstance.patch(`/ordem-servico/${ordemAtual.id_os}/`, {
+          gera_financeiro: true,
+          status_os: statusSelecionado?.nome_status || 'Finalizado'
+        });
       }
 
-      setSuccess('Financeiro gerado com sucesso!');
-      setTimeout(() => setSuccess(''), 3000);
+      setSuccess('Financeiro gerado e Ordem de Serviço finalizada com sucesso!');
+      setTimeout(() => setSuccess(''), 3500);
+
+      // Fechar dialogs de financeiro e fechar modal de edição da OS
       setOpenFinanceiroDialog(false);
+      setOpenPagamentoDialog(false);
+      setOpenDialog(false);
+      setModoEdicao(false);
+      
+      limparFormulario();
       await carregarOrdens();
 
     } catch (error) {
