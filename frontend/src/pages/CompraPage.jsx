@@ -39,7 +39,9 @@ import {
   Autocomplete,
   Switch,
   FormControlLabel,
-  Avatar
+  Avatar,
+  Checkbox,
+  CircularProgress
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -144,6 +146,104 @@ function CompraPage() {
   const [justificativaManif, setJustificativaManif] = useState('')
   const [enviandoManif, setEnviandoManif] = useState(false)
   const [resultadoManif, setResultadoManif] = useState(null)
+
+  // Estados para Modal de Devolução de Compra ao Fornecedor
+  const [openModalDevolucao, setOpenModalDevolucao] = useState(false);
+  const [compraParaDevolucao, setCompraParaDevolucao] = useState(null);
+  const [itensDevolucaoCompra, setItensDevolucaoCompra] = useState([]);
+  const [loadingDevolucao, setLoadingDevolucao] = useState(false);
+  const [operacaoDevolucaoId, setOperacaoDevolucaoId] = useState('');
+  const [motivoDevolucao, setMotivoDevolucao] = useState('');
+  const [observacoesDevolucao, setObservacoesDevolucao] = useState('');
+
+  const abrirModalDevolucaoCompra = async (compraRow) => {
+    const idTarget = compraRow.id_compra || compraRow.id;
+    setLoadingDevolucao(true);
+    setCompraParaDevolucao(compraRow);
+    setOpenModalDevolucao(true);
+    setMotivoDevolucao('');
+    setObservacoesDevolucao('');
+    setOperacaoDevolucaoId('');
+    
+    try {
+      const res = await axiosInstance.get(`/devolucoes/buscar_compra/${idTarget}/`);
+      const data = res.data;
+      setCompraParaDevolucao(data);
+      
+      const itensMapeados = (data.itens || []).map(item => ({
+        id_compra_item: item.id_compra_item,
+        id_produto: item.id_produto,
+        nome_produto: item.nome_produto,
+        codigo_produto: item.codigo_produto || '',
+        quantidade_original: parseFloat(item.quantidade_original || item.quantidade || 0),
+        quantidade_disponivel: parseFloat(item.quantidade_disponivel || item.quantidade || 0),
+        quantidade_devolver: parseFloat(item.quantidade_disponivel || item.quantidade || 0),
+        valor_unitario: parseFloat(item.valor_unitario || 0),
+        valor_total: parseFloat(item.valor_total || 0),
+        selecionado: true
+      }));
+      setItensDevolucaoCompra(itensMapeados);
+    } catch (err) {
+      console.error('Erro ao buscar detalhes da compra para devolução:', err);
+      toast.error('Erro ao carregar itens da compra para devolução.');
+    } finally {
+      setLoadingDevolucao(false);
+    }
+  };
+
+  const confirmarDevolucaoCompra = async () => {
+    const itensSelecionados = itensDevolucaoCompra
+      .filter(i => i.selecionado && i.quantidade_devolver > 0)
+      .map(i => ({
+        id_compra_item: i.id_compra_item,
+        id_produto: i.id_produto,
+        nome_produto: i.nome_produto,
+        codigo_produto: i.codigo_produto,
+        quantidade_devolvida: i.quantidade_devolver,
+        quantidade_original: i.quantidade_original,
+        valor_unitario: i.valor_unitario,
+        motivo_item: i.motivo_item || ''
+      }));
+
+    if (itensSelecionados.length === 0) {
+      toast.error('Selecione pelo menos um produto com quantidade maior que zero.');
+      return;
+    }
+
+    if (!motivoDevolucao.trim()) {
+      toast.error('Informe o motivo da devolução.');
+      return;
+    }
+
+    setLoadingDevolucao(true);
+    try {
+      const payload = {
+        tipo: 'compra',
+        id_compra: compraParaDevolucao.id_compra || compraParaDevolucao.id,
+        id_fornecedor: compraParaDevolucao.id_fornecedor,
+        id_operacao: operacaoDevolucaoId || null,
+        motivo: motivoDevolucao,
+        observacoes: observacoesDevolucao,
+        chave_nfe_referenciada: compraParaDevolucao.chave_nfe_origem || compraParaDevolucao.chave_nfe || '',
+        itens: itensSelecionados
+      };
+
+      const res = await axiosInstance.post('/devolucoes/', payload);
+      toast.success('✅ Devolução de Compra registrada com sucesso!');
+      setOpenModalDevolucao(false);
+
+      if (operacaoDevolucaoId) {
+        toast.info('🚀 Redirecionando para a aba de NF-e para emissão e transmissão SEFAZ...');
+        navigate('/nfe');
+      }
+    } catch (err) {
+      console.error('Erro ao registrar devolução de compra:', err);
+      const msg = err.response?.data?.error || err.response?.data?.detail || 'Erro ao registrar devolução.';
+      toast.error(`❌ ${msg}`);
+    } finally {
+      setLoadingDevolucao(false);
+    }
+  };
 
   // Estados do Consultor de NF-es da SEFAZ
   const [dialogNFesSeafaz, setDialogNFesSeafaz] = useState(false)
@@ -3618,18 +3718,10 @@ function CompraPage() {
                               <TrendingUpIcon />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Gerar Devolução desta Compra">
+                          <Tooltip title="Gerar Devolução desta Compra ao Fornecedor">
                             <IconButton
                               color="secondary"
-                              onClick={() => {
-                                const targetId = compra.id_compra || compra.id;
-                                navigate('/devolucoes/nova', { 
-                                  state: { 
-                                    documentoId: String(targetId),
-                                    tipoDevolucao: 'compra'
-                                  } 
-                                });
-                              }}
+                              onClick={() => abrirModalDevolucaoCompra(compra)}
                               sx={{
                                 '&:hover': {
                                   bgcolor: 'secondary.light',
@@ -5742,6 +5834,209 @@ function CompraPage() {
             }}
           >
             Criar Grupo
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal Dedicado de Devolução de Compra ao Fornecedor */}
+      <Dialog
+        open={openModalDevolucao}
+        onClose={() => setOpenModalDevolucao(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: '#1976d2', color: '#ffffff', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>📦 Devolução de Compra ao Fornecedor</span>
+          <IconButton onClick={() => setOpenModalDevolucao(false)} sx={{ color: '#ffffff' }}>
+            <ClearIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          {loadingDevolucao ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <>
+              {compraParaDevolucao && (
+                <Card sx={{ mb: 2, mt: 1, bgcolor: '#f4f6f9', borderLeft: '4px solid #1976d2' }}>
+                  <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} md={6}>
+                        <Typography variant="body2">
+                          <strong>Fornecedor:</strong> {compraParaDevolucao.nome_fornecedor || compraParaDevolucao.fornecedor_nome || 'N/A'}
+                        </Typography>
+                        {compraParaDevolucao.doc_fornecedor && (
+                          <Typography variant="body2" color="text.secondary">
+                            <strong>CNPJ / CPF:</strong> {compraParaDevolucao.doc_fornecedor}
+                          </Typography>
+                        )}
+                        <Typography variant="body2">
+                          <strong>Nº Nota de Entrada:</strong> {compraParaDevolucao.numero_documento || compraParaDevolucao.numero_nota || `#${compraParaDevolucao.id_compra}`}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12} md={6}>
+                        <Typography variant="body2" color="primary" fontWeight="bold">
+                          🔑 Chave de Acesso da Nota de Origem (SEFAZ):
+                        </Typography>
+                        <Typography variant="caption" sx={{ wordBreak: 'break-all', fontFamily: 'monospace', bgcolor: '#fff', p: 0.5, borderRadius: 1, border: '1px solid #e0e0e0', display: 'block', mt: 0.5 }}>
+                          {compraParaDevolucao.chave_nfe_origem || compraParaDevolucao.chave_nfe || compraParaDevolucao.dados_entrada || 'Chave não informada'}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              )}
+
+              <Typography variant="subtitle2" gutterBottom fontWeight="bold" color="text.secondary">
+                1. Selecione os produtos e as quantidades que deseja devolver:
+              </Typography>
+
+              <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300, mb: 3 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#e3f2fd' }}>
+                      <TableCell padding="checkbox" sx={{ bgcolor: '#e3f2fd' }}>
+                        <Checkbox
+                          checked={itensDevolucaoCompra.length > 0 && itensDevolucaoCompra.every(i => i.selecionado)}
+                          indeterminate={itensDevolucaoCompra.some(i => i.selecionado) && !itensDevolucaoCompra.every(i => i.selecionado)}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setItensDevolucaoCompra(prev => prev.map(i => ({ ...i, selecionado: checked })));
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Código / Produto</TableCell>
+                      <TableCell align="center" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Qtd Disponível</TableCell>
+                      <TableCell align="center" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold', minWidth: 120 }}>Qtd a Devolver</TableCell>
+                      <TableCell align="right" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Preço Custo</TableCell>
+                      <TableCell align="right" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Subtotal</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {itensDevolucaoCompra.map((item, index) => (
+                      <TableRow key={index} hover selected={item.selecionado}>
+                        <TableCell padding="checkbox">
+                          <Checkbox
+                            checked={item.selecionado}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setItensDevolucaoCompra(prev => {
+                                const copy = [...prev];
+                                copy[index].selecionado = checked;
+                                return copy;
+                              });
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="bold">
+                            {item.codigo_produto ? `[${item.codigo_produto}] ` : ''}{item.nome_produto}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip label={item.quantidade_disponivel} size="small" variant="outlined" />
+                        </TableCell>
+                        <TableCell align="center">
+                          <TextField
+                            type="number"
+                            size="small"
+                            disabled={!item.selecionado}
+                            value={item.quantidade_devolver}
+                            onChange={(e) => {
+                              const val = Math.max(0, Math.min(item.quantidade_disponivel, parseFloat(e.target.value) || 0));
+                              setItensDevolucaoCompra(prev => {
+                                const copy = [...prev];
+                                copy[index].quantidade_devolver = val;
+                                if (val > 0 && !copy[index].selecionado) {
+                                  copy[index].selecionado = true;
+                                }
+                                return copy;
+                              });
+                            }}
+                            inputProps={{ min: 0.01, max: item.quantidade_disponivel, step: 'any' }}
+                            sx={{ width: 100 }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          R$ {item.valor_unitario.toFixed(2)}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                          R$ {(item.quantidade_devolver * item.valor_unitario).toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Typography variant="subtitle2" gutterBottom fontWeight="bold" color="text.secondary">
+                2. Informações Fiscais e Motivo da Devolução:
+              </Typography>
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={6}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Operação Fiscal (NF-e Modelo 55)</InputLabel>
+                    <Select
+                      value={operacaoDevolucaoId}
+                      label="Operação Fiscal (NF-e Modelo 55)"
+                      onChange={(e) => setOperacaoDevolucaoId(e.target.value)}
+                    >
+                      <MenuItem value="">Nenhuma (Devolução Apenas Gerencial Interna)</MenuItem>
+                      {operacoes
+                        .filter(op => {
+                          const trans = (op.transacao || op.tipo_transacao || op.tipo || '').toLowerCase();
+                          const mod = String(op.modelo_documento || op.modelo_nf || '');
+                          return mod === '55' || trans.includes('devolu');
+                        })
+                        .map((op) => (
+                          <MenuItem key={op.id_operacao} value={op.id_operacao}>
+                            {op.nome_operacao || op.nome} (NF-e Mod. {op.modelo_documento || '55'})
+                          </MenuItem>
+                        ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    required
+                    size="small"
+                    label="Motivo da Devolução"
+                    placeholder="Ex: Produto com defeito, divergência no pedido..."
+                    value={motivoDevolucao}
+                    onChange={(e) => setMotivoDevolucao(e.target.value)}
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Observações Fiscais / Adicionais"
+                    value={observacoesDevolucao}
+                    onChange={(e) => setObservacoesDevolucao(e.target.value)}
+                    multiline
+                    rows={2}
+                  />
+                </Grid>
+              </Grid>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setOpenModalDevolucao(false)} color="inherit">
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            color="success"
+            disabled={loadingDevolucao || !itensDevolucaoCompra.some(i => i.selecionado && i.quantidade_devolver > 0)}
+            onClick={confirmarDevolucaoCompra}
+          >
+            Confirmar e Emitir Devolução de Compra
           </Button>
         </DialogActions>
       </Dialog>
