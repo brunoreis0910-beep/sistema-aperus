@@ -72,6 +72,7 @@ import WhatsAppQuickSend, { useWhatsAppTemplates } from '../components/WhatsAppQ
 import CartaCorrecaoDialog from '../components/CartaCorrecaoDialog';
 import ComplementoICMSDialog from '../components/ComplementoICMSDialog';
 import EmailDocumentoDialog from '../components/EmailDocumentoDialog';
+import ClienteFormModal from '../components/ClienteFormModal';
 
 const NFePage = () => {
     const theme = useTheme();
@@ -211,6 +212,132 @@ const NFePage = () => {
             showToast('Erro ao carregar vendas', 'error');
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Estado para Alerta Inteligente de Cliente Incompleto para NF-e
+    const [clienteIncompletoDialog, setClienteIncompletoDialog] = useState({
+        open: false,
+        vendaId: null,
+        contingencia: false,
+        cliente: null,
+        pendencias: []
+    });
+    const [openModalEditarCliente, setOpenModalEditarCliente] = useState(false);
+    const [clienteParaEditarNFe, setClienteParaEditarNFe] = useState(null);
+
+    const validarClienteParaNFe = (clienteData) => {
+        const pendencias = [];
+        if (!clienteData) {
+            return ['Cliente não cadastrado ou não informado na venda'];
+        }
+
+        const nome = (clienteData.nome_razao_social || clienteData.nome || clienteData.razao_social || '').trim();
+        const cpfCnpj = String(clienteData.cpf_cnpj || clienteData.cnpj || clienteData.cpf || '').replace(/\D/g, '');
+        const cep = String(clienteData.cep || '').replace(/\D/g, '');
+        const logradouro = (clienteData.logradouro || clienteData.endereco || '').trim();
+        const numero = (clienteData.numero || '').trim();
+        const bairro = (clienteData.bairro || '').trim();
+        const cidade = (clienteData.cidade || clienteData.municipio || '').trim();
+        const uf = (clienteData.uf || clienteData.estado || '').trim();
+
+        if (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14)) {
+            pendencias.push('CPF/CNPJ não informado ou com formato inválido (exige 11 ou 14 dígitos)');
+        }
+
+        if (!nome || ['CONSUMIDOR', 'CONSUMIDOR FINAL', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', ''].includes(nome.toUpperCase())) {
+            pendencias.push('Razão Social / Nome Completo do cliente (Emissão de NF-e 55 exige destinatário identificado)');
+        }
+
+        if (!cep || cep.length !== 8) {
+            pendencias.push('CEP do endereço (8 dígitos)');
+        }
+
+        if (!logradouro) {
+            pendencias.push('Endereço / Logradouro');
+        }
+
+        if (!numero) {
+            pendencias.push('Número do endereço (Informe S/N se não houver)');
+        }
+
+        if (!bairro) {
+            pendencias.push('Bairro');
+        }
+
+        if (!cidade) {
+            pendencias.push('Cidade / Município');
+        }
+
+        if (!uf || uf.length !== 2) {
+            pendencias.push('UF / Estado (2 letras, ex: MG, SP)');
+        }
+
+        return pendencias;
+    };
+
+    const solicitarEmissaoNFeInteligente = async (vendaId, contingencia = false) => {
+        if (processingId) return;
+
+        const venda = vendas.find(v => (v.id_venda || v.id) === vendaId);
+        const idCliente = venda?.id_cliente || venda?.cliente_id;
+
+        let clienteData = null;
+        if (idCliente) {
+            try {
+                const respCli = await axiosInstance.get(`/clientes/${idCliente}/`);
+                clienteData = respCli.data;
+            } catch (err) {
+                console.warn('⚠️ Não foi possível buscar cliente completo para validação:', err);
+            }
+        }
+
+        const pendencias = validarClienteParaNFe(clienteData);
+
+        if (pendencias.length > 0) {
+            setClienteIncompletoDialog({
+                open: true,
+                vendaId: vendaId,
+                contingencia: contingencia,
+                cliente: clienteData,
+                pendencias: pendencias
+            });
+            return;
+        }
+
+        if (contingencia) {
+            handleEmitirNFeContingencia(vendaId);
+        } else {
+            handleEmitirNFe(vendaId);
+        }
+    };
+
+    const abrirEdicaoClienteIncompleto = () => {
+        setClienteParaEditarNFe(clienteIncompletoDialog.cliente);
+        setClienteIncompletoDialog(prev => ({ ...prev, open: false }));
+        setOpenModalEditarCliente(true);
+    };
+
+    const handleClienteSalvoNFe = async (clienteSalvo) => {
+        setOpenModalEditarCliente(false);
+        showToast(`Cadastro de ${clienteSalvo.nome_razao_social || 'cliente'} atualizado com sucesso!`, 'success');
+        fetchVendas();
+
+        const vendaId = clienteIncompletoDialog.vendaId;
+        const isContingencia = clienteIncompletoDialog.contingencia;
+
+        if (vendaId) {
+            const pendencias = validarClienteParaNFe(clienteSalvo);
+            if (pendencias.length === 0) {
+                showToast('Dados do cliente validados! Transmitindo NF-e...', 'info');
+                if (isContingencia) {
+                    handleEmitirNFeContingencia(vendaId);
+                } else {
+                    handleEmitirNFe(vendaId);
+                }
+            } else {
+                showToast('Alguns campos ainda precisam ser ajustados para a emissão.', 'warning');
+            }
         }
     };
 
@@ -875,7 +1002,7 @@ const NFePage = () => {
                                                             <IconButton
                                                                 color="primary"
                                                                 size="small"
-                                                                onClick={() => handleEmitirNFe(venda.id)}
+                                                                onClick={() => solicitarEmissaoNFeInteligente(venda.id, false)}
                                                                 disabled={!!processingId}
                                                             >
                                                                 {processingId === venda.id ? (
@@ -1065,7 +1192,7 @@ const NFePage = () => {
                 {menuVenda && menuVenda.status_nfe !== 'EMITIDA' && menuVenda.status_nfe !== 'CANCELADA' && menuVenda.status_nfe !== 'INUTILIZADA' && (
                      <MenuItem 
                         onClick={() => {
-                            handleEmitirNFeContingencia(menuVenda.id_venda || menuVenda.id);
+                            solicitarEmissaoNFeInteligente(menuVenda.id_venda || menuVenda.id, true);
                             handleMenuClose();
                         }}
                         sx={{ color: 'warning.main' }}
@@ -1245,6 +1372,59 @@ const NFePage = () => {
                 temPdf={!!emailDialog.venda?.chave_nfe}
                 onSuccess={(msg) => showToast(msg, 'success')}
                 onError={(msg) => showToast(msg, 'error')}
+            />
+
+            {/* Dialog Alerta Inteligente: Cliente Incompleto para NF-e 55 */}
+            <Dialog
+                open={clienteIncompletoDialog.open}
+                onClose={() => setClienteIncompletoDialog(prev => ({ ...prev, open: false }))}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'warning.main', fontWeight: 'bold' }}>
+                    <WarningIcon color="warning" />
+                    Cliente com dados incompletos
+                </DialogTitle>
+                <DialogContent>
+                    <Typography variant="body1" sx={{ mb: 1.5, fontWeight: 500 }}>
+                        Para prosseguir com a emissão da NF-e (Modelo 55), atualize o cadastro do cliente:
+                        <strong style={{ color: '#1565c0', marginLeft: '6px' }}>
+                            {clienteIncompletoDialog.cliente?.nome_razao_social || clienteIncompletoDialog.cliente?.nome || 'Cliente'}
+                        </strong>
+                    </Typography>
+
+                    <Box sx={{ bgcolor: '#fff8e1', border: '1px solid #ffe082', borderRadius: 2, p: 2, mb: 1 }}>
+                        <Typography variant="subtitle2" sx={{ color: '#b45309', fontWeight: 'bold', mb: 1 }}>
+                            📋 Campos obrigatórios pendentes para a NF-e:
+                        </Typography>
+                        {clienteIncompletoDialog.pendencias.map((p, idx) => (
+                            <Typography key={idx} variant="body2" sx={{ color: '#c2410c', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                • {p}
+                            </Typography>
+                        ))}
+                    </Box>
+                </DialogContent>
+                <DialogActions sx={{ p: 2, pt: 0 }}>
+                    <Button onClick={() => setClienteIncompletoDialog(prev => ({ ...prev, open: false }))} color="inherit">
+                        Cancelar
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<EditIcon />}
+                        onClick={abrirEdicaoClienteIncompleto}
+                    >
+                        Editar e Salvar Cadastro do Cliente
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Modal de Cadastro Completo de Cliente */}
+            <ClienteFormModal
+                open={openModalEditarCliente}
+                onClose={() => setOpenModalEditarCliente(false)}
+                clienteToEdit={clienteParaEditarNFe}
+                onSaved={handleClienteSalvoNFe}
             />
         </Box>
     );
