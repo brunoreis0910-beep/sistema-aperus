@@ -162,12 +162,21 @@ function CompraPage() {
     peso_bruto: '',
     peso_liquido: ''
   });
+  const [despesasDevolucao, setDespesasDevolucao] = useState({
+    valor_frete: 0,
+    valor_outras: 0,
+    valor_seguro: 0
+  });
+  const [modoPreviewDevolucao, setModoPreviewDevolucao] = useState(false);
+  const [vendaIdGeradoDevolucao, setVendaIdGeradoDevolucao] = useState(null);
 
   const abrirModalDevolucaoCompra = async (compraRow) => {
     const idTarget = compraRow.id_compra || compraRow.id;
     setLoadingDevolucao(true);
     setCompraParaDevolucao(compraRow);
     setOpenModalDevolucao(true);
+    setModoPreviewDevolucao(false);
+    setVendaIdGeradoDevolucao(null);
     setMotivoDevolucao('');
     setObservacoesDevolucao('');
     setOperacaoDevolucaoId('');
@@ -177,6 +186,11 @@ function CompraPage() {
       especie: compraRow.especie || 'CAIXA',
       peso_bruto: compraRow.peso_bruto || '',
       peso_liquido: compraRow.peso_liquido || ''
+    });
+    setDespesasDevolucao({
+      valor_frete: parseFloat(compraRow.valor_frete || 0),
+      valor_outras: parseFloat(compraRow.valor_outras || 0),
+      valor_seguro: parseFloat(compraRow.valor_seguro || 0)
     });
     
     try {
@@ -226,7 +240,7 @@ function CompraPage() {
     }
   }, [itensDevolucaoCompra, compraParaDevolucao]);
 
-  const confirmarDevolucaoCompra = async () => {
+  const salvarEVisualizarDevolucaoCompra = async () => {
     const itensSelecionados = itensDevolucaoCompra
       .filter(i => i.selecionado && i.quantidade_devolver > 0)
       .map(i => ({
@@ -269,32 +283,23 @@ function CompraPage() {
         especie: freteDevolucao.especie,
         peso_bruto: freteDevolucao.peso_bruto,
         peso_liquido: freteDevolucao.peso_liquido,
+        valor_frete: despesasDevolucao.valor_frete,
+        valor_outras: despesasDevolucao.valor_outras,
+        valor_seguro: despesasDevolucao.valor_seguro,
         chave_nfe_referenciada: compraParaDevolucao.chave_nfe_origem || compraParaDevolucao.chave_nfe || '',
         itens: itensSelecionados
       };
 
       const res = await axiosInstance.post('/devolucoes/', payload);
-      toast.success('✅ Devolução de Compra registrada com sucesso!');
-      setOpenModalDevolucao(false);
+      toast.success('💾 Devolução salva! Confira todos os valores e despesas na prévia abaixo antes de transmitir.');
 
       const idVendaGerada = res.data?.id_venda || res.data?.venda_id || res.data?.id_venda_gerada || res.data?.id_devolucao;
-
-      if (operacaoDevolucaoId && idVendaGerada) {
-        setDialogNFeDevolucao({
-          open: true,
-          vendaId: idVendaGerada,
-          numeroDoc: compraParaDevolucao.numero_documento || compraParaDevolucao.numero_nota || `#${compraParaDevolucao.id_compra}`,
-          fornecedorNome: compraParaDevolucao.nome_fornecedor || compraParaDevolucao.fornecedor_nome || '',
-          chaveNFe: compraParaDevolucao.chave_nfe_origem || compraParaDevolucao.chave_nfe || '',
-          statusEmissao: 'pendente',
-          mensagemSefaz: 'Clique abaixo para Transmitir a NF-e de Devolução para a SEFAZ.',
-          protocolo: ''
-        });
-      }
+      setVendaIdGeradoDevolucao(idVendaGerada);
+      setModoPreviewDevolucao(true);
       carregarDados();
     } catch (err) {
-      console.error('Erro ao registrar devolução de compra:', err);
-      const msg = err.response?.data?.error || err.response?.data?.detail || 'Erro ao registrar devolução.';
+      console.error('Erro ao salvar devolução de compra:', err);
+      const msg = err.response?.data?.error || err.response?.data?.detail || 'Erro ao salvar devolução.';
       toast.error(`❌ ${msg}`);
     } finally {
       setLoadingDevolucao(false);
@@ -6269,6 +6274,74 @@ function CompraPage() {
                 </Grid>
               </Grid>
 
+              <Typography variant="subtitle2" gutterBottom fontWeight="bold" color="text.secondary">
+                4. Frete, Outras Despesas Acessórias e Totais da Nota:
+              </Typography>
+
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Valor do Frete (R$)"
+                    type="number"
+                    value={despesasDevolucao.valor_frete}
+                    onChange={(e) => setDespesasDevolucao(prev => ({ ...prev, valor_frete: parseFloat(e.target.value) || 0 }))}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Outras Despesas Acessórias (R$)"
+                    type="number"
+                    value={despesasDevolucao.valor_outras}
+                    onChange={(e) => setDespesasDevolucao(prev => ({ ...prev, valor_outras: parseFloat(e.target.value) || 0 }))}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Valor do Seguro (R$)"
+                    type="number"
+                    value={despesasDevolucao.valor_seguro}
+                    onChange={(e) => setDespesasDevolucao(prev => ({ ...prev, valor_seguro: parseFloat(e.target.value) || 0 }))}
+                  />
+                </Grid>
+              </Grid>
+
+              {/* Card de Resumo Financeiro da Devolução */}
+              {(() => {
+                const subtotalItens = itensDevolucaoCompra
+                  .filter(i => i.selecionado)
+                  .reduce((acc, i) => acc + (i.quantidade_devolver * i.valor_unitario), 0);
+                const totalDespesas = (despesasDevolucao.valor_frete || 0) + (despesasDevolucao.valor_outras || 0) + (despesasDevolucao.valor_seguro || 0);
+                const valorTotalFinal = subtotalItens + totalDespesas;
+
+                return (
+                  <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: '#e8f5e9', borderColor: '#a5d6a7' }}>
+                    <Grid container spacing={2} alignItems="center">
+                      <Grid item xs={12} md={4}>
+                        <Typography variant="body2">
+                          <strong>Subtotal dos Produtos:</strong> R$ {subtotalItens.toFixed(2)}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12} md={4}>
+                        <Typography variant="body2">
+                          <strong>Frete + Outras Despesas:</strong> R$ {totalDespesas.toFixed(2)}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12} md={4}>
+                        <Typography variant="subtitle1" fontWeight="bold" color="success.main">
+                          <strong>VALOR TOTAL DA NOTA: R$ {valorTotalFinal.toFixed(2)}</strong>
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                );
+              })()}
+
               <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <TextField
@@ -6285,18 +6358,51 @@ function CompraPage() {
             </>
           )}
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
+        <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
           <Button onClick={() => setOpenModalDevolucao(false)} color="inherit">
             Cancelar
           </Button>
-          <Button
-            variant="contained"
-            color="success"
-            disabled={loadingDevolucao || !itensDevolucaoCompra.some(i => i.selecionado && i.quantidade_devolver > 0)}
-            onClick={confirmarDevolucaoCompra}
-          >
-            Confirmar e Emitir Devolução de Compra
-          </Button>
+          {!modoPreviewDevolucao ? (
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={loadingDevolucao || !itensDevolucaoCompra.some(i => i.selecionado && i.quantidade_devolver > 0)}
+              onClick={salvarEVisualizarDevolucaoCompra}
+            >
+              💾 Salvar Devolução e Visualizar Prévia
+            </Button>
+          ) : (
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={() => setModoPreviewDevolucao(false)}
+              >
+                ✏️ Voltar e Editar Valores
+              </Button>
+              <Button
+                variant="contained"
+                color="success"
+                onClick={() => {
+                  setOpenModalDevolucao(false);
+                  if (vendaIdGeradoDevolucao && operacaoDevolucaoId) {
+                    setDialogNFeDevolucao({
+                      open: true,
+                      vendaId: vendaIdGeradoDevolucao,
+                      numeroDoc: compraParaDevolucao.numero_documento || compraParaDevolucao.numero_nota || `#${compraParaDevolucao.id_compra}`,
+                      fornecedorNome: compraParaDevolucao.nome_fornecedor || compraParaDevolucao.fornecedor_nome || '',
+                      chaveNFe: compraParaDevolucao.chave_nfe_origem || compraParaDevolucao.chave_nfe || '',
+                      statusEmissao: 'pendente',
+                      mensagemSefaz: 'Clique abaixo para Transmitir a NF-e de Devolução para a SEFAZ.',
+                      protocolo: ''
+                    });
+                  }
+                }}
+              >
+                🚀 Confirmar e Transmitir para SEFAZ
+              </Button>
+            </Box>
+          )}
         </DialogActions>
       </Dialog>
 
