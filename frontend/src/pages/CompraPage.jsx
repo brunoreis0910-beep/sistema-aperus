@@ -71,6 +71,7 @@ import FlashOnIcon from '@mui/icons-material/FlashOn'
 import { useAuth } from '../context/AuthContext'
 import PrecificacaoDialog from '../components/PrecificacaoDialog'
 import SolicitarAprovacaoModal from '../components/SolicitarAprovacaoModal'
+import CartaCorrecaoDialog from '../components/CartaCorrecaoDialog'
 import { toast } from 'react-toastify'
 
 function CompraPage() {
@@ -78,6 +79,7 @@ function CompraPage() {
   const navigate = useNavigate()
 
   // Estados principais
+  const [cartaCorrecaoDialog, setCartaCorrecaoDialog] = useState({ open: false, venda: null });
   const [fornecedores, setFornecedores] = useState([])
   const [produtos, setProdutos] = useState([])
   const [operacoes, setOperacoes] = useState([])
@@ -3867,101 +3869,159 @@ function CompraPage() {
                       </TableCell>
                       <TableCell align="center">
                         <Stack direction="row" spacing={0.5} justifyContent="center">
-                          {compra.id_venda && (
-                            <>
-                              <Tooltip title="Transmitir NF-e para SEFAZ">
-                                <IconButton
-                                  color="success"
-                                  size="small"
-                                  onClick={() => handleTransmitirNFeSefaz(compra.id_venda)}
-                                >
-                                  🚀
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Imprimir DANFE PDF">
-                                <IconButton
-                                  color="primary"
-                                  size="small"
-                                  onClick={() => handleImprimirDanfeDevolucao(compra.id_venda)}
-                                >
-                                  📄
-                                </IconButton>
-                              </Tooltip>
-                            </>
-                          )}
-                          <Tooltip title={compra.dados_entrada || compra.chave_nfe ? 'Manifestar NF-e do Destinatário' : 'Sem chave NF-e para manifestar'}>
-                            <span>
-                              <IconButton
-                                color="info"
-                                onClick={() => abrirManifestacao(compra)}
-                                disabled={!compra.dados_entrada && !compra.chave_nfe}
-                                sx={{
-                                  '&:hover': {
-                                    bgcolor: 'info.light',
-                                    color: 'white',
-                                  },
-                                }}
-                              >
-                                <CloudSyncIcon />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title="Editar compra">
-                            <IconButton
-                              color="warning"
-                              onClick={() => editarCompra(compra)}
-                              sx={{
-                                '&:hover': {
-                                  bgcolor: 'warning.light',
-                                  color: 'white',
-                                },
-                              }}
-                            >
-                              <EditIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Precificar produtos desta compra">
-                            <IconButton
-                              color="primary"
-                              onClick={() => abrirPrecificacaoCompra(compra.id_compra || compra.id)}
-                              sx={{
-                                '&:hover': {
-                                  bgcolor: 'primary.light',
-                                  color: 'white',
-                                },
-                              }}
-                            >
-                              <TrendingUpIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Gerar Devolução desta Compra ao Fornecedor">
-                            <IconButton
-                              color="secondary"
-                              onClick={() => abrirModalDevolucaoCompra(compra)}
-                              sx={{
-                                '&:hover': {
-                                  bgcolor: 'secondary.light',
-                                  color: 'white',
-                                },
-                              }}
-                            >
-                              <AutorenewIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Excluir compra">
-                            <IconButton
-                              color="error"
-                              onClick={() => excluirCompra(compra.id_compra || compra.id)}
-                              sx={{
-                                '&:hover': {
-                                  bgcolor: 'error.light',
-                                  color: 'white',
-                                },
-                              }}
-                            >
-                              <DeleteIcon />
-                            </IconButton>
-                          </Tooltip>
+                          {(() => {
+                            const isDevolucao = compra.is_devolucao ||
+                              (compra.operacao_nome || '').toUpperCase().includes('DEVOLU') ||
+                              (compra.operacao_abreviacao || '').toUpperCase().includes('DEVOLU');
+
+                            if (isDevolucao) {
+                              return (
+                                <>
+                                  {compra.id_venda && (
+                                    <>
+                                      <Tooltip title="Transmitir NF-e para SEFAZ">
+                                        <IconButton
+                                          color="success"
+                                          size="small"
+                                          onClick={() => handleTransmitirNFeSefaz(compra.id_venda)}
+                                        >
+                                          🚀
+                                        </IconButton>
+                                      </Tooltip>
+                                      <Tooltip title="Visualizar / Imprimir DANFE PDF">
+                                        <IconButton
+                                          color="primary"
+                                          size="small"
+                                          onClick={() => handleImprimirDanfeDevolucao(compra.id_venda)}
+                                        >
+                                          📄
+                                        </IconButton>
+                                      </Tooltip>
+                                      <Tooltip title="Emitir Carta de Correção (CC-e)">
+                                        <IconButton
+                                          color="secondary"
+                                          size="small"
+                                          onClick={() => setCartaCorrecaoDialog({
+                                            open: true,
+                                            venda: {
+                                              id_venda: compra.id_venda,
+                                              id: compra.id_venda,
+                                              numero_nfe: compra.numero_documento,
+                                              chave_nfe: compra.chave_nfe
+                                            }
+                                          })}
+                                        >
+                                          ✉️
+                                        </IconButton>
+                                      </Tooltip>
+                                    </>
+                                  )}
+                                  <Tooltip title="Editar devolução">
+                                    <IconButton
+                                      color="warning"
+                                      size="small"
+                                      onClick={() => editarCompra(compra)}
+                                    >
+                                      <EditIcon />
+                                    </IconButton>
+                                  </Tooltip>
+                                  <Tooltip title="Excluir devolução">
+                                    <IconButton
+                                      color="error"
+                                      size="small"
+                                      onClick={() => excluirCompra(compra.id_compra || compra.id)}
+                                    >
+                                      <DeleteIcon />
+                                    </IconButton>
+                                  </Tooltip>
+                                </>
+                              );
+                            }
+
+                            // Linha de Compra Normal / Entrada
+                            return (
+                              <>
+                                <Tooltip title={compra.dados_entrada || compra.chave_nfe ? 'Manifestar NF-e do Destinatário' : 'Sem chave NF-e para manifestar'}>
+                                  <span>
+                                    <IconButton
+                                      color="info"
+                                      size="small"
+                                      onClick={() => abrirManifestacao(compra)}
+                                      disabled={!compra.dados_entrada && !compra.chave_nfe}
+                                      sx={{
+                                        '&:hover': {
+                                          bgcolor: 'info.light',
+                                          color: 'white',
+                                        },
+                                      }}
+                                    >
+                                      <CloudSyncIcon />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                                <Tooltip title="Editar compra">
+                                  <IconButton
+                                    color="warning"
+                                    size="small"
+                                    onClick={() => editarCompra(compra)}
+                                    sx={{
+                                      '&:hover': {
+                                        bgcolor: 'warning.light',
+                                        color: 'white',
+                                      },
+                                    }}
+                                  >
+                                    <EditIcon />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Precificar produtos desta compra">
+                                  <IconButton
+                                    color="primary"
+                                    size="small"
+                                    onClick={() => abrirPrecificacaoCompra(compra.id_compra || compra.id)}
+                                    sx={{
+                                      '&:hover': {
+                                        bgcolor: 'primary.light',
+                                        color: 'white',
+                                      },
+                                    }}
+                                  >
+                                    <TrendingUpIcon />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Gerar Devolução desta Compra ao Fornecedor">
+                                  <IconButton
+                                    color="secondary"
+                                    size="small"
+                                    onClick={() => abrirModalDevolucaoCompra(compra)}
+                                    sx={{
+                                      '&:hover': {
+                                        bgcolor: 'secondary.light',
+                                        color: 'white',
+                                      },
+                                    }}
+                                  >
+                                    <AutorenewIcon />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Excluir compra">
+                                  <IconButton
+                                    color="error"
+                                    size="small"
+                                    onClick={() => excluirCompra(compra.id_compra || compra.id)}
+                                    sx={{
+                                      '&:hover': {
+                                        bgcolor: 'error.light',
+                                        color: 'white',
+                                      },
+                                    }}
+                                  >
+                                    <DeleteIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              </>
+                            );
+                          })()}
                         </Stack>
                       </TableCell>
                     </TableRow>
@@ -6572,6 +6632,13 @@ function CompraPage() {
           </Box>
         </DialogActions>
       </Dialog>
+
+      {/* Dialog de Carta de Correção Eletrônica (CC-e) */}
+      <CartaCorrecaoDialog
+        open={cartaCorrecaoDialog.open}
+        onClose={() => setCartaCorrecaoDialog({ open: false, venda: null })}
+        venda={cartaCorrecaoDialog.venda}
+      />
 
       </Box>
     </Box>
