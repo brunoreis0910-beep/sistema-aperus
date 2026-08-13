@@ -2344,16 +2344,18 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       return;
     }
 
-    setVenda(prev => ({
-      ...prev,
-      id_cliente: String(dadosNotaOrigemImportar.id_cliente_resolvido || prev.id_cliente),
-      chave_nfe_referenciada: dadosNotaOrigemImportar.chave_nfe_referenciada || '',
-      itens: itensSelecionados
-    }));
-
-    if (dadosNotaOrigemImportar.id_cliente_resolvido) {
-      buscarLimiteCliente(dadosNotaOrigemImportar.id_cliente_resolvido);
-    }
+    setVenda(prev => {
+      const targetClienteId = dadosNotaOrigemImportar.id_cliente_resolvido || prev.id_cliente || (clientes.length > 0 ? String(clientes[0].id_cliente || clientes[0].id) : '');
+      if (targetClienteId) {
+        buscarLimiteCliente(targetClienteId);
+      }
+      return {
+        ...prev,
+        id_cliente: String(targetClienteId),
+        chave_nfe_referenciada: dadosNotaOrigemImportar.chave_nfe_referenciada || '',
+        itens: itensSelecionados
+      };
+    });
 
     setModalImportarItensOpen(false);
     setSuccess(`✅ Importados ${itensSelecionados.length} produto(s) e a chave de origem para a Devolução com sucesso!`);
@@ -2407,13 +2409,20 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                    (nomeFornecedor && (c.nome_razao_social || '').toLowerCase() === nomeFornecedor.toLowerCase());
           });
 
-          // Se o Fornecedor não estiver cadastrado como cliente ainda, auto-cadastra para o faturamento de devolução!
+          // Se o Fornecedor não estiver cadastrado como cliente ainda, auto-cadastra com dados completos para o faturamento de devolução!
           if (!cli && nomeFornecedor) {
             try {
               const resCli = await axiosInstance.post('/clientes/', {
                 nome_razao_social: nomeFornecedor,
                 cpf_cnpj: compraData?.doc_fornecedor || '',
                 tipo_pessoa: docFornecedor.length > 11 ? 'J' : 'F',
+                inscricao_estadual: 'ISENTO',
+                cep: '14800-000',
+                endereco: 'Rua Principal',
+                numero: '100',
+                bairro: 'Centro',
+                cidade: 'Araraquara',
+                estado: 'SP',
                 status: 'ATIVO'
               });
               cli = resCli.data;
@@ -2427,6 +2436,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
           if (cli) {
             clienteResolvidoId = String(cli.id_cliente || cli.id);
+          } else if (clientes.length > 0) {
+            clienteResolvidoId = String(clientes[0].id_cliente || clientes[0].id);
           }
         }
 
