@@ -10,10 +10,11 @@ import {
   ArrowBack, Add, Remove, Search, CheckCircle, Cancel
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 
 const DevolucaoPage = () => {
   const navigate = useNavigate();
+  const { axiosInstance } = useAuth();
   const [activeStep, setActiveStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -38,10 +39,11 @@ const DevolucaoPage = () => {
   
   const carregarOperacoes = async () => {
     try {
-      const response = await axios.get('/api/operacoes/', {
+      const response = await (axiosInstance || axios).get('/devolucoes/operacoes/', {
         params: { tipo: 'devolucao' }
-      });
-      const _d = response.data;
+      }).catch(() => (axiosInstance || axios).get('/operacoes/', { params: { tipo: 'devolucao' } }));
+      
+      const _d = response?.data;
       setOperacoes(Array.isArray(_d) ? _d : Array.isArray(_d?.results) ? _d.results : []);
     } catch (err) {
       console.error('Erro ao carregar operações:', err);
@@ -50,7 +52,7 @@ const DevolucaoPage = () => {
   
   const buscarDocumento = async () => {
     if (!documentoId) {
-      setError('Informe o número do documento');
+      setError('Informe o número ou ID do documento');
       return;
     }
     
@@ -58,15 +60,23 @@ const DevolucaoPage = () => {
     setError('');
     
     try {
+      const client = axiosInstance || axios;
       const endpoint = tipoDevolucao === 'venda' 
-        ? `/api/devolucoes/buscar_venda/${documentoId}/`
-        : `/api/devolucoes/buscar_compra/${documentoId}/`;
+        ? `/devolucoes/buscar_venda/${documentoId}/`
+        : `/devolucoes/buscar_compra/${documentoId}/`;
       
-      const response = await axios.get(endpoint);
+      let response;
+      try {
+        response = await client.get(endpoint);
+      } catch (e1) {
+        // Fallback tentar com prefixo /api se endpoint direto falhar
+        response = await client.get(`/api${endpoint}`);
+      }
+
       setDocumentoData(response.data);
       
       // Inicializar itens selecionados
-      const itensIniciais = response.data.itens.map(item => ({
+      const itensIniciais = (response.data.itens || []).map(item => ({
         ...item,
         quantidade_devolver: 0,
         selecionado: false,
@@ -74,9 +84,15 @@ const DevolucaoPage = () => {
       }));
       setItensSelecionados(itensIniciais);
       
-      setActiveStep(1);
+      if (itensIniciais.length === 0) {
+        setError('Documento encontrado, mas não possui itens disponíveis para devolução.');
+      } else {
+        setActiveStep(1);
+      }
     } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao buscar documento');
+      console.error('Erro ao buscar documento:', err);
+      const msg = err.response?.data?.error || err.response?.data?.detail || 'Nenhum documento encontrado com o número/ID informado.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -179,9 +195,15 @@ const DevolucaoPage = () => {
         itens: itensParaDevolver
       };
       
-      const response = await axios.post('/api/devolucoes/', dados);
+      const client = axiosInstance || axios;
+      let response;
+      try {
+        response = await client.post('/devolucoes/', dados);
+      } catch (e1) {
+        response = await client.post('/api/devolucoes/', dados);
+      }
       
-      setSuccess(`Devolução ${response.data.numero_devolucao} criada com sucesso!`);
+      setSuccess(`Devolução ${response.data.numero_devolucao || response.data.id} criada com sucesso!`);
       
       // Redirecionar após 2 segundos
       setTimeout(() => {
@@ -189,7 +211,7 @@ const DevolucaoPage = () => {
       }, 2000);
       
     } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao criar devolução');
+      setError(err.response?.data?.error || err.response?.data?.detail || 'Erro ao criar devolução');
     } finally {
       setLoading(false);
     }
