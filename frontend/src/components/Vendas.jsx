@@ -315,6 +315,11 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   // Regime tributário da empresa: 'simples_nacional' | 'lucro_presumido' | 'lucro_real'
   const [regimeTributario, setRegimeTributario] = useState('lucro_presumido');
 
+  // Estados para Modal de Seleção de Produtos e Quantidades da Devolução
+  const [modalImportarItensOpen, setModalImportarItensOpen] = useState(false);
+  const [dadosNotaOrigemImportar, setDadosNotaOrigemImportar] = useState(null);
+  const [itensSelecaoImportar, setItensSelecaoImportar] = useState([]);
+
   // Efeito para selecionar operação baseada no modelo inicial
   useEffect(() => {
     if (initialModel && operacoes.length > 0 && modo === 'nova' && !venda.id_operacao) {
@@ -2316,6 +2321,44 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     });
   };
 
+  // Confirmar seleção de itens e quantidades da devolução no modal
+  const confirmarImportacaoItensDevolucao = () => {
+    if (!dadosNotaOrigemImportar) return;
+
+    const itensSelecionados = itensSelecaoImportar
+      .filter(i => i.selecionado && i.quantidade_devolver > 0)
+      .map(i => ({
+        id_produto: i.id_produto,
+        produto_id: i.id_produto,
+        produto_nome: i.nome_produto,
+        nome_produto: i.nome_produto,
+        codigo_produto: i.codigo_produto,
+        quantidade: i.quantidade_devolver,
+        valor_unitario: i.valor_unitario,
+        subtotal: i.quantidade_devolver * i.valor_unitario,
+        cfop: i.cfop || '',
+      }));
+
+    if (itensSelecionados.length === 0) {
+      setError('❌ Selecione pelo menos um produto com quantidade maior que zero para a devolução.');
+      return;
+    }
+
+    setVenda(prev => ({
+      ...prev,
+      id_cliente: String(dadosNotaOrigemImportar.id_cliente_resolvido || prev.id_cliente),
+      chave_nfe_referenciada: dadosNotaOrigemImportar.chave_nfe_referenciada || '',
+      itens: itensSelecionados
+    }));
+
+    if (dadosNotaOrigemImportar.id_cliente_resolvido) {
+      buscarLimiteCliente(dadosNotaOrigemImportar.id_cliente_resolvido);
+    }
+
+    setModalImportarItensOpen(false);
+    setSuccess(`✅ Importados ${itensSelecionados.length} produto(s) e a chave de origem para a Devolução com sucesso!`);
+  };
+
   // Importar Nota de Origem para Nota Complementar ou Devolução (Vendas e Compras)
   const handleImportarNotaOrigem = async () => {
     if (!numOrigemBusca.trim()) {
@@ -2352,33 +2395,70 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
 
       // Se encontrou dados estruturados (Compra ou Venda)
       if (compraData) {
-        const novosItens = (compraData.itens || []).map(item => ({
-          id_produto: item.id_produto,
-          produto_id: item.id_produto,
-          produto_nome: item.nome_produto || item.produto_nome || '',
-          nome_produto: item.nome_produto || item.produto_nome || '',
-          codigo_produto: item.codigo_produto || '',
-          quantidade: parseFloat(item.quantidade_disponivel || item.quantidade_original || item.quantidade || 0),
-          valor_unitario: parseFloat(item.valor_unitario || 0),
-          subtotal: parseFloat(item.valor_total || (item.quantidade * item.valor_unitario) || 0),
-          cfop: item.cfop || '',
-        }));
+        // Resolução inteligente do Fornecedor / Cliente
+        let clienteResolvidoId = '';
+        const docFornecedor = (compraData?.doc_fornecedor || compraData?.cpf_cnpj_cliente || '').replace(/\D/g, '');
+        const nomeFornecedor = (compraData?.nome_fornecedor || compraData?.nome_cliente || '').trim();
 
-        const novoClienteFornecedorId = compraData.id_cliente || compraData.id_fornecedor || '';
-        const chaveRef = compraData.chave_nfe_origem || compraData.chave_nfe || '';
+        if (docFornecedor || nomeFornecedor) {
+          let cli = clientes.find(c => {
+            const cDoc = (c.cpf_cnpj || c.cnpj || c.cpf || '').replace(/\D/g, '');
+            return (docFornecedor && cDoc === docFornecedor) ||
+                   (nomeFornecedor && (c.nome_razao_social || '').toLowerCase() === nomeFornecedor.toLowerCase());
+          });
 
-        setVenda(prev => ({
-          ...prev,
-          id_cliente: String(novoClienteFornecedorId || prev.id_cliente),
-          chave_nfe_referenciada: chaveRef,
-          itens: novosItens.length > 0 ? novosItens : prev.itens
-        }));
+          // Se o Fornecedor não estiver cadastrado como cliente ainda, auto-cadastra para o faturamento de devolução!
+          if (!cli && nomeFornecedor) {
+            try {
+              const resCli = await axiosInstance.post('/clientes/', {
+                nome_razao_social: nomeFornecedor,
+                cpf_cnpj: compraData?.doc_fornecedor || '',
+                tipo_pessoa: docFornecedor.length > 11 ? 'J' : 'F',
+                status: 'ATIVO'
+              });
+              cli = resCli.data;
+              if (cli && (cli.id_cliente || cli.id)) {
+                setClientes(prev => [...prev, cli]);
+              }
+            } catch (errSync) {
+              console.warn('Não foi possível auto-cadastrar fornecedor na lista de clientes:', errSync);
+            }
+          }
 
-        if (novoClienteFornecedorId) {
-          buscarLimiteCliente(novoClienteFornecedorId);
+          if (cli) {
+            clienteResolvidoId = String(cli.id_cliente || cli.id);
+          }
         }
 
-        setSuccess(`✅ Nota/Compra de origem encontrada! ${novosItens.length} produto(s) e a chave de acesso foram carregados com sucesso.`);
+        const chaveRef = compraData.chave_nfe_origem || compraData.chave_nfe || '';
+
+        const itensPre = (compraData.itens || []).map(item => {
+          const qMax = parseFloat(item.quantidade_disponivel || item.quantidade_original || item.quantidade || 0);
+          return {
+            id_produto: item.id_produto,
+            produto_id: item.id_produto,
+            produto_nome: item.nome_produto || item.produto_nome || '',
+            nome_produto: item.nome_produto || item.produto_nome || '',
+            codigo_produto: item.codigo_produto || '',
+            quantidade_maxima: qMax,
+            quantidade_devolver: qMax,
+            selecionado: true,
+            valor_unitario: parseFloat(item.valor_unitario || 0),
+            subtotal: parseFloat(item.valor_total || (qMax * item.valor_unitario) || 0),
+            cfop: item.cfop || '',
+          };
+        });
+
+        setDadosNotaOrigemImportar({
+          id_cliente_resolvido: clienteResolvidoId,
+          chave_nfe_referenciada: chaveRef,
+          nome_entidade: nomeFornecedor,
+          doc_entidade: compraData?.doc_fornecedor || '',
+          numero_documento: compraData?.numero_documento || compraData?.id_compra
+        });
+
+        setItensSelecaoImportar(itensPre);
+        setModalImportarItensOpen(true);
         setBuscandoOrigem(false);
         return;
       }
@@ -2407,7 +2487,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       }
 
       const idVendaOrigem = vendaOrigemObj.id_venda || vendaOrigemObj.id;
-      console.log(`[Importar Origem] Buscando detalhes da venda ID: ${idVendaOrigem}`);
       const resDetalhes = await axiosInstance.get(`/vendas/${idVendaOrigem}/`);
       const vendaDetalhada = resDetalhes.data;
 
@@ -2417,78 +2496,37 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         return;
       }
 
-      // Mapear itens da venda detalhada
-      const novosItens = (vendaDetalhada.itens || []).map(item => {
-        const descVal = parseFloat(item.desconto_valor || item.desconto || 0);
-        const descPerc = parseFloat(item.desconto_percentual || 0);
-        const totalVal = parseFloat(item.valor_total || item.subtotal || 0);
-        const unitVal = parseFloat(item.valor_unitario || 0);
-        const quant = parseFloat(item.quantidade || 0);
+      const novoClienteId = vendaDetalhada.id_cliente?.id_cliente || vendaDetalhada.id_cliente?.id || vendaDetalhada.id_cliente || '';
+      const chaveRefVenda = vendaDetalhada.chave_nfe || '';
 
+      const itensPreVenda = (vendaDetalhada.itens || []).map(item => {
+        const qMax = parseFloat(item.quantidade || 0);
+        const unitVal = parseFloat(item.valor_unitario || 0);
         return {
           id_produto: item.id_produto || item.produto_id,
           produto_id: item.id_produto || item.produto_id,
           produto_nome: item.produto_nome || item.produto || item.nome_produto || '',
           nome_produto: item.produto_nome || item.produto || item.nome_produto || '',
           codigo_produto: item.codigo_produto || item.codigo || '',
-          quantidade: quant,
+          quantidade_maxima: qMax,
+          quantidade_devolver: qMax,
+          selecionado: true,
           valor_unitario: unitVal,
-          desconto: descVal,
-          desconto_valor: descVal,
-          desconto_percentual: descPerc,
-          subtotal: totalVal,
-          ncm_codigo: item.ncm_codigo || '',
-          cest_codigo: item.cest_codigo || '',
+          subtotal: parseFloat(item.valor_total || item.subtotal || (qMax * unitVal) || 0),
           cfop: item.cfop || '',
-          c_benef: item.c_benef || '',
-          icms_cst_csosn: item.icms_cst_csosn || '',
-          icms_modalidade_bc: item.icms_modalidade_bc || '',
-          icms_reducao_bc_perc: item.icms_reducao_bc_perc || 0,
-          icms_bc: item.icms_bc || 0,
-          icms_aliq: item.icms_aliq || 0,
-          valor_icms: item.valor_icms || 0,
-          icmsst_bc: item.icmsst_bc || 0,
-          icmsst_aliq: item.icmsst_aliq || 0,
-          valor_icms_st: item.valor_icms_st || 0,
-          pis_cst: item.pis_cst || '',
-          pis_aliq: item.pis_aliq || 0,
-          pis_bc: item.pis_bc || 0,
-          valor_pis: item.valor_pis || 0,
-          cofins_cst: item.cofins_cst || '',
-          cofins_aliq: item.cofins_aliq || 0,
-          cofins_bc: item.cofins_bc || 0,
-          valor_cofins: item.valor_cofins || 0,
-          ipi_cst: item.ipi_cst || '',
-          ipi_aliq: item.ipi_aliq || 0,
-          ipi_bc: item.ipi_bc || 0,
-          valor_ipi: item.valor_ipi || 0,
-          ibs_cst: item.ibs_cst || '',
-          ibs_aliq: item.ibs_aliq || 0,
-          ibs_bc: item.ibs_bc || 0,
-          valor_ibs: item.valor_ibs || 0,
-          cbs_cst: item.cbs_cst || '',
-          cbs_aliq: item.cbs_aliq || 0,
-          cbs_bc: item.cbs_bc || 0,
-          valor_cbs: item.valor_cbs || 0
         };
       });
 
-      const novoClienteId = vendaDetalhada.id_cliente?.id_cliente || vendaDetalhada.id_cliente?.id || vendaDetalhada.id_cliente || '';
+      setDadosNotaOrigemImportar({
+        id_cliente_resolvido: String(novoClienteId),
+        chave_nfe_referenciada: chaveRefVenda,
+        nome_entidade: vendaDetalhada.nome_cliente || 'Cliente',
+        doc_entidade: vendaDetalhada.cpf_cnpj_cliente || '',
+        numero_documento: vendaDetalhada.numero_documento || idVendaOrigem
+      });
 
-      setVenda(prev => ({
-        ...prev,
-        id_cliente: String(novoClienteId),
-        chave_nfe_referenciada: vendaDetalhada.chave_nfe || '',
-        itens: novosItens
-      }));
-
-      if (novoClienteId) {
-        setDecisaoCashbackTomada(false);
-        buscarLimiteCliente(novoClienteId);
-        verificarCashbackCliente(novoClienteId);
-      }
-
-      setSuccess(`✅ Nota de origem encontrada! ${vendaDetalhada.itens?.length || 0} produtos e a chave de acesso foram carregados com sucesso.`);
+      setItensSelecaoImportar(itensPreVenda);
+      setModalImportarItensOpen(true);
     } catch (err) {
       console.error('[Importar Origem] Erro:', err);
       setError('❌ Erro ao comunicar com o servidor ou ao processar dados da nota.');
@@ -9800,6 +9838,136 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
             }}
           >
             Editar e Salvar Cadastro do Cliente
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog para Selecionar Produtos e Quantidades da Origem para Devolução */}
+      <Dialog
+        open={modalImportarItensOpen}
+        onClose={() => setModalImportarItensOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: '#1976d2', color: '#ffffff', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>📦 Selecionar Produtos e Quantidades para Devolução</span>
+          <IconButton onClick={() => setModalImportarItensOpen(false)} sx={{ color: '#ffffff' }}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          {dadosNotaOrigemImportar && (
+            <Card sx={{ mb: 2, mt: 1, bgcolor: '#f4f6f9', borderLeft: '4px solid #1976d2' }}>
+              <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2">
+                      <strong>Destinatário / Fornecedor:</strong> {dadosNotaOrigemImportar.nome_entidade} {dadosNotaOrigemImportar.doc_entidade ? `(${dadosNotaOrigemImportar.doc_entidade})` : ''}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" sx={{ wordBreak: 'break-all', fontFamily: 'monospace' }}>
+                      <strong>Chave SEFAZ Referenciada:</strong> {dadosNotaOrigemImportar.chave_nfe_referenciada || 'Sem chave'}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          )}
+
+          <Typography variant="subtitle2" gutterBottom fontWeight="bold" color="text.secondary">
+            Marque os produtos que deseja devolver e informe a quantidade exata:
+          </Typography>
+
+          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 350 }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow sx={{ bgcolor: '#e3f2fd' }}>
+                  <TableCell padding="checkbox" sx={{ bgcolor: '#e3f2fd' }}>
+                    <Checkbox
+                      checked={itensSelecaoImportar.length > 0 && itensSelecaoImportar.every(i => i.selecionado)}
+                      indeterminate={itensSelecaoImportar.some(i => i.selecionado) && !itensSelecaoImportar.every(i => i.selecionado)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setItensSelecaoImportar(prev => prev.map(i => ({ ...i, selecionado: checked })));
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Código / Produto</TableCell>
+                  <TableCell align="center" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Qtd Disponível</TableCell>
+                  <TableCell align="center" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold', minWidth: 120 }}>Qtd a Devolver</TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Preço Unit.</TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Subtotal</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {itensSelecaoImportar.map((item, index) => (
+                  <TableRow key={index} hover selected={item.selecionado}>
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        checked={item.selecionado}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setItensSelecaoImportar(prev => {
+                            const copy = [...prev];
+                            copy[index].selecionado = checked;
+                            return copy;
+                          });
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight="bold">
+                        {item.codigo_produto ? `[${item.codigo_produto}] ` : ''}{item.nome_produto}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Chip label={item.quantidade_maxima} size="small" variant="outlined" />
+                    </TableCell>
+                    <TableCell align="center">
+                      <TextField
+                        type="number"
+                        size="small"
+                        disabled={!item.selecionado}
+                        value={item.quantidade_devolver}
+                        onChange={(e) => {
+                          const val = Math.max(0, Math.min(item.quantidade_maxima, parseFloat(e.target.value) || 0));
+                          setItensSelecaoImportar(prev => {
+                            const copy = [...prev];
+                            copy[index].quantidade_devolver = val;
+                            if (val > 0 && !copy[index].selecionado) {
+                              copy[index].selecionado = true;
+                            }
+                            return copy;
+                          });
+                        }}
+                        inputProps={{ min: 0.01, max: item.quantidade_maxima, step: 'any' }}
+                        sx={{ width: 100 }}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      R$ {item.valor_unitario.toFixed(2)}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                      R$ {(item.quantidade_devolver * item.valor_unitario).toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setModalImportarItensOpen(false)} color="inherit">
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            color="success"
+            disabled={!itensSelecaoImportar.some(i => i.selecionado && i.quantidade_devolver > 0)}
+            onClick={confirmarImportacaoItensDevolucao}
+          >
+            Confirmar e Importar Produtos
           </Button>
         </DialogActions>
       </Dialog>
