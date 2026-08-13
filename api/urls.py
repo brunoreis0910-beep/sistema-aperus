@@ -93,6 +93,7 @@ from .views_cheques import ChequeViewSet
 from .views_marketplace import MarketplaceConfigViewSet, MarketplaceProdutoViewSet
 from .views_tributacao import CalculadoraTributariaView # NOVO
 from .views_fiscal import RegraFiscalViewSet, TipoTributacaoViewSet, TributacaoUFViewSet  # CRUD Fiscal
+from .views_contas_servicos import ContaServicoViewSet
 from .views_calculadoras import (
     calcular_revestimento,
     calcular_argamassa,
@@ -401,6 +402,7 @@ router.register(r'boletos', BoletoViewSet, basename='boleto')  # Integração Ba
 router.register(r'config-produto', ConfiguracaoProdutoViewSet, basename='config-produto')
 router.register(r'veiculos-novos', VeiculoNovoViewSet, basename='veiculo-novo')
 router.register(r'ctes', CTeViewSet, basename='cte')  # CT-e
+router.register(r'contas-servicos', ContaServicoViewSet, basename='contas-servicos')
 router.register(r'regras-fiscais', RegraFiscalViewSet, basename='regras-fiscais')  # ICMS / Regras Fiscais
 router.register(r'tipos-tributacao', TipoTributacaoViewSet, basename='tipos-tributacao')  # Perfis de Tributação por Tipo/UF
 router.register(r'tributacao-uf', TributacaoUFViewSet, basename='tributacao-uf')  # Linhas de alíquota por UF

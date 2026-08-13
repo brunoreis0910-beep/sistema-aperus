@@ -32,7 +32,10 @@ import {
   InputAdornment,
   Tooltip,
   CircularProgress,
-  Badge
+  Badge,
+  Stack,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -59,12 +62,29 @@ import {
   DeleteForever as DeleteForeverIcon,
   Gesture as GestureIcon,
   PersonPin as PersonPinIcon,
-  Analytics as AnalyticsIcon
+  Analytics as AnalyticsIcon,
+  PersonAdd as PersonAddIcon,
+  Business as BusinessIcon,
+  LocationOn as LocationIcon,
+  Phone as PhoneIcon,
+  CreditCard as CreditCardIcon,
+  Send as SendIcon,
+  Cake as CakeIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { API_ENDPOINT } from '../config/api';
 import { getAPIAtiva } from '../config/apiVeiculos';
+import {
+  buscarCNPJ,
+  buscarCEP,
+  formatCNPJ,
+  formatCPF,
+  formatTelefone,
+  formatCEP,
+  ESTADOS_BRASIL
+} from '../utils/cnpjCepUtils';
+import ClienteFormModal from '../components/ClienteFormModal';
 import {
   salvarFotoOS, listarFotosOS, removerFotoOS,
   migrarFotosOS, salvarOSPendente, listarOSPendentes,
@@ -171,6 +191,59 @@ const OrdemServicoPage = () => {
   const [checklistVeiculo, setChecklistVeiculo] = useState(checklistVazio);
   const [observacoesEntrada, setObservacoesEntrada] = useState('');
 
+  // Checklist personalizado para Equipamentos
+  const CHAVE_MODELO_EQUIPAMENTO = 'aperus_checklist_equipamento_modelo';
+  const carregarModeloEquipamento = () => {
+    try {
+      const salvo = localStorage.getItem(CHAVE_MODELO_EQUIPAMENTO);
+      return salvo ? JSON.parse(salvo) : [
+        { key: 'ligar_equipamento', label: 'Liga o equipamento' },
+        { key: 'carregador', label: 'Carregador / Fonte' },
+        { key: 'acessorios', label: 'Acessórios incluídos' },
+        { key: 'danos_externos', label: 'Danos externos visíveis' },
+      ];
+    } catch { return []; }
+  };
+  const [checklistEquipamentoModelo, setChecklistEquipamentoModelo] = useState(carregarModeloEquipamento);
+  const checklistEquipamentoVazio = (modelo) => Object.fromEntries((modelo || checklistEquipamentoModelo).map(i => [i.key, 'NA']));
+  const [checklistEquipamento, setChecklistEquipamento] = useState(() => checklistEquipamentoVazio(carregarModeloEquipamento()));
+  const [novoItemChecklist, setNovoItemChecklist] = useState('');
+  const [observacoesEntradaEquipamento, setObservacoesEntradaEquipamento] = useState('');
+  const [modeloSalvoFeedback, setModeloSalvoFeedback] = useState(false);
+
+  const adicionarItemChecklistEquipamento = () => {
+    const label = novoItemChecklist.trim();
+    if (!label) return;
+    const key = 'item_' + Date.now();
+    const novoModelo = [...checklistEquipamentoModelo, { key, label }];
+    setChecklistEquipamentoModelo(novoModelo);
+    setChecklistEquipamento(prev => ({ ...prev, [key]: 'NA' }));
+    setNovoItemChecklist('');
+  };
+
+  const removerItemChecklistEquipamento = (key) => {
+    const novoModelo = checklistEquipamentoModelo.filter(i => i.key !== key);
+    setChecklistEquipamentoModelo(novoModelo);
+    setChecklistEquipamento(prev => {
+      const novo = { ...prev };
+      delete novo[key];
+      return novo;
+    });
+  };
+
+  const salvarModeloChecklistEquipamento = () => {
+    try {
+      localStorage.setItem(CHAVE_MODELO_EQUIPAMENTO, JSON.stringify(checklistEquipamentoModelo));
+      setModeloSalvoFeedback(true);
+      setTimeout(() => setModeloSalvoFeedback(false), 2500);
+    } catch (e) { console.error('Erro ao salvar modelo:', e); }
+  };
+
+  const resetarChecklistEquipamento = (modelo) => {
+    const base = modelo || checklistEquipamentoModelo;
+    setChecklistEquipamento(Object.fromEntries(base.map(i => [i.key, 'NA'])));
+  };
+
   // Itens (Produtos/Serviços)
   const [itens, setItens] = useState([]);
   const [itemAtual, setItemAtual] = useState({
@@ -244,6 +317,71 @@ const OrdemServicoPage = () => {
   const [openEstoqueModal, setOpenEstoqueModal] = useState(false);
   const [estoqueInfo, setEstoqueInfo] = useState(null);
   const [acaoEstoqueAtual, setAcaoEstoqueAtual] = useState('nao_validar');
+
+  // ── Modal de Novo Cliente (Usando o componente oficial ClienteFormModal) ────
+  const [openNovoClienteModal, setOpenNovoClienteModal] = useState(false);
+
+  const abrirModalNovoCliente = () => {
+    setOpenNovoClienteModal(true);
+  };
+
+  const handleClienteCriado = async (novoCliente) => {
+    try {
+      const resCli = await axiosInstance.get('/clientes/', { params: { page_size: 1000 } });
+      const listaAtualizada = Array.isArray(resCli.data) ? resCli.data : resCli.data.results || [];
+      setClientes(listaAtualizada);
+
+      const idNovo = novoCliente.id_cliente || novoCliente.id;
+      if (idNovo) {
+        handleClienteChange(idNovo);
+      }
+      setSuccess(`Cliente "${novoCliente.nome_razao_social || novoCliente.nome}" cadastrado e selecionado com sucesso!`);
+    } catch (err) {
+      console.error('Erro ao atualizar lista de clientes:', err);
+    }
+  };
+
+  // ── Modal de Pesquisa Avançada de Produtos e Serviços ─────────────────────
+  const [openPesquisaItemModal, setOpenPesquisaItemModal] = useState(false);
+  const [filtroTipoBusca, setFiltroTipoBusca] = useState('todos');
+  const [filtroNome, setFiltroNome] = useState('');
+  const [filtroGrupo, setFiltroGrupo] = useState('');
+  const [filtroRef, setFiltroRef] = useState('');
+  const [filtroLocalizacao, setFiltroLocalizacao] = useState('');
+
+  const abrirModalPesquisaItem = () => {
+    setFiltroTipoBusca(itemAtual.tipo_item || 'todos');
+    setFiltroNome('');
+    setFiltroGrupo('');
+    setFiltroRef('');
+    setFiltroLocalizacao('');
+    setOpenPesquisaItemModal(true);
+  };
+
+  const selecionarItemDaPesquisa = (prod) => {
+    const isServico = prod.classificacao?.toUpperCase() === 'SERVICO';
+    const tipo = isServico ? 'servico' : 'produto';
+    const desc = prod.descricao || prod.nome_produto || `Produto ${prod.codigo_produto}`;
+
+    let valorVenda = 0;
+    if (prod.estoque_por_deposito && prod.estoque_por_deposito.length > 0) {
+      const estoqueComValor = prod.estoque_por_deposito.find(e => e.valor_venda > 0);
+      valorVenda = estoqueComValor?.valor_venda || prod.estoque_por_deposito[0]?.valor_venda || 0;
+    } else if (prod.preco_venda || prod.valor_venda) {
+      valorVenda = prod.preco_venda || prod.valor_venda || 0;
+    }
+
+    setItemAtual(prev => ({
+      ...prev,
+      tipo_item: tipo,
+      id_produto: prod.id_produto || prod.id,
+      descricao: desc,
+      valorUnitario: parseFloat(valorVenda) || 0
+    }));
+
+    setOpenPesquisaItemModal(false);
+    setSuccess(`Item "${desc}" selecionado!`);
+  };
   const [itemPendenteEstoque, setItemPendenteEstoque] = useState(null);
   const [configImpressao, setConfigImpressao] = useState({ tipo_impressora: 'a4', largura_termica: '80mm', observacao_rodape: '', copias: 1 });
 
@@ -1812,6 +1950,20 @@ const OrdemServicoPage = () => {
           dadosOrdem.laudo_tecnico = laudoAtual ? `${laudoAtual}${fichaInspacao}` : fichaInspacao.trim();
         }
 
+        // Para equipamento, incluir o checklist personalizado no laudo técnico
+        if (tipoAtendimento === 'equipamento' && checklistEquipamentoModelo.length > 0) {
+          const itensOKEq = checklistEquipamentoModelo.filter(i => checklistEquipamento[i.key] === 'OK').map(i => i.label);
+          const itensNOKEq = checklistEquipamentoModelo.filter(i => checklistEquipamento[i.key] === 'NOK').map(i => i.label);
+          const itensNAEq = checklistEquipamentoModelo.filter(i => checklistEquipamento[i.key] === 'NA').map(i => i.label);
+          let fichaEq = '\n\n--- CHECKLIST DE INSPEÇÃO DO EQUIPAMENTO ---';
+          if (itensOKEq.length) fichaEq += `\n✅ OK: ${itensOKEq.join(', ')}`;
+          if (itensNOKEq.length) fichaEq += `\n❌ NOK: ${itensNOKEq.join(', ')}`;
+          if (itensNAEq.length) fichaEq += `\n➖ N/A: ${itensNAEq.join(', ')}`;
+          if (observacoesEntradaEquipamento) fichaEq += `\nObservações: ${observacoesEntradaEquipamento}`;
+          const laudoAtualEq = dadosOrdem.laudo_tecnico || '';
+          dadosOrdem.laudo_tecnico = laudoAtualEq ? `${laudoAtualEq}${fichaEq}` : fichaEq.trim();
+        }
+
         // Adicionar as informações do veículo/animal/equipamento na descrição do problema
         if (dadosOrdem.descricao_problema) {
           dadosOrdem.descricao_problema = `${info}\n\n${dadosOrdem.descricao_problema}`;
@@ -2408,17 +2560,17 @@ const OrdemServicoPage = () => {
     }
   };
 
-  const imprimirOrdem = async (ordem) => {
-    const tipoImpressao = configImpressao.tipo_impressora;
+  const imprimirOrdem = async (ordem, modoForcado = null) => {
+    const tipoImpressao = modoForcado || configImpressao?.tipo_impressora || 'a4_fotos';
     const usarTermica = tipoImpressao === 'termica';
-    const usarFotosAssinatura = tipoImpressao === 'a4_fotos';
+    const usarPersonalizado = tipoImpressao === 'personalizado' && Boolean(configImpressao?.gabarito_customizado_nome);
 
-    if (tipoImpressao === 'personalizado') {
+    if (usarPersonalizado) {
       try {
         const response = await axiosInstance.get(`/ordem-servico/${ordem.id_os}/`);
         const ordemCompleta = response.data;
         
-        const gNome = configImpressao.gabarito_customizado_nome || 'ordem_servico';
+        const gNome = configImpressao.gabarito_customizado_nome;
         let cnpj = (ordemCompleta.empresa_info?.cnpj || '').replace(/\D/g, '');
         
         if (!cnpj) {
@@ -2431,61 +2583,100 @@ const OrdemServicoPage = () => {
           }
         }
 
-        const url = `/api/saas/gabarito-gerar/?nome_relatorio=${gNome}&os=${ordem.id_os}&cnpj=${cnpj}`;
-        window.open(url, '_blank');
-        return;
+        const url = `/api/saas/gabarito-gerar/?nome_relatorio=${gNome}&os=${ordem.id_os}${cnpj ? `&cnpj=${cnpj}` : ''}`;
+        const win = window.open(url, '_blank');
+        if (win) return;
       } catch (err) {
-        console.error('Erro ao buscar dados para impressão personalizada:', err);
-        const gNome = configImpressao.gabarito_customizado_nome || 'ordem_servico';
-        const url = `/api/saas/gabarito-gerar/?nome_relatorio=${gNome}&os=${ordem.id_os}`;
-        window.open(url, '_blank');
-        return;
+        console.error('Erro ao buscar dados para impressão personalizada, fallback para A4 com fotos:', err);
       }
     }
 
     try {
       // Buscar dados completos da ordem incluindo financeiro
-      const response = await axiosInstance.get(`/ordem-servico/${ordem.id_os}/`);
-      const ordemCompleta = response.data;
+      let ordemCompleta = ordem;
+      if (ordem?.id_os) {
+        try {
+          const response = await axiosInstance.get(`/ordem-servico/${ordem.id_os}/`);
+          ordemCompleta = response.data || ordem;
+        } catch (e) {
+          console.warn('Usando dados da OS da memória:', e);
+        }
+      }
 
       let conteudo;
       if (usarTermica) {
         conteudo = gerarConteudoImpressaoTermica(ordemCompleta);
-      } else if (usarFotosAssinatura) {
-        // Buscar fotos e assinatura do servidor
+      } else {
+        // Modo A4 (com Fotos e Assinatura)
         let fotos = [];
         let assinatura = null;
-        try {
-          const respFotos = await axiosInstance.get(`/os-fotos/?id_os=${ordem.id_os}`);
-          fotos = (respFotos.data?.results || respFotos.data || []).map(f => ({
-            base64: f.imagem_base64,
-            nomeArquivo: f.nome_arquivo,
+
+        // 1. Buscar fotos do servidor
+        if (ordemCompleta?.id_os) {
+          try {
+            const respFotos = await axiosInstance.get(`/os-fotos/?id_os=${ordemCompleta.id_os}`);
+            fotos = (respFotos.data?.results || respFotos.data || []).map(f => ({
+              base64: f.imagem_base64,
+              nomeArquivo: f.nome_arquivo,
+            }));
+          } catch (e) { console.warn('Fotos do servidor indisponíveis:', e); }
+        }
+
+        // Se servidor não retornou fotos, usar fotos do estado local
+        if (fotos.length === 0 && (fotosOS || []).length > 0) {
+          fotos = (fotosOS || []).map(f => ({
+            base64: f.base64,
+            nomeArquivo: f.nomeArquivo
           }));
-        } catch (e) { console.warn('Fotos indisponíveis para impressão:', e); }
-        try {
-          const respAssin = await axiosInstance.get(`/os-assinaturas/?id_os=${ordem.id_os}`);
-          const lista = respAssin.data?.results || respAssin.data || [];
-          if (lista.length > 0) assinatura = lista[0].assinatura_base64;
-        } catch (e) { console.warn('Assinatura indisponível para impressão:', e); }
-        conteudo = gerarConteudoImpressaoComFotos(ordemCompleta, fotos, assinatura);
-      } else {
-        conteudo = gerarConteudoImpressao(ordemCompleta);
+        }
+
+        // 2. Buscar assinatura do servidor
+        if (ordemCompleta?.id_os) {
+          try {
+            const respAssin = await axiosInstance.get(`/os-assinaturas/?id_os=${ordemCompleta.id_os}`);
+            const lista = respAssin.data?.results || respAssin.data || [];
+            if (lista.length > 0) assinatura = lista[0].assinatura_base64;
+          } catch (e) { console.warn('Assinatura do servidor indisponível:', e); }
+        }
+
+        // Se servidor não retornou assinatura, usar assinatura do estado local
+        if (!assinatura && assinaturaBase64) {
+          assinatura = assinaturaBase64;
+        }
+
+        if (tipoImpressao === 'a4_simples') {
+          conteudo = gerarConteudoImpressao(ordemCompleta);
+        } else {
+          conteudo = gerarConteudoImpressaoComFotos(ordemCompleta, fotos, assinatura);
+        }
       }
 
       const janelaImpressao = window.open('', '_blank', usarTermica ? 'width=300,height=600' : '');
-      janelaImpressao.document.write(conteudo);
-      janelaImpressao.document.close();
-      janelaImpressao.focus();
-      setTimeout(() => janelaImpressao.print(), 250);
+      if (janelaImpressao) {
+        janelaImpressao.document.write(conteudo);
+        janelaImpressao.document.close();
+        janelaImpressao.focus();
+        setTimeout(() => {
+          try {
+            janelaImpressao.print();
+          } catch (pe) {
+            console.warn('Autoprint popup bloqueado ou fechado:', pe);
+          }
+        }, 300);
+      } else {
+        alert('O navegador bloqueou a janela de impressão. Por favor, permita pop-ups para este site.');
+      }
     } catch (err) {
-      console.error('Erro ao buscar dados para impressão:', err);
-      // Fallback: usar dados existentes (sem fotos/assinatura)
-      const conteudo = usarTermica ? gerarConteudoImpressaoTermica(ordem) : gerarConteudoImpressao(ordem);
-      const janelaImpressao = window.open('', '_blank', usarTermica ? 'width=300,height=600' : '');
-      janelaImpressao.document.write(conteudo);
-      janelaImpressao.document.close();
-      janelaImpressao.focus();
-      setTimeout(() => janelaImpressao.print(), 250);
+      console.error('Erro ao preparar impressão:', err);
+      // Fallback supremo
+      const conteudo = gerarConteudoImpressaoComFotos(ordem, (fotosOS || []).map(f => ({ base64: f.base64, nomeArquivo: f.nomeArquivo })), assinaturaBase64);
+      const janelaImpressao = window.open('', '_blank');
+      if (janelaImpressao) {
+        janelaImpressao.document.write(conteudo);
+        janelaImpressao.document.close();
+        janelaImpressao.focus();
+        setTimeout(() => janelaImpressao.print(), 300);
+      }
     }
   };
 
@@ -3892,22 +4083,43 @@ const OrdemServicoPage = () => {
               </Grid>
 
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>Cliente</InputLabel>
-                  <Select
-                    value={cliente}
-                    onChange={(e) => handleClienteChange(e.target.value)}
-                    label="Cliente"
-                    disabled={osBloqueadaParaEdicao}
-                  >
-                    <MenuItem value="">Selecione...</MenuItem>
-                    {clientes.map((cli) => (
-                      <MenuItem key={cli.id_cliente} value={cli.id_cliente}>
-                        {cli.nome_razao_social || cli.nome}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <FormControl fullWidth required>
+                    <InputLabel>Cliente</InputLabel>
+                    <Select
+                      value={cliente}
+                      onChange={(e) => handleClienteChange(e.target.value)}
+                      label="Cliente"
+                      disabled={osBloqueadaParaEdicao}
+                    >
+                      <MenuItem value="">Selecione...</MenuItem>
+                      {clientes.map((cli) => (
+                        <MenuItem key={cli.id_cliente} value={cli.id_cliente}>
+                          {cli.nome_razao_social || cli.nome}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <Tooltip title="Cadastrar Novo Cliente">
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={abrirModalNovoCliente}
+                      disabled={osBloqueadaParaEdicao}
+                      startIcon={<PersonAddIcon />}
+                      sx={{
+                        minWidth: '110px',
+                        height: '56px',
+                        whiteSpace: 'nowrap',
+                        fontWeight: 600,
+                        backgroundColor: '#1976d2',
+                        '&:hover': { backgroundColor: '#1565c0' },
+                      }}
+                    >
+                      + Cliente
+                    </Button>
+                  </Tooltip>
+                </Box>
               </Grid>
 
               {cliente && listaVeiculosCliente.length > 0 && (
@@ -4149,6 +4361,261 @@ const OrdemServicoPage = () => {
                 </Paper>
               </Box>
             )}
+
+            {/* ── Checklist Personalizado para Equipamentos ── */}
+            {tipoAtendimento === 'equipamento' && tabAtual === 0 && (
+              <Box sx={{ mt: 2 }}>
+                <Paper
+                  sx={{
+                    p: 2,
+                    border: '1px solid #1565c0',
+                    backgroundColor: '#e8f0fe',
+                    borderRadius: 2,
+                  }}
+                >
+                  {/* Cabeçalho */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography
+                      variant="subtitle1"
+                      fontWeight="bold"
+                      sx={{ color: '#0d47a1', display: 'flex', alignItems: 'center', gap: 1 }}
+                    >
+                      🔧 Checklist de Inspeção do Equipamento
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {checklistEquipamentoModelo.length} {checklistEquipamentoModelo.length === 1 ? 'item' : 'itens'}
+                    </Typography>
+                  </Box>
+
+                  <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
+                    Marque cada item como <strong>OK</strong> (Conforme), <strong>NOK</strong> (Não Conforme) ou <strong>N/A</strong> (Não Aplicável).
+                    Adicione itens específicos para este tipo de equipamento e salve o modelo para usar nas próximas OS.
+                  </Typography>
+
+                  {/* Feedback de modelo salvo */}
+                  {modeloSalvoFeedback && (
+                    <Alert severity="success" sx={{ mb: 1.5, py: 0.5 }}>
+                      ✅ Modelo de checklist salvo! Será carregado automaticamente nas próximas ordens de serviço.
+                    </Alert>
+                  )}
+
+                  {/* Lista de itens */}
+                  {checklistEquipamentoModelo.length === 0 ? (
+                    <Box
+                      sx={{
+                        textAlign: 'center',
+                        py: 3,
+                        border: '1px dashed #90a4ae',
+                        borderRadius: 1,
+                        mb: 1.5,
+                        backgroundColor: 'rgba(255,255,255,0.5)',
+                      }}
+                    >
+                      <Typography variant="body2" color="text.secondary">
+                        Nenhum item no checklist. Adicione itens abaixo.
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <Grid container spacing={0.5} sx={{ mb: 1.5 }}>
+                      {checklistEquipamentoModelo.map((item) => {
+                        const valorAtual = checklistEquipamento[item.key] || 'NA';
+                        return (
+                          <Grid item xs={12} sm={6} key={item.key}>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                py: 0.6,
+                                px: 0.5,
+                                borderBottom: '1px solid #bbdefb',
+                                borderRadius: 0.5,
+                                backgroundColor:
+                                  valorAtual === 'OK'
+                                    ? 'rgba(46,125,50,0.08)'
+                                    : valorAtual === 'NOK'
+                                    ? 'rgba(198,40,40,0.08)'
+                                    : 'transparent',
+                                transition: 'background-color 0.2s',
+                              }}
+                            >
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  flex: 1,
+                                  mr: 0.5,
+                                  fontWeight: valorAtual === 'NOK' ? 600 : 400,
+                                  color:
+                                    valorAtual === 'OK'
+                                      ? '#1b5e20'
+                                      : valorAtual === 'NOK'
+                                      ? '#b71c1c'
+                                      : 'text.primary',
+                                }}
+                              >
+                                {item.label}
+                              </Typography>
+                              <Box sx={{ display: 'flex', gap: 0.4, alignItems: 'center' }}>
+                                {['OK', 'NOK', 'NA'].map((opcao) => (
+                                  <Button
+                                    key={opcao}
+                                    size="small"
+                                    variant={valorAtual === opcao ? 'contained' : 'outlined'}
+                                    onClick={() =>
+                                      setChecklistEquipamento((prev) => ({ ...prev, [item.key]: opcao }))
+                                    }
+                                    sx={{
+                                      minWidth: 38,
+                                      fontSize: '0.62rem',
+                                      px: 0.4,
+                                      py: 0.25,
+                                      fontWeight: 700,
+                                      color:
+                                        valorAtual === opcao
+                                          ? '#fff'
+                                          : opcao === 'OK'
+                                          ? '#2e7d32'
+                                          : opcao === 'NOK'
+                                          ? '#c62828'
+                                          : '#616161',
+                                      backgroundColor:
+                                        valorAtual === opcao
+                                          ? opcao === 'OK'
+                                            ? '#2e7d32'
+                                            : opcao === 'NOK'
+                                            ? '#c62828'
+                                            : '#757575'
+                                          : 'rgba(255,255,255,0.7)',
+                                      borderColor:
+                                        opcao === 'OK'
+                                          ? '#2e7d32'
+                                          : opcao === 'NOK'
+                                          ? '#c62828'
+                                          : '#bdbdbd',
+                                      '&:hover': {
+                                        backgroundColor:
+                                          opcao === 'OK' ? '#388e3c' : opcao === 'NOK' ? '#d32f2f' : '#757575',
+                                        color: '#fff',
+                                      },
+                                    }}
+                                  >
+                                    {opcao}
+                                  </Button>
+                                ))}
+                                <Tooltip title="Remover item">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => removerItemChecklistEquipamento(item.key)}
+                                    sx={{
+                                      ml: 0.3,
+                                      color: '#9e9e9e',
+                                      '&:hover': { color: '#c62828', backgroundColor: 'rgba(198,40,40,0.08)' },
+                                    }}
+                                  >
+                                    <DeleteIcon sx={{ fontSize: 15 }} />
+                                  </IconButton>
+                                </Tooltip>
+                              </Box>
+                            </Box>
+                          </Grid>
+                        );
+                      })}
+                    </Grid>
+                  )}
+
+                  {/* Campo para adicionar novo item */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      gap: 1,
+                      mb: 1.5,
+                      backgroundColor: 'rgba(255,255,255,0.6)',
+                      p: 1,
+                      borderRadius: 1,
+                      border: '1px dashed #90caf9',
+                    }}
+                  >
+                    <TextField
+                      size="small"
+                      fullWidth
+                      label="Adicionar novo item ao checklist"
+                      placeholder="Ex: Tela sem riscos, Bateria calibrada..."
+                      value={novoItemChecklist}
+                      onChange={(e) => setNovoItemChecklist(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); adicionarItemChecklistEquipamento(); } }}
+                      sx={{ backgroundColor: '#fff', borderRadius: 1 }}
+                    />
+                    <Tooltip title="Adicionar item">
+                      <IconButton
+                        onClick={adicionarItemChecklistEquipamento}
+                        disabled={!novoItemChecklist.trim()}
+                        sx={{
+                          backgroundColor: '#1565c0',
+                          color: '#fff',
+                          borderRadius: 1,
+                          '&:hover': { backgroundColor: '#0d47a1' },
+                          '&:disabled': { backgroundColor: '#cfd8dc', color: '#90a4ae' },
+                        }}
+                      >
+                        <AddIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+
+                  {/* Observações */}
+                  <Box sx={{ mb: 1.5 }}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={2}
+                      size="small"
+                      label="Observações de Entrada / Avarias Visíveis"
+                      value={observacoesEntradaEquipamento}
+                      onChange={(e) => setObservacoesEntradaEquipamento(e.target.value)}
+                      placeholder="Ex: Tampa traseira quebrada, tela com mancha..."
+                      sx={{ backgroundColor: '#fff', borderRadius: 1 }}
+                    />
+                  </Box>
+
+                  {/* Ações */}
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => resetarChecklistEquipamento()}
+                      sx={{ fontSize: '0.72rem', borderColor: '#90a4ae', color: '#546e7a' }}
+                    >
+                      Limpar Marcações
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="success"
+                      onClick={() =>
+                        setChecklistEquipamento(
+                          Object.fromEntries(checklistEquipamentoModelo.map((i) => [i.key, 'OK']))
+                        )
+                      }
+                      sx={{ fontSize: '0.72rem' }}
+                    >
+                      Marcar Tudo OK
+                    </Button>
+                    <Tooltip title="Salva a lista de itens para ser usada automaticamente nas próximas OS de equipamento">
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="primary"
+                        startIcon={<SaveIcon />}
+                        onClick={salvarModeloChecklistEquipamento}
+                        sx={{ fontSize: '0.72rem', ml: 'auto' }}
+                      >
+                        Salvar Modelo
+                      </Button>
+                    </Tooltip>
+                  </Box>
+                </Paper>
+              </Box>
+            )}
             </>
           )}
 
@@ -4173,144 +4640,50 @@ const OrdemServicoPage = () => {
                       </Select>
                     </FormControl>
                   </Grid>
-                  <Grid item xs={12} sm={4}>
-                    {itemAtual.tipo_item === 'produto' ? (
-                      <FormControl fullWidth size="small">
-                        <InputLabel>Produto</InputLabel>
-                        <Select
-                          value={itemAtual.descricao}
-                          onChange={(e) => {
-                            console.log('🛒 Produto selecionado:', e.target.value);
-                            const produtoSelecionado = produtos.find(p => {
-                              const descProduto = p.descricao || p.nome_produto || `Produto ${p.codigo_produto}`;
-                              return descProduto === e.target.value;
-                            });
-                            console.log('📦 Produto encontrado:', produtoSelecionado);
+                  <Grid item xs={12} sm={5}>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      {itemAtual.tipo_item === 'produto' ? (
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Produto</InputLabel>
+                          <Select
+                            value={itemAtual.descricao}
+                            onChange={(e) => {
+                              console.log('🛒 Produto selecionado:', e.target.value);
+                              const produtoSelecionado = produtos.find(p => {
+                                const descProduto = p.descricao || p.nome_produto || `Produto ${p.codigo_produto}`;
+                                return descProduto === e.target.value;
+                              });
+                              console.log('📦 Produto encontrado:', produtoSelecionado);
 
-                            // Pegar valor_venda do estoque (primeiro depósito com estoque)
-                            let valorVenda = 0;
-                            if (produtoSelecionado?.estoque_por_deposito && produtoSelecionado.estoque_por_deposito.length > 0) {
-                              // Procurar depósito com estoque e valor
-                              const estoqueComValor = produtoSelecionado.estoque_por_deposito.find(e => e.valor_venda > 0);
-                              valorVenda = estoqueComValor?.valor_venda || produtoSelecionado.estoque_por_deposito[0].valor_venda || 0;
-                              console.log('💰 Valor venda do estoque:', valorVenda);
-                            }
-
-                            setItemAtual({
-                              ...itemAtual,
-                              id_produto: produtoSelecionado?.id_produto || null,
-                              descricao: e.target.value,
-                              valorUnitario: valorVenda
-                            });
-                          }}
-                          onOpen={() => {
-                            console.log('📋 Lista de produtos aberta. Total:', produtos.length);
-                            console.log('📦 Produtos:', produtos);
-                            // Log detalhado dos 3 primeiros produtos
-                            if (produtos.length > 0) {
-                              console.log('📦 Exemplo produto 1:', produtos[0]);
-                              console.log('  - descricao:', produtos[0].descricao);
-                              console.log('  - nome_produto:', produtos[0].nome_produto);
-                              console.log('  - codigo_produto:', produtos[0].codigo_produto);
-                              console.log('  - estoque_por_deposito:', produtos[0].estoque_por_deposito);
-                            }
-                          }}
-                          label="Produto"
-                        >
-                          <MenuItem value="">Selecione um produto...</MenuItem>
-                          {produtos.length === 0 && (
-                            <MenuItem disabled>
-                              <em>Nenhum produto cadastrado</em>
-                            </MenuItem>
-                          )}
-                          {produtos.map((prod) => {
-                            const descricao = prod.descricao || prod.nome_produto || `Produto ${prod.codigo_produto}`;
-
-                            // Pegar valor_venda do estoque
-                            let valorVenda = 0;
-                            let qtdEstoque = 0;
-                            if (prod.estoque_por_deposito && prod.estoque_por_deposito.length > 0) {
-                              const estoqueComValor = prod.estoque_por_deposito.find(e => e.valor_venda > 0);
-                              valorVenda = estoqueComValor?.valor_venda || prod.estoque_por_deposito[0].valor_venda || 0;
-                              qtdEstoque = prod.estoque_total || 0;
-                            }
-
-                            return (
-                              <MenuItem key={prod.id_produto} value={descricao}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                                  <span>
-                                    {prod.codigo_produto && `[${prod.codigo_produto}] `}
-                                    {descricao}
-                                  </span>
-                                  <Box sx={{ display: 'flex', gap: 2, ml: 2 }}>
-                                    <Chip
-                                      label={`Estoque: ${qtdEstoque}`}
-                                      size="small"
-                                      color={qtdEstoque > 0 ? 'success' : 'error'}
-                                      sx={{ fontSize: '0.75rem' }}
-                                    />
-                                    <Chip
-                                      label={`R$ ${(parseFloat(valorVenda) || 0).toFixed(2)}`}
-                                      size="small"
-                                      color="primary"
-                                      sx={{ fontSize: '0.75rem', fontWeight: 'bold' }}
-                                    />
-                                  </Box>
-                                </Box>
-                              </MenuItem>
-                            );
-                          })}
-                        </Select>
-                      </FormControl>
-                    ) : (
-                      <FormControl fullWidth size="small">
-                        <InputLabel>Serviço</InputLabel>
-                        <Select
-                          value={itemAtual.descricao}
-                          onChange={(e) => {
-                            console.log('🔧 Serviço selecionado:', e.target.value);
-                            const servicoSelecionado = produtos.find(p => {
-                              const descProduto = p.descricao || p.nome_produto || `Produto ${p.codigo_produto}`;
-                              return descProduto === e.target.value;
-                            });
-                            console.log('📋 Serviço encontrado:', servicoSelecionado);
-
-                            // Pegar valor_venda do estoque (primeiro depósito com estoque)
-                            let valorVenda = 0;
-                            if (servicoSelecionado?.estoque_por_deposito && servicoSelecionado.estoque_por_deposito.length > 0) {
-                              const estoqueComValor = servicoSelecionado.estoque_por_deposito.find(e => e.valor_venda > 0);
-                              valorVenda = estoqueComValor?.valor_venda || servicoSelecionado.estoque_por_deposito[0].valor_venda || 0;
-                              console.log('💰 Valor serviço:', valorVenda);
-                            }
-
-                            setItemAtual({
-                              ...itemAtual,
-                              id_produto: servicoSelecionado?.id_produto || null,
-                              descricao: e.target.value,
-                              valorUnitario: valorVenda
-                            });
-                          }}
-                          label="Serviço"
-                        >
-                          <MenuItem value="">Selecione um serviço...</MenuItem>
-                          {produtos.filter(p => p.classificacao?.toUpperCase() === 'SERVICO').length === 0 && (
-                            <MenuItem disabled>
-                              <em>Nenhum serviço cadastrado (produtos com classificação "servico")</em>
-                            </MenuItem>
-                          )}
-                          {produtos
-                            .filter(p => p.classificacao?.toUpperCase() === 'SERVICO')
-                            .map((prod) => {
-                              const descricao = prod.descricao || prod.nome_produto || `Produto ${prod.codigo_produto}`;
-
-                              // Calcular estoque total
-                              let qtdEstoque = 0;
                               let valorVenda = 0;
+                              if (produtoSelecionado?.estoque_por_deposito && produtoSelecionado.estoque_por_deposito.length > 0) {
+                                const estoqueComValor = produtoSelecionado.estoque_por_deposito.find(e => e.valor_venda > 0);
+                                valorVenda = estoqueComValor?.valor_venda || produtoSelecionado.estoque_por_deposito[0].valor_venda || 0;
+                              }
 
-                              if (prod.estoque_por_deposito && Array.isArray(prod.estoque_por_deposito)) {
-                                qtdEstoque = prod.estoque_por_deposito.reduce((sum, est) => sum + (parseFloat(est.quantidade) || 0), 0);
+                              setItemAtual({
+                                ...itemAtual,
+                                id_produto: produtoSelecionado?.id_produto || null,
+                                descricao: e.target.value,
+                                valorUnitario: valorVenda
+                              });
+                            }}
+                            label="Produto"
+                          >
+                            <MenuItem value="">Selecione um produto...</MenuItem>
+                            {produtos.length === 0 && (
+                              <MenuItem disabled>
+                                <em>Nenhum produto cadastrado</em>
+                              </MenuItem>
+                            )}
+                            {produtos.map((prod) => {
+                              const descricao = prod.descricao || prod.nome_produto || `Produto ${prod.codigo_produto}`;
+                              let valorVenda = 0;
+                              let qtdEstoque = 0;
+                              if (prod.estoque_por_deposito && prod.estoque_por_deposito.length > 0) {
                                 const estoqueComValor = prod.estoque_por_deposito.find(e => e.valor_venda > 0);
-                                valorVenda = estoqueComValor?.valor_venda || prod.estoque_por_deposito[0]?.valor_venda || 0;
+                                valorVenda = estoqueComValor?.valor_venda || prod.estoque_por_deposito[0].valor_venda || 0;
+                                qtdEstoque = prod.estoque_total || 0;
                               }
 
                               return (
@@ -4320,19 +4693,109 @@ const OrdemServicoPage = () => {
                                       {prod.codigo_produto && `[${prod.codigo_produto}] `}
                                       {descricao}
                                     </span>
-                                    <Chip
-                                      label={`R$ ${(parseFloat(valorVenda) || 0).toFixed(2)}`}
-                                      size="small"
-                                      color="primary"
-                                      sx={{ fontSize: '0.75rem', fontWeight: 'bold', ml: 2 }}
-                                    />
+                                    <Box sx={{ display: 'flex', gap: 2, ml: 2 }}>
+                                      <Chip
+                                        label={`Estoque: ${qtdEstoque}`}
+                                        size="small"
+                                        color={qtdEstoque > 0 ? 'success' : 'error'}
+                                        sx={{ fontSize: '0.75rem' }}
+                                      />
+                                      <Chip
+                                        label={`R$ ${(parseFloat(valorVenda) || 0).toFixed(2)}`}
+                                        size="small"
+                                        color="primary"
+                                        sx={{ fontSize: '0.75rem', fontWeight: 'bold' }}
+                                      />
+                                    </Box>
                                   </Box>
                                 </MenuItem>
                               );
                             })}
-                        </Select>
-                      </FormControl>
-                    )}
+                          </Select>
+                        </FormControl>
+                      ) : (
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Serviço</InputLabel>
+                          <Select
+                            value={itemAtual.descricao}
+                            onChange={(e) => {
+                              console.log('🔧 Serviço selecionado:', e.target.value);
+                              const servicoSelecionado = produtos.find(p => {
+                                const descProduto = p.descricao || p.nome_produto || `Produto ${p.codigo_produto}`;
+                                return descProduto === e.target.value;
+                              });
+
+                              let valorVenda = 0;
+                              if (servicoSelecionado?.estoque_por_deposito && servicoSelecionado.estoque_por_deposito.length > 0) {
+                                const estoqueComValor = servicoSelecionado.estoque_por_deposito.find(e => e.valor_venda > 0);
+                                valorVenda = estoqueComValor?.valor_venda || servicoSelecionado.estoque_por_deposito[0].valor_venda || 0;
+                              }
+
+                              setItemAtual({
+                                ...itemAtual,
+                                id_produto: servicoSelecionado?.id_produto || null,
+                                descricao: e.target.value,
+                                valorUnitario: valorVenda
+                              });
+                            }}
+                            label="Serviço"
+                          >
+                            <MenuItem value="">Selecione um serviço...</MenuItem>
+                            {produtos.filter(p => p.classificacao?.toUpperCase() === 'SERVICO').length === 0 && (
+                              <MenuItem disabled>
+                                <em>Nenhum serviço cadastrado (produtos com classificação "servico")</em>
+                              </MenuItem>
+                            )}
+                            {produtos
+                              .filter(p => p.classificacao?.toUpperCase() === 'SERVICO')
+                              .map((prod) => {
+                                const descricao = prod.descricao || prod.nome_produto || `Produto ${prod.codigo_produto}`;
+                                let valorVenda = 0;
+                                if (prod.estoque_por_deposito && Array.isArray(prod.estoque_por_deposito)) {
+                                  const estoqueComValor = prod.estoque_por_deposito.find(e => e.valor_venda > 0);
+                                  valorVenda = estoqueComValor?.valor_venda || prod.estoque_por_deposito[0]?.valor_venda || 0;
+                                }
+
+                                return (
+                                  <MenuItem key={prod.id_produto} value={descricao}>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                                      <span>
+                                        {prod.codigo_produto && `[${prod.codigo_produto}] `}
+                                        {descricao}
+                                      </span>
+                                      <Chip
+                                        label={`R$ ${(parseFloat(valorVenda) || 0).toFixed(2)}`}
+                                        size="small"
+                                        color="primary"
+                                        sx={{ fontSize: '0.75rem', fontWeight: 'bold', ml: 2 }}
+                                      />
+                                    </Box>
+                                  </MenuItem>
+                                );
+                              })}
+                          </Select>
+                        </FormControl>
+                      )}
+
+                      <Tooltip title="Pesquisa Avançada (Nome, Grupo, Referência e Localização)">
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          onClick={abrirModalPesquisaItem}
+                          startIcon={<SearchIcon />}
+                          sx={{
+                            height: '40px',
+                            minWidth: '110px',
+                            whiteSpace: 'nowrap',
+                            fontWeight: 600,
+                            bgcolor: '#1976d2',
+                            '&:hover': { bgcolor: '#1565c0' }
+                          }}
+                        >
+                          Pesquisar
+                        </Button>
+                      </Tooltip>
+                    </Box>
                   </Grid>
 
                   {itemAtual.tipo_item === 'servico' && (
@@ -5899,6 +6362,253 @@ const OrdemServicoPage = () => {
             disabled={!selectedNFeOperation}
           >
             Confirmar e Gerar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── DIÁLOGO COMPARTILHADO: CADASTRO DE CLIENTE ─────────────────────── */}
+      <ClienteFormModal
+        open={openNovoClienteModal}
+        onClose={() => setOpenNovoClienteModal(false)}
+        onSaved={handleClienteCriado}
+      />
+
+      {/* ── DIÁLOGO: PESQUISA AVANÇADA DE PRODUTOS E SERVIÇOS ───────────────── */}
+      <Dialog
+        open={openPesquisaItemModal}
+        onClose={() => setOpenPesquisaItemModal(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: '#1976d2', color: '#fff', py: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <SearchIcon />
+              <Typography variant="h6" fontWeight={700}>
+                Pesquisa Avançada de Produtos e Serviços
+              </Typography>
+            </Box>
+            <Chip
+              label={`Total Cadastrado: ${produtos.length}`}
+              color="default"
+              sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 600 }}
+            />
+          </Box>
+        </DialogTitle>
+
+        <DialogContent sx={{ p: 3 }}>
+          {/* Painel de Filtros */}
+          <Paper variant="outlined" sx={{ p: 2, mb: 3, bgcolor: '#f8fafc' }}>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, color: '#1e293b' }}>
+              🎯 Filtros de Busca:
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Filtrar Tipo</InputLabel>
+                  <Select
+                    value={filtroTipoBusca}
+                    onChange={(e) => setFiltroTipoBusca(e.target.value)}
+                    label="Filtrar Tipo"
+                  >
+                    <MenuItem value="todos">Todos (Produtos + Serviços)</MenuItem>
+                    <MenuItem value="produto">Apenas Produtos</MenuItem>
+                    <MenuItem value="servico">Apenas Serviços</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} sm={3}>
+                <TextField
+                  fullWidth size="small"
+                  label="Nome / Descrição"
+                  placeholder="Nome do produto ou serviço..."
+                  value={filtroNome}
+                  onChange={(e) => setFiltroNome(e.target.value)}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={2}>
+                <TextField
+                  fullWidth size="small"
+                  label="Grupo"
+                  placeholder="Grupo / Categoria..."
+                  value={filtroGrupo}
+                  onChange={(e) => setFiltroGrupo(e.target.value)}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={2}>
+                <TextField
+                  fullWidth size="small"
+                  label="Referência / Código"
+                  placeholder="Código, Ref ou Cód. Barras"
+                  value={filtroRef}
+                  onChange={(e) => setFiltroRef(e.target.value)}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={2}>
+                <TextField
+                  fullWidth size="small"
+                  label="Localização"
+                  placeholder="Prateleira, Depósito..."
+                  value={filtroLocalizacao}
+                  onChange={(e) => setFiltroLocalizacao(e.target.value)}
+                />
+              </Grid>
+            </Grid>
+
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1.5 }}>
+              <Button
+                size="small"
+                color="inherit"
+                onClick={() => {
+                  setFiltroNome('');
+                  setFiltroGrupo('');
+                  setFiltroRef('');
+                  setFiltroLocalizacao('');
+                }}
+              >
+                Limpar Filtros
+              </Button>
+            </Box>
+          </Paper>
+
+          {/* Tabela de Resultados */}
+          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 400 }}>
+            <Table stickyHeader size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: '#e2e8f0' }}>
+                  <TableCell sx={{ fontWeight: 700 }}>Tipo</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Código / Ref.</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Nome / Descrição</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Grupo</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Localização</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 700 }}>Estoque Total</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>Preço Venda (R$)</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 700 }}>Ação</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {produtos
+                  .filter((prod) => {
+                    const isServico = prod.classificacao?.toUpperCase() === 'SERVICO';
+                    if (filtroTipoBusca === 'servico' && !isServico) return false;
+                    if (filtroTipoBusca === 'produto' && isServico) return false;
+
+                    if (filtroNome.trim()) {
+                      const t = filtroNome.toLowerCase().trim();
+                      const desc = (prod.descricao || prod.nome_produto || '').toLowerCase();
+                      if (!desc.includes(t)) return false;
+                    }
+
+                    if (filtroRef.trim()) {
+                      const t = filtroRef.toLowerCase().trim();
+                      const cod = (prod.codigo_produto || '').toString().toLowerCase();
+                      const ref = (prod.referencia || prod.codigo_barras || '').toString().toLowerCase();
+                      if (!cod.includes(t) && !ref.includes(t)) return false;
+                    }
+
+                    if (filtroGrupo.trim()) {
+                      const t = filtroGrupo.toLowerCase().trim();
+                      const grp = (prod.grupo_nome || prod.nome_grupo || prod.grupo?.nome_grupo || prod.grupo || '').toString().toLowerCase();
+                      if (!grp.includes(t)) return false;
+                    }
+
+                    if (filtroLocalizacao.trim()) {
+                      const t = filtroLocalizacao.toLowerCase().trim();
+                      const locMain = (prod.localizacao || prod.localizacao_estoque || prod.prateleira || '').toString().toLowerCase();
+                      const locDep = (prod.estoque_por_deposito || [])
+                        .map(dep => `${dep.deposito_nome || ''} ${dep.localizacao || ''}`)
+                        .join(' ')
+                        .toLowerCase();
+                      if (!locMain.includes(t) && !locDep.includes(t)) return false;
+                    }
+
+                    return true;
+                  })
+                  .map((prod) => {
+                    const isServico = prod.classificacao?.toUpperCase() === 'SERVICO';
+                    const desc = prod.descricao || prod.nome_produto || `Item ${prod.codigo_produto}`;
+                    const codigo = prod.codigo_produto || prod.referencia || '-';
+                    const grupo = prod.grupo_nome || prod.nome_grupo || prod.grupo?.nome_grupo || (typeof prod.grupo === 'string' ? prod.grupo : '-');
+
+                    const locMain = prod.localizacao || prod.localizacao_estoque || prod.prateleira;
+                    const locDepositos = (prod.estoque_por_deposito || [])
+                      .map(d => d.localizacao ? `${d.deposito_nome}: ${d.localizacao}` : null)
+                      .filter(Boolean)
+                      .join(', ');
+                    const localizacaoExibir = locMain || locDepositos || '-';
+
+                    let valorVenda = 0;
+                    let qtdEstoque = prod.estoque_total || 0;
+                    if (prod.estoque_por_deposito && prod.estoque_por_deposito.length > 0) {
+                      const estVal = prod.estoque_por_deposito.find(e => e.valor_venda > 0);
+                      valorVenda = estVal?.valor_venda || prod.estoque_por_deposito[0]?.valor_venda || 0;
+                    } else {
+                      valorVenda = prod.preco_venda || prod.valor_venda || 0;
+                    }
+
+                    return (
+                      <TableRow key={prod.id_produto} hover>
+                        <TableCell>
+                          <Chip
+                            label={isServico ? 'Serviço' : 'Produto'}
+                            size="small"
+                            color={isServico ? 'secondary' : 'primary'}
+                            variant="outlined"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={600}>{codigo}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={700}>{desc}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="text.secondary">{grupo}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="text.secondary">{localizacaoExibir}</Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          {!isServico ? (
+                            <Chip
+                              label={qtdEstoque}
+                              size="small"
+                              color={qtdEstoque > 0 ? 'success' : 'error'}
+                            />
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">N/A</Typography>
+                          )}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2" fontWeight={700} color="primary">
+                            R$ {(parseFloat(valorVenda) || 0).toFixed(2)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="success"
+                            onClick={() => selecionarItemDaPesquisa(prod)}
+                          >
+                            Selecionar
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setOpenPesquisaItemModal(false)} color="inherit">
+            Fechar
           </Button>
         </DialogActions>
       </Dialog>

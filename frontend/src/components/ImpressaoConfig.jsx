@@ -114,7 +114,8 @@ const ModuloCard = ({ modulo, axiosInstance, gabaritos }) => {
       setSuccess('Configuração salva com sucesso!');
       setTimeout(() => setSuccess(''), 3500);
     } catch (err) {
-      setError('Erro ao salvar. Tente novamente.');
+      const msg = err.response?.data ? (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data)) : (err.message || 'Tente novamente.');
+      setError(`Erro ao salvar: ${msg}`);
     } finally {
       setSaving(false);
     }

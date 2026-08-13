@@ -2280,7 +2280,17 @@ class UserAtalhoSerializer(serializers.ModelSerializer):
 
 class ConfiguracaoImpressaoSerializer(serializers.ModelSerializer):
     modulo_display = serializers.CharField(source='get_modulo_display', read_only=True)
-    tipo_impressora_display = serializers.CharField(source='get_tipo_impressora_display', read_only=True)
+    tipo_impressora = serializers.CharField(required=False, allow_blank=True)
+    tipo_impressora_display = serializers.SerializerMethodField()
+
+    def get_tipo_impressora_display(self, obj):
+        displays = {
+            'termica': 'Térmica (Cupom)',
+            'a4': 'A4 (Folha)',
+            'a4_fotos': 'A4 com Fotos e Assinatura',
+            'personalizado': 'Gabarito Customizado',
+        }
+        return displays.get(obj.tipo_impressora, obj.tipo_impressora)
 
     class Meta:
         from .models import ConfiguracaoImpressao

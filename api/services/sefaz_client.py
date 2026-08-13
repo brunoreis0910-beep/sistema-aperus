@@ -41,15 +41,35 @@ class SefazService:
         }
     }
 
-    def __init__(self, empresa_config, modelo='65'):
+    def __init__(self, empresa_config, modelo='65', tpEmis='1'):
         self.config = empresa_config
         self.modelo = str(modelo)
         self.uf = self.config.estado or 'MG'
+        self.tpEmis = str(tpEmis)
         
         # Determine environment depending on Model
         if self.modelo == '55':
              self.ambiente = self.config.ambiente_nfe or '2'
-             self.urls = self.URLS_NFE
+             if self.tpEmis == '6':
+                  # Sefaz Virtual de Contingência Ambiente Nacional (SVC-AN)
+                  self.urls = {
+                      self.uf: {
+                          '2': { # Homologacao SVC-AN
+                              'NfeAutorizacao': 'https://hom.sefazvirtual.fazenda.gov.br/NFeAutorizacao4/NFeAutorizacao4.asmx',
+                              'NfeRetAutorizacao': 'https://hom.sefazvirtual.fazenda.gov.br/NFeRetAutorizacao4/NFeRetAutorizacao4.asmx',
+                              'NfeRecepcaoEvento': 'https://hom.sefazvirtual.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
+                              'NfeConsultaProtocolo': 'https://hom.sefazvirtual.fazenda.gov.br/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx'
+                          },
+                          '1': { # Producao SVC-AN
+                              'NfeAutorizacao': 'https://www.sefazvirtual.fazenda.gov.br/NFeAutorizacao4/NFeAutorizacao4.asmx',
+                              'NfeRetAutorizacao': 'https://www.sefazvirtual.fazenda.gov.br/NFeRetAutorizacao4/NFeRetAutorizacao4.asmx',
+                              'NfeRecepcaoEvento': 'https://www.sefazvirtual.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
+                              'NfeConsultaProtocolo': 'https://www.sefazvirtual.fazenda.gov.br/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx'
+                          }
+                      }
+                  }
+             else:
+                  self.urls = self.URLS_NFE
         else:
              self.ambiente = self.config.ambiente_nfce or '2'
              self.urls = self.URLS_NFCE

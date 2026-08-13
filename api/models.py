@@ -1009,7 +1009,7 @@ class ContaServico(models.Model):
     cnpj_fornecedor = models.CharField(max_length=18, blank=True, null=True)
     numero_documento = models.CharField(max_length=50, blank=True)
     serie = models.CharField(max_length=5, blank=True)
-    chave_acesso = models.CharField(max_length=44, blank=True, null=True)
+    chave_acesso = models.CharField(max_length=100, blank=True, null=True)
     data_emissao = models.DateField()
     data_vencimento = models.DateField(blank=True, null=True)
     data_pagamento = models.DateField(blank=True, null=True)
@@ -5430,6 +5430,7 @@ class ConfiguracaoImpressao(models.Model):
     TIPO_IMPRESSORA_CHOICES = [
         ('termica', 'Térmica (Cupom)'),
         ('a4', 'A4 (Folha)'),
+        ('a4_fotos', 'A4 com Fotos e Assinatura'),
         ('personalizado', 'Gabarito Customizado'),
     ]
     LARGURA_TERMICA_CHOICES = [
@@ -5445,10 +5446,9 @@ class ConfiguracaoImpressao(models.Model):
         help_text='Módulo do sistema ao qual esta configuração se aplica',
     )
     tipo_impressora = models.CharField(
-        max_length=20,
-        choices=TIPO_IMPRESSORA_CHOICES,
+        max_length=50,
         default='termica',
-        help_text='Tipo de impressora a utilizar',
+        help_text='Tipo de impressora a utilizar (termica, a4, a4_fotos, personalizado)',
     )
     gabarito_customizado_nome = models.CharField(
         max_length=100,

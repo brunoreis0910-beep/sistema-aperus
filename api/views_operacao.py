@@ -56,6 +56,14 @@ class ApplyOperacaoView(APIView):
                     results.append({'id_produto': pid, 'error': 'invalid quantidade'})
                     continue
 
+                is_servico = bool(
+                    getattr(produto, 'classificacao', None) and
+                    str(produto.classificacao).strip().upper() in ['SERVICO', 'SERVIÇO', 'SERVICOS', 'SERVIÇOS']
+                )
+                if is_servico:
+                    results.append({'id_produto': pid, 'skipped': True, 'message': 'Serviço não baixa estoque'})
+                    continue
+
                 # Se a operação configura baixa no estoque local do produto
                     if baixa:
                         # baixa behavior: if operacao defines a deposito de baixa, decrement that deposito's saldo_deposito

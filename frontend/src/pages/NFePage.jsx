@@ -59,6 +59,8 @@ import {
   ExpandMore as ExpandMoreIcon,
   KeyboardArrowUp as KeyboardArrowUpIcon,
   FilterList as FilterListIcon,
+  Edit as EditIcon,
+  Visibility as VisibilityIcon,
   WhatsApp as WhatsAppIcon,
   Email as EmailIcon
 } from '@mui/icons-material';
@@ -233,6 +235,34 @@ const NFePage = () => {
             console.error("❌ Erro na emissão:", err);
             const errorMsg = err.response?.data?.details || err.response?.data?.error || err.response?.data?.message || 'Erro desconhecido ao emitir';
             showToast(`Erro na emissão: ${errorMsg}`, 'error');
+            fetchVendas();
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const handleEmitirNFeContingencia = async (vendaId) => {
+        if (processingId) return;
+
+        setProcessingId(vendaId);
+        showToast('Solicitando emissão de NF-e em Contingência SVC-AN...', 'info');
+
+        try {
+            const response = await axiosInstance.post(`/vendas/${vendaId}/emitir_nfe/`, {
+                contingencia_svcan: true
+            });
+
+            console.log("⚡ Emissão em Contingência concluída:", response.data);
+
+            const msg = response.data.message || 'NF-e Emitida em Contingência SVC-AN com Sucesso!';
+            showToast(msg, 'success');
+
+            fetchVendas();
+
+        } catch (err) {
+            console.error("⚡ Erro na emissão em contingência:", err);
+            const errorMsg = err.response?.data?.details || err.response?.data?.error || err.response?.data?.message || 'Erro desconhecido ao emitir em contingência';
+            showToast(`Erro na emissão em contingência: ${errorMsg}`, 'error');
             fetchVendas();
         } finally {
             setProcessingId(null);
@@ -815,6 +845,29 @@ const NFePage = () => {
                                                 flexWrap: 'nowrap',
                                                 minWidth: 'fit-content'
                                             }}>
+                                                {/* Botão de Editar Nota (só se não emitida/cancelada/inutilizada) */}
+                                                {venda.status_nfe !== 'EMITIDA' && venda.status_nfe !== 'CANCELADA' && venda.status_nfe !== 'INUTILIZADA' && (
+                                                     <Tooltip title="Editar Nota/Venda">
+                                                         <span>
+                                                             <IconButton
+                                                                 color="warning"
+                                                                 size="small"
+                                                                 onClick={() => {
+                                                                     navigate('/vendas', { 
+                                                                         state: { 
+                                                                             modo: 'editar', 
+                                                                             vendaId: venda.id_venda || venda.id 
+                                                                         } 
+                                                                     });
+                                                                 }}
+                                                                 disabled={!!processingId}
+                                                             >
+                                                                 <EditIcon fontSize="small" />
+                                                             </IconButton>
+                                                         </span>
+                                                     </Tooltip>
+                                                 )}
+
                                                 {/* Botão de Transmitir NF-e (só aparece quando NÃO emitida) */}
                                                 {venda.status_nfe !== 'EMITIDA' && venda.status_nfe !== 'CANCELADA' && venda.status_nfe !== 'INUTILIZADA' && (
                                                     <Tooltip title="Transmitir NF-e">
@@ -852,6 +905,27 @@ const NFePage = () => {
                                                         onSuccess={() => console.log('WhatsApp NF-e enviado!')}
                                                     />
                                                 )}
+
+                                                 {/* Botão de Visualizar Nota (disponível para todas as notas) */}
+                                                 <Tooltip title="Visualizar Nota/Venda">
+                                                     <span>
+                                                         <IconButton
+                                                             color="info"
+                                                             size="small"
+                                                             onClick={() => {
+                                                                 navigate('/vendas', { 
+                                                                     state: { 
+                                                                         modo: 'visualizar', 
+                                                                         vendaId: venda.id_venda || venda.id 
+                                                                     } 
+                                                                 });
+                                                             }}
+                                                             disabled={!!processingId}
+                                                         >
+                                                             <VisibilityIcon fontSize="small" />
+                                                         </IconButton>
+                                                     </span>
+                                                 </Tooltip>
 
                                                 {/* Menu de opções */}
                                                 <Tooltip title="Mais opções">
@@ -954,6 +1028,53 @@ const NFePage = () => {
                     </MenuItem>
                 )}
                 
+                {menuVenda && menuVenda.status_nfe !== 'EMITIDA' && menuVenda.status_nfe !== 'CANCELADA' && menuVenda.status_nfe !== 'INUTILIZADA' && (
+                     <MenuItem 
+                        onClick={() => {
+                            navigate('/vendas', { 
+                                state: { 
+                                    modo: 'editar', 
+                                    vendaId: menuVenda.id_venda || menuVenda.id 
+                                } 
+                            });
+                            handleMenuClose();
+                        }}
+                     >
+                        <ListItemIcon><EditIcon fontSize="small" color="warning" /></ListItemIcon>
+                        Editar Nota/Venda
+                    </MenuItem>
+                )}
+
+                 {menuVenda && (
+                      <MenuItem 
+                         onClick={() => {
+                             navigate('/vendas', { 
+                                 state: { 
+                                     modo: 'visualizar', 
+                                     vendaId: menuVenda.id_venda || menuVenda.id 
+                                 } 
+                             });
+                             handleMenuClose();
+                         }}
+                      >
+                         <ListItemIcon><VisibilityIcon fontSize="small" color="info" /></ListItemIcon>
+                         Visualizar Nota/Venda
+                     </MenuItem>
+                 )}
+
+                {menuVenda && menuVenda.status_nfe !== 'EMITIDA' && menuVenda.status_nfe !== 'CANCELADA' && menuVenda.status_nfe !== 'INUTILIZADA' && (
+                     <MenuItem 
+                        onClick={() => {
+                            handleEmitirNFeContingencia(menuVenda.id_venda || menuVenda.id);
+                            handleMenuClose();
+                        }}
+                        sx={{ color: 'warning.main' }}
+                     >
+                        <ListItemIcon><WarningIcon fontSize="small" color="warning" /></ListItemIcon>
+                        Transmitir em Contingência SVC-AN
+                    </MenuItem>
+                )}
+
                 {menuVenda?.status_nfe !== 'EMITIDA' && menuVenda?.status_nfe !== 'CANCELADA' && (
                      <MenuItem onClick={handleOpenInutilizar}>
                         <ListItemIcon><BlockIcon fontSize="small" /></ListItemIcon>

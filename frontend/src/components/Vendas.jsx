@@ -31,7 +31,9 @@ import {
   DialogActions,
   Autocomplete,
   Tooltip,
-  Snackbar
+  Snackbar,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -49,9 +51,12 @@ import {
   Check as CheckIcon,
   CheckCircle as CheckCircleIcon,
   AddShoppingCart as AddShoppingCartIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  LocalShipping as LocalShippingIcon,
+  Description as DescriptionIcon,
+  Note as NoteIcon
 } from '@mui/icons-material';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import mockAPI from '../services/mockAPI';
 import useImpressaoVenda from '../hooks/useImpressaoVenda';
@@ -162,6 +167,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   console.log('🚀 [Vendas.jsx] COMPONENTE INICIANDO - Props:', { embedded, initialMode, initialModel });
   
   const location = useLocation();
+  const navigate = useNavigate();
   console.log('📍 [Vendas.jsx] Location:', location.pathname);
   
   // Hook de autenticação (DEVE VIR PRIMEIRO!)
@@ -189,6 +195,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [veioDeNFe, setVeioDeNFe] = useState(false);
+  const [isOnlyViewing, setIsOnlyViewing] = useState(false);
 
   // Modo atual: 'lista' ou 'nova'
   const [modo, setModo] = useState((initialMode || location.state?.modo) === 'nova' ? 'nova' : 'lista');
@@ -196,6 +204,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   // Estado para controlar modal de nova venda
   const [openModalNovaVenda, setOpenModalNovaVenda] = useState(initialMode === 'nova');
   const [showLucratividade, setShowLucratividade] = useState(false);
+  const [abaAtiva, setAbaAtiva] = useState(0); // 0 = Principal, 1 = Frete, 2 = Outros
 
   // Dados para formulário (declarados antes dos useEffects para evitar TDZ)
   const [venda, setVenda] = useState({
@@ -212,7 +221,20 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     valor_total: 0,
     itens: [],
     venda_futura_origem: null, // ID da venda de origem quando for entrega
-    chave_nfe_referenciada: '' // Chave da nota complementar/devolução
+    chave_nfe_referenciada: '', // Chave da nota complementar/devolução
+    // Campos de Frete e Transporte
+    tipo_frete: 9,
+    id_transportadora: '',
+    placa_veiculo: '',
+    uf_veiculo: '',
+    rntrc: '',
+    quantidade_volumes: 0,
+    especie_volumes: '',
+    marca_volumes: '',
+    peso_liquido: 0,
+    peso_bruto: 0,
+    observacao_fisco: '',
+    observacao_contribuinte: ''
   });
 
   // Item sendo adicionado (declarado antes dos useEffects para evitar TDZ)
@@ -239,7 +261,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     const restaurarEstadoSalvo = async () => {
       try {
         const estadoSalvo = await carregarEstadoVendas();
-        if (estadoSalvo && modo === 'nova') {
+        if (estadoSalvo && modo === 'nova' && !veioDeNFe && !location.state?.modo) {
           console.log('✅ Restaurando estado salvo de Vendas');
           
           // Restaurar dados da venda
@@ -256,12 +278,12 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     };
     
     restaurarEstadoSalvo();
-  }, [modo]); // Executa quando o modo muda
+  }, [modo, veioDeNFe, location.state]); // Executa quando o modo ou rota muda
 
   // 🔹 AUTO-SAVE: Salva automaticamente o estado quando houver mudanças
   useEffect(() => {
-    // Não salvar se não estiver no modo 'nova' ou se não houver dados
-    if (modo !== 'nova' || !venda.id_operacao) return;
+    // Não salvar se não estiver no modo 'nova', se for edição/visualização, ou se não houver dados
+    if (modo !== 'nova' || !venda.id_operacao || venda.id || isOnlyViewing) return;
     
     // Debounce: aguarda 1 segundo após a última mudança para salvar
     const timeoutId = setTimeout(async () => {
@@ -279,7 +301,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     }, 1000); // Aguarda 1 segundo de "silêncio" antes de salvar
 
     return () => clearTimeout(timeoutId);
-  }, [venda, novoItem, modo]);
+  }, [venda, novoItem, modo, isOnlyViewing]);
 
   // Dados das listas
   const [operacoes, setOperacoes] = useState([]);
@@ -4214,37 +4236,44 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   };
 
   // Editar venda
-  const editarVenda = async (vendaParaEditar) => {
-    console.log('✏️ Editando venda:', vendaParaEditar);
+  const editarVenda = async (vendaParaEditar, forceReadOnly = false) => {
+    console.log('✏️ Editando/Visualizando venda:', vendaParaEditar, 'forceReadOnly:', forceReadOnly);
     const idVenda = vendaParaEditar.id || vendaParaEditar.id_venda;
     if (!idVenda) return;
 
     try {
       setLoading(true);
+      setIsOnlyViewing(forceReadOnly);
       // Buscar venda completa com itens detalhados do backend
       const res = await axiosInstance.get(`/vendas/${idVenda}/`);
       const vendaCompleta = res.data;
-      console.log('✅ Venda completa carregada para edição:', vendaCompleta);
+      console.log('✅ Venda completa carregada para edição/visualização:', vendaCompleta);
 
-      // Verificar se a venda já foi paga (financeiro baixado)
-      const status = statusFinanceiro[idVenda];
-
-      if (status && status.temFinanceiro && status.valorPago > 0) {
+      if (forceReadOnly) {
         setVendaBloqueadaParaEdicao(true);
-        console.log('🔒 Venda bloqueada para edição - possui pagamentos:', {
-          valorPago: status.valorPago,
-          valorTotal: status.valorTotal,
-          status: status.status
-        });
       } else {
-        setVendaBloqueadaParaEdicao(false);
+        // Verificar se a venda já foi paga (financeiro baixado)
+        const status = statusFinanceiro[idVenda];
+
+        if (status && status.temFinanceiro && status.valorPago > 0) {
+          setVendaBloqueadaParaEdicao(true);
+          console.log('🔒 Venda bloqueada para edição - possui pagamentos:', {
+            valorPago: status.valorPago,
+            valorTotal: status.valorTotal,
+            status: status.status
+          });
+        } else {
+          setVendaBloqueadaParaEdicao(false);
+        }
       }
 
       setVenda({
-        id: vendaCompleta.id,
+        id: vendaCompleta.id_venda || vendaCompleta.id,
         id_operacao: vendaCompleta.id_operacao,
         id_cliente: vendaCompleta.id_cliente,
         id_vendedor: vendaCompleta.id_vendedor || '',
+        numero_documento: vendaCompleta.numero_venda || vendaCompleta.numero_documento || '',
+        data_venda: (vendaCompleta.data_emissao || vendaCompleta.data_documento || '').split('T')[0],
         observacoes: vendaCompleta.observacoes || '',
         desconto: parseFloat(vendaCompleta.desconto) || 0,
         taxa_entrega: parseFloat(vendaCompleta.taxa_entrega) || 0,
@@ -4256,8 +4285,22 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
           valor_unitario: parseFloat(item.valor_unitario) || 0,
           desconto: parseFloat(item.desconto || item.desconto_valor || 0)
         })),
-        chave_nfe_referenciada: vendaCompleta.chave_nfe_referenciada || ''
+        chave_nfe_referenciada: vendaCompleta.chave_nfe_referenciada || '',
+        // Campos de Frete e Transporte
+        tipo_frete: vendaCompleta.tipo_frete !== undefined ? vendaCompleta.tipo_frete : 9,
+        id_transportadora: vendaCompleta.id_transportadora || '',
+        placa_veiculo: vendaCompleta.placa_veiculo || '',
+        uf_veiculo: vendaCompleta.uf_veiculo || '',
+        rntrc: vendaCompleta.rntrc || '',
+        quantidade_volumes: vendaCompleta.quantidade_volumes !== undefined ? vendaCompleta.quantidade_volumes : 0,
+        especie_volumes: vendaCompleta.especie_volumes || '',
+        marca_volumes: vendaCompleta.marca_volumes || '',
+        peso_liquido: parseFloat(vendaCompleta.peso_liquido || 0),
+        peso_bruto: parseFloat(vendaCompleta.peso_bruto || 0),
+        observacao_fisco: vendaCompleta.observacao_fisco || '',
+        observacao_contribuinte: vendaCompleta.observacao_contribuinte || ''
       });
+      setAbaAtiva(0);
       setModo('nova');
       setOpenModalNovaVenda(true);
     } catch (err) {
@@ -4267,6 +4310,35 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (location.state?.modo === 'editar' && location.state?.vendaId) {
+      setVeioDeNFe(true);
+      const targetVendaId = location.state.vendaId;
+      // Limpar o state para evitar loops ou reaberturas no recarregamento/outra navegação
+      navigate(location.pathname, { replace: true, state: {} });
+      // Iniciar edição
+      editarVenda({ id: targetVendaId }, false);
+    } else if (location.state?.modo === 'visualizar' && location.state?.vendaId) {
+      setVeioDeNFe(true);
+      const targetVendaId = location.state.vendaId;
+      // Limpar o state para evitar loops ou reaberturas no recarregamento/outra navegação
+      navigate(location.pathname, { replace: true, state: {} });
+      // Iniciar visualização
+      editarVenda({ id: targetVendaId }, true);
+    }
+  }, [location, navigate]);
+
+  const prevOpenModal = useRef(false);
+
+  useEffect(() => {
+    if (prevOpenModal.current && !openModalNovaVenda && veioDeNFe) {
+      setVeioDeNFe(false);
+      setIsOnlyViewing(false);
+      navigate('/nfe');
+    }
+    prevOpenModal.current = openModalNovaVenda;
+  }, [openModalNovaVenda, veioDeNFe, navigate]);
 
   // Excluir venda
   const excluirVenda = async (venda) => {
@@ -5120,7 +5192,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
           px: 3 
         }}>
           <Typography variant="h6" component="span" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
-            📝 Nova Venda
+            {isOnlyViewing ? '👁️ Visualizar Nota Fiscal/Venda' : venda.id ? '✏️ Editar Venda' : '📝 Nova Venda'}
           </Typography>
           <IconButton 
             size="small"
@@ -5154,26 +5226,61 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
           {vendaBloqueadaParaEdicao && (
             <Grid item xs={12}>
               <Alert severity="warning" sx={{ mb: 2 }}>
-                <strong>⚠️ Venda com pagamentos realizados</strong>
-                <br />
-                Esta venda já possui pagamentos no financeiro e não pode ser editada.
+                {isOnlyViewing ? (
+                  <>
+                    <strong>👁️ Modo de Visualização</strong>
+                    <br />
+                    Esta Nota Fiscal/Venda está em modo somente leitura e não pode ser alterada.
+                  </>
+                ) : (
+                  <>
+                    <strong>⚠️ Venda com pagamentos realizados</strong>
+                    <br />
+                    Esta venda já possui pagamentos no financeiro e não pode ser editada.
+                  </>
+                )}
               </Alert>
             </Grid>
           )}
 
-          {/* Dados da venda - Compacto */}
+          {/* Sistema de Abas */}
           <Grid item xs={12}>
-            <Box sx={{ 
-              p: 2.5, 
-              bgcolor: 'background.paper', 
-              borderRadius: '16px',
-              border: '1px solid #e2e8f0',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
-            }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 2, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.75rem' }}>
-                📋 Informações Gerais
-              </Typography>
-              <Grid container spacing={2}>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+              <Tabs
+                value={abaAtiva}
+                onChange={(e, newValue) => setAbaAtiva(newValue)}
+                variant="fullWidth"
+                sx={{
+                  '& .MuiTab-root': {
+                    minHeight: 48,
+                    textTransform: 'none',
+                    fontWeight: 'bold',
+                    fontSize: '0.9rem'
+                  }
+                }}
+              >
+                <Tab icon={<DescriptionIcon />} iconPosition="start" label="Principal" />
+                <Tab icon={<LocalShippingIcon />} iconPosition="start" label="Frete / Transporte" />
+                <Tab icon={<NoteIcon />} iconPosition="start" label="Observações / Outros" />
+              </Tabs>
+            </Box>
+          </Grid>
+
+          {abaAtiva === 0 && (
+            <>
+              {/* Dados da venda - Compacto */}
+              <Grid item xs={12}>
+                <Box sx={{ 
+                  p: 2.5, 
+                  bgcolor: 'background.paper', 
+                  borderRadius: '16px',
+                  border: '1px solid #e2e8f0',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+                }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 2, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.75rem' }}>
+                    📋 Informações Gerais
+                  </Typography>
+                  <Grid container spacing={2}>
                   <Grid item xs={6} md={2}>
                     <TextField
                       fullWidth
@@ -5408,6 +5515,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                                     ? `${clienteSelecionado.valor_desconto}%` 
                                     : `R$ ${clienteSelecionado.valor_desconto}`;
                                   console.log(`💰 Cliente ${clienteSelecionado.nome_razao_social} selecionado com desconto configurado de ${valorFormatado}`);
+                          console.log(`💰 Cliente ${clienteSelecionado.nome_razao_social} selecionado com desconto configurado de ${valorFormatado}`);
                                   setSuccess(`O desconto de ${valorFormatado} será aplicado após selecionar os produtos que estão nos grupos definidos, exceto.`);
                                   setTimeout(() => setSuccess(''), 8000); // Remover alerta após 8 segundos
                                 }
@@ -5469,21 +5577,9 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                     </FormControl>
                   </Grid>
 
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="Observações"
-                      multiline
-                      rows={1}
-                      value={venda.observacoes}
-                      onChange={(e) => setVenda(prev => ({ ...prev, observacoes: e.target.value }))}
-                      disabled={vendaBloqueadaParaEdicao}
-                    />
-                  </Grid>
-                </Grid>
-              </Box>
-          </Grid>
+                 </Grid>
+               </Box>
+           </Grid>
 
           {/* Card de Limite do Cliente - Compacto */}
           {showLimiteInfo && limiteCliente && (
@@ -6101,7 +6197,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {venda.itens.length === 0 ? (
+                      {venda.itens.filter(item => !['991', '992', '993', '994', '995', '996', '997', '998', '999'].includes(String(item.codigo_produto || item.codigo || '').trim())).length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={venda.venda_futura_origem ? 11 : 9} align="center">
                             <Typography color="textSecondary">
@@ -6111,6 +6207,10 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                         </TableRow>
                       ) : (
                         venda.itens.map((item, index) => {
+                          const code = String(item.codigo_produto || item.codigo || '').trim();
+                          if (['991', '992', '993', '994', '995', '996', '997', '998', '999'].includes(code)) {
+                            return null;
+                          }
                           const imagemUrl = item.imagem_url || localStorage.getItem(`produto_imagem_${item.codigo_produto}`);
 
                           return (
@@ -6643,7 +6743,498 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                 </Grid>
               </Box>
             </Grid>
-          </Grid>
+            </>
+          )}
+
+          {/* Tab 1 - Frete / Transporte */}
+          {abaAtiva === 1 && (
+            <Grid item xs={12}>
+              <Box sx={{ 
+                p: 2.5, 
+                bgcolor: 'background.paper', 
+                borderRadius: '16px',
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+              }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 3, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  🚚 Dados de Frete e Transporte
+                </Typography>
+                
+                <Grid container spacing={2}>
+                  {/* Modalidade do Frete */}
+                  <Grid item xs={12} md={4}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Modalidade Frete</InputLabel>
+                      <Select
+                        value={venda.tipo_frete !== undefined ? venda.tipo_frete : 9}
+                        onChange={(e) => setVenda(prev => ({ ...prev, tipo_frete: parseInt(e.target.value) }))}
+                        label="Modalidade Frete"
+                        disabled={vendaBloqueadaParaEdicao}
+                      >
+                        <MenuItem value={0}>0 - Emitente (CIF)</MenuItem>
+                        <MenuItem value={1}>1 - Destinatário (FOB)</MenuItem>
+                        <MenuItem value={2}>2 - Terceiros</MenuItem>
+                        <MenuItem value={3}>3 - Transp. Próprio Remetente</MenuItem>
+                        <MenuItem value={4}>4 - Transp. Próprio Destinatário</MenuItem>
+                        <MenuItem value={9}>9 - Sem Ocorrência de Transporte</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  {/* Transportadora */}
+                  <Grid item xs={12} md={8}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Transportadora</InputLabel>
+                      <Select
+                        value={venda.id_transportadora || ''}
+                        onChange={(e) => setVenda(prev => ({ ...prev, id_transportadora: e.target.value }))}
+                        label="Transportadora"
+                        disabled={vendaBloqueadaParaEdicao}
+                      >
+                        <MenuItem value="">Nenhuma Transportadora</MenuItem>
+                        {clientes.map(cli => (
+                          <MenuItem key={`transp-${cli.id_cliente}`} value={cli.id_cliente}>
+                            {cli.nome_razao_social} {cli.cpf_cnpj ? `(${cli.cpf_cnpj})` : ''}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  {/* Veículo - Placa, UF, RNTRC */}
+                  <Grid item xs={6} md={3}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Placa Veículo"
+                      value={venda.placa_veiculo || ''}
+                      onChange={(e) => setVenda(prev => ({ ...prev, placa_veiculo: e.target.value.toUpperCase().slice(0, 8) }))}
+                      disabled={vendaBloqueadaParaEdicao}
+                    />
+                  </Grid>
+
+                  <Grid item xs={6} md={2}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="UF Veículo"
+                      value={venda.uf_veiculo || ''}
+                      onChange={(e) => setVenda(prev => ({ ...prev, uf_veiculo: e.target.value.toUpperCase().slice(0, 2) }))}
+                      disabled={vendaBloqueadaParaEdicao}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} md={7}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="RNTRC (Registro Transportador)"
+                      value={venda.rntrc || ''}
+                      onChange={(e) => setVenda(prev => ({ ...prev, rntrc: e.target.value }))}
+                      disabled={vendaBloqueadaParaEdicao}
+                    />
+                  </Grid>
+
+                  {/* Volumes e Pesos */}
+                  <Grid item xs={6} md={3}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      type="number"
+                      label="Qtd. Volumes"
+                      value={venda.quantidade_volumes || 0}
+                      onChange={(e) => setVenda(prev => ({ ...prev, quantidade_volumes: parseInt(e.target.value) || 0 }))}
+                      disabled={vendaBloqueadaParaEdicao}
+                    />
+                  </Grid>
+
+                  <Grid item xs={6} md={3}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Espécie Volumes"
+                      placeholder="Ex: CAIXAS, PALETES"
+                      value={venda.especie_volumes || ''}
+                      onChange={(e) => setVenda(prev => ({ ...prev, especie_volumes: e.target.value }))}
+                      disabled={vendaBloqueadaParaEdicao}
+                    />
+                  </Grid>
+
+                  <Grid item xs={6} md={3}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Marca Volumes"
+                      value={venda.marca_volumes || ''}
+                      onChange={(e) => setVenda(prev => ({ ...prev, marca_volumes: e.target.value }))}
+                      disabled={vendaBloqueadaParaEdicao}
+                    />
+                  </Grid>
+
+                  <Grid item xs={6} md={3}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      type="number"
+                      label="Peso Líquido (kg)"
+                      value={venda.peso_liquido || ''}
+                      onChange={(e) => setVenda(prev => ({ ...prev, peso_liquido: parseFloat(e.target.value) || 0 }))}
+                      disabled={vendaBloqueadaParaEdicao}
+                      inputProps={{ step: 0.001 }}
+                    />
+                  </Grid>
+
+                  <Grid item xs={6} md={3}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      type="number"
+                      label="Peso Bruto (kg)"
+                      value={venda.peso_bruto || ''}
+                      onChange={(e) => setVenda(prev => ({ ...prev, peso_bruto: parseFloat(e.target.value) || 0 }))}
+                      disabled={vendaBloqueadaParaEdicao}
+                      inputProps={{ step: 0.001 }}
+                    />
+                  </Grid>
+                </Grid>
+               </Box>
+             </Grid>
+           )}
+
+           {/* Tab 2 - Outros / Observações */}
+           {abaAtiva === 2 && (
+             <Grid item xs={12}>
+               <Box sx={{ 
+                 p: 2.5, 
+                 bgcolor: 'background.paper', 
+                 borderRadius: '16px',
+                 border: '1px solid #e2e8f0',
+                 boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+               }}>
+                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 3, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 1 }}>
+                   📝 Observações e Dados Fiscais
+                 </Typography>
+                 
+                 <Grid container spacing={2.5}>
+                   {/* Chave de Acesso Referenciada */}
+                   <Grid item xs={12}>
+                     <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1, fontSize: '0.8rem' }}>
+                       🔗 Documento Fiscal Referenciado
+                     </Typography>
+                     <TextField
+                       fullWidth
+                       size="small"
+                       label="Chave de Acesso Referenciada"
+                       placeholder="Chave de 44 dígitos da NF-e referenciada"
+                       value={venda.chave_nfe_referenciada || ''}
+                       onChange={(e) => setVenda(prev => ({ ...prev, chave_nfe_referenciada: e.target.value.replace(/\D/g, '').slice(0, 44) }))}
+                       inputProps={{ maxLength: 44 }}
+                       helperText="Obrigatório para NF-e de Devolução, Estorno ou Complementar"
+                       disabled={vendaBloqueadaParaEdicao}
+                     />
+                   </Grid>
+
+                   <Grid item xs={12}>
+                     <Divider sx={{ my: 1 }} />
+                     <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1.5, fontSize: '0.8rem' }}>
+                       💬 Mensagens e Observações
+                     </Typography>
+                   </Grid>
+
+                   {/* Observações da Venda */}
+                   <Grid item xs={12}>
+                     <TextField
+                       fullWidth
+                       size="small"
+                       label="Observações Internas (Venda)"
+                       multiline
+                       rows={3}
+                       value={venda.observacoes || ''}
+                       onChange={(e) => setVenda(prev => ({ ...prev, observacoes: e.target.value }))}
+                       disabled={vendaBloqueadaParaEdicao}
+                     />
+                   </Grid>
+
+                   {/* Observações do Contribuinte */}
+                   <Grid item xs={12}>
+                     <TextField
+                       fullWidth
+                       size="small"
+                       label="Informações Complementares ao Contribuinte (Sai na DANFE)"
+                       multiline
+                       rows={3}
+                       value={venda.observacao_contribuinte || ''}
+                       onChange={(e) => setVenda(prev => ({ ...prev, observacao_contribuinte: e.target.value }))}
+                       disabled={vendaBloqueadaParaEdicao}
+                     />
+                   </Grid>
+
+                   {/* Observações ao Fisco */}
+                   <Grid item xs={12}>
+                     <TextField
+                       fullWidth
+                       size="small"
+                       label="Informações ao Fisco (Uso exclusivo SEFAZ)"
+                       multiline
+                       rows={3}
+                       value={venda.observacao_fisco || ''}
+                       onChange={(e) => setVenda(prev => ({ ...prev, observacao_fisco: e.target.value }))}
+                       disabled={vendaBloqueadaParaEdicao}
+                     />
+                   </Grid>
+
+                    {/* Tabela de Ajustes Fiscais (SPED/CAT) */}
+                    <Grid item xs={12}>
+                      <Divider sx={{ my: 2 }} />
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'primary.main', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 1 }}>
+                          📊 Registros de Ajuste Fiscal (SPED / CAT)
+                        </Typography>
+                        <Button
+                          variant="outlined"
+                          color="primary"
+                          size="small"
+                          startIcon={<AddIcon />}
+                          onClick={() => {
+                            const novoItem = {
+                              id: `ajuste-${Date.now()}`,
+                              codigo_produto: '996',
+                              nome_produto: 'TRANSFERÊNCIA DE CRÉDITO',
+                              quantidade: 1,
+                              valor_unitario: 0,
+                              desconto_valor: 0,
+                              valor_total: 0,
+                              cfop: '',
+                              icms_cst_csosn: '90',
+                              icms_bc: 0,
+                              icms_aliq: 0,
+                              valor_icms: 0,
+                            };
+                            setVenda(prev => ({
+                              ...prev,
+                              itens: [...(prev.itens || []), novoItem]
+                            }));
+                          }}
+                          disabled={vendaBloqueadaParaEdicao}
+                        >
+                          Adicionar Ajuste
+                        </Button>
+                      </Box>
+
+                      {venda.itens.filter(item => ['991', '992', '993', '994', '995', '996', '997', '998', '999'].includes(String(item.codigo_produto || item.codigo || '').trim())).length === 0 ? (
+                        <Box sx={{ p: 2, bgcolor: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', textAlign: 'center' }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Nenhum registro de ajuste fiscal adicionado nesta nota.
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <TableContainer sx={{ border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                          <Table size="small">
+                            <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                              <TableRow>
+                                <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>Registro</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="right">Valor</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="center">CFOP</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="right">Alíq. ICMS (%)</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="right">Valor ICMS</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="center">Ações</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {venda.itens.map((item, index) => {
+                                const code = String(item.codigo_produto || item.codigo || '').trim();
+                                if (!['991', '992', '993', '994', '995', '996', '997', '998', '999'].includes(code)) {
+                                  return null;
+                                }
+
+                                const OPCOES_REGISTRO_FISCAL = [
+                                  { value: '991', label: '991 - REGISTRO DO FRETE' },
+                                  { value: '992', label: '992 - REGISTRO DE SEGURO' },
+                                  { value: '993', label: '993 - PIS/COFINS' },
+                                  { value: '994', label: '994 - APROPRIAÇÃO DE CRÉDITO DE ATIVO IMOBILIZADO' },
+                                  { value: '995', label: '995 - RESSARCIMENTO DE SUBSTITUIÇÃO TRIBUTÁRIA' },
+                                  { value: '996', label: '996 - TRANSFERÊNCIA DE CRÉDITO' },
+                                  { value: '997', label: '997 - COMPLEMENTO DE VALOR DE NOTA FISCAL E/OU ICMS' },
+                                  { value: '998', label: '998 - SERVIÇOS NÃO TRIBUTADOS' },
+                                  { value: '999', label: '999 - OUTRAS DESPESAS ACESSÓRIAS' }
+                                ];
+
+                                return (
+                                  <TableRow key={item.id || `ajuste-row-${index}`}>
+                                    {/* Registro Dropdown */}
+                                    <TableCell sx={{ minWidth: 280 }}>
+                                      <FormControl fullWidth size="small">
+                                        <Select
+                                          value={code}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            const label = OPCOES_REGISTRO_FISCAL.find(op => op.value === val)?.label || '';
+                                            setVenda(prev => {
+                                              const novosItens = prev.itens.map((it, idx) => {
+                                                if (idx === index) {
+                                                  return {
+                                                    ...it,
+                                                    codigo_produto: val,
+                                                    nome_produto: label.substring(6)
+                                                  };
+                                                }
+                                                return it;
+                                              });
+                                              return { ...prev, itens: novosItens };
+                                            });
+                                          }}
+                                          disabled={vendaBloqueadaParaEdicao}
+                                        >
+                                          {OPCOES_REGISTRO_FISCAL.map(op => (
+                                            <MenuItem key={op.value} value={op.value}>
+                                              {op.label}
+                                            </MenuItem>
+                                          ))}
+                                        </Select>
+                                      </FormControl>
+                                    </TableCell>
+
+                                    {/* Valor Input */}
+                                    <TableCell align="right" sx={{ maxWidth: 120 }}>
+                                      <TextField
+                                        size="small"
+                                        type="number"
+                                        value={item.valor_unitario || ''}
+                                        onChange={(e) => {
+                                          const val = parseFloat(e.target.value) || 0;
+                                          setVenda(prev => {
+                                            const novosItens = prev.itens.map((it, idx) => {
+                                              if (idx === index) {
+                                                const aliq = parseFloat(it.icms_aliq) || 0;
+                                                return {
+                                                  ...it,
+                                                  valor_unitario: val,
+                                                  valor_total: val,
+                                                  icms_bc: val,
+                                                  valor_icms: Number((val * (aliq / 100)).toFixed(2))
+                                                };
+                                              }
+                                              return it;
+                                            });
+                                            const novoTotal = novosItens.reduce((acc, it) => acc + parseFloat(it.valor_total || 0), 0) + (parseFloat(prev.taxa_entrega) || 0);
+                                            return { ...prev, itens: novosItens, valor_total: novoTotal };
+                                          });
+                                        }}
+                                        InputProps={{
+                                          startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                                        }}
+                                        disabled={vendaBloqueadaParaEdicao}
+                                      />
+                                    </TableCell>
+
+                                    {/* CFOP Input */}
+                                    <TableCell align="center" sx={{ maxWidth: 100 }}>
+                                      <TextField
+                                        size="small"
+                                        placeholder="CFOP"
+                                        value={item.cfop || ''}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setVenda(prev => {
+                                            const novosItens = prev.itens.map((it, idx) => {
+                                              if (idx === index) {
+                                                return { ...it, cfop: val };
+                                              }
+                                              return it;
+                                            });
+                                            return { ...prev, itens: novosItens };
+                                          });
+                                        }}
+                                        inputProps={{ maxLength: 4 }}
+                                        disabled={vendaBloqueadaParaEdicao}
+                                      />
+                                    </TableCell>
+
+                                    {/* Alíquota ICMS Input */}
+                                    <TableCell align="right" sx={{ maxWidth: 110 }}>
+                                      <TextField
+                                        size="small"
+                                        type="number"
+                                        value={item.icms_aliq || ''}
+                                        onChange={(e) => {
+                                          const val = parseFloat(e.target.value) || 0;
+                                          setVenda(prev => {
+                                            const novosItens = prev.itens.map((it, idx) => {
+                                              if (idx === index) {
+                                                const vUnit = parseFloat(it.valor_unitario) || 0;
+                                                return {
+                                                  ...it,
+                                                  icms_aliq: val,
+                                                  valor_icms: Number((vUnit * (val / 100)).toFixed(2))
+                                                };
+                                              }
+                                              return it;
+                                            });
+                                            return { ...prev, itens: novosItens };
+                                          });
+                                        }}
+                                        InputProps={{
+                                          endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                                        }}
+                                        disabled={vendaBloqueadaParaEdicao}
+                                      />
+                                    </TableCell>
+
+                                    {/* Valor ICMS Input */}
+                                    <TableCell align="right" sx={{ maxWidth: 120 }}>
+                                      <TextField
+                                        size="small"
+                                        type="number"
+                                        value={item.valor_icms || ''}
+                                        onChange={(e) => {
+                                          const val = parseFloat(e.target.value) || 0;
+                                          setVenda(prev => {
+                                            const novosItens = prev.itens.map((it, idx) => {
+                                              if (idx === index) {
+                                                return { ...it, valor_icms: val };
+                                              }
+                                              return it;
+                                            });
+                                            return { ...prev, itens: novosItens };
+                                          });
+                                        }}
+                                        InputProps={{
+                                          startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                                        }}
+                                        disabled={vendaBloqueadaParaEdicao}
+                                      />
+                                    </TableCell>
+
+                                    {/* Ação (Delete) */}
+                                    <TableCell align="center">
+                                      <IconButton
+                                        color="error"
+                                        size="small"
+                                        onClick={() => {
+                                          setVenda(prev => {
+                                            const novosItens = prev.itens.filter((_, idx) => idx !== index);
+                                            const novoTotal = novosItens.reduce((acc, it) => acc + parseFloat(it.valor_total || 0), 0) + (parseFloat(prev.taxa_entrega) || 0);
+                                            return { ...prev, itens: novosItens, valor_total: novoTotal };
+                                          });
+                                        }}
+                                        disabled={vendaBloqueadaParaEdicao}
+                                      >
+                                        <DeleteIcon fontSize="small" />
+                                      </IconButton>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      )}
+                    </Grid>
+                 </Grid>
+               </Box>
+             </Grid>
+           )}
+         </Grid>
         </DialogContent>
         <DialogActions sx={{ p: 1.5, bgcolor: 'grey.50', gap: 1 }}>
           {!!user?.parametros?.mostrar_lucratividade && (venda.itens || []).length > 0 && (

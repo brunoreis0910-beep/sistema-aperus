@@ -206,18 +206,14 @@
                   const rowText = (row.textContent || "").toUpperCase();
                   if (!rowText.includes('AUTORIZADA')) continue;
 
-                  // 3. Extract ID
-                  // Try to find "ID: 358" inside the row
+                  // 3. Extract ID safely by examining cells individually to avoid concatenation with other cells (e.g. date)
                   let vendaId = null;
-                  const idMatch = rowText.match(/ID:\s*(\d+)/);
-                  if (idMatch) {
-                      vendaId = idMatch[1];
-                  } else {
-                      // Fallback: Look for first cell numbers
-                      const firstCell = row.querySelector('td, th');
-                      if (firstCell) {
-                           const nums = firstCell.textContent.match(/\d+/g);
-                           if(nums && nums.length > 0) vendaId = nums[nums.length - 1]; 
+                  const cells = row.querySelectorAll('td');
+                  for (let cell of cells) {
+                      const match = (cell.textContent || "").match(/ID:\s*(\d+)/i);
+                      if (match) {
+                          vendaId = match[1];
+                          break;
                       }
                   }
 

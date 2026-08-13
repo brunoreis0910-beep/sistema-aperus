@@ -402,7 +402,10 @@ class NFeService:
                     logger.info(f"Updated Venda Key/Number from XML: {venda.chave_nfe} / {venda.numero_nfe}")
                 
                 # Inicializa SefazService (necessário para consulta)
-                sefaz = SefazService(empresa, modelo='55')
+                tp_emis_val = '1'
+                if getattr(venda, 'tpEmis', None) == '6' or venda.status_nfe == 'CONTINGENCIA_SVCAN':
+                    tp_emis_val = '6'
+                sefaz = SefazService(empresa, modelo='55', tpEmis=tp_emis_val)
                 
                 # === SMART HANDLING: Consulta Prévia de Status (Evitar Duplicidade) ===
                 if new_key:
@@ -492,7 +495,10 @@ class NFeService:
                         raise e_java
             
             # Inicializa SefazService para envio (modelo 55 = NF-e)
-            sefaz = SefazService(empresa, modelo='55')
+            tp_emis_val = '1'
+            if getattr(venda, 'tpEmis', None) == '6' or venda.status_nfe == 'CONTINGENCIA_SVCAN':
+                tp_emis_val = '6'
+            sefaz = SefazService(empresa, modelo='55', tpEmis=tp_emis_val)
             
             # (CDATA já foi adicionado ANTES da assinatura no passo 1.1)
             

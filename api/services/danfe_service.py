@@ -386,7 +386,7 @@ class DanfeGenerator:
         self._field_box(5+4*w+20, y_box, 15, h, "V. ICMS UF REM.", "0,00", "right")
         self._field_box(5+4*w+35, y_box, 15, h, "V. FCP UF DEST.", "0,00", "right")
         self._field_box(5+4*w+50, y_box, w+5, h, "VALOR PIS", "0,00", "right")
-        self._field_box(5+5*w+55, y_box, 28, h, "VALOR TOTAL PROD.", f"{self.venda.valor_total:.2f}", "right")
+        self._field_box(5+5*w+55, y_box, 28, h, "VALOR TOTAL PROD.", f"{(self.venda.valor_total or 0):.2f}", "right")
         
         y_box -= 9
         self._field_box(5, y_box, w, h, "VALOR DO FRETE", f"{self.venda.taxa_entrega or 0:.2f}", "right")
@@ -397,7 +397,7 @@ class DanfeGenerator:
         self._field_box(5+5*w, y_box, w, h, "VALOR DA COFINS", "0,00", "right")
         self._field_box(5+6*w, y_box, w+10, h, "VALOR PIS", "0,00", "right")
         
-        total_nota = self.venda.valor_total + (self.venda.taxa_entrega or Decimal("0.00"))
+        total_nota = (self.venda.valor_total or Decimal("0.00")) + (self.venda.taxa_entrega or Decimal("0.00"))
         self._field_box(5+7*w+10, y_box, 36, h, "VALOR TOTAL NOTA", f"{total_nota:.2f}", "right")
 
     def _desenhar_transportador(self):
@@ -427,8 +427,8 @@ class DanfeGenerator:
         self._field_box(28, y_box, 40, 8, "ESPÉCIE", self.venda.especie_volumes)
         self._field_box(71, y_box, 40, 8, "MARCA", self.venda.marca_volumes)
         self._field_box(114, y_box, 40, 8, "NUMERAÇÃO", "")
-        self._field_box(157, y_box, 24, 8, "PESO BRUTO", f"{self.venda.peso_bruto:.3f}")
-        self._field_box(184, y_box, 21, 8, "PESO LÍQUIDO", f"{self.venda.peso_liquido:.3f}")
+        self._field_box(157, y_box, 24, 8, "PESO BRUTO", f"{(self.venda.peso_bruto or 0):.3f}")
+        self._field_box(184, y_box, 21, 8, "PESO LÍQUIDO", f"{(self.venda.peso_liquido or 0):.3f}")
 
     def _desenhar_itens(self):
         y = 115
