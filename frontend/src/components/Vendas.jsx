@@ -5423,6 +5423,24 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                           } catch (err) {
                             console.error('❌ Erro ao buscar próximo número:', err);
                           }
+
+                          // 🚨 Validação Inteligente Proativa para NF-e (Modelo 55) ao mudar Operação
+                          if (operacaoSelecionada && (String(operacaoSelecionada.modelo_documento) === '55' || String(initialModel) === '55')) {
+                            if (venda.id_cliente) {
+                              const cliObj = clientes.find(c => String(c.id_cliente || c.id) === String(venda.id_cliente));
+                              if (cliObj) {
+                                const pendencias = validarClienteParaNFe(cliObj);
+                                if (pendencias.length > 0) {
+                                  setClienteParaEditarVendas(cliObj);
+                                  setClienteIncompletoNFeDialog({
+                                    open: true,
+                                    cliente: cliObj,
+                                    pendencias: pendencias
+                                  });
+                                }
+                              }
+                            }
+                          }
                         }}
                         error={!venda.id_operacao}
                       >
@@ -5598,13 +5616,28 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                                 String(cli.id || cli.pk || cli.ID || cli.id_cliente) === String(clienteId)
                               );
                               if (clienteSelecionado) {
+                                // 🚨 Validação Inteligente Proativa para NF-e (Modelo 55)
+                                const operacaoSel = operacoes.find(op => String(op.id_operacao) === String(venda.id_operacao));
+                                const ehModelo55 = (operacaoSel && String(operacaoSel.modelo_documento) === '55') || String(initialModel) === '55' || String(venda.modelo_nf) === '55';
+
+                                if (ehModelo55) {
+                                  const pendencias = validarClienteParaNFe(clienteSelecionado);
+                                  if (pendencias.length > 0) {
+                                    setClienteParaEditarVendas(clienteSelecionado);
+                                    setClienteIncompletoNFeDialog({
+                                      open: true,
+                                      cliente: clienteSelecionado,
+                                      pendencias: pendencias
+                                    });
+                                  }
+                                }
+
                                 const temDesconto = parseFloat(clienteSelecionado.valor_desconto || 0) > 0;
                                 if (temDesconto) {
                                   const valorFormatado = clienteSelecionado.tipo_desconto === 'PERCENTUAL' 
                                     ? `${clienteSelecionado.valor_desconto}%` 
                                     : `R$ ${clienteSelecionado.valor_desconto}`;
                                   console.log(`💰 Cliente ${clienteSelecionado.nome_razao_social} selecionado com desconto configurado de ${valorFormatado}`);
-                          console.log(`💰 Cliente ${clienteSelecionado.nome_razao_social} selecionado com desconto configurado de ${valorFormatado}`);
                                   setSuccess(`O desconto de ${valorFormatado} será aplicado após selecionar os produtos que estão nos grupos definidos, exceto.`);
                                   setTimeout(() => setSuccess(''), 8000); // Remover alerta após 8 segundos
                                 }
