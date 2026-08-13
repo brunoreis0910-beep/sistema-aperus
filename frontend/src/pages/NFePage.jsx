@@ -901,6 +901,7 @@ const NFePage = () => {
                                 <TableCell sx={{ width: 40 }} />
                                 <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>Nº Nota</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>Data Emissão</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>Operação</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>Destinatário</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>Valor Total</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>Chave de Acesso</TableCell>
@@ -911,7 +912,7 @@ const NFePage = () => {
                         <TableBody>
                             {filteredVendas.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+                                    <TableCell colSpan={9} align="center" sx={{ py: 6 }}>
                                         <Typography variant="h6" color="text.disabled">
                                             {searchTerm ? 'Nenhuma NF-e encontrada para a busca.' : 'Nenhuma NF-e encontrada.'}
                                         </Typography>
@@ -937,7 +938,7 @@ const NFePage = () => {
                                                     NF-e {venda.numero_nfe}
                                                 </Typography>
                                             ) : (
-                                                <Typography variant="body2" color="text.secondary">Thinking...</Typography>
+                                                <Typography variant="body2" color="text.secondary">Pendente</Typography>
                                             )}
                                              <Typography variant="caption" display="block" color="text.secondary">ID: {venda.id}</Typography>
                                         </TableCell>
@@ -945,6 +946,15 @@ const NFePage = () => {
                                             {venda.data_emissao 
                                                 ? new Date(venda.data_emissao).toLocaleString('pt-BR') 
                                                 : (venda.data_venda ? new Date(venda.data_venda).toLocaleString('pt-BR') : '-')}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Chip
+                                                label={venda.nome_operacao || venda.operacao_nome || (typeof venda.operacao === 'object' ? (venda.operacao?.nome_operacao || venda.operacao?.nome) : venda.operacao) || 'Venda (Mod.55)'}
+                                                size="small"
+                                                variant="outlined"
+                                                color="primary"
+                                                sx={{ fontSize: '0.75rem', fontWeight: 600, bgcolor: '#e3f2fd' }}
+                                            />
                                         </TableCell>
                                         <TableCell>
                                             {venda.cliente || venda.nome_cliente || 'Destinatário Desconhecido'}
@@ -1068,7 +1078,7 @@ const NFePage = () => {
                                         </TableCell>
                                     </TableRow>
                                     <TableRow>
-                                        <TableCell colSpan={8} sx={{ p: 0, borderBottom: expandedRows.has(venda.id) ? undefined : 'none' }}>
+                                        <TableCell colSpan={9} sx={{ p: 0, borderBottom: expandedRows.has(venda.id) ? undefined : 'none' }}>
                                             <Collapse in={expandedRows.has(venda.id)} unmountOnExit>
                                                 <Box sx={{ p: 2, bgcolor: 'grey.50' }}>
                                                     <Typography variant="subtitle2" gutterBottom fontWeight="bold">
