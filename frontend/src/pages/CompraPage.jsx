@@ -155,6 +155,13 @@ function CompraPage() {
   const [operacaoDevolucaoId, setOperacaoDevolucaoId] = useState('');
   const [motivoDevolucao, setMotivoDevolucao] = useState('');
   const [observacoesDevolucao, setObservacoesDevolucao] = useState('');
+  const [freteDevolucao, setFreteDevolucao] = useState({
+    transportadora_nome: '',
+    qtd_volumes: '',
+    especie: 'CAIXA',
+    peso_bruto: '',
+    peso_liquido: ''
+  });
 
   const abrirModalDevolucaoCompra = async (compraRow) => {
     const idTarget = compraRow.id_compra || compraRow.id;
@@ -164,6 +171,13 @@ function CompraPage() {
     setMotivoDevolucao('');
     setObservacoesDevolucao('');
     setOperacaoDevolucaoId('');
+    setFreteDevolucao({
+      transportadora_nome: compraRow.transportadora_nome || '',
+      qtd_volumes: compraRow.qtd_volumes || '',
+      especie: compraRow.especie || 'CAIXA',
+      peso_bruto: compraRow.peso_bruto || '',
+      peso_liquido: compraRow.peso_liquido || ''
+    });
     
     try {
       const res = await axiosInstance.get(`/devolucoes/buscar_compra/${idTarget}/`);
@@ -180,6 +194,11 @@ function CompraPage() {
         quantidade_devolver: parseFloat(item.quantidade_disponivel || item.quantidade || 0),
         valor_unitario: parseFloat(item.valor_unitario || 0),
         valor_total: parseFloat(item.valor_total || 0),
+        cfop: item.cfop || '5202',
+        vpis: parseFloat(item.vpis || 0),
+        vcofins: parseFloat(item.vcofins || 0),
+        vibs: parseFloat(item.vibs || 0),
+        vcbs: parseFloat(item.vcbs || 0),
         selecionado: true
       }));
       setItensDevolucaoCompra(itensMapeados);
@@ -202,6 +221,11 @@ function CompraPage() {
         quantidade_devolvida: i.quantidade_devolver,
         quantidade_original: i.quantidade_original,
         valor_unitario: i.valor_unitario,
+        cfop: i.cfop || '5202',
+        vpis: i.vpis,
+        vcofins: i.vcofins,
+        vibs: i.vibs,
+        vcbs: i.vcbs,
         motivo_item: i.motivo_item || ''
       }));
 
@@ -224,6 +248,11 @@ function CompraPage() {
         id_operacao: operacaoDevolucaoId || null,
         motivo: motivoDevolucao,
         observacoes: observacoesDevolucao,
+        transportadora_nome: freteDevolucao.transportadora_nome,
+        qtd_volumes: freteDevolucao.qtd_volumes,
+        especie: freteDevolucao.especie,
+        peso_bruto: freteDevolucao.peso_bruto,
+        peso_liquido: freteDevolucao.peso_liquido,
         chave_nfe_referenciada: compraParaDevolucao.chave_nfe_origem || compraParaDevolucao.chave_nfe || '',
         itens: itensSelecionados
       };
@@ -5909,9 +5938,11 @@ function CompraPage() {
                         />
                       </TableCell>
                       <TableCell sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Código / Produto</TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Qtd Disponível</TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold', minWidth: 120 }}>Qtd a Devolver</TableCell>
+                      <TableCell align="center" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold', minWidth: 90 }}>CFOP</TableCell>
+                      <TableCell align="center" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Qtd Disp.</TableCell>
+                      <TableCell align="center" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold', minWidth: 100 }}>Qtd Devolver</TableCell>
                       <TableCell align="right" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Preço Custo</TableCell>
+                      <TableCell align="center" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold', minWidth: 180 }}>PIS / COFINS / IBS / CBS</TableCell>
                       <TableCell align="right" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Subtotal</TableCell>
                     </TableRow>
                   </TableHead>
@@ -5937,6 +5968,23 @@ function CompraPage() {
                           </Typography>
                         </TableCell>
                         <TableCell align="center">
+                          <TextField
+                            size="small"
+                            disabled={!item.selecionado}
+                            value={item.cfop}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setItensDevolucaoCompra(prev => {
+                                const copy = [...prev];
+                                copy[index].cfop = val;
+                                return copy;
+                              });
+                            }}
+                            inputProps={{ maxLength: 4 }}
+                            sx={{ width: 85 }}
+                          />
+                        </TableCell>
+                        <TableCell align="center">
                           <Chip label={item.quantidade_disponivel} size="small" variant="outlined" />
                         </TableCell>
                         <TableCell align="center">
@@ -5957,11 +6005,79 @@ function CompraPage() {
                               });
                             }}
                             inputProps={{ min: 0.01, max: item.quantidade_disponivel, step: 'any' }}
-                            sx={{ width: 100 }}
+                            sx={{ width: 90 }}
                           />
                         </TableCell>
                         <TableCell align="right">
                           R$ {item.valor_unitario.toFixed(2)}
+                        </TableCell>
+                        <TableCell align="center">
+                          <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                            <TextField
+                              size="small"
+                              label="PIS"
+                              type="number"
+                              disabled={!item.selecionado}
+                              value={item.vpis}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setItensDevolucaoCompra(prev => {
+                                  const copy = [...prev];
+                                  copy[index].vpis = val;
+                                  return copy;
+                                });
+                              }}
+                              sx={{ width: 60 }}
+                            />
+                            <TextField
+                              size="small"
+                              label="COFINS"
+                              type="number"
+                              disabled={!item.selecionado}
+                              value={item.vcofins}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setItensDevolucaoCompra(prev => {
+                                  const copy = [...prev];
+                                  copy[index].vcofins = val;
+                                  return copy;
+                                });
+                              }}
+                              sx={{ width: 65 }}
+                            />
+                            <TextField
+                              size="small"
+                              label="IBS"
+                              type="number"
+                              disabled={!item.selecionado}
+                              value={item.vibs}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setItensDevolucaoCompra(prev => {
+                                  const copy = [...prev];
+                                  copy[index].vibs = val;
+                                  return copy;
+                                });
+                              }}
+                              sx={{ width: 60 }}
+                            />
+                            <TextField
+                              size="small"
+                              label="CBS"
+                              type="number"
+                              disabled={!item.selecionado}
+                              value={item.vcbs}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setItensDevolucaoCompra(prev => {
+                                  const copy = [...prev];
+                                  copy[index].vcbs = val;
+                                  return copy;
+                                });
+                              }}
+                              sx={{ width: 60 }}
+                            />
+                          </Box>
                         </TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
                           R$ {(item.quantidade_devolver * item.valor_unitario).toFixed(2)}
@@ -5976,7 +6092,7 @@ function CompraPage() {
                 2. Informações Fiscais e Motivo da Devolução:
               </Typography>
 
-              <Grid container spacing={2}>
+              <Grid container spacing={2} sx={{ mb: 2 }}>
                 <Grid item xs={12} md={6}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Operação Fiscal (NF-e Modelo 55)</InputLabel>
@@ -6012,12 +6128,70 @@ function CompraPage() {
                     onChange={(e) => setMotivoDevolucao(e.target.value)}
                   />
                 </Grid>
+              </Grid>
 
+              <Typography variant="subtitle2" gutterBottom fontWeight="bold" color="text.secondary">
+                3. Transportadora, Volumes / Caixas e Pesos:
+              </Typography>
+
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Transportadora"
+                    placeholder="Nome da transportadora..."
+                    value={freteDevolucao.transportadora_nome}
+                    onChange={(e) => setFreteDevolucao(prev => ({ ...prev, transportadora_nome: e.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={6} md={2}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Volumes / Caixas"
+                    type="number"
+                    value={freteDevolucao.qtd_volumes}
+                    onChange={(e) => setFreteDevolucao(prev => ({ ...prev, qtd_volumes: e.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={6} md={2}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Espécie"
+                    value={freteDevolucao.especie}
+                    onChange={(e) => setFreteDevolucao(prev => ({ ...prev, especie: e.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={6} md={2}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Peso Bruto (kg)"
+                    type="number"
+                    value={freteDevolucao.peso_bruto}
+                    onChange={(e) => setFreteDevolucao(prev => ({ ...prev, peso_bruto: e.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={6} md={2}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Peso Líquido (kg)"
+                    type="number"
+                    value={freteDevolucao.peso_liquido}
+                    onChange={(e) => setFreteDevolucao(prev => ({ ...prev, peso_liquido: e.target.value }))}
+                  />
+                </Grid>
+              </Grid>
+
+              <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
                     size="small"
-                    label="Observações Fiscais / Adicionais"
+                    label="Observações Fiscais / Dados Adicionais da NF-e"
                     value={observacoesDevolucao}
                     onChange={(e) => setObservacoesDevolucao(e.target.value)}
                     multiline
