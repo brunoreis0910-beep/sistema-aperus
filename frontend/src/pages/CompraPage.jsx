@@ -677,9 +677,81 @@ function CompraPage() {
       setOperacoes(operacoesPermitidas);
       
       const comprasData = comprasRes.data?.results || comprasRes.data || []
-      console.log('🔍 Compras carregadas:', comprasData)
-      console.log('🔍 Primeira compra:', comprasData[0])
-      setCompras(Array.isArray(comprasData) ? comprasData : [])
+      
+      // Buscar devoluções de compra registradas para exibir na tabela de Gestão de Compras
+      let devolucoesCompraData = [];
+      try {
+        const devRes = await axiosInstance.get('/devolucoes/?tipo=compra');
+        devolucoesCompraData = Array.isArray(devRes.data) ? devRes.data : (devRes.data?.results || []);
+      } catch (eDev) {}
+
+      let devolucoesVendasData = [];
+      try {
+        const devVendasRes = await axiosInstance.get('/vendas/');
+        const allVendas = Array.isArray(devVendasRes.data) ? devVendasRes.data : (devVendasRes.data?.results || []);
+        devolucoesVendasData = allVendas.filter(v => {
+          const op = operacoesData.find(o => String(o.id_operacao || o.id) === String(v.id_operacao));
+          const opNome = (op?.nome_operacao || op?.nome || '').toUpperCase();
+          return opNome.includes('DEVOLU') && opNome.includes('COMPRA');
+        });
+      } catch (eVend) {}
+
+      // Mapear devoluções como compras para exibição unificada na tabela de Compras
+      const devolucoesMapeadas = devolucoesCompraData.map(dev => {
+        const forn = fornecedoresData.find(f => String(f.id_fornecedor || f.id) === String(dev.id_fornecedor));
+        const op = operacoesData.find(o => String(o.id_operacao || o.id) === String(dev.id_operacao));
+        const numNota = dev.numero_devolucao || dev.numero_documento || dev.numero_nota || (dev.id_compra ? `#${dev.id_compra}` : `#${dev.id_devolucao}`);
+
+        return {
+          id_compra: `DEV-${dev.id_devolucao}`,
+          id_devolucao: dev.id_devolucao,
+          id_venda: dev.id_venda,
+          id_fornecedor: dev.id_fornecedor,
+          fornecedor_nome: forn?.nome_razao_social || forn?.nome_fantasia || dev.nome_fornecedor || 'Fornecedor',
+          nome_fornecedor: forn?.nome_razao_social || forn?.nome_fantasia || dev.nome_fornecedor || 'Fornecedor',
+          doc_fornecedor: forn?.cpf_cnpj || dev.doc_fornecedor || '',
+          data_documento: dev.data_devolucao || dev.criado_em,
+          data_entrada: dev.data_devolucao || dev.criado_em,
+          operacao_nome: op?.nome_operacao || op?.nome || 'DEVOLUÇÃO DE COMPRA',
+          id_operacao: dev.id_operacao,
+          numero_documento: numNota,
+          chave_nfe: dev.chave_nfe_referenciada || dev.chave_nfe || '',
+          valor_total_nota: dev.valor_total_devolucao || dev.valor_total || 0,
+          valor_total: dev.valor_total_devolucao || dev.valor_total || 0,
+          is_devolucao: true,
+          status_nfe: dev.status_nfe || dev.status
+        };
+      });
+
+      const devVendasMapeadas = devolucoesVendasData.map(v => {
+        const forn = fornecedoresData.find(f => String(f.id_fornecedor || f.id) === String(v.id_cliente || v.id_fornecedor));
+        const op = operacoesData.find(o => String(o.id_operacao || o.id) === String(v.id_operacao));
+
+        return {
+          id_compra: `NFE-${v.id_venda}`,
+          id_venda: v.id_venda,
+          id_fornecedor: v.id_cliente || v.id_fornecedor,
+          fornecedor_nome: forn?.nome_razao_social || forn?.nome_fantasia || v.nome_cliente || 'Fornecedor',
+          nome_fornecedor: forn?.nome_razao_social || forn?.nome_fantasia || v.nome_cliente || 'Fornecedor',
+          data_documento: v.data_venda || v.data_documento,
+          data_entrada: v.data_venda || v.data_documento,
+          operacao_nome: op?.nome_operacao || op?.nome || 'DEVOLUÇÃO DE COMPRA (NFE)',
+          id_operacao: v.id_operacao,
+          numero_documento: v.numero_documento || v.numero_nfe || `#${v.id_venda}`,
+          chave_nfe: v.chave_nfe || v.chave_nfe_referenciada || '',
+          valor_total_nota: v.valor_total || 0,
+          valor_total: v.valor_total || 0,
+          is_devolucao: true,
+          status_nfe: v.status_nfe || v.status_venda
+        };
+      });
+
+      // Unificar lista mantendo compras e devoluções
+      const idsVendasExistentes = new Set((Array.isArray(comprasData) ? comprasData : []).map(c => String(c.id_venda || c.id_compra)));
+      const devNovas = [...devolucoesMapeadas, ...devVendasMapeadas].filter(d => !idsVendasExistentes.has(String(d.id_venda || d.id_compra)));
+
+      const listaUnificadaCompras = [...devNovas, ...(Array.isArray(comprasData) ? comprasData : [])];
+      setCompras(listaUnificadaCompras);
       
       const gruposData = Array.isArray(gruposRes.data)
         ? gruposRes.data
@@ -3775,29 +3847,54 @@ function CompraPage() {
                       </TableCell>
                       <TableCell sx={{ color: '#000' }}>{compra.numero_documento || '-'}</TableCell>
                       <TableCell sx={{ color: '#000', maxWidth: 160 }}>
-                        {compra.dados_entrada ? (
-                          <Tooltip title={compra.dados_entrada}>
-                            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>
-                              {compra.dados_entrada.slice(0, 12)}…
-                            </Typography>
-                          </Tooltip>
-                        ) : (
-                          <Typography variant="caption" color="text.disabled">—</Typography>
-                        )}
+                        {(() => {
+                          const chaveExibir = compra.chave_nfe || compra.chave_nfe_referenciada || compra.dados_entrada;
+                          return chaveExibir ? (
+                            <Tooltip title={chaveExibir}>
+                              <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: '0.7rem', color: '#1565c0', fontWeight: 'bold' }}>
+                                {chaveExibir.slice(0, 12)}…
+                              </Typography>
+                            </Tooltip>
+                          ) : (
+                            <Typography variant="caption" color="text.disabled">—</Typography>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell align="right">
                         <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'success.main' }}>
-                          R$ {compra.valor_total}
+                          R$ {parseFloat(compra.valor_total_nota || compra.valor_total || 0).toFixed(2)}
                         </Typography>
                       </TableCell>
                       <TableCell align="center">
-                        <Stack direction="row" spacing={1} justifyContent="center">
-                          <Tooltip title={compra.dados_entrada ? 'Manifestar NF-e do Destinatário' : 'Sem chave NF-e para manifestar'}>
+                        <Stack direction="row" spacing={0.5} justifyContent="center">
+                          {compra.id_venda && (
+                            <>
+                              <Tooltip title="Transmitir NF-e para SEFAZ">
+                                <IconButton
+                                  color="success"
+                                  size="small"
+                                  onClick={() => handleTransmitirNFeSefaz(compra.id_venda)}
+                                >
+                                  🚀
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Imprimir DANFE PDF">
+                                <IconButton
+                                  color="primary"
+                                  size="small"
+                                  onClick={() => handleImprimirDanfeDevolucao(compra.id_venda)}
+                                >
+                                  📄
+                                </IconButton>
+                              </Tooltip>
+                            </>
+                          )}
+                          <Tooltip title={compra.dados_entrada || compra.chave_nfe ? 'Manifestar NF-e do Destinatário' : 'Sem chave NF-e para manifestar'}>
                             <span>
                               <IconButton
                                 color="info"
                                 onClick={() => abrirManifestacao(compra)}
-                                disabled={!compra.dados_entrada}
+                                disabled={!compra.dados_entrada && !compra.chave_nfe}
                                 sx={{
                                   '&:hover': {
                                     bgcolor: 'info.light',
