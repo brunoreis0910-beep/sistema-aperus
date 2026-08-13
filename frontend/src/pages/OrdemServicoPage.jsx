@@ -2680,6 +2680,119 @@ const OrdemServicoPage = () => {
     }
   };
 
+  const gerarHtmlChecklistImpressao = (ordem, modoTermica = false) => {
+    let itensParaExibir = [];
+    let obsEntrada = '';
+    let tituloChecklist = '📋 CHECKLIST DE INSPEÇÃO / VISTORIA DE ENTRADA';
+
+    // 1. Tentar pegar do estado local (se estiver editando/criando OS)
+    if (tipoAtendimento === 'veiculo' && checklistVeiculo) {
+      itensParaExibir = checklistItens.map(i => ({
+        label: i.label,
+        status: checklistVeiculo[i.key] || 'NA'
+      }));
+      obsEntrada = observacoesEntrada || '';
+    } else if (tipoAtendimento === 'equipamento' && (checklistEquipamentoModelo || []).length > 0) {
+      tituloChecklist = '📋 CHECKLIST DE INSPEÇÃO DO EQUIPAMENTO';
+      itensParaExibir = (checklistEquipamentoModelo || []).map(i => ({
+        label: i.label,
+        status: checklistEquipamento[i.key] || 'NA'
+      }));
+      obsEntrada = observacoesEntradaEquipamento || '';
+    }
+
+    // 2. Fallback: se os itens do estado não foram selecionados ou se veio de ordem salva (listagem)
+    const laudo = (ordem?.laudo_tecnico || '') + '\n' + (ordem?.descricao_problema || '');
+    if (itensParaExibir.length === 0 || itensParaExibir.every(i => i.status === 'NA')) {
+      if (laudo.includes('CHECKLIST') || laudo.includes('INSPEÇÃO') || laudo.includes('FICHA DE INSPEÇÃO')) {
+        const extraidos = [];
+        const matchOK = laudo.match(/✅\s*OK:\s*([^\n]+)/);
+        if (matchOK && matchOK[1]) {
+          matchOK[1].split(',').forEach(item => {
+            if (item.trim()) extraidos.push({ label: item.trim(), status: 'OK' });
+          });
+        }
+        const matchNOK = laudo.match(/❌\s*NOK:\s*([^\n]+)/);
+        if (matchNOK && matchNOK[1]) {
+          matchNOK[1].split(',').forEach(item => {
+            if (item.trim()) extraidos.push({ label: item.trim(), status: 'NOK' });
+          });
+        }
+        const matchNA = laudo.match(/➖\s*N\/A:\s*([^\n]+)/);
+        if (matchNA && matchNA[1]) {
+          matchNA[1].split(',').forEach(item => {
+            if (item.trim()) extraidos.push({ label: item.trim(), status: 'NA' });
+          });
+        }
+        const matchObs = laudo.match(/(?:Avarias|Observações):\s*([^\n]+)/);
+        if (matchObs && matchObs[1]) {
+          obsEntrada = matchObs[1].trim();
+        }
+
+        if (extraidos.length > 0) {
+          itensParaExibir = extraidos;
+        }
+      }
+    }
+
+    const temItensMarcados = itensParaExibir.some(i => i.status === 'OK' || i.status === 'NOK');
+    if (!temItensMarcados && !obsEntrada && itensParaExibir.length === 0) {
+      return '';
+    }
+
+    if (modoTermica) {
+      const linhasTermica = itensParaExibir
+        .filter(i => i.status !== 'NA')
+        .map(i => `${i.status === 'OK' ? '[✓ OK]' : '[✗ NOK]'} ${i.label}`)
+        .join('<br>');
+      
+      if (!linhasTermica && !obsEntrada) return '';
+
+      return `
+        <div style="margin:10px 0;padding:6px;border:1px dashed #000;font-size:0.85em;">
+          <strong style="text-transform:uppercase;">--- CHECKLIST DE INSPEÇÃO ---</strong><br>
+          ${linhasTermica || 'Sem itens alterados'}<br>
+          ${obsEntrada ? `<div style="margin-top:4px;"><strong>Obs/Avarias:</strong> ${obsEntrada}</div>` : ''}
+        </div>
+      `;
+    }
+
+    // Modo A4: Grid elegante 2/3 colunas com badges coloridos
+    const gridCols = itensParaExibir.map(item => {
+      let badgeHtml = '';
+      if (item.status === 'OK') {
+        badgeHtml = `<span style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;padding:2px 8px;border-radius:4px;font-weight:bold;font-size:0.82em;white-space:nowrap;">✓ OK</span>`;
+      } else if (item.status === 'NOK') {
+        badgeHtml = `<span style="background:#ffebee;color:#c62828;border:1px solid #ef9a9a;padding:2px 8px;border-radius:4px;font-weight:bold;font-size:0.82em;white-space:nowrap;">✗ NOK</span>`;
+      } else {
+        badgeHtml = `<span style="background:#f5f5f5;color:#757575;border:1px solid #e0e0e0;padding:2px 8px;border-radius:4px;font-size:0.82em;white-space:nowrap;">- N/A</span>`;
+      }
+
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#ffffff;box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+          <span style="font-weight:500;font-size:0.88em;color:#334155;">${item.label}</span>
+          ${badgeHtml}
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div style="margin:18px 0;padding:14px 16px;border:2px solid #2196f3;border-radius:8px;background:#f0f7ff;page-break-inside:avoid;">
+        <h3 style="color:#1565c0;margin:0 0 12px 0;font-size:1.05em;border-bottom:1px solid #bbdefb;padding-bottom:6px;">
+          ${tituloChecklist}
+        </h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(210px, 1fr));gap:8px;">
+          ${gridCols}
+        </div>
+        ${obsEntrada ? `
+          <div style="margin-top:12px;padding:9px 12px;background:#fff8e1;border:1px solid #ffe082;border-radius:6px;font-size:0.88em;color:#5d4037;">
+            <strong>⚠️ Observações / Avarias de Entrada:</strong> ${obsEntrada}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  };
+
   const gerarConteudoImpressao = (ordem) => {
     console.log('🖨️ Gerando conteúdo de impressão para ordem:', ordem);
     console.log('🔍 Desconto produtos:', ordem.desconto_produtos, 'Tipo:', ordem.tipo_desconto_produtos);
@@ -3051,6 +3164,7 @@ const OrdemServicoPage = () => {
         </div>
         
         ${veiculoHtml}
+        ${gerarHtmlChecklistImpressao(ordem)}
         
         ${ordem.descricao_problema ? `
           <div class="section-box">
@@ -3252,6 +3366,8 @@ const OrdemServicoPage = () => {
     ${ordem.cliente_cpf_cnpj ? `<div><span class="lbl">CPF/CNPJ:</span> ${ordem.cliente_cpf_cnpj}</div>` : ''}
   </div>
 
+  ${gerarHtmlChecklistImpressao(ordem)}
+
   ${ordem.descricao_problema ? `<div class="sec"><strong>📝 Problema / Observações:</strong><div style="margin-top:6px;white-space:pre-wrap;">${ordem.descricao_problema}</div></div>` : ''}
   ${ordem.laudo_tecnico ? `<div class="sec" style="border-color:#ff9800;background:#fff3e0;"><strong style="color:#e65100;">🔧 Laudo Técnico:</strong><div style="margin-top:6px;white-space:pre-wrap;">${ordem.laudo_tecnico}</div></div>` : ''}
 
@@ -3409,6 +3525,8 @@ const OrdemServicoPage = () => {
 
         <!-- TÉCNICO -->
         <div class="info"><span class="info-label">Técnico:</span> ${nomeTecnico}</div>
+
+        ${gerarHtmlChecklistImpressao(ordem, true)}
 
         <!-- DESCRIÇÃO DO PROBLEMA -->
         ${ordem.descricao_problema ? `
