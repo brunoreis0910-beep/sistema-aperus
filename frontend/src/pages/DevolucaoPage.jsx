@@ -498,10 +498,28 @@ const DevolucaoPage = () => {
             {activeStep === 2 && renderStep2()}
             {activeStep === 3 && renderStep3()}
             
-            <Box sx={{ mt: 4, display: 'flex', justifyContent: 'space-between' }}>
+            {/* Barra de Ações Inferior Fixa e Destacada */}
+            <Box sx={{
+              position: 'sticky',
+              bottom: 0,
+              zIndex: 10,
+              mt: 4,
+              p: 2,
+              bgcolor: '#ffffff',
+              borderTop: '2px solid #1976d2',
+              boxShadow: '0 -4px 20px rgba(0,0,0,0.08)',
+              borderRadius: '0 0 8px 8px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
               <Button
+                variant="outlined"
+                size="large"
+                startIcon={<ArrowBack />}
                 disabled={activeStep === 0 || loading}
                 onClick={voltarPasso}
+                sx={{ textTransform: 'none', minWidth: 130, fontWeight: 600 }}
               >
                 Voltar
               </Button>
@@ -510,17 +528,22 @@ const DevolucaoPage = () => {
                 {activeStep < steps.length - 1 ? (
                   <Button
                     variant="contained"
+                    size="large"
                     onClick={proximoPasso}
                     disabled={loading}
+                    sx={{ textTransform: 'none', minWidth: 140, fontWeight: 700, px: 3 }}
                   >
-                    Próximo
+                    Próximo Passo
                   </Button>
                 ) : (
                   <Button
                     variant="contained"
-                    color="primary"
+                    color="success"
+                    size="large"
+                    startIcon={<CheckCircle />}
                     onClick={finalizarDevolucao}
                     disabled={loading}
+                    sx={{ textTransform: 'none', minWidth: 180, fontWeight: 700, px: 3 }}
                   >
                     Confirmar Devolução
                   </Button>
