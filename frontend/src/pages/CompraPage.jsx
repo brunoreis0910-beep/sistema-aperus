@@ -75,6 +75,7 @@ import PrintIcon from '@mui/icons-material/Print'
 import DownloadIcon from '@mui/icons-material/Download'
 import CancelIcon from '@mui/icons-material/Cancel'
 import VisibilityIcon from '@mui/icons-material/Visibility'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import { useAuth } from '../context/AuthContext'
 import PrecificacaoDialog from '../components/PrecificacaoDialog'
 import SolicitarAprovacaoModal from '../components/SolicitarAprovacaoModal'
@@ -3919,22 +3920,62 @@ function CompraPage() {
                         {compra.fornecedor_nome || compra.id_fornecedor || '-'}
                       </TableCell>
                       <TableCell>
-                        <Chip
-                          label={compra.operacao_abreviacao || compra.operacao_nome || compra.id_operacao || '-'}
-                          size="small"
-                          sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold', color: '#000' }}
-                        />
+                        <Stack spacing={0.5} alignItems="flex-start">
+                          <Chip
+                            label={compra.operacao_abreviacao || compra.operacao_nome || compra.id_operacao || '-'}
+                            size="small"
+                            sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold', color: '#000' }}
+                          />
+                          {(compra.status_nfe === 'AUTORIZADA' || compra.status_nfe === 'EMITIDA' || compra.status === 'AUTORIZADA' || compra.status === 'EMITIDA') && (
+                            <Chip
+                              label="🟢 AUTORIZADA"
+                              size="small"
+                              color="success"
+                              sx={{ fontWeight: 'bold', fontSize: '0.68rem', height: '20px' }}
+                            />
+                          )}
+                          {(compra.status_nfe === 'ERRO' || compra.status_nfe === 'REJEITADA') && (
+                            <Chip
+                              label="❌ REJEITADA"
+                              size="small"
+                              color="error"
+                              sx={{ fontWeight: 'bold', fontSize: '0.68rem', height: '20px' }}
+                            />
+                          )}
+                          {(compra.origem === 'xml' || compra.xml_conteudo || compra.dados_entrada || (compra.chave_nfe && compra.chave_nfe.length === 44)) && (
+                            <Chip
+                              label="📥 IMPORTADA"
+                              size="small"
+                              color="info"
+                              variant="outlined"
+                              sx={{ fontWeight: 'bold', fontSize: '0.65rem', height: '18px' }}
+                            />
+                          )}
+                        </Stack>
                       </TableCell>
-                      <TableCell sx={{ color: '#000' }}>{compra.numero_documento || '-'}</TableCell>
-                      <TableCell sx={{ color: '#000', maxWidth: 160 }}>
+                      <TableCell sx={{ color: '#000', fontWeight: 'bold' }}>
+                        {compra.numero_nfe || compra.numero_documento || compra.numero_nota || '-'}
+                      </TableCell>
+                      <TableCell sx={{ color: '#000', minWidth: 240 }}>
                         {(() => {
                           const chaveExibir = compra.chave_nfe || compra.chave_nfe_referenciada || compra.dados_entrada;
                           return chaveExibir ? (
-                            <Tooltip title={chaveExibir}>
-                              <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: '0.7rem', color: '#1565c0', fontWeight: 'bold' }}>
-                                {chaveExibir.slice(0, 12)}…
+                            <Stack direction="row" alignItems="center" spacing={0.5}>
+                              <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: '0.72rem', color: '#1565c0', fontWeight: 'bold', wordBreak: 'break-all' }}>
+                                {chaveExibir}
                               </Typography>
-                            </Tooltip>
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(chaveExibir);
+                                  toast.success('Chave NF-e copiada!');
+                                }}
+                                title="Copiar Chave NF-e"
+                                sx={{ p: 0.2 }}
+                              >
+                                <ContentCopyIcon sx={{ fontSize: 14, color: '#1565c0' }} />
+                              </IconButton>
+                            </Stack>
                           ) : (
                             <Typography variant="caption" color="text.disabled">—</Typography>
                           );
