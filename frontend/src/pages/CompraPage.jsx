@@ -2175,9 +2175,9 @@ function CompraPage() {
     <Box sx={{
       minHeight: '100vh',
       background: '#f0f2f5',
-      p: 1.5
+      p: { xs: 1, sm: 2, md: 3 }
     }}>
-      <Box sx={{ maxWidth: '1500px', mx: 'auto' }}>
+      <Box sx={{ width: '100%', maxWidth: '100%', mx: 'auto' }}>
         {/* Header com título e estatísticas */}
         <Paper
           elevation={8}
@@ -3857,7 +3857,8 @@ function CompraPage() {
               elevation={2}
               sx={{
                 borderRadius: 2,
-                overflow: 'hidden'
+                width: '100%',
+                overflowX: 'auto'
               }}
             >
               <Table>
