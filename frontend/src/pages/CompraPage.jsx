@@ -41,7 +41,9 @@ import {
   FormControlLabel,
   Avatar,
   Checkbox,
-  CircularProgress
+  CircularProgress,
+  Menu,
+  ListItemIcon
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -68,6 +70,10 @@ import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary'
 import WarehouseIcon from '@mui/icons-material/Warehouse'
 import NoteIcon from '@mui/icons-material/Note'
 import FlashOnIcon from '@mui/icons-material/FlashOn'
+import MoreVertIcon from '@mui/icons-material/MoreVert'
+import PrintIcon from '@mui/icons-material/Print'
+import DownloadIcon from '@mui/icons-material/Download'
+import CancelIcon from '@mui/icons-material/Cancel'
 import { useAuth } from '../context/AuthContext'
 import PrecificacaoDialog from '../components/PrecificacaoDialog'
 import SolicitarAprovacaoModal from '../components/SolicitarAprovacaoModal'
@@ -80,6 +86,19 @@ function CompraPage() {
 
   // Estados principais
   const [cartaCorrecaoDialog, setCartaCorrecaoDialog] = useState({ open: false, venda: null });
+  const [anchorElDevolucao, setAnchorElDevolucao] = useState(null);
+  const [compraMenuDevolucao, setCompraMenuDevolucao] = useState(null);
+
+  const handleMenuOpenDevolucao = (e, compra) => {
+    e.stopPropagation();
+    setAnchorElDevolucao(e.currentTarget);
+    setCompraMenuDevolucao(compra);
+  };
+
+  const handleMenuCloseDevolucao = () => {
+    setAnchorElDevolucao(null);
+    setCompraMenuDevolucao(null);
+  };
   const [fornecedores, setFornecedores] = useState([])
   const [produtos, setProdutos] = useState([])
   const [operacoes, setOperacoes] = useState([])
@@ -3898,57 +3917,39 @@ function CompraPage() {
                               const targetId = compra.id_venda || compra.id_devolucao || compra.id_compra;
                               return (
                                 <>
-                                  <Tooltip title="Transmitir NF-e para SEFAZ">
-                                    <IconButton
-                                      color="success"
-                                      size="small"
-                                      onClick={() => handleTransmitirNFeSefaz(targetId)}
-                                    >
-                                      🚀
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Visualizar / Imprimir DANFE PDF">
-                                    <IconButton
-                                      color="primary"
-                                      size="small"
-                                      onClick={() => handleImprimirDanfeDevolucao(targetId)}
-                                    >
-                                      📄
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Emitir Carta de Correção (CC-e)">
-                                    <IconButton
-                                      color="secondary"
-                                      size="small"
-                                      onClick={() => setCartaCorrecaoDialog({
-                                        open: true,
-                                        venda: {
-                                          id_venda: targetId,
-                                          id: targetId,
-                                          numero_nfe: compra.numero_documento,
-                                          chave_nfe: compra.chave_nfe
-                                        }
-                                      })}
-                                    >
-                                      ✉️
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Editar devolução">
+                                  <Tooltip title="Editar Nota/Devolução">
                                     <IconButton
                                       color="warning"
                                       size="small"
                                       onClick={() => editarCompra(compra)}
                                     >
-                                      <EditIcon />
+                                      <EditIcon fontSize="small" />
                                     </IconButton>
                                   </Tooltip>
-                                  <Tooltip title="Excluir devolução">
+                                  <Tooltip title="Transmitir NF-e para SEFAZ">
                                     <IconButton
-                                      color="error"
+                                      color="primary"
                                       size="small"
-                                      onClick={() => excluirCompra(compra.id_compra || compra.id)}
+                                      onClick={() => handleTransmitirNFeSefaz(targetId)}
                                     >
-                                      <DeleteIcon />
+                                      <DescriptionIcon fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                  <Tooltip title="Imprimir DANFE PDF">
+                                    <IconButton
+                                      color="success"
+                                      size="small"
+                                      onClick={() => handleImprimirDanfeDevolucao(targetId)}
+                                    >
+                                      <PrintIcon fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                  <Tooltip title="Mais opções (Carta de Correção, XML, Excluir)">
+                                    <IconButton
+                                      size="small"
+                                      onClick={(e) => handleMenuOpenDevolucao(e, compra)}
+                                    >
+                                      <MoreVertIcon fontSize="small" />
                                     </IconButton>
                                   </Tooltip>
                                 </>
@@ -6656,6 +6657,84 @@ function CompraPage() {
         onClose={() => setCartaCorrecaoDialog({ open: false, venda: null })}
         venda={cartaCorrecaoDialog.venda}
       />
+
+      {/* Menu de Mais Opções para Devoluções (Estilo idêntico à aba NF-e) */}
+      <Menu
+        anchorEl={anchorElDevolucao}
+        open={Boolean(anchorElDevolucao)}
+        onClose={handleMenuCloseDevolucao}
+      >
+        <MenuItem
+          onClick={() => {
+            const targetId = compraMenuDevolucao?.id_venda || compraMenuDevolucao?.id_devolucao || compraMenuDevolucao?.id_compra;
+            handleImprimirDanfeDevolucao(targetId);
+            handleMenuCloseDevolucao();
+          }}
+        >
+          <ListItemIcon><PrintIcon fontSize="small" color="success" /></ListItemIcon>
+          Imprimir DANFE (PDF)
+        </MenuItem>
+
+        <MenuItem
+          onClick={() => {
+            const targetId = compraMenuDevolucao?.id_venda || compraMenuDevolucao?.id_devolucao || compraMenuDevolucao?.id_compra;
+            handleTransmitirNFeSefaz(targetId);
+            handleMenuCloseDevolucao();
+          }}
+          sx={{ color: 'primary.main' }}
+        >
+          <ListItemIcon><DescriptionIcon fontSize="small" color="primary" /></ListItemIcon>
+          Transmitir NF-e para SEFAZ
+        </MenuItem>
+
+        <MenuItem
+          onClick={() => {
+            const targetId = compraMenuDevolucao?.id_venda || compraMenuDevolucao?.id_devolucao || compraMenuDevolucao?.id_compra;
+            setCartaCorrecaoDialog({
+              open: true,
+              venda: {
+                id_venda: targetId,
+                id: targetId,
+                numero_nfe: compraMenuDevolucao?.numero_documento,
+                chave_nfe: compraMenuDevolucao?.chave_nfe
+              }
+            });
+            handleMenuCloseDevolucao();
+          }}
+          sx={{ color: 'secondary.main' }}
+        >
+          <ListItemIcon><DescriptionIcon fontSize="small" color="secondary" /></ListItemIcon>
+          Carta de Correção (CC-e)
+        </MenuItem>
+
+        {compraMenuDevolucao?.chave_nfe && (
+          <MenuItem
+            onClick={() => {
+              const targetId = compraMenuDevolucao?.id_venda || compraMenuDevolucao?.id_devolucao;
+              window.open(`${axiosInstance.defaults.baseURL}/vendas/${targetId}/download_xml/`, '_blank');
+              handleMenuCloseDevolucao();
+            }}
+          >
+            <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
+            Baixar XML da NF-e
+          </MenuItem>
+        )}
+
+        <Divider />
+
+        <MenuItem
+          onClick={() => {
+            if (compraMenuDevolucao) {
+              excluirCompra(compraMenuDevolucao.id_compra || compraMenuDevolucao.id);
+            }
+            handleMenuCloseDevolucao();
+          }}
+          sx={{ color: 'error.main' }}
+        >
+          <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+          Excluir Devolução
+        </MenuItem>
+      </Menu>
 
       </Box>
     </Box>
