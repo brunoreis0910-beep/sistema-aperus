@@ -1160,9 +1160,9 @@ const ProdutoPageResponsive = () => {
       // Fechar dialog do produto
       handleCloseDialog();
 
-      // Abrir dialog de configuração de depósitos
-      if (productId) {
-        console.log('🏢 Abrindo configuração de depósitos...');
+      // Abrir dialog de configuração de depósitos APENAS se for NOVO PRODUTO (!selectedProduto)
+      if (!selectedProduto && productId) {
+        console.log('🏢 Abrindo configuração de depósitos para novo produto...');
         await handleOpenDepotDialog(productId);
       } else {
         alert(selectedProduto ? 'Produto editado com sucesso!' : 'Produto criado com sucesso!');
@@ -1362,16 +1362,18 @@ const ProdutoPageResponsive = () => {
               });
             });
 
-            setDepotValues(estoqueData.map(dep => ({
-              id_estoque: dep.id_estoque ?? null,
-              id_deposito: dep.id_deposito,
-              nome_deposito: dep.nome_deposito,
-              quantidade: dep.quantidade ?? 0,
-              quantidade_minima: dep.quantidade_minima ?? 0,
-              valor_venda: dep.valor_venda ?? 0,
-              // suportar ambos nomes: valor_ultima_compra (backend) ou valor_custo (legado)
-              valor_custo: dep.valor_ultima_compra ?? dep.valor_custo ?? 0
-            })));
+            setDepotValues(estoqueData.map(dep => {
+              const custoReal = dep.custo_medio || dep.valor_custo || dep.valor_ultima_compra || 0;
+              return {
+                id_estoque: dep.id_estoque ?? null,
+                id_deposito: dep.id_deposito,
+                nome_deposito: dep.nome_deposito,
+                quantidade: dep.quantidade ?? dep.quantidade_atual ?? 0,
+                quantidade_minima: dep.quantidade_minima ?? 0,
+                valor_venda: dep.valor_venda ?? 0,
+                valor_custo: custoReal
+              };
+            }));
 
             return true; // Sucesso
           } else {
@@ -1433,12 +1435,16 @@ const ProdutoPageResponsive = () => {
 
       // Atualizar ou criar cada depósito via API
       for (const depot of depotValues) {
+        const valCustoNum = parseFloat(depot.valor_custo);
         const updateData = {
           quantidade_minima: parseFloat(depot.quantidade_minima) || 0,
           valor_venda: parseFloat(depot.valor_venda) || 0,
-          valor_ultima_compra: parseFloat(depot.valor_custo) || 0,
-          custo_medio: parseFloat(depot.valor_custo) || 0
         };
+        // Só atualiza o custo se foi informado um valor positivo
+        if (!isNaN(valCustoNum) && valCustoNum > 0) {
+          updateData.valor_ultima_compra = valCustoNum;
+          updateData.custo_medio = valCustoNum;
+        }
 
         try {
           if (depot.id_estoque) {
