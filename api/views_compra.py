@@ -1582,19 +1582,40 @@ class CompraViewSet(viewsets.ModelViewSet):
             
             with transaction.atomic():
                 # 1. Abate estoque dos produtos apenas se a compra incrementou o estoque
-                if movimenta_estoque:
-                    for item in itens:
-                        produto = item.id_produto
-                        if produto:
+                for item in itens:
+                    produto = item.id_produto
+                    if produto:
+                        if movimenta_estoque:
                             try:
                                 estoque_obj = Estoque.objects.filter(id_produto=produto, id_deposito_id=deposito_id).first()
                                 if estoque_obj:
                                     estoque_obj.quantidade = max(Decimal('0'), (estoque_obj.quantidade or Decimal('0')) - item.quantidade)
                                     estoque_obj.save()
-                            except Exception:
-                                pass
+                            except Exception as _e_q:
+                                print(f"[DESTAQUE_DELECAO] Erro ao abater quantidade: {_e_q}")
+
+                        # 2. Reverter custo_medio e valor_ultima_compra para o valor da compra anterior
+                        try:
+                            item_anterior = CompraItem.objects.filter(
+                                id_produto=produto
+                            ).exclude(
+                                id_compra=compra.pk
+                            ).order_by('-id_item').first()
+
+                            if item_anterior and item_anterior.valor_compra:
+                                custo_revertido = Decimal(str(item_anterior.valor_compra)).quantize(Decimal('0.0001'))
+                            else:
+                                custo_revertido = Decimal('0.0000')
+
+                            Estoque.objects.filter(id_produto=produto).update(
+                                valor_ultima_compra=custo_revertido,
+                                custo_medio=custo_revertido
+                            )
+                            print(f"🔄 Custo do produto {produto.id_produto} ({produto.nome_produto}) revertido para R$ {custo_revertido}")
+                        except Exception as _e_c:
+                            print(f"[DESTAQUE_DELECAO] Erro ao reverter custo: {_e_c}")
                 
-                # 2. Exclui financeiros pendentes (se houver)
+                # 3. Exclui financeiros pendentes (se houver)
                 if financeiros.exists():
                     financeiros.delete()
                 
