@@ -394,24 +394,37 @@ class ProdutoSerializer(serializers.ModelSerializer):
         return clean_ncm
 
     def get_estoque_por_deposito(self, obj):
-        """Retorna estoque atual por deposito"""
+        """Retorna estoque atual por deposito para todos os depósitos cadastrados"""
         try:
             from .models import Estoque, Deposito
-            estoques = Estoque.objects.filter(id_produto=obj).select_related('id_deposito')
-            result = [
-                {
-                    'id_estoque': estoque.id_estoque,  # IMPORTANTE: ID para fazer PATCH
-                    'id_deposito': estoque.id_deposito.id_deposito,
-                    'nome_deposito': estoque.id_deposito.nome_deposito,
-                    'quantidade_atual': float(estoque.quantidade) if estoque.quantidade else 0.0,  # Frontend espera quantidade_atual
-                    'quantidade': float(estoque.quantidade) if estoque.quantidade else 0.0,  # Manter compatibilidade
-                    'quantidade_minima': float(estoque.quantidade_minima) if estoque.quantidade_minima else 0.0,
-                    'quantidade_maxima': float(estoque.quantidade_maxima) if estoque.quantidade_maxima else 0.0,
-                    'valor_venda': float(estoque.valor_venda) if estoque.valor_venda else 0.0,
-                    'valor_ultima_compra': float(estoque.valor_ultima_compra) if estoque.valor_ultima_compra else 0.0
-                }
-                for estoque in estoques
-            ]
+            depositos = Deposito.objects.all().order_by('id_deposito')
+            result = []
+            for dep in depositos:
+                estoque, created = Estoque.objects.get_or_create(
+                    id_produto=obj,
+                    id_deposito=dep,
+                    defaults={
+                        'quantidade': 0,
+                        'custo_medio': 0,
+                        'valor_ultima_compra': 0,
+                        'valor_venda': 0,
+                        'quantidade_minima': 0
+                    }
+                )
+                custo_val = float(estoque.custo_medio or estoque.valor_ultima_compra or 0.0)
+                result.append({
+                    'id_estoque': estoque.id_estoque,
+                    'id_deposito': dep.id_deposito,
+                    'nome_deposito': dep.nome_deposito,
+                    'quantidade_atual': float(estoque.quantidade or 0.0),
+                    'quantidade': float(estoque.quantidade or 0.0),
+                    'quantidade_minima': float(estoque.quantidade_minima or 0.0),
+                    'quantidade_maxima': float(estoque.quantidade_maxima or 0.0),
+                    'valor_venda': float(estoque.valor_venda or 0.0),
+                    'valor_custo': custo_val,
+                    'custo_medio': custo_val,
+                    'valor_ultima_compra': float(estoque.valor_ultima_compra or 0.0)
+                })
             return result
         except Exception as e:
             return []

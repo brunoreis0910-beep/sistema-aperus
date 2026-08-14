@@ -1436,7 +1436,8 @@ const ProdutoPageResponsive = () => {
         const updateData = {
           quantidade_minima: parseFloat(depot.quantidade_minima) || 0,
           valor_venda: parseFloat(depot.valor_venda) || 0,
-          valor_ultima_compra: parseFloat(depot.valor_custo) || 0
+          valor_ultima_compra: parseFloat(depot.valor_custo) || 0,
+          custo_medio: parseFloat(depot.valor_custo) || 0
         };
 
         try {
