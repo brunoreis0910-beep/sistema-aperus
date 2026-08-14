@@ -128,6 +128,18 @@ class SpedEFDGenerator:
             return s[:length]
         return s
 
+    def format_cst_icms(self, cst):
+        import re
+        if not cst:
+            return "000"
+        cst_str = str(cst).strip()
+        cst_str = re.sub(r'[^\d]', '', cst_str)
+        if not cst_str:
+            return "000"
+        if len(cst_str) > 3:
+            cst_str = cst_str[-3:]
+        return cst_str.zfill(3)
+
     def add_line(self, reg, *args):
         line_data = [reg] + list(args) + [''] # Ends with |
         line = "|".join([self.format_str(x) if not isinstance(x, (float, Decimal)) else self.format_decimal(x) for x in line_data])
@@ -466,8 +478,8 @@ class SpedEFDGenerator:
                     if not prod: continue
                     
                     trib = getattr(prod, 'tributacao_detalhada', None)
-                    cst_icms = trib.cst_icms if trib else "000"
-                    cst_icms = cst_icms[-3:] if cst_icms else "000"
+                    cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None) or "000"
+                    cst_icms = self.format_cst_icms(cst_raw)
                     
                     aliq_icms = trib.icms_aliquota if trib else Decimal(0)
                     vl_bc_icms = item.valor_total if cst_icms in ['000', '020', '090'] else Decimal(0)
@@ -545,8 +557,8 @@ class SpedEFDGenerator:
                      
                      # Buscar dados fiscais
                      trib = getattr(prod, 'tributacao_detalhada', None)
-                     cst_icms = trib.cst_icms if trib else "000"
-                     cst_icms = cst_icms[-3:] if cst_icms else "000"
+                     cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None) or "000"
+                     cst_icms = self.format_cst_icms(cst_raw)
                      
                      cfop = "5102" 
                      if cst_icms in ['060', '500']: cfop = "5405"
@@ -655,8 +667,8 @@ class SpedEFDGenerator:
                 prod = item.id_produto
                 if not prod: continue
                 trib = getattr(prod, 'tributacao_detalhada', None)
-                cst_icms = trib.cst_icms if trib else "000"
-                cst_icms = cst_icms[-3:] if cst_icms else "000"
+                cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None) or "000"
+                cst_icms = self.format_cst_icms(cst_raw)
                 aliq_icms = trib.icms_aliquota if trib else Decimal(0)
                 vl_bc_icms = item.valor_total if cst_icms in ['000', '020', '090'] else Decimal(0)
                 vl_icms = vl_bc_icms * (aliq_icms / 100) if vl_bc_icms > 0 else Decimal(0)
@@ -718,8 +730,8 @@ class SpedEFDGenerator:
                 prod = item.id_produto
                 if not prod: continue
                 trib = getattr(prod, 'tributacao_detalhada', None)
-                cst_icms = trib.cst_icms if trib else "000"
-                cst_icms = cst_icms[-3:] if cst_icms else "000"
+                cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None) or "000"
+                cst_icms = self.format_cst_icms(cst_raw)
                 cfop = getattr(item, 'cfop', None) or (op.transacao if op else "1949") or "1949"
                 aliq_icms = trib.icms_aliquota if trib else Decimal(0)
                 vl_bc_icms = item.valor_total if cst_icms in ['000', '020', '090'] else Decimal(0)
