@@ -2221,8 +2221,8 @@ function CompraPage() {
           custo_total: custoTotal,
           is_nota_debito: eNotaDebito,
           nome_produto: produto?.nome_produto || `Produto ${item.id_produto}`
-        }
-      })
+        };
+      });
 
       setCompraSelecionadaPrecificacao(itensComProdutos)
       setModalPrecificacao(true)
@@ -2233,6 +2233,61 @@ function CompraPage() {
       setLoading(false)
     }
   }
+
+  // Abre modal de precificação a partir do formulário (criação ou importação)
+  const abrirPrecificacaoForm = async () => {
+    try {
+      setLoading(true)
+      const eNotaDebito = ['2', '3', '6'].includes(String(form.finalidade)) || !!form.chave_referenciada || !!idCompraOrigemSelecionada || !!dadosNotaDebitoModal;
+
+      let itensOrigemMap = {};
+      const idOrigem = idCompraOrigemSelecionada || dadosNotaDebitoModal?.compra_origem_sugerida?.id_compra;
+      if (eNotaDebito && idOrigem) {
+        try {
+          const resOrig = await axiosInstance.get(`/compras/${idOrigem}/`);
+          if (resOrig.data && resOrig.data.itens) {
+            resOrig.data.itens.forEach(itOrig => {
+              itensOrigemMap[itOrig.id_produto] = parseFloat(itOrig.valor_compra || itOrig.valor_unitario || 0);
+            });
+          }
+        } catch (eOrig) {
+          console.warn('Não foi possível carregar valores da compra de origem:', eOrig);
+        }
+      }
+
+      const itensMapeados = form.itens.filter(item => item.id_produto).map(item => {
+        const pId = parseInt(item.id_produto);
+        const produto = produtos.find(p => p.id_produto === pId);
+        const valorDebito = parseFloat(item.valor_compra || item.valor_unitario || 0);
+
+        let custoOrigem = 0;
+        if (eNotaDebito) {
+          custoOrigem = itensOrigemMap[pId] || parseFloat(produto?.custo_medio || produto?.valor_ultima_compra || 0);
+        }
+
+        const custoTotal = eNotaDebito ? (custoOrigem + valorDebito) : valorDebito;
+
+        return {
+          id_produto: pId,
+          quantidade: item.quantidade,
+          valor_unitario: valorDebito,
+          valor_debito: valorDebito,
+          custo_origem: custoOrigem,
+          custo_total: custoTotal,
+          is_nota_debito: eNotaDebito,
+          nome_produto: produto?.nome_produto || `Produto ${pId}`
+        };
+      });
+
+      setCompraSelecionadaPrecificacao(itensMapeados);
+      setModalPrecificacao(true);
+    } catch (error) {
+      console.error('Erro ao preparar precificação do formulário:', error)
+      setErro('Erro ao preparar precificação do formulário')
+    } finally {
+      setLoading(false)
+    }
+  };
 
   // Verifica permissões
   if (authLoading || loading) {
@@ -3689,7 +3744,7 @@ function CompraPage() {
                     <span>
                       <Button
                         variant="outlined"
-                        onClick={() => setModalPrecificacao(true)}
+                        onClick={abrirPrecificacaoForm}
                         startIcon={<TrendingUpIcon />}
                         disabled={form.itens.filter(item => item.id_produto).length === 0}
                         sx={{
