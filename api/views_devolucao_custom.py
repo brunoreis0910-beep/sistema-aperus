@@ -507,6 +507,21 @@ def buscar_compra_view(request, id_compra):
         raw_val = str(id_compra).strip()
 
         with connection.cursor() as cursor:
+            # 0. Se for um ID de devolução, buscar a compra/venda de origem correspondente
+            cursor.execute("""
+                SELECT id_compra, id_venda, id_fornecedor, chave_nfe_referenciada
+                FROM devolucoes
+                WHERE CAST(id_devolucao AS CHAR) = %s
+            """, [raw_val])
+            row_dev = cursor.fetchone()
+            if row_dev:
+                if row_dev[0]:
+                    raw_val = str(row_dev[0])
+                    clean_key = raw_val
+                elif row_dev[1]:
+                    raw_val = str(row_dev[1])
+                    clean_key = raw_val
+
             # 1. Tentar buscar em compras primeiro por ID, numero_nota ou chave_nfe
             cursor.execute("""
                 SELECT

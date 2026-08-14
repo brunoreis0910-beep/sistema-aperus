@@ -193,15 +193,19 @@ function CompraPage() {
   const [vendaIdGeradoDevolucao, setVendaIdGeradoDevolucao] = useState(null);
 
   const abrirModalDevolucaoCompra = async (compraRow) => {
-    const idTarget = compraRow.id_compra || compraRow.id;
+    let idTarget = compraRow.id_compra || compraRow.id_devolucao || compraRow.id;
+    if (typeof idTarget === 'string' && idTarget.startsWith('DEV-')) {
+      idTarget = compraRow.id_compra || idTarget.replace('DEV-', '');
+    }
+
     setLoadingDevolucao(true);
     setCompraParaDevolucao(compraRow);
     setOpenModalDevolucao(true);
     setModoPreviewDevolucao(false);
-    setVendaIdGeradoDevolucao(null);
-    setMotivoDevolucao('');
-    setObservacoesDevolucao('');
-    setOperacaoDevolucaoId('');
+    setVendaIdGeradoDevolucao(compraRow.id_venda || null);
+    setMotivoDevolucao(compraRow.motivo || '');
+    setObservacoesDevolucao(compraRow.observacoes || '');
+    setOperacaoDevolucaoId(compraRow.id_operacao || '');
     setFreteDevolucao({
       transportadora_nome: compraRow.transportadora_nome || '',
       qtd_volumes: compraRow.qtd_volumes || '',
@@ -218,18 +222,20 @@ function CompraPage() {
     try {
       const res = await axiosInstance.get(`/devolucoes/buscar_compra/${idTarget}/`);
       const data = res.data;
-      setCompraParaDevolucao(data);
+      setCompraParaDevolucao(prev => ({ ...prev, ...data }));
       
-      const itensMapeados = (data.itens || []).map(item => ({
-        id_compra_item: item.id_compra_item,
+      const rawItens = (data.itens && data.itens.length > 0) ? data.itens : (compraRow.itens || compraRow.devolucao_itens || []);
+
+      const itensMapeados = rawItens.map(item => ({
+        id_compra_item: item.id_compra_item || item.id_devolucao_item || item.id,
         id_produto: item.id_produto,
-        nome_produto: item.nome_produto,
-        codigo_produto: item.codigo_produto || '',
-        quantidade_original: parseFloat(item.quantidade_original || item.quantidade || 0),
-        quantidade_disponivel: parseFloat(item.quantidade_disponivel || item.quantidade || 0),
-        quantidade_devolver: parseFloat(item.quantidade_disponivel || item.quantidade || 0),
+        nome_produto: item.nome_produto || item.produto_nome || item.descricao || 'Produto',
+        codigo_produto: item.codigo_produto || item.codigo || '',
+        quantidade_original: parseFloat(item.quantidade_original || item.quantidade || item.quantidade_devolvida || 0),
+        quantidade_disponivel: parseFloat(item.quantidade_disponivel || item.quantidade || item.quantidade_devolvida || 0),
+        quantidade_devolver: parseFloat(item.quantidade_devolver || item.quantidade_devolvida || item.quantidade_disponivel || item.quantidade || 0),
         valor_unitario: parseFloat(item.valor_unitario || 0),
-        valor_total: parseFloat(item.valor_total || 0),
+        valor_total: parseFloat(item.valor_total || (parseFloat(item.quantidade_devolver || item.quantidade || 0) * parseFloat(item.valor_unitario || 0))),
         cfop: item.cfop || '5202',
         vpis: parseFloat(item.vpis || 0),
         vcofins: parseFloat(item.vcofins || 0),
@@ -240,7 +246,28 @@ function CompraPage() {
       setItensDevolucaoCompra(itensMapeados);
     } catch (err) {
       console.error('Erro ao buscar detalhes da compra para devolução:', err);
-      toast.error('Erro ao carregar itens da compra para devolução.');
+      if (compraRow.itens && compraRow.itens.length > 0) {
+        const fallbackItens = compraRow.itens.map(item => ({
+          id_compra_item: item.id_compra_item || item.id,
+          id_produto: item.id_produto,
+          nome_produto: item.nome_produto || item.produto_nome || 'Produto',
+          codigo_produto: item.codigo_produto || '',
+          quantidade_original: parseFloat(item.quantidade || 0),
+          quantidade_disponivel: parseFloat(item.quantidade || 0),
+          quantidade_devolver: parseFloat(item.quantidade_devolvida || item.quantidade || 0),
+          valor_unitario: parseFloat(item.valor_unitario || 0),
+          valor_total: parseFloat(item.valor_total || 0),
+          cfop: item.cfop || '5202',
+          vpis: parseFloat(item.vpis || 0),
+          vcofins: parseFloat(item.vcofins || 0),
+          vibs: parseFloat(item.vibs || 0),
+          vcbs: parseFloat(item.vcbs || 0),
+          selecionado: true
+        }));
+        setItensDevolucaoCompra(fallbackItens);
+      } else {
+        toast.error('Erro ao carregar itens da compra para devolução.');
+      }
     } finally {
       setLoadingDevolucao(false);
     }
