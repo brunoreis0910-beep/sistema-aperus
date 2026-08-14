@@ -174,7 +174,13 @@ class CompraSerializer(serializers.ModelSerializer):
             
             for item in itens_data:
                 print(f'[DEBUG] Item recebido: {item}')
-                produto = item.get('id_produto')
+                prod_id = item.get('id_produto')
+                if isinstance(prod_id, Produto):
+                    produto_obj = prod_id
+                elif prod_id:
+                    produto_obj = Produto.objects.filter(id_produto=prod_id).first()
+                else:
+                    produto_obj = None
 
                 # Frontend envia 'quantidade' e 'valor_unitario' como da NF.
                 # O backend deve calcular a quantidade de estoque e o custo unitário de estoque.
@@ -188,8 +194,6 @@ class CompraSerializer(serializers.ModelSerializer):
                 qtd_estoque = qtd_nf * fracao
                 
                 # Calcula o custo unitário para o estoque
-                # Se a fração for > 1, o custo unitário é dividido.
-                # Ex: Caixa com 6 custa R$60 (valor_unit_nf). Custo por unidade é R$10.
                 custo_unit_estoque = valor_unit_nf / fracao if fracao > 1 else valor_unit_nf
                 
                 # O valor total do item na compra é sempre baseado nos valores da NF
@@ -202,7 +206,7 @@ class CompraSerializer(serializers.ModelSerializer):
                 # Preparar dados do item para salvar no banco
                 item_data = {
                     'id_compra': compra,
-                    'id_produto': produto,
+                    'id_produto': produto_obj,
                     'quantidade': qtd_estoque,          # Salva a quantidade convertida para o estoque
                     'valor_compra': custo_unit_estoque, # Salva o custo unitário de estoque
                     'valor_total': valor_total_item,    # Valor total do item (baseado na NF)
@@ -217,17 +221,15 @@ class CompraSerializer(serializers.ModelSerializer):
 
                 # Salvar/atualizar fração por fornecedor+produto quando fracao > 1
                 ean_val = item.get('_ean') or '' # O _ean é passado pelo frontend
-                # Sempre atualiza a fração (mesmo fracao=1 para resetar) quando há EAN
-                if produto and compra.id_fornecedor and ean_val:
+                if produto_obj and compra.id_fornecedor and ean_val:
                     try:
                         from .models import FornecedorProdutoFracao
                         FornecedorProdutoFracao.objects.update_or_create(
                             fornecedor=compra.id_fornecedor,
-                            produto=produto,
+                            produto=produto_obj,
                             gtin=ean_val,
                             defaults={'fracao': fracao}
                         )
-                        print(f'[FRACAO] Fração {fracao} salva/atualizada para Fornecedor {compra.id_fornecedor.id} e Produto {produto.id}')
                     except Exception as _fe:
                         print(f'[FRACAO] erro ao salvar fracao: {_fe}')
                 
@@ -237,7 +239,7 @@ class CompraSerializer(serializers.ModelSerializer):
                 print(f'[DEBUG_TOTAL] Total acumulado: {total}, Desconto total: {desconto_total}')
 
                 # Atualiza estoque
-                if produto and operacao:
+                if produto_obj and operacao:
                     op_inc_estoque = getattr(operacao, 'incrementar_estoque', 1)
                     op_tipo_inc = getattr(operacao, 'tipo_estoque_incremento', 'Deposito')
                     op_gera_estoque = (op_inc_estoque not in [0, '0', False]) and (op_tipo_inc not in ['Nenhum', '0', None, ''])
@@ -246,51 +248,58 @@ class CompraSerializer(serializers.ModelSerializer):
                     movimenta_estoque = compra_movimenta and op_gera_estoque
                     is_ajuste_custo = getattr(compra, 'ajuste_custo', False) or getattr(compra, 'finalidade', '1') == '6'
 
-                    deposito_id = getattr(operacao, 'id_deposito_incremento', None) or 1
+                    dep_obj = getattr(operacao, 'id_deposito_incremento', None)
+                    if dep_obj and hasattr(dep_obj, 'pk'):
+                        deposito_id = dep_obj.pk
+                    elif isinstance(dep_obj, int):
+                        deposito_id = dep_obj
+                    else:
+                        deposito_id = 1
 
-                    try:
-                        estoque_obj = Estoque.objects.get(
-                            id_produto=produto,
-                            id_deposito_id=deposito_id
+                    estoque_obj = Estoque.objects.filter(
+                        id_produto=produto_obj,
+                        id_deposito_id=deposito_id
+                    ).first()
+
+                    if not estoque_obj:
+                        estoque_obj = Estoque.objects.filter(id_produto=produto_obj).first()
+
+                    if not estoque_obj:
+                        dep_instance = Deposito.objects.filter(id_deposito=deposito_id).first() or Deposito.objects.first()
+                        qtd_inicial = Decimal('0.000') if not movimenta_estoque else qtd_estoque
+                        estoque_obj = Estoque.objects.create(
+                            id_produto=produto_obj,
+                            id_deposito=dep_instance,
+                            quantidade=qtd_inicial,
+                            custo_medio=custo_unit_estoque.quantize(Decimal('0.0001')),
+                            valor_ultima_compra=custo_unit_estoque.quantize(Decimal('0.0001')),
+                            valor_total=(qtd_inicial * custo_unit_estoque).quantize(Decimal('0.0001'))
                         )
-                        
-                        qtd_estoque_atual = estoque_obj.quantidade or Decimal('0.000')
-                        custo_medio_atual = estoque_obj.custo_medio or Decimal('0.0000')
-                        qtd_estoque_decimal = Decimal(str(qtd_estoque_atual))
+                    else:
+                        qtd_estoque_atual = Decimal(str(estoque_obj.quantidade or 0))
+                        custo_medio_atual = Decimal(str(estoque_obj.custo_medio or 0))
 
                         if not movimenta_estoque:
-                            # NOTA DE DÉBITO (finNFe = 6): Não altera a quantidade física do estoque
-                            nova_quantidade = qtd_estoque_decimal
+                            nova_quantidade = qtd_estoque_atual
                             if is_ajuste_custo:
-                                if qtd_estoque_decimal > 0:
-                                    acrescimo_por_unidade = (qtd_estoque * custo_unit_estoque) / qtd_estoque_decimal
+                                if qtd_estoque_atual > 0:
+                                    acrescimo_por_unidade = (qtd_estoque * custo_unit_estoque) / qtd_estoque_atual
                                     novo_custo_medio = custo_medio_atual + acrescimo_por_unidade
                                 else:
                                     novo_custo_medio = custo_medio_atual + custo_unit_estoque
                             else:
                                 novo_custo_medio = custo_medio_atual
                         else:
-                            # ENTRADA NORMAL: Soma quantidade física e recalcula custo médio ponderado
-                            nova_quantidade = qtd_estoque_decimal + qtd_estoque
-                            valor_estoque_atual = qtd_estoque_decimal * custo_medio_atual
+                            nova_quantidade = qtd_estoque_atual + qtd_estoque
+                            valor_estoque_atual = qtd_estoque_atual * custo_medio_atual
                             valor_nova_compra = qtd_estoque * custo_unit_estoque
                             novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else custo_unit_estoque
                         
                         estoque_obj.quantidade = nova_quantidade
                         estoque_obj.custo_medio = novo_custo_medio.quantize(Decimal('0.0001'))
-                        estoque_obj.valor_ultima_compra = custo_unit_estoque
-                        estoque_obj.valor_total = nova_quantidade * novo_custo_medio
+                        estoque_obj.valor_ultima_compra = custo_unit_estoque.quantize(Decimal('0.0001'))
+                        estoque_obj.valor_total = (nova_quantidade * novo_custo_medio).quantize(Decimal('0.0001'))
                         estoque_obj.save()
-                    except Estoque.DoesNotExist:
-                        qtd_inicial = Decimal('0.000') if not movimenta_estoque else qtd_estoque
-                        estoque_obj = Estoque.objects.create(
-                            id_produto=produto,
-                            id_deposito_id=deposito_id,
-                            quantidade=qtd_inicial,
-                            custo_medio=custo_unit_estoque,
-                            valor_ultima_compra=custo_unit_estoque,
-                            valor_total=qtd_inicial * custo_unit_estoque
-                        )
 
                     # Registrar no Histórico / Kardex
                     try:
