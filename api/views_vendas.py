@@ -441,6 +441,31 @@ def resolver_venda_para_operacao(id_target):
         if devolucao.id_venda:
             venda = Venda.objects.filter(pk=devolucao.id_venda).first()
             if venda:
+                # 1. Garantir que numero_nfe não seja nulo ou zero
+                if not venda.numero_nfe or venda.numero_nfe == 0:
+                    from django.db.models import Max
+                    max_num = Venda.objects.filter(numero_nfe__gt=0).aggregate(Max('numero_nfe'))['numero_nfe__max'] or 0
+                    venda.numero_nfe = max_num + 1
+                    venda.numero_documento = max_num + 1
+                    venda.save(update_fields=['numero_nfe', 'numero_documento'])
+
+                # 2. Garantir que os itens da devolução estejam em venda_itens para impressão do DANFE
+                if venda.itens.count() == 0 and devolucao.itens.exists():
+                    from django.db import connection
+                    with connection.cursor() as cursor:
+                        for dev_item in devolucao.itens.all():
+                            cfop_item = dev_item.cfop if (dev_item.cfop and dev_item.cfop != '5102' and dev_item.cfop != '6102') else '5202'
+                            cursor.execute("""
+                                INSERT INTO venda_itens (id_venda, id_produto, quantidade, valor_unitario, valor_total, cfop)
+                                VALUES (%s, %s, %s, %s, %s, %s)
+                            """, [
+                                venda.id_venda,
+                                dev_item.id_produto,
+                                dev_item.quantidade_devolvida,
+                                dev_item.valor_unitario,
+                                dev_item.valor_total,
+                                cfop_item
+                            ])
                 return venda
 
         # Auto-criar Venda se a devolução não possui id_venda vinculado ainda
@@ -476,6 +501,23 @@ def resolver_venda_para_operacao(id_target):
             )
             devolucao.id_venda = venda.id_venda
             devolucao.save(update_fields=['id_venda'])
+
+            # Criar itens em venda_itens para a NF-e com CFOP 5202
+            from django.db import connection
+            with connection.cursor() as cursor:
+                for dev_item in devolucao.itens.all():
+                    cfop_item = dev_item.cfop if (dev_item.cfop and dev_item.cfop != '5102' and dev_item.cfop != '6102') else '5202'
+                    cursor.execute("""
+                        INSERT INTO venda_itens (id_venda, id_produto, quantidade, valor_unitario, valor_total, cfop)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, [
+                        venda.id_venda,
+                        dev_item.id_produto,
+                        dev_item.quantidade_devolvida,
+                        dev_item.valor_unitario,
+                        dev_item.valor_total,
+                        cfop_item
+                    ])
             return venda
         except Exception as e_venda:
             logger.error(f"Erro ao resolver Venda para Devolução #{clean_id}: {e_venda}")
