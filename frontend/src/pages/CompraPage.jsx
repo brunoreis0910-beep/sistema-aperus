@@ -175,6 +175,11 @@ function CompraPage() {
   const [enviandoManif, setEnviandoManif] = useState(false)
   const [resultadoManif, setResultadoManif] = useState(null)
 
+  // Estados para Modal de Alerta de Nota de Débito (finNFe = 6)
+  const [dialogNotaDebitoOpen, setDialogNotaDebitoOpen] = useState(false);
+  const [dadosNotaDebitoModal, setDadosNotaDebitoModal] = useState(null);
+  const [idCompraOrigemSelecionada, setIdCompraOrigemSelecionada] = useState('');
+
   // Estados para Modal de Devolução de Compra ao Fornecedor
   const [openModalDevolucao, setOpenModalDevolucao] = useState(false);
   const [compraParaDevolucao, setCompraParaDevolucao] = useState(null);
@@ -1062,6 +1067,15 @@ function CompraPage() {
         id_operacao: form.id_operacao,
         itens: itensMapeados,
       })
+
+      // Se for Nota Fiscal de Débito (finNFe = 6), exibe modal de alerta e vínculo com nota de origem
+      if (dados.finalidade === '6') {
+        setDadosNotaDebitoModal(dados);
+        const idSugerido = dados.compra_origem_sugerida?.id_compra || '';
+        setIdCompraOrigemSelecionada(idSugerido ? String(idSugerido) : '');
+        setDialogNotaDebitoOpen(true);
+        toast.warning('⚠️ Nota Fiscal de Débito (finNFe = 6) identificada. Vincule a Nota de Origem.', { autoClose: 6000 });
+      }
 
       // Mostrar mensagem se vínculos foram restaurados
       if (vinculosRestaurados > 0) {
@@ -6901,6 +6915,90 @@ function CompraPage() {
           Excluir Devolução
         </MenuItem>
       </Menu>
+
+      {/* Diálogo de Alerta e Vínculo para Nota Fiscal de Débito (finNFe = 6) */}
+      <Dialog
+        open={dialogNotaDebitoOpen}
+        onClose={() => setDialogNotaDebitoOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: '#fff3e0', color: '#e65100', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <WarningIcon color="warning" />
+          Nota Fiscal de Débito Detectada (finNFe = 6) - Ajuste Complementar RTC
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          <Alert severity="warning" sx={{ mb: 2, fontWeight: 'bold' }}>
+            Esta nota fiscal refere-se a um <strong>Acréscimo Complementar de Valor / Débito (Reforma Tributária - RTC)</strong>.
+            A quantidade em estoque físico não será multiplicada para evitar duplicidade.
+          </Alert>
+
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Para atualizar corretamente o <strong>Custo Médio dos produtos</strong>, vincule este ajuste à <strong>Nota Fiscal de Entrada de Origem</strong> do fornecedor <strong>{dadosNotaDebitoModal?.fornecedor_nome}</strong>:
+          </Typography>
+
+          {dadosNotaDebitoModal?.compra_origem_sugerida && (
+            <Paper elevation={1} sx={{ p: 2, mb: 3, bgcolor: '#e8f5e9', border: '1px solid #a5d6a7' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
+                ✨ Nota de Origem Recomendada (via Chave Referenciada XML):
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                • <strong>Documento:</strong> Nota Nº {dadosNotaDebitoModal.compra_origem_sugerida.numero_documento} | Data: {dadosNotaDebitoModal.compra_origem_sugerida.data_entrada}
+              </Typography>
+              <Typography variant="body2">
+                • <strong>Valor Total Origem:</strong> R$ {parseFloat(dadosNotaDebitoModal.compra_origem_sugerida.valor_total || 0).toFixed(2)}
+              </Typography>
+            </Paper>
+          )}
+
+          <FormControl fullWidth sx={{ mt: 1 }}>
+            <InputLabel id="label-compra-origem">Selecione a Nota Fiscal de Origem *</InputLabel>
+            <Select
+              labelId="label-compra-origem"
+              value={idCompraOrigemSelecionada}
+              onChange={(e) => setIdCompraOrigemSelecionada(e.target.value)}
+              label="Selecione a Nota Fiscal de Origem *"
+            >
+              <MenuItem value="">
+                <em>Nenhuma (Apenas registrar Nota de Débito sem vínculo direto)</em>
+              </MenuItem>
+              {Array.isArray(dadosNotaDebitoModal?.compras_fornecedor_opcoes) && dadosNotaDebitoModal.compras_fornecedor_opcoes.map((cf) => (
+                <MenuItem key={cf.id_compra} value={String(cf.id_compra)}>
+                  Nota Nº {cf.numero_documento} — {cf.data_entrada} (R$ {parseFloat(cf.valor_total).toFixed(2)})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, bgcolor: '#fafafa' }}>
+          <Button onClick={() => setDialogNotaDebitoOpen(false)} color="inherit">
+            Cancelar
+          </Button>
+
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={() => {
+              if (idCompraOrigemSelecionada) {
+                const opt = dadosNotaDebitoModal?.compras_fornecedor_opcoes?.find(c => String(c.id_compra) === String(idCompraOrigemSelecionada));
+                setForm(f => ({
+                  ...f,
+                  chave_referenciada: opt?.chave_nfe || dadosNotaDebitoModal?.chave_referenciada || f.chave_referenciada,
+                  movimenta_estoque_fisico: false,
+                  ajuste_custo: true
+                }));
+                toast.success(`🔗 Nota de Débito vinculada à Nota Nº ${opt?.numero_documento || idCompraOrigemSelecionada}!`, { autoClose: 4000 });
+              } else {
+                toast.info('Nota de Débito mantida sem vínculo de origem direto.', { autoClose: 3000 });
+              }
+              setDialogNotaDebitoOpen(false);
+            }}
+            sx={{ fontWeight: 'bold' }}
+          >
+            Confirmar e Vincular Custo
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       </Box>
     </Box>

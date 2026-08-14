@@ -997,6 +997,36 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'n_item_origem': n_item_origem_item,
                     })
             
+            # Buscar compra de origem no banco se houver chave referenciada
+            compra_origem_sugerida = None
+            if chave_referenciada_global:
+                from django.db.models import Q
+                c_orig = Compra.objects.filter(
+                    Q(dados_entrada=chave_referenciada_global) | 
+                    Q(dados_entrada__icontains=chave_referenciada_global)
+                ).first()
+                if c_orig:
+                    compra_origem_sugerida = {
+                        'id_compra': c_orig.id_compra,
+                        'numero_documento': c_orig.numero_documento,
+                        'data_entrada': str(c_orig.data_entrada) if c_orig.data_entrada else '',
+                        'valor_total': float(c_orig.valor_total or 0),
+                        'chave_nfe': c_orig.dados_entrada
+                    }
+
+            # Buscar compras anteriores do mesmo fornecedor para opção de escolha manual
+            compras_fornecedor_opcoes = []
+            if id_fornecedor:
+                qs_forn = Compra.objects.filter(id_fornecedor_id=id_fornecedor).order_by('-id_compra')[:20]
+                for cf in qs_forn:
+                    compras_fornecedor_opcoes.append({
+                        'id_compra': cf.id_compra,
+                        'numero_documento': cf.numero_documento or f"#{cf.id_compra}",
+                        'data_entrada': str(cf.data_entrada) if cf.data_entrada else '',
+                        'valor_total': float(cf.valor_total or 0),
+                        'chave_nfe': cf.dados_entrada or ''
+                    })
+
             return Response({
                 'numero_nf': numero_nf,
                 'numero_documento': numero_nf,  # Alias para compatibilidade
@@ -1014,6 +1044,8 @@ class CompraViewSet(viewsets.ModelViewSet):
                 'chave_referenciada': chave_referenciada_global,
                 'movimenta_estoque_fisico': movimenta_estoque_fisico,
                 'ajuste_custo': ajuste_custo,
+                'compra_origem_sugerida': compra_origem_sugerida,
+                'compras_fornecedor_opcoes': compras_fornecedor_opcoes,
 
                 # Totais da NF-e
                 'valor_total': valor_total,
