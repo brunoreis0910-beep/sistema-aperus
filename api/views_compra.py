@@ -662,37 +662,47 @@ class CompraViewSet(viewsets.ModelViewSet):
             fin_nfe = get_text(ide, 'finNFe', '1')
             tp_debito = get_text(ide, 'tpNFDebito', '')
 
-            # Extraction ultra-inteligente de chaves e números referenciados do XML
+            # Extrair chave NFe da própria nota atual FIRST
+            chave_nfe = ''
+            id_attr = infNFe.get('Id', '') if infNFe is not None else ''
+            if id_attr:
+                chave_nfe = id_attr.replace('NFe', '').strip()
+            if not chave_nfe:
+                chave_nfe = get_text(infNFe, 'chNFe', '').strip()
+
+            # Extraction ultra-inteligente de chaves referenciadas (<chaveAcesso>, <refNFe>, <DFeReferenciado>)
             chaves_referenciadas_encontradas = []
             numeros_nf_referenciados = []
 
-            # 1. Regex em todo o conteúdo textual do XML para capturar qualquer sequência de 44 dígitos
-            try:
-                raw_xml_str = ET.tostring(root, encoding='utf-8').decode('utf-8', errors='ignore')
-                import re as _re
-                all_44_digits = _re.findall(r'\b\d{44}\b', raw_xml_str)
-                for d44 in all_44_digits:
-                    if d44 != chave_nfe and d44 not in chaves_referenciadas_encontradas:
-                        chaves_referenciadas_encontradas.append(d44)
-            except Exception:
-                pass
-
-            # 2. Varredura de nós <refNFe>, <refNF>, <nNF>, <chaveAcesso>
+            # 1. Varredura direta de nós específicos de referência (<chaveAcesso>, <refNFe>, <refNFCe>, <DFeReferenciado>)
+            import re as _re
             for elem in root.iter():
                 tag_clean = elem.tag.split('}')[-1].lower()
-                val_raw = (elem.text or '').strip()
-                val_digits = _re.sub(r'\D', '', val_raw) if val_raw else ''
+                if tag_clean in ['chaveacesso', 'refnfe', 'refnfce', 'refcte']:
+                    val_raw = (elem.text or '').strip()
+                    val_digits = _re.sub(r'\D', '', val_raw) if val_raw else ''
+                    if len(val_digits) == 44 and val_digits != chave_nfe:
+                        if val_digits not in chaves_referenciadas_encontradas:
+                            chaves_referenciadas_encontradas.append(val_digits)
 
-                if len(val_digits) == 44 and val_digits != chave_nfe:
-                    if val_digits not in chaves_referenciadas_encontradas:
-                        chaves_referenciadas_encontradas.append(val_digits)
-
-                if tag_clean == 'refnf':
+                if tag_clean in ['refnf', 'dfereferenciado']:
                     for child in elem:
-                        if child.tag.endswith('nNF') and child.text:
+                        child_tag = child.tag.split('}')[-1].lower()
+                        if child_tag == 'nnf' and child.text:
                             num_clean = _re.sub(r'\D', '', child.text)
                             if num_clean and num_clean not in numeros_nf_referenciados:
                                 numeros_nf_referenciados.append(num_clean)
+
+            # 2. Fallback regex em todo o XML para quaisquer outros 44 dígitos que não sejam a própria chave da nota
+            if not chaves_referenciadas_encontradas:
+                try:
+                    raw_xml_str = ET.tostring(root, encoding='utf-8').decode('utf-8', errors='ignore')
+                    all_44_digits = _re.findall(r'\b\d{44}\b', raw_xml_str)
+                    for d44 in all_44_digits:
+                        if d44 != chave_nfe and d44 not in chaves_referenciadas_encontradas:
+                            chaves_referenciadas_encontradas.append(d44)
+                except Exception:
+                    pass
 
             chave_referenciada_global = chaves_referenciadas_encontradas[0] if chaves_referenciadas_encontradas else ''
 
