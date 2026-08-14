@@ -2324,6 +2324,20 @@ class ProdutoViewSetCustom(viewsets.ModelViewSet):
         
         instance.save()
         
+        # Se veio preco_custo, custo_medio ou valor_custo no request.data ao salvar o produto
+        preco_custo_req = request.data.get('preco_custo') or request.data.get('custo_medio') or request.data.get('valor_custo')
+        if preco_custo_req is not None:
+            try:
+                from decimal import Decimal
+                from .models import Estoque
+                custo_dec = Decimal(str(preco_custo_req))
+                for est in Estoque.objects.filter(id_produto=instance):
+                    est.custo_medio = custo_dec.quantize(Decimal('0.0001'))
+                    est.valor_ultima_compra = custo_dec.quantize(Decimal('0.0001'))
+                    est.save()
+            except Exception:
+                pass
+        
         # Tratar produtos_complementares (M2M)
         complementares_value = request.data.get('produtos_complementares')
         if complementares_value is not None:

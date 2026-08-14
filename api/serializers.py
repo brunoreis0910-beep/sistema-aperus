@@ -327,10 +327,12 @@ class ProdutoSerializer(serializers.ModelSerializer):
     # Campo para mostrar nome do grupo (somente leitura)
     grupo_nome = serializers.CharField(source='id_grupo.nome_grupo', read_only=True, allow_null=True)
     
-    # Campos para mostrar estoque por dep�sito (somente leitura)
+    # Campos para mostrar estoque por depósito (somente leitura)
     estoque_por_deposito = serializers.SerializerMethodField()
     estoque_total = serializers.SerializerMethodField()
-    valor_venda = serializers.SerializerMethodField()  # NOVO: Valor de venda (primeiro dep�sito)
+    valor_venda = serializers.SerializerMethodField()  # NOVO: Valor de venda (primeiro depósito)
+    preco_custo = serializers.SerializerMethodField()  # Custo médio / Preço de Custo (do estoque)
+    custo_medio = serializers.SerializerMethodField()
     
     # Tributacao detalhada (nested, somente leitura)
     tributacao_detalhada = TributacaoProdutoSerializer(read_only=True, allow_null=True)
@@ -351,9 +353,11 @@ class ProdutoSerializer(serializers.ModelSerializer):
             'gtin',
             'categoria',
             'tributacao_detalhada',  # CST/CFOP do produto
-            'estoque_por_deposito', # NOVO: Estoque por dep�sito
+            'estoque_por_deposito', # NOVO: Estoque por depósito
             'estoque_total',        # NOVO: Total consolidado
             'valor_venda',          # NOVO: Valor de venda
+            'preco_custo',          # Preço de custo (custo médio do estoque)
+            'custo_medio',
             'observacoes',
             'imagem_url',
             # Campos de materiais de construção
@@ -369,7 +373,7 @@ class ProdutoSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id_produto', 'grupo_nome', 
-            'estoque_por_deposito', 'estoque_total', 'valor_venda',
+            'estoque_por_deposito', 'estoque_total', 'valor_venda', 'preco_custo', 'custo_medio',
             'tributacao_detalhada'  # somente leitura
         ]
 
@@ -414,6 +418,7 @@ class ProdutoSerializer(serializers.ModelSerializer):
 
     def get_estoque_total(self, obj):
         """Retorna o estoque total consolidado de todos os dep�sitos"""
+        """Retorna o estoque total consolidado de todos os depsitos"""
         try:
             from .models import Estoque
             total = Estoque.objects.filter(id_produto=obj).aggregate(
@@ -424,7 +429,7 @@ class ProdutoSerializer(serializers.ModelSerializer):
             return 0.0
 
     def get_valor_venda(self, obj):
-        """Retorna o valor de venda do produto (primeiro dep�sito encontrado)"""
+        """Retorna o valor de venda do produto (primeiro depósito encontrado)"""
         try:
             from .models import Estoque
             estoque = Estoque.objects.filter(id_produto=obj).first()
@@ -434,8 +439,22 @@ class ProdutoSerializer(serializers.ModelSerializer):
         except Exception:
             return 0.0
 
+    def get_preco_custo(self, obj):
+        """Retorna o custo médio / preço de custo do produto (primeiro depósito encontrado)"""
+        try:
+            from .models import Estoque
+            estoque = Estoque.objects.filter(id_produto=obj).first()
+            if estoque and (estoque.custo_medio or estoque.valor_ultima_compra):
+                return float(estoque.custo_medio or estoque.valor_ultima_compra)
+            return 0.0
+        except Exception:
+            return 0.0
+
+    def get_custo_medio(self, obj):
+        return self.get_preco_custo(obj)
+
     def create(self, validated_data):
-        """Sobrescrever create para criar automaticamente registros de estoque nos dep�sitos"""
+        """Sobrescrever create para criar automaticamente registros de estoque nos depsitos"""
         from .models import Deposito, Estoque
         from decimal import Decimal
         
