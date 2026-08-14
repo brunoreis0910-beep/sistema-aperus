@@ -768,9 +768,10 @@ function CompraPage() {
           if (opVenda) op = opVenda;
         }
 
-        const numNota = vendaVinculada?.numero_documento || vendaVinculada?.numero_nfe || dev.numero_nfe || dev.numero_documento || dev.numero_devolucao || (dev.id_compra ? `#${dev.id_compra}` : `#${dev.id_devolucao}`);
-        const statusNota = vendaVinculada?.status_nfe || dev.status_nfe || dev.status || (vendaVinculada ? 'AUTORIZADA' : 'PENDENTE');
-        const chaveNota = vendaVinculada?.chave_nfe || dev.chave_nfe_referenciada || dev.chave_nfe || '';
+        const numNota = dev.venda_numero_nfe || vendaVinculada?.numero_documento || vendaVinculada?.numero_nfe || dev.numero_nfe || dev.numero_documento || dev.numero_devolucao;
+        const statusNota = dev.venda_status_nfe || vendaVinculada?.status_nfe || dev.status_nfe || dev.status || 'AUTORIZADA';
+        const chaveNota = dev.venda_chave_nfe || vendaVinculada?.chave_nfe || dev.chave_nfe || '';
+        const opNome = dev.operacao_nome || op?.nome_operacao || op?.nome || 'DEVOLUÇÃO DE COMPRA (NFE)';
 
         return {
           id_compra: `DEV-${dev.id_devolucao}`,
@@ -782,7 +783,7 @@ function CompraPage() {
           doc_fornecedor: forn?.cpf_cnpj || dev.doc_fornecedor || '',
           data_documento: dev.data_devolucao || dev.criado_em,
           data_entrada: dev.data_devolucao || dev.criado_em,
-          operacao_nome: op?.nome_operacao || op?.nome || 'DEVOLUÇÃO DE COMPRA (NFE)',
+          operacao_nome: opNome,
           id_operacao: op?.id_operacao || dev.id_operacao || 22,
           numero_nfe: numNota,
           numero_documento: numNota,

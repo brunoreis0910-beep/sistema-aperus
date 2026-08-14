@@ -35,14 +35,17 @@ class DevolucaoSerializer(serializers.ModelSerializer):
     criado_por_nome = serializers.SerializerMethodField()
     aprovado_por_nome = serializers.SerializerMethodField()
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+    venda_numero_nfe = serializers.SerializerMethodField()
+    venda_status_nfe = serializers.SerializerMethodField()
+    venda_chave_nfe = serializers.SerializerMethodField()
+    operacao_nome = serializers.SerializerMethodField()
+
     class Meta:
         model = Devolucao
         fields = [
             'id_devolucao', 'tipo', 'tipo_display', 'id_venda', 'id_compra',
-            'id_cliente', 'id_fornecedor', 'id_operacao', 'data_devolucao',
-            'numero_devolucao', 'motivo', 'observacoes', 'gerar_credito',
+            'id_cliente', 'id_fornecedor', 'id_operacao', 'operacao_nome', 'data_devolucao',
+            'numero_devolucao', 'venda_numero_nfe', 'venda_status_nfe', 'venda_chave_nfe', 'motivo', 'observacoes', 'gerar_credito',
             'chave_nfe_referenciada',
             'valor_total_devolucao', 'status', 'status_display',
             'estoque_atualizado', 'financeiro_gerado', 'criado_por',
@@ -55,6 +58,38 @@ class DevolucaoSerializer(serializers.ModelSerializer):
             'criado_em', 'atualizado_em'
         ]
     
+    def get_venda_numero_nfe(self, obj):
+        if obj.id_venda:
+            from .models import Venda
+            v = Venda.objects.filter(pk=obj.id_venda).first()
+            if v and v.numero_nfe:
+                return v.numero_nfe
+        return obj.numero_devolucao
+
+    def get_venda_status_nfe(self, obj):
+        if obj.id_venda:
+            from .models import Venda
+            v = Venda.objects.filter(pk=obj.id_venda).first()
+            if v and v.status_nfe:
+                return v.status_nfe
+        return obj.status
+
+    def get_venda_chave_nfe(self, obj):
+        if obj.id_venda:
+            from .models import Venda
+            v = Venda.objects.filter(pk=obj.id_venda).first()
+            if v and v.chave_nfe:
+                return v.chave_nfe
+        return obj.chave_nfe_referenciada
+
+    def get_operacao_nome(self, obj):
+        if obj.id_venda:
+            from .models import Venda
+            v = Venda.objects.filter(pk=obj.id_venda).first()
+            if v and v.id_operacao:
+                return v.id_operacao.nome_operacao
+        return "DEVOLUÇÃO DE COMPRA (NFE)"
+
     def get_criado_por_nome(self, obj):
         return obj.criado_por.get_full_name() if obj.criado_por else None
     
