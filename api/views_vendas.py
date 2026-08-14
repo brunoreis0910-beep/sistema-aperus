@@ -550,24 +550,40 @@ class ImprimirDanfeNFeView(APIView):
     Endpoint para gerar PDF do DANFE (NFe Modelo 55).
     URL: /api/vendas/<id>/imprimir_danfe/
     """
-    permission_classes = [AllowAny] # Pode ajustar conforme necessidade
+    permission_classes = [AllowAny]
     renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
     
     def get(self, request, id_venda):
-        venda = resolver_venda_para_operacao(id_venda)
+        from django.http import HttpResponse, Http404
+        try:
+            venda = resolver_venda_para_operacao(id_venda)
+        except Exception:
+            return HttpResponse(
+                "<div style='font-family:sans-serif; padding:40px; text-align:center;'>"
+                "<h2>⚠️ Registro de Devolução ou Venda não encontrado</h2>"
+                "<p>Verifique o número da nota ou recarregue a página de compras.</p>"
+                "</div>",
+                content_type='text/html; charset=utf-8',
+                status=404
+            )
         
         # Validar se tem NFe emitida
         if not venda.chave_nfe:
-            if request.accepted_renderer.format == 'html':
-                return Response({"erro": "Venda não possui Chave NFe (não emitida ou erro)."}, template_name="api/danfe_erro.html", status=400)
-            return Response({"erro": "Venda não possui Chave NFe (não emitida ou erro)."}, status=400)
+            return HttpResponse(
+                "<div style='font-family:sans-serif; padding:40px; text-align:center; color:#c62828;'>"
+                "<h2>⚠️ NF-e de Devolução ainda não Autorizada na SEFAZ</h2>"
+                "<p style='font-size:16px;'>Esta nota fiscal ainda não possui a Chave de Acesso da SEFAZ.</p>"
+                "<p>Por favor, volte para a Tela de Compras e clique no botão 🚀 <strong>Transmitir para SEFAZ</strong> antes de imprimir a DANFE.</p>"
+                "</div>",
+                content_type='text/html; charset=utf-8',
+                status=400
+            )
             
         try:
             generator = DanfeGenerator(venda)
             pdf_buffer = generator.gerar_pdf()
             
-            from django.http import HttpResponse
             response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
             filename = f"DANFE_{venda.numero_nfe or venda.pk}.pdf"
             response['Content-Disposition'] = f'inline; filename="{filename}"'
@@ -575,9 +591,14 @@ class ImprimirDanfeNFeView(APIView):
             
         except Exception as e:
             logger.error(f"Erro ao gerar DANFE PDF: {e}")
-            if request.accepted_renderer.format == 'html':
-                return Response({"erro": f"Erro ao gerar PDF: {str(e)}"}, template_name="api/danfe_erro.html", status=500)
-            return Response({"erro": f"Erro ao gerar PDF: {str(e)}"}, status=500)
+            return HttpResponse(
+                f"<div style='font-family:sans-serif; padding:40px; text-align:center; color:#c62828;'>"
+                f"<h2>❌ Erro ao Gerar PDF da DANFE</h2>"
+                f"<p>{str(e)}</p>"
+                f"</div>",
+                content_type='text/html; charset=utf-8',
+                status=500
+            )
 
 
 class ImprimirDanfceNFCeView(APIView):
