@@ -301,12 +301,17 @@ class CompraSerializer(serializers.ModelSerializer):
                         estoque_obj.valor_total = (nova_quantidade * novo_custo_medio).quantize(Decimal('0.0001'))
                         estoque_obj.save()
 
+                        # Sincronizar valor_ultima_compra em TODOS os depósitos do produto
+                        Estoque.objects.filter(id_produto=produto_obj).update(
+                            valor_ultima_compra=custo_unit_estoque.quantize(Decimal('0.0001'))
+                        )
+
                     # Registrar no Histórico / Kardex
                     try:
                         from .models import EstoqueMovimentacao
                         EstoqueMovimentacao.objects.create(
                             id_estoque=estoque_obj,
-                            id_produto=produto,
+                            id_produto=produto_obj,
                             tipo_movimentacao='AJUSTE' if not movimenta_estoque else 'ENTRADA',
                             tipo_documento='COMPRA',
                             id_documento=compra.pk,
