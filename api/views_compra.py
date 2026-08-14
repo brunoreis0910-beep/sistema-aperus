@@ -276,6 +276,13 @@ class CompraSerializer(serializers.ModelSerializer):
                         estoque_obj.valor_ultima_compra = custo_unit_estoque
                         estoque_obj.valor_total = nova_quantidade * novo_custo_medio
                         estoque_obj.save()
+
+                        # Atualizar o Preço de Custo no cadastro principal do Produto
+                        try:
+                            produto.preco_custo = novo_custo_medio.quantize(Decimal('0.01'))
+                            produto.save()
+                        except Exception as eprod:
+                            print(f"Erro ao atualizar preco_custo do produto: {eprod}")
                     except Estoque.DoesNotExist:
                         qtd_inicial = Decimal('0.000') if not movimenta_estoque else qtd_estoque
                         estoque_obj = Estoque.objects.create(
