@@ -56,17 +56,26 @@ class Logger {
 
         console.log = (...args) => {
             originalLog.apply(console, args);
-            this.info('Console', args);
+            if (!this.isLogging) {
+                this.isLogging = true;
+                try { this.info('Console', args); } finally { this.isLogging = false; }
+            }
         };
 
         console.error = (...args) => {
             originalError.apply(console, args);
-            this.error('Console Error', args);
+            if (!this.isLogging) {
+                this.isLogging = true;
+                try { this.error('Console Error', args); } finally { this.isLogging = false; }
+            }
         };
 
         console.warn = (...args) => {
             originalWarn.apply(console, args);
-            this.warn('Console Warning', args);
+            if (!this.isLogging) {
+                this.isLogging = true;
+                try { this.warn('Console Warning', args); } finally { this.isLogging = false; }
+            }
         };
     }
 
@@ -138,16 +147,19 @@ class Logger {
 
     clear() {
         this.logs = [];
-        localStorage.removeItem('debug_logs');
+        try { localStorage.removeItem('debug_logs'); } catch (_) {}
         this.listeners.forEach(listener => listener(this.logs));
     }
 
     saveLogs() {
         try {
-            const logsToSave = this.logs.slice(-50); // Salva apenas os últimos 50
+            const logsToSave = this.logs.slice(-30); // Salva apenas os últimos 30
             localStorage.setItem('debug_logs', JSON.stringify(logsToSave));
         } catch (e) {
-            console.error('Erro ao salvar logs:', e);
+            // Se o localStorage encheu (QuotaExceededError), limpa logs antigos para evitar travamentos
+            try {
+                localStorage.removeItem('debug_logs');
+            } catch (_) {}
         }
     }
 
@@ -159,7 +171,7 @@ class Logger {
                 this.listeners.forEach(listener => listener(this.logs));
             }
         } catch (e) {
-            console.error('Erro ao carregar logs:', e);
+            // Ignora silenciosamente para não poluir console
         }
     }
 
