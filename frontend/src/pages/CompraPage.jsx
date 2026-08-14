@@ -759,8 +759,18 @@ function CompraPage() {
       // Mapear devoluções como compras para exibição unificada na tabela de Compras
       const devolucoesMapeadas = devolucoesCompraData.map(dev => {
         const forn = fornecedoresData.find(f => String(f.id_fornecedor || f.id) === String(dev.id_fornecedor));
-        const op = operacoesData.find(o => String(o.id_operacao || o.id) === String(dev.id_operacao));
-        const numNota = dev.numero_devolucao || dev.numero_documento || dev.numero_nota || (dev.id_compra ? `#${dev.id_compra}` : `#${dev.id_devolucao}`);
+        let op = operacoesData.find(o => String(o.id_operacao || o.id) === String(dev.id_operacao));
+
+        // Buscar venda emitida vinculada a esta devolução
+        const vendaVinculada = devolucoesVendasData.find(v => String(v.id_venda) === String(dev.id_venda));
+        if (vendaVinculada && vendaVinculada.id_operacao) {
+          const opVenda = operacoesData.find(o => String(o.id_operacao || o.id) === String(vendaVinculada.id_operacao));
+          if (opVenda) op = opVenda;
+        }
+
+        const numNota = vendaVinculada?.numero_documento || vendaVinculada?.numero_nfe || dev.numero_nfe || dev.numero_documento || dev.numero_devolucao || (dev.id_compra ? `#${dev.id_compra}` : `#${dev.id_devolucao}`);
+        const statusNota = vendaVinculada?.status_nfe || dev.status_nfe || dev.status || (vendaVinculada ? 'AUTORIZADA' : 'PENDENTE');
+        const chaveNota = vendaVinculada?.chave_nfe || dev.chave_nfe_referenciada || dev.chave_nfe || '';
 
         return {
           id_compra: `DEV-${dev.id_devolucao}`,
@@ -772,14 +782,15 @@ function CompraPage() {
           doc_fornecedor: forn?.cpf_cnpj || dev.doc_fornecedor || '',
           data_documento: dev.data_devolucao || dev.criado_em,
           data_entrada: dev.data_devolucao || dev.criado_em,
-          operacao_nome: op?.nome_operacao || op?.nome || 'DEVOLUÇÃO DE COMPRA',
-          id_operacao: dev.id_operacao,
+          operacao_nome: op?.nome_operacao || op?.nome || 'DEVOLUÇÃO DE COMPRA (NFE)',
+          id_operacao: op?.id_operacao || dev.id_operacao || 22,
+          numero_nfe: numNota,
           numero_documento: numNota,
-          chave_nfe: dev.chave_nfe_referenciada || dev.chave_nfe || '',
+          chave_nfe: chaveNota,
           valor_total_nota: dev.valor_total_devolucao || dev.valor_total || 0,
           valor_total: dev.valor_total_devolucao || dev.valor_total || 0,
           is_devolucao: true,
-          status_nfe: dev.status_nfe || dev.status
+          status_nfe: statusNota
         };
       });
 
@@ -3942,7 +3953,7 @@ function CompraPage() {
                               sx={{ fontWeight: 'bold', fontSize: '0.68rem', height: '20px' }}
                             />
                           )}
-                          {(compra.origem === 'xml' || compra.xml_conteudo || compra.dados_entrada || (compra.chave_nfe && compra.chave_nfe.length === 44)) && (
+                          {!compra.is_devolucao && (compra.origem === 'xml' || compra.xml_conteudo) && (
                             <Chip
                               label="📥 IMPORTADA"
                               size="small"
