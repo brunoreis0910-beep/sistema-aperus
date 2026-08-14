@@ -34,11 +34,18 @@ class DevolucaoSerializer(serializers.ModelSerializer):
     itens = DevolucaoItemSerializer(many=True, read_only=False)
     criado_por_nome = serializers.SerializerMethodField()
     aprovado_por_nome = serializers.SerializerMethodField()
-    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    tipo_display = serializers.SerializerMethodField()
+    status_display = serializers.SerializerMethodField()
     venda_numero_nfe = serializers.SerializerMethodField()
     venda_status_nfe = serializers.SerializerMethodField()
     venda_chave_nfe = serializers.SerializerMethodField()
     operacao_nome = serializers.SerializerMethodField()
+
+    def get_tipo_display(self, obj):
+        return "Devolução de Compra" if obj.tipo == 'compra' else "Devolução de Venda"
+
+    def get_status_display(self, obj):
+        return str(obj.status or '').upper()
 
     class Meta:
         model = Devolucao
