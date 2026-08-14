@@ -1052,6 +1052,9 @@ function CompraPage() {
       await carregarDados()
 
       // Preencher formulário APÓS carregar listas — garante que o Select exiba o fornecedor
+      const eNotaAjusteOuDebito = ['2', '3', '6'].includes(String(dados.finalidade)) || !!dados.chave_referenciada || !!dados.compra_origem_sugerida;
+      const chaveRefFinal = dados.compra_origem_sugerida?.chave_nfe || dados.chave_referenciada || '';
+
       setForm({
         id_fornecedor: dados.id_fornecedor || '',
         numero_documento: dados.numero_documento || '',
@@ -1061,20 +1064,24 @@ function CompraPage() {
         xml_conteudo: dados.xml_conteudo || '',
         finalidade: dados.finalidade || '1',
         tipo_debito: dados.tipo_debito || '',
-        chave_referenciada: dados.chave_referenciada || '',
-        movimenta_estoque_fisico: dados.movimenta_estoque_fisico !== undefined ? dados.movimenta_estoque_fisico : true,
-        ajuste_custo: dados.ajuste_custo || false,
+        chave_referenciada: chaveRefFinal,
+        movimenta_estoque_fisico: eNotaAjusteOuDebito ? false : (dados.movimenta_estoque_fisico !== undefined ? dados.movimenta_estoque_fisico : true),
+        ajuste_custo: eNotaAjusteOuDebito ? true : (dados.ajuste_custo || false),
         id_operacao: form.id_operacao,
         itens: itensMapeados,
       })
 
-      // Se for Nota Fiscal de Débito (finNFe = 6), exibe modal de alerta e vínculo com nota de origem
-      if (dados.finalidade === '6') {
+      // Se a nota possui chave referenciada OU é Nota de Débito/Complementar/Ajuste (finNFe 2, 3 ou 6)
+      if (eNotaAjusteOuDebito) {
         setDadosNotaDebitoModal(dados);
         const idSugerido = dados.compra_origem_sugerida?.id_compra || '';
         setIdCompraOrigemSelecionada(idSugerido ? String(idSugerido) : '');
         setDialogNotaDebitoOpen(true);
-        toast.warning('⚠️ Nota Fiscal de Débito (finNFe = 6) identificada. Vincule a Nota de Origem.', { autoClose: 6000 });
+        if (dados.compra_origem_sugerida) {
+          toast.success(`✨ Nota Fiscal de Origem Nº ${dados.compra_origem_sugerida.numero_documento} vinculada automaticamente!`, { autoClose: 5000 });
+        } else {
+          toast.warning('⚠️ Nota de Débito/Ajuste (finNFe ' + dados.finalidade + ') identificada. Selecione a Nota de Origem.', { autoClose: 6000 });
+        }
       }
 
       // Mostrar mensagem se vínculos foram restaurados
