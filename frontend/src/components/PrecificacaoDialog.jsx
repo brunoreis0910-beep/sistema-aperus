@@ -25,7 +25,8 @@ import {
   Chip,
   IconButton,
   InputAdornment,
-  Tooltip
+  Tooltip,
+  Stack
 } from '@mui/material'
 import {
   Calculate as CalculateIcon,
@@ -279,11 +280,23 @@ const PrecificacaoDialog = ({ open, onClose, itens, onAplicar, axiosInstance }) 
                     {item.nome_produto || `Produto ${item.id_produto}`}
                   </TableCell>
                   <TableCell align="right">
-                    <Chip
-                      label={formatarMoeda(item.valor_unitario)}
-                      size="small"
-                      color="default"
-                    />
+                    <Stack direction="column" alignItems="flex-end" spacing={0.5}>
+                      <Chip
+                        label={formatarMoeda(item.valor_unitario)}
+                        size="small"
+                        color={item.chave_origem || item.is_ajuste_custo ? "success" : "default"}
+                        sx={{ fontWeight: 'bold' }}
+                      />
+                      {(item.chave_origem || item.is_ajuste_custo) && (
+                        <Chip
+                          label="📈 Custo Ajustado (Débito)"
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                          sx={{ fontSize: '0.65rem', height: 18 }}
+                        />
+                      )}
+                    </Stack>
                   </TableCell>
                   <TableCell align="center">
                     <TextField
