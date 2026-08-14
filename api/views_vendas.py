@@ -447,18 +447,25 @@ def resolver_venda_para_operacao(id_target):
         try:
             id_op = devolucao.id_operacao
             if not id_op:
-                op = Operacao.objects.filter(transacao='Devolucao').first()
+                op = Operacao.objects.filter(transacao='Devolucao').first() or Operacao.objects.filter(nome_operacao__icontains='Devolucao').first()
                 id_op = op.id_operacao if op else 22
             
             forn = Fornecedor.objects.filter(pk=devolucao.id_fornecedor).first() if devolucao.id_fornecedor else None
             cli = Cliente.objects.filter(cpf_cnpj=forn.cpf_cnpj).first() if (forn and forn.cpf_cnpj) else None
             id_cli = cli.id_cliente if cli else (devolucao.id_fornecedor or 1)
 
+            from django.db.models import Max
+            max_num = Venda.objects.filter(numero_nfe__gt=0).aggregate(Max('numero_nfe'))['numero_nfe__max'] or 0
+            proximo_numero = max_num + 1
+
             venda = Venda.objects.create(
                 id_cliente_id=id_cli,
                 id_operacao_id=id_op,
                 data_documento=devolucao.data_devolucao or timezone.now(),
                 valor_total=devolucao.valor_total_devolucao or 0,
+                numero_nfe=proximo_numero,
+                numero_documento=proximo_numero,
+                serie_nfe='1',
                 observacao_contribuinte=devolucao.observacoes or f'Devolução referente à compra #{devolucao.id_compra}',
                 chave_nfe_referenciada=devolucao.chave_nfe_referenciada or '',
                 status_nfe='PENDENTE',

@@ -110,14 +110,29 @@ class DevolucaoSerializer(serializers.ModelSerializer):
         devolucao.valor_total_devolucao = valor_total
 
         # Se for Devolução de Compra com Operação Fiscal, criar registro em vendas para emissão NF-e SEFAZ
-        if devolucao.tipo == 'compra' and devolucao.id_operacao and not devolucao.id_venda:
+        if devolucao.tipo == 'compra' and not devolucao.id_venda:
             try:
-                from .models import Venda
+                from .models import Venda, Operacao
+                from django.db.models import Max
+
+                id_op = devolucao.id_operacao
+                if not id_op:
+                    op_dev = Operacao.objects.filter(transacao='Devolucao').first() or Operacao.objects.filter(nome_operacao__icontains='Devolucao').first()
+                    id_op = op_dev.id_operacao if op_dev else 22
+                    devolucao.id_operacao = id_op
+
+                # Gerar próximo número de NF-e sequencial válido (não zero)
+                max_num = Venda.objects.filter(numero_nfe__gt=0).aggregate(Max('numero_nfe'))['numero_nfe__max'] or 0
+                proximo_numero = max_num + 1
+
                 venda = Venda.objects.create(
                     id_cliente_id=devolucao.id_fornecedor,
-                    id_operacao_id=devolucao.id_operacao,
+                    id_operacao_id=id_op,
                     data_documento=devolucao.data_devolucao or timezone.now(),
                     valor_total=valor_total,
+                    numero_nfe=proximo_numero,
+                    numero_documento=proximo_numero,
+                    serie_nfe='1',
                     observacao_contribuinte=devolucao.observacoes or f'Devolução referente à compra #{devolucao.id_compra}',
                     chave_nfe_referenciada=devolucao.chave_nfe_referenciada or '',
                     status_nfe='PENDENTE',
@@ -128,10 +143,11 @@ class DevolucaoSerializer(serializers.ModelSerializer):
                 )
                 devolucao.id_venda = venda.id_venda
 
-                # Criar itens da venda para a NF-e
+                # Criar itens da venda para a NF-e com CFOP de devolução 5202
                 from django.db import connection
                 with connection.cursor() as cursor:
                     for dev_item in devolucao.itens.all():
+                        cfop_item = dev_item.cfop if (dev_item.cfop and dev_item.cfop != '5102' and dev_item.cfop != '6102') else '5202'
                         cursor.execute("""
                             INSERT INTO venda_itens (
                                 id_venda, id_produto, quantidade, valor_unitario, valor_total, cfop
@@ -142,7 +158,7 @@ class DevolucaoSerializer(serializers.ModelSerializer):
                             dev_item.quantidade_devolvida,
                             dev_item.valor_unitario,
                             dev_item.valor_total,
-                            dev_item.cfop or '5202'
+                            cfop_item
                         ])
             except Exception as e_venda:
                 print(f"Aviso ao gerar Venda de Devolucao: {e_venda}")
