@@ -568,24 +568,22 @@ class ImprimirDanfeNFeView(APIView):
                 status=404
             )
         
-        # Validar se tem NFe emitida
-        if not venda.chave_nfe:
-            return HttpResponse(
-                "<div style='font-family:sans-serif; padding:40px; text-align:center; color:#c62828;'>"
-                "<h2>⚠️ NF-e de Devolução ainda não Autorizada na SEFAZ</h2>"
-                "<p style='font-size:16px;'>Esta nota fiscal ainda não possui a Chave de Acesso da SEFAZ.</p>"
-                "<p>Por favor, volte para a Tela de Compras e clique no botão 🚀 <strong>Transmitir para SEFAZ</strong> antes de imprimir a DANFE.</p>"
-                "</div>",
-                content_type='text/html; charset=utf-8',
-                status=400
-            )
+        # Se for solicitação de prévia ou se a nota ainda não possuir chave transmitida
+        is_solicitacao_previa = (
+            request.query_params.get('previa') == 'true' or
+            request.query_params.get('modo') == 'previa' or
+            not venda.chave_nfe
+        )
+        if is_solicitacao_previa:
+            venda.is_previa = True
             
         try:
             generator = DanfeGenerator(venda)
             pdf_buffer = generator.gerar_pdf()
             
             response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
-            filename = f"DANFE_{venda.numero_nfe or venda.pk}.pdf"
+            prefix = "PREVIA_DANFE" if is_solicitacao_previa else "DANFE"
+            filename = f"{prefix}_{venda.numero_nfe or venda.pk}.pdf"
             response['Content-Disposition'] = f'inline; filename="{filename}"'
             return response
             

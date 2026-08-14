@@ -74,6 +74,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert'
 import PrintIcon from '@mui/icons-material/Print'
 import DownloadIcon from '@mui/icons-material/Download'
 import CancelIcon from '@mui/icons-material/Cancel'
+import VisibilityIcon from '@mui/icons-material/Visibility'
 import { useAuth } from '../context/AuthContext'
 import PrecificacaoDialog from '../components/PrecificacaoDialog'
 import SolicitarAprovacaoModal from '../components/SolicitarAprovacaoModal'
@@ -378,8 +379,9 @@ function CompraPage() {
     }
   };
 
-  const handleImprimirDanfeDevolucao = (vendaIdTarget) => {
-    const windowUrl = `${axiosInstance.defaults.baseURL || '/api'}/vendas/${vendaIdTarget}/imprimir_danfe/`;
+  const handleImprimirDanfeDevolucao = (vendaIdTarget, previa = false) => {
+    const queryParam = previa ? '?previa=true' : '';
+    const windowUrl = `${axiosInstance.defaults.baseURL || '/api'}/vendas/${vendaIdTarget}/imprimir_danfe/${queryParam}`;
     window.open(windowUrl, '_blank');
   };
 
@@ -3917,6 +3919,15 @@ function CompraPage() {
                               const targetId = compra.id_venda || compra.id_devolucao || compra.id_compra;
                               return (
                                 <>
+                                  <Tooltip title="Visualizar Prévia DANFE (Conferência do Fornecedor)">
+                                    <IconButton
+                                      color="info"
+                                      size="small"
+                                      onClick={() => handleImprimirDanfeDevolucao(targetId, true)}
+                                    >
+                                      <VisibilityIcon fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
                                   <Tooltip title="Editar Nota/Devolução">
                                     <IconButton
                                       color="warning"
@@ -3935,11 +3946,11 @@ function CompraPage() {
                                       <DescriptionIcon fontSize="small" />
                                     </IconButton>
                                   </Tooltip>
-                                  <Tooltip title="Imprimir DANFE PDF">
+                                  <Tooltip title="Imprimir DANFE Oficial PDF">
                                     <IconButton
                                       color="success"
                                       size="small"
-                                      onClick={() => handleImprimirDanfeDevolucao(targetId)}
+                                      onClick={() => handleImprimirDanfeDevolucao(targetId, false)}
                                     >
                                       <PrintIcon fontSize="small" />
                                     </IconButton>
@@ -6553,7 +6564,15 @@ function CompraPage() {
                 color="secondary"
                 onClick={() => setModoPreviewDevolucao(false)}
               >
-                ✏️ Voltar e Editar Valores
+                ✏️ Voltar e Editar
+              </Button>
+              <Button
+                variant="outlined"
+                color="info"
+                startIcon={<VisibilityIcon />}
+                onClick={() => handleImprimirDanfeDevolucao(vendaIdGeradoDevolucao, true)}
+              >
+                👁️ Gerar DANFE Prévia (PDF para Fornecedor)
               </Button>
               <Button
                 variant="contained"
@@ -6667,12 +6686,24 @@ function CompraPage() {
         <MenuItem
           onClick={() => {
             const targetId = compraMenuDevolucao?.id_venda || compraMenuDevolucao?.id_devolucao || compraMenuDevolucao?.id_compra;
-            handleImprimirDanfeDevolucao(targetId);
+            handleImprimirDanfeDevolucao(targetId, true);
+            handleMenuCloseDevolucao();
+          }}
+          sx={{ color: 'info.main' }}
+        >
+          <ListItemIcon><VisibilityIcon fontSize="small" color="info" /></ListItemIcon>
+          Visualizar Prévia DANFE (Conferência)
+        </MenuItem>
+
+        <MenuItem
+          onClick={() => {
+            const targetId = compraMenuDevolucao?.id_venda || compraMenuDevolucao?.id_devolucao || compraMenuDevolucao?.id_compra;
+            handleImprimirDanfeDevolucao(targetId, false);
             handleMenuCloseDevolucao();
           }}
         >
           <ListItemIcon><PrintIcon fontSize="small" color="success" /></ListItemIcon>
-          Imprimir DANFE (PDF)
+          Imprimir DANFE Oficial (PDF)
         </MenuItem>
 
         <MenuItem

@@ -51,14 +51,28 @@ class DanfeGenerator:
         # 6. Dados Adicionais
         self._desenhar_rodape()
 
-        # 7. Marca D'água se Homologação
-        if is_homologacao:
+        # 7. Marca D'água se Prévia ou Homologação
+        if not self.venda.chave_nfe or getattr(self.venda, 'is_previa', False):
+            self._desenhar_marca_dagua_previa()
+        elif is_homologacao:
             self._desenhar_marca_dagua_homologacao()
         
         self.c.showPage()
         self.c.save()
         buffer.seek(0)
         return buffer
+
+    def _desenhar_marca_dagua_previa(self):
+        """Desenha 'PRÉVIA DA DANFE - SEM VALOR FISCAL' na diagonal"""
+        self.c.saveState()
+        self.c.translate(105*mm, 148*mm) # Centro da página
+        self.c.rotate(45)
+        self.c.setFillColorRGB(0.85, 0.25, 0.25, 0.35) # Vermelho transparente
+        self.c.setFont("Helvetica-Bold", 34)
+        self.c.drawCentredString(0, 20, "PRÉVIA DA DANFE - SEM VALOR FISCAL")
+        self.c.setFont("Helvetica-Bold", 20)
+        self.c.drawCentredString(0, -20, "DOCUMENTO PARA CONFERÊNCIA DO FORNECEDOR")
+        self.c.restoreState()
 
     def _desenhar_marca_dagua_homologacao(self):
         """Desenha 'SEM VALOR FISCAL' na diagonal"""
