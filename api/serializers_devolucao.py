@@ -112,33 +112,32 @@ class DevolucaoSerializer(serializers.ModelSerializer):
         # Se for Devolução de Compra com Operação Fiscal, criar registro em vendas para emissão NF-e SEFAZ
         if devolucao.tipo == 'compra' and devolucao.id_operacao and not devolucao.id_venda:
             try:
+                from .models import Venda
+                venda = Venda.objects.create(
+                    id_cliente_id=devolucao.id_fornecedor,
+                    id_operacao_id=devolucao.id_operacao,
+                    data_documento=devolucao.data_devolucao or timezone.now(),
+                    valor_total=valor_total,
+                    observacao_contribuinte=devolucao.observacoes or f'Devolução referente à compra #{devolucao.id_compra}',
+                    chave_nfe_referenciada=devolucao.chave_nfe_referenciada or '',
+                    status_nfe='PENDENTE',
+                    tipo_frete='9',
+                    peso_bruto=0,
+                    peso_liquido=0,
+                    quantidade_volumes=0
+                )
+                devolucao.id_venda = venda.id_venda
+
+                # Criar itens da venda para a NF-e
                 from django.db import connection
                 with connection.cursor() as cursor:
-                    # Garantir que exista um cliente id correspondente ao fornecedor
-                    id_forn = devolucao.id_fornecedor
-                    cursor.execute("""
-                        INSERT INTO vendas (
-                            id_cliente, id_operacao, data_venda, valor_total,
-                            observacao, chave_nfe_referenciada, status_nfe, status_venda
-                        ) VALUES (%s, %s, NOW(), %s, %s, %s, 'PENDENTE', 'PENDENTE')
-                    """, [
-                        id_forn,
-                        devolucao.id_operacao,
-                        valor_total,
-                        devolucao.observacoes or f'Devolução referente à compra #{devolucao.id_compra}',
-                        devolucao.chave_nfe_referenciada or ''
-                    ])
-                    venda_id = cursor.lastrowid
-                    devolucao.id_venda = venda_id
-
-                    # Criar itens da venda para a NF-e
                     for dev_item in devolucao.itens.all():
                         cursor.execute("""
                             INSERT INTO venda_itens (
                                 id_venda, id_produto, quantidade, valor_unitario, valor_total, cfop
                             ) VALUES (%s, %s, %s, %s, %s, %s)
                         """, [
-                            venda_id,
+                            venda.id_venda,
                             dev_item.id_produto,
                             dev_item.quantidade_devolvida,
                             dev_item.valor_unitario,

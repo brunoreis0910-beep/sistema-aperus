@@ -3895,47 +3895,44 @@ function CompraPage() {
                               (compra.operacao_abreviacao || '').toUpperCase().includes('DEVOLU');
 
                             if (isDevolucao) {
+                              const targetId = compra.id_venda || compra.id_devolucao || compra.id_compra;
                               return (
                                 <>
-                                  {compra.id_venda && (
-                                    <>
-                                      <Tooltip title="Transmitir NF-e para SEFAZ">
-                                        <IconButton
-                                          color="success"
-                                          size="small"
-                                          onClick={() => handleTransmitirNFeSefaz(compra.id_venda)}
-                                        >
-                                          🚀
-                                        </IconButton>
-                                      </Tooltip>
-                                      <Tooltip title="Visualizar / Imprimir DANFE PDF">
-                                        <IconButton
-                                          color="primary"
-                                          size="small"
-                                          onClick={() => handleImprimirDanfeDevolucao(compra.id_venda)}
-                                        >
-                                          📄
-                                        </IconButton>
-                                      </Tooltip>
-                                      <Tooltip title="Emitir Carta de Correção (CC-e)">
-                                        <IconButton
-                                          color="secondary"
-                                          size="small"
-                                          onClick={() => setCartaCorrecaoDialog({
-                                            open: true,
-                                            venda: {
-                                              id_venda: compra.id_venda,
-                                              id: compra.id_venda,
-                                              numero_nfe: compra.numero_documento,
-                                              chave_nfe: compra.chave_nfe
-                                            }
-                                          })}
-                                        >
-                                          ✉️
-                                        </IconButton>
-                                      </Tooltip>
-                                    </>
-                                  )}
+                                  <Tooltip title="Transmitir NF-e para SEFAZ">
+                                    <IconButton
+                                      color="success"
+                                      size="small"
+                                      onClick={() => handleTransmitirNFeSefaz(targetId)}
+                                    >
+                                      🚀
+                                    </IconButton>
+                                  </Tooltip>
+                                  <Tooltip title="Visualizar / Imprimir DANFE PDF">
+                                    <IconButton
+                                      color="primary"
+                                      size="small"
+                                      onClick={() => handleImprimirDanfeDevolucao(targetId)}
+                                    >
+                                      📄
+                                    </IconButton>
+                                  </Tooltip>
+                                  <Tooltip title="Emitir Carta de Correção (CC-e)">
+                                    <IconButton
+                                      color="secondary"
+                                      size="small"
+                                      onClick={() => setCartaCorrecaoDialog({
+                                        open: true,
+                                        venda: {
+                                          id_venda: targetId,
+                                          id: targetId,
+                                          numero_nfe: compra.numero_documento,
+                                          chave_nfe: compra.chave_nfe
+                                        }
+                                      })}
+                                    >
+                                      ✉️
+                                    </IconButton>
+                                  </Tooltip>
                                   <Tooltip title="Editar devolução">
                                     <IconButton
                                       color="warning"
