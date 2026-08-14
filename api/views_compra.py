@@ -654,11 +654,17 @@ class CompraViewSet(viewsets.ModelViewSet):
             fin_nfe = get_text(ide, 'finNFe', '1')
             tp_debito = get_text(ide, 'tpNFDebito', '')
 
-            # Chave referenciada global da nota em ide -> NFref -> refNFe
-            chave_referenciada_global = ''
-            nf_ref_node = get_node(ide, 'NFref')
-            if nf_ref_node is not None:
-                chave_referenciada_global = get_text(nf_ref_node, 'refNFe', '') or get_text(nf_ref_node, 'refNFCe', '')
+            # Chaves referenciadas extraídas do XML (qualquer nó refNFe, refNFCe ou chaveAcesso)
+            chaves_referenciadas_encontradas = []
+            for elem in root.iter():
+                tag_lower = elem.tag.lower()
+                if tag_lower.endswith('refnfe') or tag_lower.endswith('refnfce') or tag_lower.endswith('chaveacesso'):
+                    val = (elem.text or '').strip()
+                    if len(val) == 44 and val.isdigit():
+                        if val not in chaves_referenciadas_encontradas:
+                            chaves_referenciadas_encontradas.append(val)
+            
+            chave_referenciada_global = chaves_referenciadas_encontradas[0] if chaves_referenciadas_encontradas else ''
 
             # Definição automática de comportamento para Nota de Débito (finNFe = 6)
             movimenta_estoque_fisico = True
@@ -997,22 +1003,44 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'n_item_origem': n_item_origem_item,
                     })
             
-            # Buscar compra de origem no banco se houver chave referenciada
+            # Busca ultra-inteligente da Nota de Origem no banco de dados
             compra_origem_sugerida = None
-            if chave_referenciada_global:
-                from django.db.models import Q
+            from django.db.models import Q
+
+            # 1. Tentar por todas as chaves referenciadas extraídas do XML
+            for ch_ref in chaves_referenciadas_encontradas:
+                if ch_ref == chave_nfe:
+                    continue  # ignora a própria chave da nota atual
+
                 c_orig = Compra.objects.filter(
-                    Q(dados_entrada=chave_referenciada_global) | 
-                    Q(dados_entrada__icontains=chave_referenciada_global)
+                    Q(dados_entrada=ch_ref) | Q(dados_entrada__icontains=ch_ref)
                 ).first()
+
+                # 2. Fallback: extrai o número da NF-e (posições 25:34) e busca por número de documento + fornecedor
+                if not c_orig and len(ch_ref) == 44:
+                    try:
+                        n_nf_ref = str(int(ch_ref[25:34]))  # Remove zeros à esquerda (ex: 000057329 -> 57329)
+                        cnpj_ref = ch_ref[6:20]
+                        c_orig = Compra.objects.filter(
+                            numero_documento__icontains=n_nf_ref
+                        ).filter(
+                            Q(id_fornecedor__cpf_cnpj__icontains=cnpj_ref) | Q(dados_entrada__icontains=n_nf_ref)
+                        ).first()
+                    except Exception:
+                        pass
+
                 if c_orig:
                     compra_origem_sugerida = {
                         'id_compra': c_orig.id_compra,
                         'numero_documento': c_orig.numero_documento,
                         'data_entrada': str(c_orig.data_entrada) if c_orig.data_entrada else '',
                         'valor_total': float(c_orig.valor_total or 0),
-                        'chave_nfe': c_orig.dados_entrada
+                        'chave_nfe': c_orig.dados_entrada or ch_ref,
+                        'fornecedor_nome': c_orig.id_fornecedor.nome_razao_social if c_orig.id_fornecedor else ''
                     }
+                    if not chave_referenciada_global:
+                        chave_referenciada_global = ch_ref
+                    break
 
             # Buscar compras do fornecedor ou compras recentes do sistema para escolha manual
             compras_fornecedor_opcoes = []

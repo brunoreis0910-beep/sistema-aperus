@@ -6937,19 +6937,33 @@ function CompraPage() {
             Para atualizar corretamente o <strong>Custo Médio dos produtos</strong>, vincule este ajuste à <strong>Nota Fiscal de Entrada de Origem</strong> do fornecedor <strong>{dadosNotaDebitoModal?.fornecedor_nome}</strong>:
           </Typography>
 
-          {dadosNotaDebitoModal?.compra_origem_sugerida && (
-            <Paper elevation={1} sx={{ p: 2, mb: 3, bgcolor: '#e8f5e9', border: '1px solid #a5d6a7' }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
-                ✨ Nota de Origem Recomendada (via Chave Referenciada XML):
+          {dadosNotaDebitoModal?.compra_origem_sugerida ? (
+            <Paper elevation={2} sx={{ p: 2, mb: 3, bgcolor: '#e8f5e9', border: '2px solid #66bb6a', borderRadius: 2 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#1b5e20', display: 'flex', alignItems: 'center', gap: 1 }}>
+                ✅ Nota de Origem Localizada Automaticamente no Banco (via Chave Referenciada XML):
               </Typography>
-              <Typography variant="body2" sx={{ mt: 0.5 }}>
-                • <strong>Documento:</strong> Nota Nº {dadosNotaDebitoModal.compra_origem_sugerida.numero_documento} | Data: {dadosNotaDebitoModal.compra_origem_sugerida.data_entrada}
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                • <strong>Documento:</strong> Nota Nº {dadosNotaDebitoModal.compra_origem_sugerida.numero_documento} {dadosNotaDebitoModal.compra_origem_sugerida.fornecedor_nome ? `(${dadosNotaDebitoModal.compra_origem_sugerida.fornecedor_nome})` : ''} | Data Entrada: {dadosNotaDebitoModal.compra_origem_sugerida.data_entrada}
               </Typography>
               <Typography variant="body2">
                 • <strong>Valor Total Origem:</strong> R$ {parseFloat(dadosNotaDebitoModal.compra_origem_sugerida.valor_total || 0).toFixed(2)}
               </Typography>
+              {dadosNotaDebitoModal.compra_origem_sugerida.chave_nfe && (
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5, wordBreak: 'break-all' }}>
+                  🔑 Chave: {dadosNotaDebitoModal.compra_origem_sugerida.chave_nfe}
+                </Typography>
+              )}
             </Paper>
-          )}
+          ) : dadosNotaDebitoModal?.chave_referenciada ? (
+            <Paper elevation={1} sx={{ p: 2, mb: 3, bgcolor: '#fffde7', border: '1px solid #ffe082', borderRadius: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#f57f17' }}>
+                ℹ️ Chave Referenciada encontrada no XML: {dadosNotaDebitoModal.chave_referenciada}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
+                A nota original com esta chave de acesso ainda não foi cadastrada no sistema ou foi digitada em formato diferente. Selecione a nota de origem manualmente abaixo:
+              </Typography>
+            </Paper>
+          ) : null}
 
           {(() => {
             const listOpcoes = [];
