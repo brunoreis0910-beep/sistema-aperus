@@ -367,9 +367,15 @@ function CompraPage() {
     protocolo: ''
   });
 
-  const handleTransmitirNFeSefaz = async (vendaIdTarget) => {
+  const handleTransmitirNFeSefaz = async (vendaIdTarget, compraRow = null) => {
+    toast.info('📡 Transmitindo lote de NF-e para a SEFAZ...');
     setDialogNFeDevolucao(prev => ({
       ...prev,
+      open: true,
+      vendaId: vendaIdTarget,
+      fornecedorNome: compraRow?.nome_fornecedor || prev.fornecedorNome || '',
+      numeroDoc: compraRow?.numero_documento || compraRow?.numero_nota || prev.numeroDoc || `#${vendaIdTarget}`,
+      chaveNFe: compraRow?.chave_nfe || prev.chaveNFe || '',
       statusEmissao: 'enviando',
       mensagemSefaz: '📡 Assinando XML e transmitindo lote para a SEFAZ...'
     }));
@@ -379,9 +385,10 @@ function CompraPage() {
       if (data.sucesso || data.status === 'autorizada' || data.cStat === 100) {
         setDialogNFeDevolucao(prev => ({
           ...prev,
+          open: true,
           statusEmissao: 'autorizada',
           mensagemSefaz: `🟢 NF-e Autorizada com Sucesso! ${data.xMotivo || 'Autorizado o uso da NF-e'}`,
-          chaveNFe: data.chave_nfe || prev.chaveNFe,
+          chaveNFe: data.chave_nfe || data.chave || prev.chaveNFe,
           protocolo: data.nProt || data.protocolo || ''
         }));
         toast.success('🟢 NF-e de Devolução Autorizada pela SEFAZ!');
@@ -390,6 +397,7 @@ function CompraPage() {
         const erroSefaz = data.error || data.xMotivo || data.mensagem || 'Rejeição da SEFAZ';
         setDialogNFeDevolucao(prev => ({
           ...prev,
+          open: true,
           statusEmissao: 'rejeitada',
           mensagemSefaz: `❌ Rejeição SEFAZ: ${erroSefaz}`
         }));
@@ -399,6 +407,7 @@ function CompraPage() {
       const erroMsg = err.response?.data?.mensagem || err.response?.data?.xMotivo || err.response?.data?.error || err.response?.data?.details || err.message || 'Erro de conexão com SEFAZ';
       setDialogNFeDevolucao(prev => ({
         ...prev,
+        open: true,
         statusEmissao: 'rejeitada',
         mensagemSefaz: `❌ Erro de Transmissão: ${erroMsg}`
       }));
