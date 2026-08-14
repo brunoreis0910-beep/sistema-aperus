@@ -466,6 +466,15 @@ def resolver_venda_para_operacao(id_target):
                                 dev_item.valor_total,
                                 cfop_item
                             ])
+                # 3. Garantir que cliente.inscricao_estadual sincronize com fornecedor.inscricao_estadual
+                if venda.id_cliente and devolucao.id_fornecedor:
+                    forn = Fornecedor.objects.filter(pk=devolucao.id_fornecedor).first()
+                    if forn and forn.inscricao_estadual and forn.inscricao_estadual.strip() not in ['', 'ISENTO']:
+                        cli = venda.id_cliente
+                        if not cli.inscricao_estadual or cli.inscricao_estadual.strip() in ['', 'ISENTO']:
+                            cli.inscricao_estadual = forn.inscricao_estadual.strip()
+                            cli.save(update_fields=['inscricao_estadual'])
+
                 return venda
 
         # Auto-criar Venda se a devolução não possui id_venda vinculado ainda
