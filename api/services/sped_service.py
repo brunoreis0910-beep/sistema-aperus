@@ -140,6 +140,15 @@ class SpedEFDGenerator:
             cst_str = cst_str[-3:]
         return cst_str.zfill(3)
 
+    def format_cfop(self, cfop_input, default="1949"):
+        import re
+        if not cfop_input:
+            return default
+        cfop_str = re.sub(r'[^\d]', '', str(cfop_input).strip())
+        if len(cfop_str) == 4:
+            return cfop_str
+        return default
+
     def add_line(self, reg, *args):
         line_data = [reg] + list(args) + [''] # Ends with |
         line = "|".join([self.format_str(x) if not isinstance(x, (float, Decimal)) else self.format_decimal(x) for x in line_data])
@@ -732,7 +741,8 @@ class SpedEFDGenerator:
                 trib = getattr(prod, 'tributacao_detalhada', None)
                 cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None) or "000"
                 cst_icms = self.format_cst_icms(cst_raw)
-                cfop = getattr(item, 'cfop', None) or (op.transacao if op else "1949") or "1949"
+                raw_cfop = getattr(item, 'cfop', None) or (op.cfop if op and getattr(op, 'cfop', None) else None)
+                cfop = self.format_cfop(raw_cfop, "1949")
                 aliq_icms = trib.icms_aliquota if trib else Decimal(0)
                 vl_bc_icms = item.valor_total if cst_icms in ['000', '020', '090'] else Decimal(0)
                 vl_icms = vl_bc_icms * (aliq_icms / 100) if vl_bc_icms > 0 else Decimal(0)
