@@ -1014,11 +1014,14 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'chave_nfe': c_orig.dados_entrada
                     }
 
-            # Buscar compras anteriores do mesmo fornecedor para opção de escolha manual
+            # Buscar compras do fornecedor ou compras recentes do sistema para escolha manual
             compras_fornecedor_opcoes = []
+            ids_inseridos = set()
+
             if id_fornecedor:
                 qs_forn = Compra.objects.filter(id_fornecedor_id=id_fornecedor).order_by('-id_compra')[:20]
                 for cf in qs_forn:
+                    ids_inseridos.add(cf.id_compra)
                     compras_fornecedor_opcoes.append({
                         'id_compra': cf.id_compra,
                         'numero_documento': cf.numero_documento or f"#{cf.id_compra}",
@@ -1026,6 +1029,18 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'valor_total': float(cf.valor_total or 0),
                         'chave_nfe': cf.dados_entrada or ''
                     })
+
+            # Adicionar compras recentes do sistema como fallback
+            qs_geral = Compra.objects.exclude(id_compra__in=ids_inseridos).order_by('-id_compra')[:30]
+            for cf in qs_geral:
+                forn_nome = cf.id_fornecedor.nome_razao_social if cf.id_fornecedor else ''
+                compras_fornecedor_opcoes.append({
+                    'id_compra': cf.id_compra,
+                    'numero_documento': f"{cf.numero_documento or '#' + str(cf.id_compra)} ({forn_nome})",
+                    'data_entrada': str(cf.data_entrada) if cf.data_entrada else '',
+                    'valor_total': float(cf.valor_total or 0),
+                    'chave_nfe': cf.dados_entrada or ''
+                })
 
             return Response({
                 'numero_nf': numero_nf,

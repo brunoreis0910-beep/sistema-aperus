@@ -6951,24 +6951,64 @@ function CompraPage() {
             </Paper>
           )}
 
-          <FormControl fullWidth sx={{ mt: 1 }}>
-            <InputLabel id="label-compra-origem">Selecione a Nota Fiscal de Origem *</InputLabel>
-            <Select
-              labelId="label-compra-origem"
-              value={idCompraOrigemSelecionada}
-              onChange={(e) => setIdCompraOrigemSelecionada(e.target.value)}
-              label="Selecione a Nota Fiscal de Origem *"
-            >
-              <MenuItem value="">
-                <em>Nenhuma (Apenas registrar Nota de Débito sem vínculo direto)</em>
-              </MenuItem>
-              {Array.isArray(dadosNotaDebitoModal?.compras_fornecedor_opcoes) && dadosNotaDebitoModal.compras_fornecedor_opcoes.map((cf) => (
-                <MenuItem key={cf.id_compra} value={String(cf.id_compra)}>
-                  Nota Nº {cf.numero_documento} — {cf.data_entrada} (R$ {parseFloat(cf.valor_total).toFixed(2)})
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          {(() => {
+            const listOpcoes = [];
+            const idsVistos = new Set();
+
+            if (dadosNotaDebitoModal?.compra_origem_sugerida) {
+              const s = dadosNotaDebitoModal.compra_origem_sugerida;
+              idsVistos.add(String(s.id_compra));
+              listOpcoes.push(s);
+            }
+
+            if (Array.isArray(dadosNotaDebitoModal?.compras_fornecedor_opcoes)) {
+              dadosNotaDebitoModal.compras_fornecedor_opcoes.forEach(cf => {
+                const idC = String(cf.id_compra);
+                if (!idsVistos.has(idC)) {
+                  idsVistos.add(idC);
+                  listOpcoes.push(cf);
+                }
+              });
+            }
+
+            if (Array.isArray(compras)) {
+              compras.forEach(c => {
+                const idC = String(c.id_compra || c.id);
+                if (!idsVistos.has(idC)) {
+                  idsVistos.add(idC);
+                  const fornNome = c.fornecedor_nome || c.fornecedor?.nome_razao_social || '';
+                  listOpcoes.push({
+                    id_compra: c.id_compra || c.id,
+                    numero_documento: `${c.numero_documento || '#' + idC}${fornNome ? ' (' + fornNome + ')' : ''}`,
+                    data_entrada: c.data_entrada || '',
+                    valor_total: c.valor_total || 0,
+                    chave_nfe: c.dados_entrada || c.chave_nfe || ''
+                  });
+                }
+              });
+            }
+
+            return (
+              <FormControl fullWidth sx={{ mt: 1 }}>
+                <InputLabel id="label-compra-origem">Selecione a Nota Fiscal de Origem *</InputLabel>
+                <Select
+                  labelId="label-compra-origem"
+                  value={idCompraOrigemSelecionada}
+                  onChange={(e) => setIdCompraOrigemSelecionada(e.target.value)}
+                  label="Selecione a Nota Fiscal de Origem *"
+                >
+                  <MenuItem value="">
+                    <em>Nenhuma (Apenas registrar Nota de Débito sem vínculo direto)</em>
+                  </MenuItem>
+                  {listOpcoes.map((cf) => (
+                    <MenuItem key={cf.id_compra} value={String(cf.id_compra)}>
+                      Nota Nº {cf.numero_documento} — {cf.data_entrada} (R$ {parseFloat(cf.valor_total || 0).toFixed(2)})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            );
+          })()}
         </DialogContent>
         <DialogActions sx={{ p: 2, bgcolor: '#fafafa' }}>
           <Button onClick={() => setDialogNotaDebitoOpen(false)} color="inherit">
