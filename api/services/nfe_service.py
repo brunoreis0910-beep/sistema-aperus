@@ -337,27 +337,8 @@ class NFeService:
                 raise ImportError(f"Dependência faltando: {e}. Executável: {sys.executable}")
 
             # 0. SMART RETRY: Se já existe XML assinado salvo (de tentativa anterior com erro),
-            # reutilizar esse XML ao invés de gerar novo (evita mudança de dhEmi e DigestValue)
+            # Sempre regerar o XML a partir dos dados atualizados do banco (IE do fornecedor, número da NF-e, etc.)
             xml_signed_reutilizado = None
-            
-            # Se a mensagem de erro anterior for "Assinatura difere" (297) ou "DigestValue mismatch",
-            # NÃO REUTILIZAR o XML, pois a assinatura está inválida.
-            erro_assinatura = False
-            msg_erro = str(getattr(venda, 'mensagem_nfe', '') or '')
-            if '297' in msg_erro or 'Assinatura difere' in msg_erro or 'DigestValue' in msg_erro:
-                erro_assinatura = True
-                logger.warning(f"[RETRY] Erro de assinatura detectado ({msg_erro}). Forçando regeneração do XML.")
-            
-            if venda.xml_nfe and venda.status_nfe == 'PENDENTE' and not erro_assinatura:
-                logger.info(f"[RETRY] Nota PENDENTE com XML já gerado. Verificando se pode reutilizar...")
-                
-                # Verifica se é um XML assinado válido (tem tag Signature)
-                if '<Signature' in venda.xml_nfe and '<infNFe' in venda.xml_nfe:
-                    logger.info("[RETRY] XML assinado encontrado! Reutilizando para evitar mudança de dhEmi...")
-                    xml_signed_reutilizado = venda.xml_nfe
-                    # Pula geração e assinatura, vai direto para transmissão
-                else:
-                    logger.warning("[RETRY] XML salvo não está assinado. Gerando novo...")
 
             # 1. Build XML (SOMENTE SE NÃO REUTILIZOU XML ANTERIOR)
             # REMOVED: Forced override of number 2 to 1.

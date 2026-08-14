@@ -480,8 +480,14 @@ def resolver_venda_para_operacao(id_target):
             id_cli = cli.id_cliente if cli else (devolucao.id_fornecedor or 1)
 
             from django.db.models import Max
-            max_num = Venda.objects.filter(numero_nfe__gt=0).aggregate(Max('numero_nfe'))['numero_nfe__max'] or 0
-            proximo_numero = max_num + 1
+            op_obj = Operacao.objects.filter(pk=id_op).first()
+            if op_obj and getattr(op_obj, 'proximo_numero_nf', None):
+                proximo_numero = op_obj.proximo_numero_nf
+                op_obj.proximo_numero_nf += 1
+                op_obj.save(update_fields=['proximo_numero_nf'])
+            else:
+                max_num = Venda.objects.filter(numero_nfe__gt=0, numero_nfe__lt=500).aggregate(Max('numero_nfe'))['numero_nfe__max'] or 17
+                proximo_numero = max_num + 1
 
             venda = Venda.objects.create(
                 id_cliente_id=id_cli,
