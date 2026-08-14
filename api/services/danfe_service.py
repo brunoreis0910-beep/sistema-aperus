@@ -128,10 +128,14 @@ class DanfeGenerator:
         self._rect(55, top-18, 105, 8) # Assinatura
         self._text(56, top-17, "IDENTIFICAÇÃO E ASSINATURA DO RECEBEDOR", size=5)
         
+        num_nfe = getattr(self.venda, 'numero_nfe', None) or getattr(self.venda, 'numero_documento', None) or getattr(self.venda, 'pk', 1)
+        if not num_nfe or str(num_nfe) == '0':
+            num_nfe = getattr(self.venda, 'pk', 1)
+
         # NF-e Canhoto
         self._rect(185, top-18, 20, 15)
         self._text_bold(195, top-8, "NF-e", size=10, align="center")
-        self._text_bold(195, top-12, f"Nº {self.venda.numero_nfe or '0'}", size=8, align="center")
+        self._text_bold(195, top-12, f"Nº {num_nfe}", size=8, align="center")
         self._text_bold(195, top-15, f"SÉRIE {self.venda.serie_nfe or '1'}", size=6, align="center")
         
         # -- LOGO E DADOS EMITENTE --
@@ -229,7 +233,7 @@ class DanfeGenerator:
         self._rect(x_danfe+20, y_emit+7, 6, 6)
         self._text_bold(x_danfe+23, y_emit+8, tp_nf, size=9, align="center")
         
-        self._text_bold(x_danfe+w_danfe/2, y_emit+4, f"Nº {self.venda.numero_nfe}", size=8, align="center")
+        self._text_bold(x_danfe+w_danfe/2, y_emit+4, f"Nº {num_nfe}", size=8, align="center")
         self._text(x_danfe+w_danfe/2, y_emit+1, f"SÉRIE {self.venda.serie_nfe or '1'}", size=6, align="center")
 
         # Código de Barras e Chave
@@ -338,9 +342,23 @@ class DanfeGenerator:
             except Exception as e:
                 logger.error(f"Erro ao ler CFOP do XML: {e}")
 
-        # 2. Fallback: Se não tem XML processado mas tem itens, podemos tentar adivinhar 
-        # (Mas sem Regra Fiscal complexa, vamos assumir o padrão 5102 que é usado no XML Builder por enquanto)
-        return cfop_desc.get('5102')
+        # 2. Fallback: Se não tem XML processado (ex: Prévia), verificar Operação e CFOP dos itens
+        first_item = self.venda.itens.first() if hasattr(self.venda, 'itens') else None
+        item_cfop = getattr(first_item, 'cfop', '') if first_item else ''
+        
+        op_obj = getattr(self.venda, 'id_operacao', None)
+        op_nome = getattr(op_obj, 'nome_operacao', '') if op_obj else ''
+
+        if 'DEVOLU' in op_nome.upper() or item_cfop in ['5201', '5202', '6201', '6202', '5411', '6411']:
+            return "DEVOLUCAO DE COMPRA PARA COMERCIALIZACAO"
+        
+        if item_cfop and item_cfop in cfop_desc:
+            return cfop_desc[item_cfop]
+
+        if op_nome:
+            return op_nome.upper()
+
+        return "DEVOLUCAO DE COMPRA PARA COMERCIALIZACAO"
 
     def _desenhar_destinatario(self, is_homologacao=False):
         cli = self.venda.id_cliente
@@ -467,30 +485,37 @@ class DanfeGenerator:
         self._text(5, hd-1, "_"*145, size=5) # Linha
         
         y_item = hd - 4
+
+        itens_list = list(self.venda.itens.all())
+        row_height = 3.5
+        font_sz = 6
+        if len(itens_list) > 16:
+            row_height = max(1.8, (y_item - 52) / max(1, len(itens_list)))
+            font_sz = 5
         
-        # Listar Itens (Limitado visualmente, nao farei paginacao para manter simples)
-        for item in self.venda.itens.all():
-            if y_item < 55: break # End of box
+        # Listar Todos os Itens
+        for item in itens_list:
+            if y_item < 50: break # Limite seguro do quadro
             
             prod = item.id_produto
-            codigo = prod.codigo_produto if prod else "000"
-            nome = prod.nome_produto[:50] if prod else "ITEM"
-            ncm = prod.ncm if prod else ""
-            cst = "000" # Placeholder
-            cfop = "5102" # Placeholder
-            unid = prod.unidade_medida if prod else "UN"
+            codigo = getattr(prod, 'codigo_produto', '') or getattr(item, 'codigo_produto', '') or "000"
+            nome = (getattr(prod, 'nome_produto', '') or getattr(item, 'nome_produto', '') or "ITEM")[:50]
+            ncm = getattr(prod, 'ncm', '') or getattr(item, 'ncm', '') or ""
+            cst = getattr(item, 'cst', '') or getattr(item, 'cst_csosn', '') or "000"
+            cfop = getattr(item, 'cfop', '') or "5202"
+            unid = getattr(prod, 'unidade_medida', '') or getattr(item, 'unidade_medida', '') or "UN"
             
-            self._text(6, y_item, codigo, size=6)
-            self._text(25, y_item, nome, size=6)
-            self._text(90, y_item, ncm, size=6)
-            self._text(105, y_item, cst, size=6)
-            self._text(113, y_item, cfop, size=6)
-            self._text(123, y_item, unid, size=6)
-            self._text(140, y_item, f"{item.quantidade:.2f}", size=6, align="right")
-            self._text(155, y_item, f"{item.valor_unitario:.2f}", size=6, align="right")
-            self._text(170, y_item, f"{item.valor_total:.2f}", size=6, align="right")
+            self._text(6, y_item, str(codigo), size=font_sz)
+            self._text(25, y_item, nome, size=font_sz)
+            self._text(90, y_item, str(ncm), size=font_sz)
+            self._text(105, y_item, str(cst), size=font_sz)
+            self._text(113, y_item, str(cfop), size=font_sz)
+            self._text(123, y_item, str(unid), size=font_sz)
+            self._text(140, y_item, f"{float(item.quantidade or 0):.2f}", size=font_sz, align="right")
+            self._text(155, y_item, f"{float(item.valor_unitario or 0):.2f}", size=font_sz, align="right")
+            self._text(170, y_item, f"{float(item.valor_total or 0):.2f}", size=font_sz, align="right")
             
-            y_item -= 3.5
+            y_item -= row_height
 
     def _desenhar_rodape(self):
         y = 45
