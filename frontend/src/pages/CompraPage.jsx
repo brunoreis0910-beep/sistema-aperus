@@ -2182,13 +2182,44 @@ function CompraPage() {
         return
       }
 
-      // Mapeia os itens com informações completas do produto
+      const eNotaDebito = ['2', '3', '6'].includes(String(compra.finalidade)) || !!compra.chave_referenciada || !!compra.id_compra_origem || !!compra.compra_origem_sugerida;
+
+      // Buscar detalhes da compra de origem se for Nota de Débito e houver vínculo
+      let itensOrigemMap = {};
+      const idOrigem = compra.id_compra_origem || compra.compra_origem_sugerida?.id_compra;
+      if (eNotaDebito && idOrigem) {
+        try {
+          const resOrig = await axiosInstance.get(`/compras/${idOrigem}/`);
+          if (resOrig.data && resOrig.data.itens) {
+            resOrig.data.itens.forEach(itOrig => {
+              itensOrigemMap[itOrig.id_produto] = parseFloat(itOrig.valor_compra || itOrig.valor_unitario || 0);
+            });
+          }
+        } catch (eOrig) {
+          console.warn('Não foi possível carregar valores da compra de origem:', eOrig);
+        }
+      }
+
+      // Mapeia os itens com informações completas do produto e detalhamento de custo de débito
       const itensComProdutos = compra.itens.map(item => {
         const produto = produtos.find(p => p.id_produto === item.id_produto)
+        const valorDebito = parseFloat(item.valor_compra || item.valor_unitario || 0);
+        
+        let custoOrigem = 0;
+        if (eNotaDebito) {
+          custoOrigem = itensOrigemMap[item.id_produto] || parseFloat(produto?.custo_medio || produto?.valor_ultima_compra || 0);
+        }
+        
+        const custoTotal = eNotaDebito ? (custoOrigem + valorDebito) : valorDebito;
+
         return {
           id_produto: item.id_produto,
           quantidade: item.quantidade,
-          valor_unitario: item.valor_compra || item.valor_unitario,
+          valor_unitario: valorDebito,
+          valor_debito: valorDebito,
+          custo_origem: custoOrigem,
+          custo_total: custoTotal,
+          is_nota_debito: eNotaDebito,
           nome_produto: produto?.nome_produto || `Produto ${item.id_produto}`
         }
       })

@@ -1505,6 +1505,7 @@ class CompraViewSet(viewsets.ModelViewSet):
                     id_produto = item.get('id_produto')
                     id_deposito = item.get('id_deposito', 1)
                     valor_venda = Decimal(str(item.get('valor_venda', 0)))
+                    valor_custo_raw = item.get('valor_custo') or item.get('custo_total') or item.get('valor_compra')
                     
                     if valor_venda <= 0:
                         itens_erro.append({
@@ -1513,26 +1514,26 @@ class CompraViewSet(viewsets.ModelViewSet):
                         })
                         continue
                     
-                    # Busca ou cria estoque
-                    estoque, created = Estoque.objects.get_or_create(
-                        id_produto_id=id_produto,
-                        id_deposito_id=id_deposito,
-                        defaults={
-                            'quantidade': Decimal('0'),
-                            'custo_medio': Decimal('0'),
-                            'valor_venda': valor_venda
-                        }
-                    )
-                    
-                    if not created:
-                        estoque.valor_venda = valor_venda
-                        estoque.save()
+                    # Atualizar valor_venda em TODOS os depósitos do produto
+                    Estoque.objects.filter(id_produto_id=id_produto).update(valor_venda=valor_venda)
+
+                    # Se foi informado custo total (ex: Nota de Débito com custo acumulado), atualizar custo_medio e valor_ultima_compra em todos os depósitos
+                    if valor_custo_raw:
+                        try:
+                            v_custo_dec = Decimal(str(valor_custo_raw)).quantize(Decimal('0.0001'))
+                            if v_custo_dec > 0:
+                                Estoque.objects.filter(id_produto_id=id_produto).update(
+                                    custo_medio=v_custo_dec,
+                                    valor_ultima_compra=v_custo_dec
+                                )
+                        except Exception as _ce:
+                            print(f"[PRECIFICACAO] Erro ao atualizar custo: {_ce}")
                     
                     itens_atualizados.append({
                         'id_produto': id_produto,
                         'id_deposito': id_deposito,
                         'valor_venda': str(valor_venda),
-                        'status': 'criado' if created else 'atualizado'
+                        'status': 'atualizado'
                     })
                     
                 except (InvalidOperation, ValueError, TypeError, Estoque.DoesNotExist) as e:

@@ -69,12 +69,18 @@ const PrecificacaoDialog = ({ open, onClose, itens, onAplicar, axiosInstance }) 
 
     try {
       const payload = {
-        itens: itensCalculados.map(item => ({
-          id_produto: item.id_produto,
-          valor_compra: parseFloat(item.valor_unitario) || 0,
-          tipo_calculo: tipoCalculo,
-          percentual: parseFloat(item.percentual) || 0
-        }))
+        itens: itensCalculados.map(item => {
+          const isDeb = item.is_nota_debito || (item.custo_origem !== undefined && item.custo_origem !== null && item.custo_origem > 0);
+          const cOrig = parseFloat(item.custo_origem || 0);
+          const vDeb = parseFloat(item.valor_debito || item.valor_unitario || 0);
+          const cTotal = isDeb ? (cOrig + vDeb) : vDeb;
+          return {
+            id_produto: item.id_produto,
+            valor_compra: cTotal || 0,
+            tipo_calculo: tipoCalculo,
+            percentual: parseFloat(item.percentual) || 0
+          };
+        })
       }
 
       const response = await axiosInstance.post('/compras/calcular-precificacao/', payload)
@@ -122,11 +128,18 @@ const PrecificacaoDialog = ({ open, onClose, itens, onAplicar, axiosInstance }) 
 
     try {
       const payload = {
-        itens: itensCalculados.map(item => ({
-          id_produto: item.id_produto,
-          id_deposito: 1, // Depósito padrão
-          valor_venda: parseFloat(item.valor_venda_sugerido)
-        }))
+        itens: itensCalculados.map(item => {
+          const isDeb = item.is_nota_debito || (item.custo_origem !== undefined && item.custo_origem !== null && item.custo_origem > 0);
+          const cOrig = parseFloat(item.custo_origem || 0);
+          const vDeb = parseFloat(item.valor_debito || item.valor_unitario || 0);
+          const cTotal = isDeb ? (cOrig + vDeb) : vDeb;
+          return {
+            id_produto: item.id_produto,
+            id_deposito: 1, // Depósito padrão
+            valor_venda: parseFloat(item.valor_venda_sugerido),
+            valor_custo: cTotal
+          };
+        })
       }
 
       const response = await axiosInstance.post('/compras/aplicar-precificacao/', payload)
@@ -261,92 +274,137 @@ const PrecificacaoDialog = ({ open, onClose, itens, onAplicar, axiosInstance }) 
           </Grid>
         </Grid>
 
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Produto</TableCell>
-                <TableCell align="right">Custo</TableCell>
-                <TableCell align="center">% {tipoCalculo === 'margem' ? 'Margem' : 'Markup'}</TableCell>
-                <TableCell align="right">Venda Sugerida</TableCell>
-                <TableCell align="center">Margem Real</TableCell>
-                <TableCell align="center">Markup Real</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {itensCalculados && itensCalculados.map((item, index) => (
-                <TableRow key={index}>
-                  <TableCell>
-                    {item.nome_produto || `Produto ${item.id_produto}`}
-                  </TableCell>
-                  <TableCell align="right">
-                    <Stack direction="column" alignItems="flex-end" spacing={0.5}>
-                      <Chip
-                        label={formatarMoeda(item.valor_unitario)}
-                        size="small"
-                        color={item.chave_origem || item.is_ajuste_custo ? "success" : "default"}
-                        sx={{ fontWeight: 'bold' }}
-                      />
-                      {(item.chave_origem || item.is_ajuste_custo) && (
-                        <Chip
-                          label="📈 Custo Ajustado (Débito)"
-                          size="small"
-                          color="success"
-                          variant="outlined"
-                          sx={{ fontSize: '0.65rem', height: 18 }}
-                        />
-                      )}
-                    </Stack>
-                  </TableCell>
-                  <TableCell align="center">
-                    <TextField
-                      size="small"
-                      type="number"
-                      value={item.percentual || ''}
-                      onChange={(e) => handlePercentualChange(index, e.target.value)}
-                      sx={{ width: 110 }}
-                      InputProps={{
-                        endAdornment: <InputAdornment position="end">%</InputAdornment>
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    {item.valor_venda_sugerido ? (
-                      <Chip
-                        label={formatarMoeda(item.valor_venda_sugerido)}
-                        size="small"
-                        color="success"
-                        icon={<AttachMoneyIcon />}
-                      />
+        {(() => {
+          const temNotaDebito = itensCalculados.some(i => i.is_nota_debito || (i.custo_origem !== undefined && i.custo_origem !== null && i.custo_origem > 0));
+          return (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Produto</TableCell>
+                    {temNotaDebito ? (
+                      <>
+                        <TableCell align="right">Custo Origem</TableCell>
+                        <TableCell align="right">Vlr. Nota Débito</TableCell>
+                        <TableCell align="right">Custo Total</TableCell>
+                      </>
                     ) : (
-                      <Typography variant="caption" color="text.secondary">
-                        Não calculado
-                      </Typography>
+                      <TableCell align="right">Custo</TableCell>
                     )}
-                  </TableCell>
-                  <TableCell align="center">
-                    {item.margem_percentual && (
-                      <Chip
-                        label={`${item.margem_percentual}%`}
-                        size="small"
-                        color="info"
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell align="center">
-                    {item.markup_percentual && (
-                      <Chip
-                        label={`${item.markup_percentual}%`}
-                        size="small"
-                        color="warning"
-                      />
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                    <TableCell align="center">% {tipoCalculo === 'margem' ? 'Margem' : 'Markup'}</TableCell>
+                    <TableCell align="right">Venda Sugerida</TableCell>
+                    <TableCell align="center">Margem Real</TableCell>
+                    <TableCell align="center">Markup Real</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {itensCalculados && itensCalculados.map((item, index) => {
+                    const isDebito = item.is_nota_debito || (item.custo_origem !== undefined && item.custo_origem !== null && item.custo_origem > 0);
+                    const custoOrigem = parseFloat(item.custo_origem || 0);
+                    const valorDebito = parseFloat(item.valor_debito || item.valor_unitario || 0);
+                    const custoTotalCalculado = isDebito ? (custoOrigem + valorDebito) : valorDebito;
+
+                    return (
+                      <TableRow key={index}>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {item.nome_produto || `Produto ${item.id_produto}`}
+                          </Typography>
+                          {isDebito && (
+                            <Chip
+                              label="📈 Ajuste Complementar (Débito)"
+                              size="small"
+                              color="info"
+                              variant="outlined"
+                              sx={{ fontSize: '0.65rem', height: 18, mt: 0.5 }}
+                            />
+                          )}
+                        </TableCell>
+
+                        {temNotaDebito ? (
+                          <>
+                            <TableCell align="right">
+                              <Typography variant="body2" color="text.secondary">
+                                {formatarMoeda(custoOrigem)}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Typography variant="body2" color="primary.main" sx={{ fontWeight: 500 }}>
+                                + {formatarMoeda(valorDebito)}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Chip
+                                label={formatarMoeda(custoTotalCalculado)}
+                                size="small"
+                                color="success"
+                                sx={{ fontWeight: 'bold' }}
+                              />
+                            </TableCell>
+                          </>
+                        ) : (
+                          <TableCell align="right">
+                            <Chip
+                              label={formatarMoeda(item.valor_unitario)}
+                              size="small"
+                              color="default"
+                              sx={{ fontWeight: 'bold' }}
+                            />
+                          </TableCell>
+                        )}
+
+                        <TableCell align="center">
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={item.percentual || ''}
+                            onChange={(e) => handlePercentualChange(index, e.target.value)}
+                            sx={{ width: 110 }}
+                            InputProps={{
+                              endAdornment: <InputAdornment position="end">%</InputAdornment>
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          {item.valor_venda_sugerido ? (
+                            <Chip
+                              label={formatarMoeda(item.valor_venda_sugerido)}
+                              size="small"
+                              color="success"
+                              icon={<AttachMoneyIcon />}
+                            />
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">
+                              Não calculated
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell align="center">
+                          {item.margem_percentual && (
+                            <Chip
+                              label={`${item.margem_percentual}%`}
+                              size="small"
+                              color="info"
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell align="center">
+                          {item.markup_percentual && (
+                            <Chip
+                              label={`${item.markup_percentual}%`}
+                              size="small"
+                              color="warning"
+                            />
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          );
+        })()}
 
         <Box sx={{ mt: 2 }}>
           <Alert severity="info">
