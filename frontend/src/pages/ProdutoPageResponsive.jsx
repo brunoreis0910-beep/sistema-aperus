@@ -1361,7 +1361,7 @@ const ProdutoPageResponsive = () => {
             });
 
             setDepotValues(estoqueData.map(dep => {
-              const custoReal = dep.custo_medio || dep.valor_custo || dep.valor_ultima_compra || 0;
+              const custoReal = dep.valor_custo || dep.custo_medio || dep.valor_ultima_compra || produto.preco_custo || produto.custo_medio || 0;
               return {
                 id_estoque: dep.id_estoque ?? null,
                 id_deposito: dep.id_deposito,

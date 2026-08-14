@@ -678,9 +678,30 @@ class ProdutoComDepositosSerializer(serializers.ModelSerializer):
     estoque_total = serializers.SerializerMethodField()
     estoque_por_deposito = serializers.SerializerMethodField()
     valor_venda = serializers.SerializerMethodField()  # NOVO: Valor de venda principal
+    preco_custo = serializers.SerializerMethodField()
+    custo_medio = serializers.SerializerMethodField()
     tributacao_detalhada = serializers.SerializerMethodField()  # Dados do produto tributário
     tributacao_info = serializers.SerializerMethodField()  # Formato esperado pelo frontend
     grupo_nome = serializers.CharField(source='id_grupo.nome_grupo', read_only=True, allow_null=True)
+
+    def get_preco_custo(self, obj):
+        """Retorna o custo médio / valor de última compra do produto no estoque."""
+        with connection.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COALESCE(e.custo_medio, e.valor_ultima_compra, 0) AS preco_custo
+                FROM estoque e
+                WHERE e.id_produto = %s AND (e.custo_medio > 0 OR e.valor_ultima_compra > 0)
+                ORDER BY e.custo_medio DESC, e.valor_ultima_compra DESC
+                LIMIT 1
+                """,
+                [obj.id_produto],
+            )
+            row = cur.fetchone()
+            return float(row[0]) if row and row[0] else 0.0
+
+    def get_custo_medio(self, obj):
+        return self.get_preco_custo(obj)
 
     # Campos Calculadora Construção
     id_produto_pai = serializers.IntegerField(source='produto_pai_id', allow_null=True, required=False)
@@ -792,7 +813,7 @@ class ProdutoComDepositosSerializer(serializers.ModelSerializer):
         # incluir id_grupo para permitir salvar/alterar o grupo do produto
         fields = [
             'id_produto', 'codigo_produto', 'nome_produto', 'id_grupo', 'grupo_nome',
-            'depositos', 'estoque_total', 'estoque_por_deposito', 'valor_venda',
+            'depositos', 'estoque_total', 'estoque_por_deposito', 'valor_venda', 'preco_custo', 'custo_medio',
             'imagem_url', 'descricao', 'unidade_medida', 'marca', 'ncm', 'cest', 'gtin',
             'categoria', 'classificacao', 'observacoes', 'tributacao_detalhada', 'tributacao_info',
             'metragem_caixa', 'rendimento_m2', 'peso_unitario', 'id_produto_pai', 'variacao',
