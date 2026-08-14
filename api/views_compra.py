@@ -467,36 +467,53 @@ class CompraSerializer(serializers.ModelSerializer):
                         except Exception as _fe:
                             print(f'[FRACAO] erro ao salvar fracao no update: {_fe}')
 
-                # Atualizar estoque com novo item
-                id_produto = item_data['id_produto']
-                quantidade = Decimal(str(item_data['quantidade']))
-                valor_compra = Decimal(str(item_data.get('valor_compra') or item_data.get('valor_unitario') or 0))
+                # Definir se movimenta estoque físico
+                operacao_obj = instance.id_operacao
+                op_inc_estoque = getattr(operacao_obj, 'incrementar_estoque', 1) if operacao_obj else 1
+                op_tipo_inc = getattr(operacao_obj, 'tipo_estoque_incremento', 'Deposito') if operacao_obj else 'Deposito'
+                op_gera_estoque = (op_inc_estoque not in [0, '0', False]) and (str(op_tipo_inc).strip().lower() not in ['nenhum', '0', 'none', ''])
+                compra_movimenta = getattr(instance, 'movimenta_estoque_fisico', True)
+
+                movimenta_estoque = compra_movimenta and op_gera_estoque
 
                 try:
-                    estoque_obj = Estoque.objects.get(
+                    estoque_obj = Estoque.objects.filter(
                         id_produto=id_produto,
                         id_deposito_id=novo_deposito_id
-                    )
-                    qtd_estoque_decimal = Decimal(str(estoque_obj.quantidade or 0))
-                    custo_medio_atual = Decimal(str(estoque_obj.custo_medio or 0))
-                    nova_quantidade = qtd_estoque_decimal + quantidade
-                    valor_estoque_atual = qtd_estoque_decimal * custo_medio_atual
-                    valor_nova_compra = quantidade * valor_compra
-                    novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else valor_compra
-                    estoque_obj.quantidade = nova_quantidade
-                    estoque_obj.custo_medio = novo_custo_medio.quantize(Decimal('0.0001'))
-                    estoque_obj.valor_ultima_compra = valor_compra
-                    estoque_obj.valor_total = nova_quantidade * novo_custo_medio
-                    estoque_obj.save()
-                except Estoque.DoesNotExist:
-                    Estoque.objects.create(
-                        id_produto=id_produto,
-                        id_deposito_id=novo_deposito_id,
-                        quantidade=quantidade,
-                        custo_medio=valor_compra,
-                        valor_ultima_compra=valor_compra,
-                        valor_total=quantidade * valor_compra
-                    )
+                    ).first()
+                    if not estoque_obj:
+                        estoque_obj = Estoque.objects.filter(id_produto=id_produto).first()
+
+                    if estoque_obj:
+                        qtd_estoque_decimal = Decimal(str(estoque_obj.quantidade or 0))
+                        custo_medio_atual = Decimal(str(estoque_obj.custo_medio or 0))
+
+                        if not movimenta_estoque:
+                            nova_quantidade = qtd_estoque_decimal
+                            novo_custo_medio = custo_medio_atual
+                        else:
+                            nova_quantidade = qtd_estoque_decimal + quantidade
+                            valor_estoque_atual = qtd_estoque_decimal * custo_medio_atual
+                            valor_nova_compra = quantidade * valor_compra
+                            novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else valor_compra
+
+                        estoque_obj.quantidade = nova_quantidade
+                        estoque_obj.custo_medio = novo_custo_medio.quantize(Decimal('0.0001'))
+                        estoque_obj.valor_ultima_compra = valor_compra
+                        estoque_obj.valor_total = (nova_quantidade * novo_custo_medio).quantize(Decimal('0.0001'))
+                        estoque_obj.save()
+                    else:
+                        qtd_init = Decimal('0.000') if not movimenta_estoque else quantidade
+                        Estoque.objects.create(
+                            id_produto=id_produto,
+                            id_deposito_id=novo_deposito_id,
+                            quantidade=qtd_init,
+                            custo_medio=valor_compra,
+                            valor_ultima_compra=valor_compra,
+                            valor_total=(qtd_init * valor_compra).quantize(Decimal('0.0001'))
+                        )
+                except Exception as e_est:
+                    print(f"[ERRO] Falha ao atualizar estoque no update: {e_est}")
             
             # Deletar financeiros pendentes antigos
             financeiros.filter(status_conta='Pendente').delete()
@@ -1551,22 +1568,30 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'detail': 'Para excluir esta compra, primeiro estorne os pagamentos no módulo Financeiro.'
                     }, status=status.HTTP_403_FORBIDDEN)
 
-            # Abate estoque dos itens
+            # Abate estoque dos itens apenas se a operação gerava estoque físico
             operacao = compra.id_operacao
+            op_inc_estoque = getattr(operacao, 'incrementar_estoque', 1) if operacao else 1
+            op_tipo_inc = getattr(operacao, 'tipo_estoque_incremento', 'Deposito') if operacao else 'Deposito'
+            op_gera_estoque = (op_inc_estoque not in [0, '0', False]) and (str(op_tipo_inc).strip().lower() not in ['nenhum', '0', 'none', ''])
+            compra_movimenta = getattr(compra, 'movimenta_estoque_fisico', True)
+
+            movimenta_estoque = compra_movimenta and op_gera_estoque
             itens = compra.itens.all()
             deposito_id = getattr(operacao, 'id_deposito_incremento', None) or 1
             
             with transaction.atomic():
-                # 1. Abate estoque dos produtos
-                for item in itens:
-                    produto = item.id_produto
-                    if produto:
-                        try:
-                            estoque_obj = Estoque.objects.get(id_produto=produto, id_deposito_id=deposito_id)
-                            estoque_obj.quantidade = (estoque_obj.quantidade or Decimal('0')) - item.quantidade
-                            estoque_obj.save()
-                        except Estoque.DoesNotExist:
-                            pass
+                # 1. Abate estoque dos produtos apenas se a compra incrementou o estoque
+                if movimenta_estoque:
+                    for item in itens:
+                        produto = item.id_produto
+                        if produto:
+                            try:
+                                estoque_obj = Estoque.objects.filter(id_produto=produto, id_deposito_id=deposito_id).first()
+                                if estoque_obj:
+                                    estoque_obj.quantidade = max(Decimal('0'), (estoque_obj.quantidade or Decimal('0')) - item.quantidade)
+                                    estoque_obj.save()
+                            except Exception:
+                                pass
                 
                 # 2. Exclui financeiros pendentes (se houver)
                 if financeiros.exists():
