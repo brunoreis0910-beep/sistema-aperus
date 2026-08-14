@@ -511,12 +511,29 @@ class CompraViewSet(viewsets.ModelViewSet):
         except serializers.ValidationError as e:
             print(f"ERRO DE VALIDAÇÃO: {e}")
             print("="*80)
-            return Response({'erro': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            if hasattr(e, 'detail') and isinstance(e.detail, dict):
+                msgs = []
+                for field, errors in e.detail.items():
+                    err_str = ", ".join([str(err) for err in errors]) if isinstance(errors, list) else str(errors)
+                    if field == 'dados_entrada':
+                        msgs.append(f"Chave NF-e ({err_str})")
+                    elif field == 'id_fornecedor':
+                        msgs.append(f"Fornecedor: {err_str}")
+                    elif field == 'id_operacao':
+                        msgs.append(f"Operação: {err_str}")
+                    else:
+                        msgs.append(f"{field}: {err_str}")
+                clean_msg = " | ".join(msgs)
+            elif hasattr(e, 'detail') and isinstance(e.detail, list):
+                clean_msg = ", ".join([str(err) for err in e.detail])
+            else:
+                clean_msg = str(e)
+            return Response({'erro': clean_msg, 'message': clean_msg, 'detail': clean_msg}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             print(f"[CREATE_COMPRA_v5] ERRO: {type(e).__name__}: {e}")
             traceback.print_exc()
             print("="*80)
-            return Response({'erro': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'erro': str(e), 'message': str(e), 'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'])
     def importar_xml(self, request):

@@ -1735,7 +1735,10 @@ function CompraPage() {
       setTimeout(() => setSucesso(null), 5000)
     } catch (error) {
       console.error('❌ Erro ao salvar compra:', error)
-      setErro(`❌ Erro ao salvar compra: ${error.response?.data?.detail || error.response?.data?.message || JSON.stringify(error.response?.data) || error.message}`)
+      const dataErr = error.response?.data
+      const errorDetail = dataErr?.erro || dataErr?.error || dataErr?.detail || dataErr?.message || (typeof dataErr === 'string' ? dataErr : JSON.stringify(dataErr)) || error.message;
+      setErro(`❌ ${errorDetail}`)
+      toast.error(`❌ ${errorDetail}`)
     }
   }
 
@@ -1813,8 +1816,10 @@ function CompraPage() {
 
     } catch (error) {
       console.error('❌ Erro no fluxo completo de Compra + Financeiro:', error);
-      const errorDetail = error.response?.data?.detail || error.response?.data?.message || JSON.stringify(error.response?.data) || error.message;
-      setErro(`❌ Erro ao salvar compra e gerar financeiro: ${errorDetail}`);
+      const dataErr = error.response?.data
+      const errorDetail = dataErr?.erro || dataErr?.error || dataErr?.detail || dataErr?.message || (typeof dataErr === 'string' ? dataErr : JSON.stringify(dataErr)) || error.message;
+      setErro(`❌ ${errorDetail}`);
+      toast.error(`❌ ${errorDetail}`);
     }
   }
 
