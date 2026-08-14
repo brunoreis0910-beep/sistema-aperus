@@ -416,7 +416,65 @@ class LimparNFeErroView(APIView):
         
         venda.save()
         
-        return Response({"sucesso": True, "mensagem": "Status de erro da NF-e limpo com sucesso. Venda agora  PENDENTE."})
+        return Response({"sucesso": True, "mensagem": "Status de erro da NF-e limpo com sucesso. Venda agora PENDENTE."})
+
+
+def resolver_venda_para_operacao(id_target):
+    """
+    Busca Venda por pk. Se não encontrar, busca em Devolucao ou Compra e recupera/gera a Venda correspondente.
+    Evita erro 404 quando o frontend envia ID de devolução ou ID de compra ao imprimir DANFE ou transmitir NF-e.
+    """
+    from .models import Venda, Fornecedor, Cliente, Operacao
+    from .models_devolucao import Devolucao
+    from django.utils import timezone
+    from django.http import Http404
+
+    # 1. Tentar Venda direta por PK
+    venda = Venda.objects.filter(pk=id_target).first()
+    if venda:
+        return venda
+
+    # 2. Tentar via Devolucao por ID de devolução ou ID de compra
+    clean_id = str(id_target).replace('DEV-', '').replace('NFE-', '')
+    devolucao = Devolucao.objects.filter(pk=clean_id).first() or Devolucao.objects.filter(id_compra=clean_id).first()
+    if devolucao:
+        if devolucao.id_venda:
+            venda = Venda.objects.filter(pk=devolucao.id_venda).first()
+            if venda:
+                return venda
+
+        # Auto-criar Venda se a devolução não possui id_venda vinculado ainda
+        try:
+            id_op = devolucao.id_operacao
+            if not id_op:
+                op = Operacao.objects.filter(transacao='Devolucao').first()
+                id_op = op.id_operacao if op else 22
+            
+            forn = Fornecedor.objects.filter(pk=devolucao.id_fornecedor).first() if devolucao.id_fornecedor else None
+            cli = Cliente.objects.filter(cpf_cnpj=forn.cpf_cnpj).first() if (forn and forn.cpf_cnpj) else None
+            id_cli = cli.id_cliente if cli else (devolucao.id_fornecedor or 1)
+
+            venda = Venda.objects.create(
+                id_cliente_id=id_cli,
+                id_operacao_id=id_op,
+                data_documento=devolucao.data_devolucao or timezone.now(),
+                valor_total=devolucao.valor_total_devolucao or 0,
+                observacao_contribuinte=devolucao.observacoes or f'Devolução referente à compra #{devolucao.id_compra}',
+                chave_nfe_referenciada=devolucao.chave_nfe_referenciada or '',
+                status_nfe='PENDENTE',
+                tipo_frete='9',
+                peso_bruto=0,
+                peso_liquido=0,
+                quantidade_volumes=0
+            )
+            devolucao.id_venda = venda.id_venda
+            devolucao.save(update_fields=['id_venda'])
+            return venda
+        except Exception as e_venda:
+            logger.error(f"Erro ao resolver Venda para Devolução #{clean_id}: {e_venda}")
+
+    raise Http404(f"Venda ou Devolução com ID {id_target} não encontrada.")
+
 
 class NFeView(APIView):
     """
@@ -424,7 +482,7 @@ class NFeView(APIView):
     URL: /api/vendas/<id>/emitir_nfe/
     """
     def post(self, request, id_venda):
-        venda = get_object_or_404(Venda, pk=id_venda)
+        venda = resolver_venda_para_operacao(id_venda)
 
         # Tratar parâmetro de contingência SVC-AN
         if request.data.get('contingencia_svcan') or request.query_params.get('contingencia_svcan') == 'true':
@@ -453,7 +511,7 @@ class CancelarNFeView(APIView):
     URL: /api/vendas/<id>/cancelar_nfe/
     """
     def post(self, request, id_venda):
-        venda = get_object_or_404(Venda, pk=id_venda)
+        venda = resolver_venda_para_operacao(id_venda)
         justificativa = request.data.get('justificativa', '').strip()
         
         if len(justificativa) < 15:
@@ -469,11 +527,11 @@ class CancelarNFeView(APIView):
 
 class InutilizarNFeView(APIView):
     """
-    Endpoint para inutilizar numera��o de NFe (Modelo 55).
+    Endpoint para inutilizar numeração de NFe (Modelo 55).
     URL: /api/vendas/<id>/inutilizar_nfe/
     """
     def post(self, request, id_venda):
-        venda = get_object_or_404(Venda, pk=id_venda)
+        venda = resolver_venda_para_operacao(id_venda)
         justificativa = request.data.get('justificativa', '').strip()
         
         if len(justificativa) < 15:
@@ -497,7 +555,7 @@ class ImprimirDanfeNFeView(APIView):
     parser_classes = [JSONParser, FormParser, MultiPartParser]
     
     def get(self, request, id_venda):
-        venda = get_object_or_404(Venda, pk=id_venda)
+        venda = resolver_venda_para_operacao(id_venda)
         
         # Validar se tem NFe emitida
         if not venda.chave_nfe:
