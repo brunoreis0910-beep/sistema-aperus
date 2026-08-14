@@ -654,17 +654,94 @@ class CompraViewSet(viewsets.ModelViewSet):
             fin_nfe = get_text(ide, 'finNFe', '1')
             tp_debito = get_text(ide, 'tpNFDebito', '')
 
-            # Chaves referenciadas extraídas do XML (qualquer nó refNFe, refNFCe ou chaveAcesso)
+            # Extraction ultra-inteligente de chaves e números referenciados do XML
             chaves_referenciadas_encontradas = []
+            numeros_nf_referenciados = []
+
+            # 1. Regex em todo o conteúdo textual do XML para capturar qualquer sequência de 44 dígitos
+            try:
+                raw_xml_str = ET.tostring(root, encoding='utf-8').decode('utf-8', errors='ignore')
+                import re as _re
+                all_44_digits = _re.findall(r'\b\d{44}\b', raw_xml_str)
+                for d44 in all_44_digits:
+                    if d44 != chave_nfe and d44 not in chaves_referenciadas_encontradas:
+                        chaves_referenciadas_encontradas.append(d44)
+            except Exception:
+                pass
+
+            # 2. Varredura de nós <refNFe>, <refNF>, <nNF>, <chaveAcesso>
             for elem in root.iter():
-                tag_lower = elem.tag.lower()
-                if tag_lower.endswith('refnfe') or tag_lower.endswith('refnfce') or tag_lower.endswith('chaveacesso'):
-                    val = (elem.text or '').strip()
-                    if len(val) == 44 and val.isdigit():
-                        if val not in chaves_referenciadas_encontradas:
-                            chaves_referenciadas_encontradas.append(val)
-            
+                tag_clean = elem.tag.split('}')[-1].lower()
+                val_raw = (elem.text or '').strip()
+                val_digits = _re.sub(r'\D', '', val_raw) if val_raw else ''
+
+                if len(val_digits) == 44 and val_digits != chave_nfe:
+                    if val_digits not in chaves_referenciadas_encontradas:
+                        chaves_referenciadas_encontradas.append(val_digits)
+
+                if tag_clean == 'refnf':
+                    for child in elem:
+                        if child.tag.endswith('nNF') and child.text:
+                            num_clean = _re.sub(r'\D', '', child.text)
+                            if num_clean and num_clean not in numeros_nf_referenciados:
+                                numeros_nf_referenciados.append(num_clean)
+
             chave_referenciada_global = chaves_referenciadas_encontradas[0] if chaves_referenciadas_encontradas else ''
+
+            # Busca ultra-inteligente da Nota de Origem no banco de dados
+            compra_origem_sugerida = None
+            from django.db.models import Q
+
+            # Estratégia 1: Busca pelas chaves de 44 dígitos encontradas no XML
+            for ch_ref in chaves_referenciadas_encontradas:
+                c_orig = Compra.objects.filter(
+                    Q(dados_entrada=ch_ref) | Q(dados_entrada__icontains=ch_ref)
+                ).first()
+
+                # Se não achou pela chave completa, extrai o número da nota (posições 25:34)
+                if not c_orig and len(ch_ref) == 44:
+                    try:
+                        n_nf_ref = str(int(ch_ref[25:34]))  # Remove zeros à esquerda (ex: 000057329 -> 57329)
+                        cnpj_ref = ch_ref[6:20]
+                        c_orig = Compra.objects.filter(numero_documento__icontains=n_nf_ref).filter(
+                            Q(id_fornecedor__cpf_cnpj__icontains=cnpj_ref) | Q(id_fornecedor_id=id_fornecedor) | Q(dados_entrada__icontains=n_nf_ref)
+                        ).first()
+                        if not c_orig:
+                            c_orig = Compra.objects.filter(numero_documento=n_nf_ref).first()
+                    except Exception:
+                        pass
+
+                if c_orig:
+                    compra_origem_sugerida = {
+                        'id_compra': c_orig.id_compra,
+                        'numero_documento': c_orig.numero_documento,
+                        'data_entrada': str(c_orig.data_entrada) if c_orig.data_entrada else '',
+                        'valor_total': float(c_orig.valor_total or 0),
+                        'chave_nfe': c_orig.dados_entrada or ch_ref,
+                        'fornecedor_nome': c_orig.id_fornecedor.nome_razao_social if c_orig.id_fornecedor else ''
+                    }
+                    if not chave_referenciada_global:
+                        chave_referenciada_global = ch_ref
+                    break
+
+            # Estratégia 2: Se não achou por chave, busca pelos números de nota referenciados (ex: <refNF>)
+            if not compra_origem_sugerida and numeros_nf_referenciados:
+                for n_ref in numeros_nf_referenciados:
+                    c_orig = Compra.objects.filter(numero_documento__icontains=n_ref).filter(
+                        Q(id_fornecedor_id=id_fornecedor) | Q(id_fornecedor__cpf_cnpj__icontains=cnpj_emit)
+                    ).first()
+                    if not c_orig:
+                        c_orig = Compra.objects.filter(numero_documento=n_ref).first()
+                    if c_orig:
+                        compra_origem_sugerida = {
+                            'id_compra': c_orig.id_compra,
+                            'numero_documento': c_orig.numero_documento,
+                            'data_entrada': str(c_orig.data_entrada) if c_orig.data_entrada else '',
+                            'valor_total': float(c_orig.valor_total or 0),
+                            'chave_nfe': c_orig.dados_entrada or '',
+                            'fornecedor_nome': c_orig.id_fornecedor.nome_razao_social if c_orig.id_fornecedor else ''
+                        }
+                        break
 
             # Definição automática de comportamento para Nota de Débito (finNFe = 6)
             movimenta_estoque_fisico = True
@@ -1003,45 +1080,6 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'n_item_origem': n_item_origem_item,
                     })
             
-            # Busca ultra-inteligente da Nota de Origem no banco de dados
-            compra_origem_sugerida = None
-            from django.db.models import Q
-
-            # 1. Tentar por todas as chaves referenciadas extraídas do XML
-            for ch_ref in chaves_referenciadas_encontradas:
-                if ch_ref == chave_nfe:
-                    continue  # ignora a própria chave da nota atual
-
-                c_orig = Compra.objects.filter(
-                    Q(dados_entrada=ch_ref) | Q(dados_entrada__icontains=ch_ref)
-                ).first()
-
-                # 2. Fallback: extrai o número da NF-e (posições 25:34) e busca por número de documento + fornecedor
-                if not c_orig and len(ch_ref) == 44:
-                    try:
-                        n_nf_ref = str(int(ch_ref[25:34]))  # Remove zeros à esquerda (ex: 000057329 -> 57329)
-                        cnpj_ref = ch_ref[6:20]
-                        c_orig = Compra.objects.filter(
-                            numero_documento__icontains=n_nf_ref
-                        ).filter(
-                            Q(id_fornecedor__cpf_cnpj__icontains=cnpj_ref) | Q(dados_entrada__icontains=n_nf_ref)
-                        ).first()
-                    except Exception:
-                        pass
-
-                if c_orig:
-                    compra_origem_sugerida = {
-                        'id_compra': c_orig.id_compra,
-                        'numero_documento': c_orig.numero_documento,
-                        'data_entrada': str(c_orig.data_entrada) if c_orig.data_entrada else '',
-                        'valor_total': float(c_orig.valor_total or 0),
-                        'chave_nfe': c_orig.dados_entrada or ch_ref,
-                        'fornecedor_nome': c_orig.id_fornecedor.nome_razao_social if c_orig.id_fornecedor else ''
-                    }
-                    if not chave_referenciada_global:
-                        chave_referenciada_global = ch_ref
-                    break
-
             # Buscar compras do fornecedor ou compras recentes do sistema para escolha manual
             compras_fornecedor_opcoes = []
             ids_inseridos = set()
