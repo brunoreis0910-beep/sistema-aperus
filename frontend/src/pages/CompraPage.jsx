@@ -1732,23 +1732,19 @@ function CompraPage() {
         response = await axiosInstance.post('/compras/', payload)
       }
 
-      // Salvar frações por fornecedor+produto
+      // Salvar frações por fornecedor+produto em paralelo
       const idFornecedor = parseInt(form.id_fornecedor)
       if (idFornecedor) {
-        for (const item of itensCalculados) {
-          const fracao = parseFloat(item.fracao_memorizada) || 1
-          const ean = item._ean || ''
-          const idProduto = parseInt(item.id_produto)
-          if (ean && idProduto && !isNaN(fracao) && fracao > 0) {
-            try {
-              await axiosInstance.post('/compras/salvar-fracao/', {
-                id_fornecedor: idFornecedor,
-                id_produto: idProduto,
-                gtin: ean,
-                fracao: fracao
-              })
-            } catch (_) {}
-          }
+        const fracaoPromises = itensCalculados
+          .filter(item => item._ean && item.id_produto && parseFloat(item.fracao_memorizada) > 0)
+          .map(item => axiosInstance.post('/compras/salvar-fracao/', {
+            id_fornecedor: idFornecedor,
+            id_produto: parseInt(item.id_produto),
+            gtin: item._ean,
+            fracao: parseFloat(item.fracao_memorizada)
+          }).catch(() => {}));
+        if (fracaoPromises.length > 0) {
+          await Promise.all(fracaoPromises);
         }
       }
 
@@ -1788,23 +1784,19 @@ function CompraPage() {
 
       console.log('✅ Compra criada com ID:', idCompra);
 
-      // 2. Salvar frações de produtos
+      // 2. Salvar frações de produtos em paralelo
       const idFornecedor = parseInt(form.id_fornecedor)
-      if (idFornecedor) {
-        for (const item of dadosCompraTemporaria.itensCalculados) {
-          const fracao = parseFloat(item.fracao_memorizada) || 1
-          const ean = item._ean || ''
-          const idProduto = parseInt(item.id_produto)
-          if (ean && idProduto && !isNaN(fracao) && fracao > 0) {
-            try {
-              await axiosInstance.post('/compras/salvar-fracao/', {
-                id_fornecedor: idFornecedor,
-                id_produto: idProduto,
-                gtin: ean,
-                fracao: fracao
-              })
-            } catch (_) {}
-          }
+      if (idFornecedor && dadosCompraTemporaria?.itensCalculados) {
+        const fracaoPromises = dadosCompraTemporaria.itensCalculados
+          .filter(item => item._ean && item.id_produto && parseFloat(item.fracao_memorizada) > 0)
+          .map(item => axiosInstance.post('/compras/salvar-fracao/', {
+            id_fornecedor: idFornecedor,
+            id_produto: parseInt(item.id_produto),
+            gtin: item._ean,
+            fracao: parseFloat(item.fracao_memorizada)
+          }).catch(() => {}));
+        if (fracaoPromises.length > 0) {
+          await Promise.all(fracaoPromises);
         }
       }
 
