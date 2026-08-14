@@ -180,6 +180,16 @@ function CompraPage() {
   const [dadosNotaDebitoModal, setDadosNotaDebitoModal] = useState(null);
   const [idCompraOrigemSelecionada, setIdCompraOrigemSelecionada] = useState('');
 
+  useEffect(() => {
+    if (dialogNotaDebitoOpen && !idCompraOrigemSelecionada) {
+      if (dadosNotaDebitoModal?.compra_origem_sugerida?.id_compra) {
+        setIdCompraOrigemSelecionada(String(dadosNotaDebitoModal.compra_origem_sugerida.id_compra));
+      } else if (Array.isArray(dadosNotaDebitoModal?.compras_fornecedor_opcoes) && dadosNotaDebitoModal.compras_fornecedor_opcoes.length > 0) {
+        setIdCompraOrigemSelecionada(String(dadosNotaDebitoModal.compras_fornecedor_opcoes[0].id_compra));
+      }
+    }
+  }, [dialogNotaDebitoOpen, dadosNotaDebitoModal, idCompraOrigemSelecionada]);
+
   // Estados para Modal de Devolução de Compra ao Fornecedor
   const [openModalDevolucao, setOpenModalDevolucao] = useState(false);
   const [compraParaDevolucao, setCompraParaDevolucao] = useState(null);
