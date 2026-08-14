@@ -333,17 +333,27 @@ export default function CadastroTurboProduto() {
             let grupoFoiCriadoAgora = false;
             
             if (sugestoes.grupo_sugerido) {
-                // 1. Tentar encontrar grupo existente (usa ref para evitar closure stale)
-                const grupoEncontrado = gruposDisponiveisRef.current.find(g => 
-                    g.nome_grupo.toLowerCase().includes(sugestoes.grupo_sugerido.toLowerCase()) ||
-                    sugestoes.grupo_sugerido.toLowerCase().includes(g.nome_grupo.toLowerCase())
-                );
+                const normSugGrupo = sugestoes.grupo_sugerido.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+                // 1. Tentar nome exato do grupo (normalizado para ignorar acentos e maiúsculas)
+                let grupoEncontrado = gruposDisponiveisRef.current.find(g => {
+                    const normG = (g.nome_grupo || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                    return normG === normSugGrupo;
+                });
+
+                // 2. Tentar correspondência parcial segura (somente para termos com 4+ caracteres)
+                if (!grupoEncontrado && normSugGrupo.length >= 4) {
+                    grupoEncontrado = gruposDisponiveisRef.current.find(g => {
+                        const normG = (g.nome_grupo || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                        return normG.length >= 4 && (normG.includes(normSugGrupo) || normSugGrupo.includes(normG));
+                    });
+                }
                 
                 if (grupoEncontrado) {
                     idGrupoResolvido = grupoEncontrado.id_grupo;
                     nomeGrupoResolvido = grupoEncontrado.nome_grupo;
                 } else {
-                    // 2. Se não encontrar, criar automaticamente
+                    // 3. Se não encontrar grupo existente, criar automaticamente
                     console.log("Grupo sugerido não encontrado. Criando automaticamente:", sugestoes.grupo_sugerido);
                     try {
                        const resNovoGrupo = await api.post('/api/grupos-produto/', { nome_grupo: sugestoes.grupo_sugerido });
@@ -388,15 +398,8 @@ export default function CadastroTurboProduto() {
                     toast.success(`🤖 NCM preenchido: ${sugestoes.ncm_provavel}`, { autoClose: 3000 });
                     alterado = true;
                 }
-
-                // 3. Categoria (texto livre) - IGNORADO pois agora usamos categoria_mercadologica_id
-                // if (!novosDados.categoria && sugestoes.categoria) {
-                //    novosDados.categoria = sugestoes.categoria;
-                //    alterado = true;
-                // }
                 
                 // 3. Classificação Fiscal (Tipo do Item)
-                // A IA pode retornar "00" ou "Mercadoria para Revenda" ou não retornar
                 const classificacaoIA = sugestoes.classificacao_tipo_item || sugestoes.classificacao;
                 if (!novosDados.classificacao && classificacaoIA) {
                      let codigoClassificacao = String(classificacaoIA);
@@ -410,36 +413,55 @@ export default function CadastroTurboProduto() {
                      toast.success(`🤖 Classificação: ${codigoClassificacao}`, { autoClose: 3000 });
                      alterado = true;
                 } else if (!novosDados.classificacao) {
-                     // Fallback: se IA não retornou classificação, usa 00 (Mercadoria para Revenda)
                      novosDados.classificacao = "00";
                      alterado = true;
                 }
                 
-                // 4. Preencher Categoria — salva o nome no campo 'categoria' do produto (texto)
-                if (!novosDados.categoria) {
+                // 4. Preencher Categoria Mercadológica com suporte robusto a id_categoria e id
+                if (!novosDados.categoria_mercadologica_id) {
                     let catEncontrada = null;
                     
-                    // Prioridade 1: IA retornou o ID diretamente da lista de categorias
+                    // Prioridade 1: IA retornou o ID da categoria (checa id_categoria e id com String)
                     const categoriaIdIA = sugestoes.categoria_id;
                     if (categoriaIdIA) {
-                        catEncontrada = categoriasDisponiveisRef.current.find(c => c.id === categoriaIdIA);
+                        catEncontrada = categoriasDisponiveisRef.current.find(c => 
+                            String(c.id_categoria || c.id) === String(categoriaIdIA)
+                        );
                     }
                     
-                    // Prioridade 2: Fallback - buscar pelo nome sugerido
+                    // Prioridade 2: Fallback inteligente pelo nome da categoria
                     if (!catEncontrada) {
                         const categoriaSugerida = sugestoes.categoria_sugerida || sugestoes.categoria;
                         if (categoriaSugerida) {
-                            const termo = categoriaSugerida.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                            const normSug = categoriaSugerida.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                            
+                            // 2.1 Nome exato da categoria
                             catEncontrada = categoriasDisponiveisRef.current.find(c => {
-                                const nome = (c.nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                                const caminho = (c.caminho_completo || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                                return nome === termo || caminho.includes(termo) || termo.includes(nome);
+                                const normNome = (c.nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                                return normNome === normSug;
                             });
+
+                            // 2.2 Caminho completo exato ou final
+                            if (!catEncontrada) {
+                                catEncontrada = categoriasDisponiveisRef.current.find(c => {
+                                    const normCaminho = (c.caminho_completo || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                                    return normCaminho === normSug || normCaminho.endsWith(normSug);
+                                });
+                            }
+
+                            // 2.3 Substring com 4+ caracteres
+                            if (!catEncontrada && normSug.length >= 4) {
+                                catEncontrada = categoriasDisponiveisRef.current.find(c => {
+                                    const normNome = (c.nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                                    return normNome.length >= 4 && (normNome.includes(normSug) || normSug.includes(normNome));
+                                });
+                            }
                         }
                     }
                     
                     if (catEncontrada) {
-                        novosDados.categoria_mercadologica_id = catEncontrada.id;
+                        const catId = catEncontrada.id_categoria || catEncontrada.id;
+                        novosDados.categoria_mercadologica_id = catId;
                         novosDados.categoria = catEncontrada.nome;
                         novosDados.confianca_ia = categoriaIdIA ? 0.95 : 0.80;
                         toast.success(`🤖 Categoria definida: ${catEncontrada.caminho_completo || catEncontrada.nome}`, { autoClose: 3000 });
