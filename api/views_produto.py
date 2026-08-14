@@ -2267,15 +2267,6 @@ class ProdutoViewSetCustom(viewsets.ModelViewSet):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         
-        # DEBUG: Ver o que está chegando
-        imagem_recebida = request.data.get('imagem_url')
-        print(f"\n[BUSCA] DEBUG UPDATE - Produto ID {instance.id_produto}")
-        print(f"  - imagem_url recebida: {imagem_recebida[:100] if imagem_recebida else 'None'}...")
-        print(f"  - Tamanho: {len(imagem_recebida) if imagem_recebida else 0} caracteres")
-        print(f"  - categoria recebida: [{request.data.get('categoria')}]")
-        print(f"  - produtos_complementares recebidos: {request.data.get('produtos_complementares')}")
-        print(f"  - ALL request.data keys: {list(request.data.keys())}\n")
-        
         # Extrair campos que podem ser atualizados
         data = {
             'codigo_produto': request.data.get('codigo_produto', instance.codigo_produto),
