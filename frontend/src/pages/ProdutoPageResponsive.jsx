@@ -1160,12 +1160,10 @@ const ProdutoPageResponsive = () => {
       // Fechar dialog do produto
       handleCloseDialog();
 
-      // Abrir dialog de configuração de depósitos APENAS se for NOVO PRODUTO (!selectedProduto)
-      if (!selectedProduto && productId) {
-        console.log('🏢 Abrindo configuração de depósitos para novo produto...');
+      // Abrir dialog de configuração de depósitos após salvar o produto
+      if (productId) {
+        console.log('🏢 Abrindo configuração de depósitos...');
         await handleOpenDepotDialog(productId);
-      } else {
-        alert(selectedProduto ? 'Produto editado com sucesso!' : 'Produto criado com sucesso!');
       }
     } catch (error) {
       console.error('❌ Erro ao salvar produto:', error);
