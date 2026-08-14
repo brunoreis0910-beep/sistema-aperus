@@ -1077,15 +1077,16 @@ const ProdutoPageResponsive = () => {
         console.log('🔍 Validando id_grupo antes de enviar:', payloadLimpo.id_grupo);
         console.log('🔍 Grupos disponíveis:', gruposAtivos.map(g => `ID: ${g.id}, Nome: ${g.nome}`));
 
-        // Verificar se o grupo existe nos grupos ativos
-        const grupoValido = gruposAtivos.find(g => Number(g.id) === Number(payloadLimpo.id_grupo) && g.ativo !== false);
+        // Verificar se o grupo existe nos grupos ativos (checar g.id_grupo || g.id)
+        const grupoValido = gruposAtivos.find(g => Number(g.id_grupo || g.id) === Number(payloadLimpo.id_grupo) && g.ativo !== false);
         console.log('🔍 Grupo válido encontrado:', grupoValido);
 
         if (!grupoValido) {
-          console.log('⚠️ id_grupo não encontrado nos grupos válidos, removendo do payload');
-          console.log('⚠️ ID procurado:', payloadLimpo.id_grupo);
-          console.log('⚠️ IDs disponíveis:', gruposAtivos.map(g => g.id));
-          delete payloadLimpo.id_grupo;
+          // Se for um número válido > 0, mantém mesmo assim para não perder a edição
+          const numG = Number(payloadLimpo.id_grupo);
+          if (isNaN(numG) || numG <= 0) {
+            delete payloadLimpo.id_grupo;
+          }
         } else {
           console.log('✅ Grupo válido confirmado, mantendo id_grupo:', payloadLimpo.id_grupo);
         }

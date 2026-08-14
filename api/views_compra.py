@@ -238,7 +238,12 @@ class CompraSerializer(serializers.ModelSerializer):
 
                 # Atualiza estoque
                 if produto and operacao:
-                    movimenta_estoque = getattr(compra, 'movimenta_estoque_fisico', True)
+                    op_inc_estoque = getattr(operacao, 'incrementar_estoque', 1)
+                    op_tipo_inc = getattr(operacao, 'tipo_estoque_incremento', 'Deposito')
+                    op_gera_estoque = (op_inc_estoque not in [0, '0', False]) and (op_tipo_inc not in ['Nenhum', '0', None, ''])
+                    compra_movimenta = getattr(compra, 'movimenta_estoque_fisico', True)
+
+                    movimenta_estoque = compra_movimenta and op_gera_estoque
                     is_ajuste_custo = getattr(compra, 'ajuste_custo', False) or getattr(compra, 'finalidade', '1') == '6'
 
                     deposito_id = getattr(operacao, 'id_deposito_incremento', None) or 1

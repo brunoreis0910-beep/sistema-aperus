@@ -2292,14 +2292,26 @@ class ProdutoViewSetCustom(viewsets.ModelViewSet):
             'controla_lote': request.data.get('controla_lote', instance.controla_lote),
         }
         
-        # Tratar id_grupo separadamente (precisa ser objeto GrupoProduto, não ID)
-        id_grupo_value = request.data.get('id_grupo')
-        if id_grupo_value is not None:
-            try:
-                grupo = GrupoProduto.objects.get(id_grupo=id_grupo_value)
-                instance.id_grupo = grupo
-            except GrupoProduto.DoesNotExist:
-                pass  # Mantém o grupo atual se não encontrar
+        # Tratar id_grupo (pode vir como int, str, dict ou chave 'grupo')
+        id_grupo_raw = request.data.get('id_grupo')
+        if id_grupo_raw is None:
+            id_grupo_raw = request.data.get('grupo')
+
+        if id_grupo_raw is not None:
+            if isinstance(id_grupo_raw, dict):
+                gid = id_grupo_raw.get('id_grupo') or id_grupo_raw.get('id')
+            else:
+                gid = id_grupo_raw
+
+            if gid in ('', 0, '0', None):
+                instance.id_grupo = None
+            else:
+                try:
+                    gid_int = int(gid)
+                    grupo = GrupoProduto.objects.get(id_grupo=gid_int)
+                    instance.id_grupo = grupo
+                except Exception as egrp:
+                    pass
         
         # Tratar produto_pai separadamente (ForeignKey para si mesmo)
         produto_pai_value = request.data.get('produto_pai')
