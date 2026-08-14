@@ -531,21 +531,22 @@ class NfeXmlBuilder:
                  if len(doc_cli) > 11: # CNPJ (Pessoa Jurídica)
                      if len(ie_digits) >= 2:
                          ind_ie_dest = "1"
-                         ET.SubElement(dest, f"{{{self.ns}}}IE").text = ie_digits
                      elif "ISENTO" in raw_ie and uf_dest != "MG":
                          ind_ie_dest = "2"
                      else:
-                         # MG e maioria das SEFAZs rejeitam indIEDest=2 (Rejeicao 805). Para PJ sem IE, usar indIEDest=9
                          ind_ie_dest = "9"
                  else: # CPF (Pessoa Física)
                      if len(ie_digits) >= 2:
                          ind_ie_dest = "1"
-                         ET.SubElement(dest, f"{{{self.ns}}}IE").text = ie_digits
                      elif "ISENTO" in raw_ie and uf_dest != "MG":
                          ind_ie_dest = "2"
                      else:
                          ind_ie_dest = "9"
+
+                 # XSD Schema 4.00: indIEDest DEVE VIR ANTES da tag IE
                  ET.SubElement(dest, f"{{{self.ns}}}indIEDest").text = ind_ie_dest
+                 if ind_ie_dest == "1" and ie_digits:
+                     ET.SubElement(dest, f"{{{self.ns}}}IE").text = ie_digits
 
         # --- Totais Accumulators ---
         total_vbc = 0.0

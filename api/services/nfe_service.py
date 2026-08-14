@@ -348,8 +348,8 @@ class NFeService:
                 erro_assinatura = True
                 logger.warning(f"[RETRY] Erro de assinatura detectado ({msg_erro}). Forçando regeneração do XML.")
             
-            if venda.xml_nfe and venda.status_nfe in ['ERRO', 'PENDENTE'] and not erro_assinatura:
-                logger.info(f"[RETRY] Nota com XML já gerado. Verificando se pode reutilizar...")
+            if venda.xml_nfe and venda.status_nfe == 'PENDENTE' and not erro_assinatura:
+                logger.info(f"[RETRY] Nota PENDENTE com XML já gerado. Verificando se pode reutilizar...")
                 
                 # Verifica se é um XML assinado válido (tem tag Signature)
                 if '<Signature' in venda.xml_nfe and '<infNFe' in venda.xml_nfe:
