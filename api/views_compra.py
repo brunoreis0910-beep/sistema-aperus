@@ -550,25 +550,33 @@ class CompraViewSet(viewsets.ModelViewSet):
             # Lê conteúdo completo do XML
             xml_bytes = xml_file.read()
             
-            # Tenta decodificar de várias formas
-            try:
-                xml_conteudo_str = xml_bytes.decode('utf-8')
-            except UnicodeDecodeError:
-                xml_conteudo_str = xml_bytes.decode('latin-1', errors='replace')
-            
-            # Remove declaração de encoding se existir para evitar conflito com ET
-            if 'encoding="UTF-8"' in xml_conteudo_str or "encoding='UTF-8'" in xml_conteudo_str:
-                # ET.parse lida, mas às vezes stringIO precisa cuidado. 
-                # Vamos usar BytesIO direto no xml_bytes original para segurança
-                pass
+            # Tenta decodificar com detecção robusta de codificação (BOM UTF-16, UTF-8, Latin-1)
+            xml_conteudo_str = ""
+            if xml_bytes.startswith(b'\xff\xfe') or xml_bytes.startswith(b'\xfe\xff'):
+                try:
+                    xml_conteudo_str = xml_bytes.decode('utf-16')
+                except Exception:
+                    xml_conteudo_str = xml_bytes.decode('utf-16-le', errors='replace')
+            else:
+                try:
+                    xml_conteudo_str = xml_bytes.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        xml_conteudo_str = xml_bytes.decode('utf-16', errors='replace')
+                    except Exception:
+                        xml_conteudo_str = xml_bytes.decode('latin-1', errors='replace')
 
-            xml_file_io = io.BytesIO(xml_bytes)
+            # Garantir limpeza de declaração encoding no cabeçalho se houver incompatibilidade de string
+            import re as _re
+            clean_xml_str = _re.sub(r'<\?xml[^>]+\?>', '<?xml version="1.0" encoding="UTF-8"?>', xml_conteudo_str, count=1)
 
             try:
-                tree = ET.parse(xml_file_io)
-                root = tree.getroot()
+                root = ET.fromstring(clean_xml_str.encode('utf-8'))
             except ET.ParseError as e:
-                return Response({'error': f'Erro ao ler XML: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                try:
+                    root = ET.fromstring(xml_conteudo_str.encode('utf-8'))
+                except ET.ParseError as e2:
+                    return Response({'error': f'Erro ao ler XML: {str(e2)}'}, status=status.HTTP_400_BAD_REQUEST)
             
             # Namespace da NF-e (tenta com e sem namespace)
             ns = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
