@@ -2441,6 +2441,13 @@ class Compra(models.Model):
     
     gerou_financeiro = models.IntegerField(blank=True, null=True, default=0, db_column='gerou_financeiro')
 
+    # Suporte a Notas de Débito (finNFe = 6) e Ajustes de Custo (Reforma Tributária / RTC)
+    finalidade = models.CharField(max_length=2, default='1', db_column='finalidade')
+    tipo_debito = models.CharField(max_length=2, blank=True, null=True, db_column='tipo_debito')
+    chave_referenciada = models.CharField(max_length=44, blank=True, null=True, db_column='chave_referenciada')
+    movimenta_estoque_fisico = models.BooleanField(default=True, db_column='movimenta_estoque_fisico')
+    ajuste_custo = models.BooleanField(default=False, db_column='ajuste_custo')
+
     class Meta:
         db_table = 'compras'
         managed = False
@@ -2470,6 +2477,10 @@ class CompraItem(models.Model):
     valor_icms = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_icms')
     valor_pis = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_pis')
     valor_cofins = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_cofins')
+
+    # Vínculo com item de origem (DFeReferenciado)
+    chave_origem = models.CharField(max_length=44, blank=True, null=True, db_column='chave_origem')
+    n_item_origem = models.IntegerField(blank=True, null=True, db_column='n_item_origem')
 
     class Meta:
         db_table = 'compra_itens'

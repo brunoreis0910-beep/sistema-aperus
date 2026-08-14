@@ -238,56 +238,71 @@ class CompraSerializer(serializers.ModelSerializer):
 
                 # Atualiza estoque
                 if produto and operacao:
-                    print(f'[DEBUG_IF] Entrando no if - produto: {produto}, operacao: {operacao}')
+                    movimenta_estoque = getattr(compra, 'movimenta_estoque_fisico', True)
+                    is_ajuste_custo = getattr(compra, 'ajuste_custo', False) or getattr(compra, 'finalidade', '1') == '6'
+
                     deposito_id = getattr(operacao, 'id_deposito_incremento', None) or 1
-                    print(f'[DEBUG_IF] deposito_id: {deposito_id}')
-                    print(f'[DEBUG_ANTES_QUERY] Vai buscar estoque - produto.pk={produto.pk}, deposito_id={deposito_id}')
 
                     try:
                         estoque_obj = Estoque.objects.get(
                             id_produto=produto,
                             id_deposito_id=deposito_id
                         )
-                        print(f'[DEBUG_ESTOQUE] Estoque encontrado - Qtd atual: {estoque_obj.quantidade} ({type(estoque_obj.quantidade)})')
                         
                         qtd_estoque_atual = estoque_obj.quantidade or Decimal('0.000')
                         custo_medio_atual = estoque_obj.custo_medio or Decimal('0.0000')
-                        
-                        print(f'[DEBUG_ESTOQUE] Tipo antes de Decimal(): {type(qtd_estoque_atual)}')
-                        
                         qtd_estoque_decimal = Decimal(str(qtd_estoque_atual))
-                        print(f'[DEBUG_ESTOQUE] Tipo depois de Decimal(): {type(qtd_estoque_decimal)}')
-                        print(f'[DEBUG_ESTOQUE] quantidade a adicionar: {qtd_estoque} ({type(qtd_estoque)})')
-                        
-                        nova_quantidade = qtd_estoque_decimal + qtd_estoque
-                        print(f'[DEBUG_ESTOQUE] Nova quantidade calculada: {nova_quantidade} ({type(nova_quantidade)})')
-                        
-                        # Calcula novo custo médio ponderado
-                        valor_estoque_atual = qtd_estoque_decimal * custo_medio_atual
-                        valor_nova_compra = qtd_estoque * custo_unit_estoque
-                        novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else custo_unit_estoque
+
+                        if not movimenta_estoque:
+                            # NOTA DE DÉBITO (finNFe = 6): Não altera a quantidade física do estoque
+                            nova_quantidade = qtd_estoque_decimal
+                            if is_ajuste_custo:
+                                if qtd_estoque_decimal > 0:
+                                    acrescimo_por_unidade = (qtd_estoque * custo_unit_estoque) / qtd_estoque_decimal
+                                    novo_custo_medio = custo_medio_atual + acrescimo_por_unidade
+                                else:
+                                    novo_custo_medio = custo_medio_atual + custo_unit_estoque
+                            else:
+                                novo_custo_medio = custo_medio_atual
+                        else:
+                            # ENTRADA NORMAL: Soma quantidade física e recalcula custo médio ponderado
+                            nova_quantidade = qtd_estoque_decimal + qtd_estoque
+                            valor_estoque_atual = qtd_estoque_decimal * custo_medio_atual
+                            valor_nova_compra = qtd_estoque * custo_unit_estoque
+                            novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else custo_unit_estoque
                         
                         estoque_obj.quantidade = nova_quantidade
                         estoque_obj.custo_medio = novo_custo_medio.quantize(Decimal('0.0001'))
                         estoque_obj.valor_ultima_compra = custo_unit_estoque
                         estoque_obj.valor_total = nova_quantidade * novo_custo_medio
                         estoque_obj.save()
-                        print(f'[DEBUG_ESTOQUE] Estoque atualizado - Custo médio: {novo_custo_medio}, Última compra: {custo_unit_estoque}')
                     except Estoque.DoesNotExist:
-                        print(f'[DEBUG_ESTOQUE] Estoque não existe, criando novo')
-                        print(f'[DEBUG_ESTOQUE_CREATE] Vai criar - produto={produto} (tipo: {type(produto)})')
-                        print(f'[DEBUG_ESTOQUE_CREATE] deposito_id={deposito_id} (tipo: {type(deposito_id)})')
-                        print(f'[DEBUG_ESTOQUE_CREATE] quantidade={qtd_estoque} (tipo: {type(qtd_estoque)})')
-                        
-                        Estoque.objects.create(
+                        qtd_inicial = Decimal('0.000') if not movimenta_estoque else qtd_estoque
+                        estoque_obj = Estoque.objects.create(
                             id_produto=produto,
                             id_deposito_id=deposito_id,
-                            quantidade=qtd_estoque,
+                            quantidade=qtd_inicial,
                             custo_medio=custo_unit_estoque,
                             valor_ultima_compra=custo_unit_estoque,
-                            valor_total=qtd_estoque * custo_unit_estoque
+                            valor_total=qtd_inicial * custo_unit_estoque
                         )
-                        print(f'[DEBUG_ESTOQUE] Novo estoque criado com custo médio: {custo_unit_estoque}')
+
+                    # Registrar no Histórico / Kardex
+                    try:
+                        from .models import EstoqueMovimentacao
+                        EstoqueMovimentacao.objects.create(
+                            id_estoque=estoque_obj,
+                            id_produto=produto,
+                            tipo_movimentacao='AJUSTE' if not movimenta_estoque else 'ENTRADA',
+                            tipo_documento='COMPRA',
+                            id_documento=compra.pk,
+                            quantidade_anterior=qtd_estoque_decimal if 'qtd_estoque_decimal' in locals() else Decimal('0'),
+                            quantidade_movimentada=Decimal('0') if not movimenta_estoque else qtd_estoque,
+                            quantidade_atual=estoque_obj.quantidade,
+                            observacoes=f'Entrada NF {compra.numero_documento} - Finalidade {compra.finalidade}'
+                        )
+                    except Exception as kex:
+                        print(f"Erro ao registrar Kardex: {kex}")
             compra.save()
 
             # Verifica se operação gera financeiro
@@ -618,6 +633,23 @@ class CompraViewSet(viewsets.ModelViewSet):
             numero_nf = get_text(ide, 'nNF')
             data_emissao = get_text(ide, 'dhEmi')
             
+            # Finalidade e Débito (RTC / Reforma)
+            fin_nfe = get_text(ide, 'finNFe', '1')
+            tp_debito = get_text(ide, 'tpNFDebito', '')
+
+            # Chave referenciada global da nota em ide -> NFref -> refNFe
+            chave_referenciada_global = ''
+            nf_ref_node = get_node(ide, 'NFref')
+            if nf_ref_node is not None:
+                chave_referenciada_global = get_text(nf_ref_node, 'refNFe', '') or get_text(nf_ref_node, 'refNFCe', '')
+
+            # Definição automática de comportamento para Nota de Débito (finNFe = 6)
+            movimenta_estoque_fisico = True
+            ajuste_custo = False
+            if fin_nfe == '6':
+                movimenta_estoque_fisico = False
+                ajuste_custo = True
+            
             # Extrair chave NFe corretamente
             chave_nfe = ''
             # Tenta pegar do atributo Id
@@ -756,6 +788,16 @@ class CompraViewSet(viewsets.ModelViewSet):
                     ncm = get_text(prod, 'NCM')
                     cfop_orig = get_text(prod, 'CFOP')
                     unidade = get_text(prod, 'uCom')
+
+                    # Leitura de vínculos item a item (DFeReferenciado)
+                    dfe_ref = get_node(det, 'DFeReferenciado')
+                    chave_origem_item = ''
+                    n_item_origem_item = None
+                    if dfe_ref is not None:
+                        chave_origem_item = get_text(dfe_ref, 'chaveAcesso', '') or get_text(dfe_ref, 'refNFe', '')
+                        n_item_ref_str = get_text(dfe_ref, 'nItem', '')
+                        if n_item_ref_str and n_item_ref_str.isdigit():
+                            n_item_origem_item = int(n_item_ref_str)
 
                     # Converter CFOP para entrada (5→1, 6→2, 7→3)
                     cfop_entrada = cfop_orig
@@ -933,7 +975,9 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'vpis': vpis,
                         'vcofins': vcofins,
                         'id_produto': produto_db.id_produto if produto_db else None,
-                        'produto_encontrado': produto_db is not None  # Flag indicando se o produto foi encontrado
+                        'produto_encontrado': produto_db is not None,  # Flag indicando se o produto foi encontrado
+                        'chave_origem': chave_origem_item or chave_referenciada_global,
+                        'n_item_origem': n_item_origem_item,
                     })
             
             return Response({
@@ -947,6 +991,13 @@ class CompraViewSet(viewsets.ModelViewSet):
                 'fornecedor_nome': fornecedor_nome,
                 'fornecedor_criado': fornecedor_criado,
                 
+                # Suporte a Nota de Débito (finNFe = 6) / RTC / Reforma
+                'finalidade': fin_nfe,
+                'tipo_debito': tp_debito,
+                'chave_referenciada': chave_referenciada_global,
+                'movimenta_estoque_fisico': movimenta_estoque_fisico,
+                'ajuste_custo': ajuste_custo,
+
                 # Totais da NF-e
                 'valor_total': valor_total,
                 'valor_produtos': valor_produtos,

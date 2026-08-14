@@ -125,6 +125,11 @@ function CompraPage() {
     data_entrada: new Date().toLocaleDateString('en-CA'),
     dados_entrada: '',
     xml_conteudo: '',
+    finalidade: '1',
+    tipo_debito: '',
+    chave_referenciada: '',
+    movimenta_estoque_fisico: true,
+    ajuste_custo: false,
     itens: [{ id_produto: '', quantidade: 1, valor_unitario: 0, cfop: '', cst: '', csosn: '', vbc_icms: '', picms: '', vicms: '', vipi: '', vpis: '', vcofins: '' }],
     // Dados de Frete
     frete_modalidade: '',
@@ -1049,6 +1054,11 @@ function CompraPage() {
         data_entrada: dados.data_entrada || new Date().toLocaleDateString('en-CA'),
         dados_entrada: chaveNfe,
         xml_conteudo: dados.xml_conteudo || '',
+        finalidade: dados.finalidade || '1',
+        tipo_debito: dados.tipo_debito || '',
+        chave_referenciada: dados.chave_referenciada || '',
+        movimenta_estoque_fisico: dados.movimenta_estoque_fisico !== undefined ? dados.movimenta_estoque_fisico : true,
+        ajuste_custo: dados.ajuste_custo || false,
         id_operacao: form.id_operacao,
         itens: itensMapeados,
       })
@@ -2384,6 +2394,13 @@ function CompraPage() {
                 border: '1px solid #e0e0e0'
               }}
             >
+              {form.finalidade === '6' && (
+                <Alert severity="info" sx={{ mb: 3, fontWeight: 'bold' }}>
+                  ℹ️ Esta é uma <strong>Nota Fiscal de Débito (Ajuste/Complementar - RTC)</strong>. 
+                  A movimentação de estoque físico foi desativada automaticamente para evitar duplicidade de saldo.
+                  O valor complementar será ajustado diretamente no Custo Médio dos produtos.
+                </Alert>
+              )}
               <Typography
                 variant="subtitle1"
                 sx={{
@@ -2546,6 +2563,29 @@ function CompraPage() {
                       },
                     }}
                   />
+                </Grid>
+
+                <Grid item xs={12} md={6} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={form.movimenta_estoque_fisico !== false}
+                        onChange={(e) => setForm({ ...form, movimenta_estoque_fisico: e.target.checked })}
+                        color="primary"
+                      />
+                    }
+                    label="Movimentar saldo físico no estoque"
+                  />
+                  {form.chave_referenciada && (
+                    <Chip
+                      icon={<ReceiptIcon />}
+                      label={`Origem Ref: ${form.chave_referenciada.slice(0, 6)}...${form.chave_referenciada.slice(-6)}`}
+                      color="secondary"
+                      variant="outlined"
+                      size="small"
+                      sx={{ fontWeight: 'bold' }}
+                    />
+                  )}
                 </Grid>
               </Grid>
             </Paper>
