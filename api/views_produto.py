@@ -863,7 +863,10 @@ class ProdutoComDepositosSerializer(serializers.ModelSerializer):
                 SELECT d.id AS id_deposito, d.nome AS nome_deposito, 
                        COALESCE(e.quantidade, 0) AS quantidade_atual,
                        COALESCE(e.valor_venda, 0) AS valor_venda,
-                       COALESCE(e.quantidade_minima, 0) AS quantidade_minima
+                       COALESCE(e.quantidade_minima, 0) AS quantidade_minima,
+                       COALESCE(e.custo_medio, e.valor_ultima_compra, 0) AS custo_medio,
+                       COALESCE(e.valor_ultima_compra, e.custo_medio, 0) AS valor_ultima_compra,
+                       e.id_estoque AS id_estoque
                 FROM deposito d
                 LEFT JOIN estoque e ON e.id_deposito = d.id AND e.id_produto = %s
                 ORDER BY d.nome
@@ -874,12 +877,18 @@ class ProdutoComDepositosSerializer(serializers.ModelSerializer):
 
         out = []
         for r in rows:
+            custo_val = float(r[5]) if r[5] is not None else 0.0
             out.append({
                 'id_deposito': r[0],
                 'nome_deposito': r[1],
-                'quantidade_atual': float(r[2]) if r[2] is not None else 0,
-                'valor_venda': float(r[3]) if r[3] is not None else 0,
-                'quantidade_minima': float(r[4]) if r[4] is not None else 0,
+                'quantidade_atual': float(r[2]) if r[2] is not None else 0.0,
+                'quantidade': float(r[2]) if r[2] is not None else 0.0,
+                'valor_venda': float(r[3]) if r[3] is not None else 0.0,
+                'quantidade_minima': float(r[4]) if r[4] is not None else 0.0,
+                'valor_custo': custo_val,
+                'custo_medio': custo_val,
+                'valor_ultima_compra': float(r[6]) if r[6] is not None else custo_val,
+                'id_estoque': r[7]
             })
         return out
 
