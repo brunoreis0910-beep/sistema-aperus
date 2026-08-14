@@ -396,7 +396,7 @@ function CompraPage() {
         toast.error(`❌ ${erroSefaz}`);
       }
     } catch (err) {
-      const erroMsg = err.response?.data?.details || err.response?.data?.error || err.message || 'Erro de conexão com SEFAZ';
+      const erroMsg = err.response?.data?.mensagem || err.response?.data?.xMotivo || err.response?.data?.error || err.response?.data?.details || err.message || 'Erro de conexão com SEFAZ';
       setDialogNFeDevolucao(prev => ({
         ...prev,
         statusEmissao: 'rejeitada',

@@ -524,17 +524,27 @@ class NfeXmlBuilder:
                            ET.SubElement(enderDest, f"{{{self.ns}}}fone").text = fone_clean[:14] # Limit NFe pattern
 
                  # --- indIEDest e IE ---
-                 ind_ie_dest = "9"
-                 ie_limpa = ''.join(filter(str.isdigit, c.inscricao_estadual or ''))
-                 if len(doc_cli) > 11 and ie_limpa:
-                     ie_upper = ie_limpa.upper().strip()
-                     if "ISENTO" in ie_upper:
-                         ind_ie_dest = "2"
-                     elif len(ie_limpa) > 4:
+                 raw_ie = str(c.inscricao_estadual or '').upper().strip()
+                 ie_digits = ''.join(filter(str.isdigit, raw_ie))
+                 uf_dest = self._limpar_texto(c.estado, 2) or "MG"
+                 
+                 if len(doc_cli) > 11: # CNPJ (Pessoa Jurídica)
+                     if len(ie_digits) >= 2:
                          ind_ie_dest = "1"
-                         ET.SubElement(dest, f"{{{self.ns}}}IE").text = ie_limpa
-                 else:
-                     ind_ie_dest = "9"
+                         ET.SubElement(dest, f"{{{self.ns}}}IE").text = ie_digits
+                     elif "ISENTO" in raw_ie and uf_dest != "MG":
+                         ind_ie_dest = "2"
+                     else:
+                         # MG e maioria das SEFAZs rejeitam indIEDest=2 (Rejeicao 805). Para PJ sem IE, usar indIEDest=9
+                         ind_ie_dest = "9"
+                 else: # CPF (Pessoa Física)
+                     if len(ie_digits) >= 2:
+                         ind_ie_dest = "1"
+                         ET.SubElement(dest, f"{{{self.ns}}}IE").text = ie_digits
+                     elif "ISENTO" in raw_ie and uf_dest != "MG":
+                         ind_ie_dest = "2"
+                     else:
+                         ind_ie_dest = "9"
                  ET.SubElement(dest, f"{{{self.ns}}}indIEDest").text = ind_ie_dest
 
         # --- Totais Accumulators ---
@@ -1247,8 +1257,8 @@ class NfeXmlBuilder:
             # print(f"DEBUG: CRT={crt_raw} Regime={getattr(self.empresa, 'regime_tributario', 'N/A')} is_normal={is_regime_normal}")
             
             # REFORMA TRIBUTÁRIA: IBSCBS desativado para o Schema NFe 4.00 oficial (produção)
-            # A SEFAZ 4.00 rejeita o XML com Rejeição 215 se contiver tags de reforma não ativadas no WebService
-            should_generate_reform = True
+            # A SEFAZ 4.00 rejeita o XML com Rejeição 225 se contiver tags de reforma não ativadas no WebService
+            should_generate_reform = False
             
             has_reform_fields = True
             
@@ -1543,22 +1553,26 @@ class NfeXmlBuilder:
         pag = ET.SubElement(infNFe, f"{{{self.ns}}}pag")
         detPag = ET.SubElement(pag, f"{{{self.ns}}}detPag")
         
-        # Validar tPag e xPag
-        t_pag = self.tipo_pagamento
-        # Fallback se t_pag (DB) for inválido para 'simples'
-        if t_pag not in ['01','02','03','04','05','10','11','12','13','15','90','99']:
-            t_pag = "01" # Dinheiro default
-          
-        # FORÇAR PAGAMENTO IGUAL AO XML DE SUCESSO DO USUARIO (05 - Credito Loja ou 01 - Dinheiro)
-        # O XML de sucesso usou tPag=05 e indPag=0.
-        # Vamos manter o que vem do banco se possivel, mas REINSERIR indPag.
-        
-        # NOTE: A NT 2020.006 tornou indPag facultativo, mas alguns servidores validam.
-        # O XML de sucesso tem <indPag>0</indPag>
-        ET.SubElement(detPag, f"{{{self.ns}}}indPag").text = "0" 
+        # Verificar se é nota de Devolução (finNFe = 4)
+        fin_nfe = '1'
+        if self.venda.id_operacao:
+            op_fin = str(getattr(self.venda.id_operacao, 'finalidade_emissao', '') or '').strip()
+            nome_op = (self.venda.id_operacao.nome_operacao or '').upper()
+            if op_fin == '4' or 'DEVOLU' in nome_op:
+                fin_nfe = '4'
 
-        ET.SubElement(detPag, f"{{{self.ns}}}tPag").text = t_pag
-        ET.SubElement(detPag, f"{{{self.ns}}}vPag").text = "{:.2f}".format(total_fiscal)
+        if fin_nfe == '4':
+            # SEFAZ NT 2020.006 (Rejeição 871): Emissão de NF-e de Devolução (finalidade 4) exige tPag = '90' (Sem Pagamento)
+            t_pag = "90"
+            ET.SubElement(detPag, f"{{{self.ns}}}tPag").text = "90"
+            ET.SubElement(detPag, f"{{{self.ns}}}vPag").text = "0.00"
+        else:
+            t_pag = self.tipo_pagamento
+            if t_pag not in ['01','02','03','04','05','10','11','12','13','15','90','99']:
+                t_pag = "01"
+            ET.SubElement(detPag, f"{{{self.ns}}}indPag").text = "0" 
+            ET.SubElement(detPag, f"{{{self.ns}}}tPag").text = t_pag
+            ET.SubElement(detPag, f"{{{self.ns}}}vPag").text = "{:.2f}".format(total_fiscal)
         
         # Pagamento cartao exige tag card no subgrupo se integrado, mas se nao integrado (POS)
         # a tag card é opcional/recomendada. Vamos manter simples.
