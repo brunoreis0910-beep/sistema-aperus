@@ -889,31 +889,26 @@ const ProdutoPageResponsive = () => {
       return;
     }
 
+    // Resolver id_grupo a partir do grupo selecionado no dropdown (formData.grupo)
+    if (formData.grupo) {
+      const grupoEncontrado = gruposAtivos.find(g => (g.nome === formData.grupo || g.nome_grupo === formData.grupo));
+      if (grupoEncontrado) {
+        const gid = Number(grupoEncontrado.id_grupo || grupoEncontrado.id);
+        if (!isNaN(gid) && gid > 0) {
+          produtoData.id_grupo = gid;
+          console.log('✅ id_grupo resolvido pelo grupo selecionado:', gid, '(', formData.grupo, ')');
+        }
+      }
+    }
+    
+    // Fallback: se não encontrou pelo nome, usa o id_grupo do formData se for válido
+    if (!produtoData.id_grupo && formData.id_grupo && Number(formData.id_grupo) > 0) {
+      produtoData.id_grupo = Number(formData.id_grupo);
+    }
+
     // Campos opcionais - só incluir se tiverem valor válido
     if (formData.categoria && String(formData.categoria).trim()) {
       produtoData.categoria = String(formData.categoria).trim();
-    }
-    // Prioridade: se já tem id_grupo no formData (produto editado), usar ele
-    if (formData.id_grupo && Number(formData.id_grupo) > 0) {
-      console.log('✅ id_grupo já existe no formData:', formData.id_grupo);
-      produtoData.id_grupo = Number(formData.id_grupo);
-    } else if (formData.grupo && gruposAtivos.find(g => g.nome === formData.grupo)) {
-      const grupo = gruposAtivos.find(g => g.nome === formData.grupo);
-      console.log('🔍 Grupo selecionado:', formData.grupo);
-      console.log('🔍 Grupo encontrado:', grupo);
-      console.log('🔍 Todos os grupos disponíveis:', gruposAtivos);
-
-      // Validação: só adicionar se ID existe e é válido
-      if (grupo && grupo.id && Number(grupo.id) > 0 && !isNaN(Number(grupo.id))) {
-        console.log('✅ ID do grupo válido, adicionando:', Number(grupo.id));
-        produtoData.id_grupo = Number(grupo.id);
-      } else {
-        console.log('⚠️ Grupo encontrado mas ID inválido, criando produto sem grupo');
-        console.log('⚠️ Detalhes do grupo:', grupo);
-      }
-    } else if (formData.grupo) {
-      console.log('⚠️ Grupo não encontrado nos grupos ativos:', formData.grupo);
-      console.log('⚠️ Criando produto sem grupo para evitar erro');
     }
 
     
@@ -3130,16 +3125,28 @@ const ProdutoPageResponsive = () => {
                       <InputLabel>Grupo</InputLabel>
                       <Select
                         value={formData.grupo}
-                        onChange={(e) => setFormData({ ...formData, grupo: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const gMatch = gruposAtivos.find(g => (g.nome === val || g.nome_grupo === val));
+                          setFormData({
+                            ...formData,
+                            grupo: val,
+                            id_grupo: gMatch ? Number(gMatch.id_grupo || gMatch.id) : formData.id_grupo
+                          });
+                        }}
                         label="Grupo"
                         required
                         disabled={loadingGrupos}
                       >
-                        {gruposAtivos.map((grupo) => (
-                          <MenuItem key={grupo.id} value={grupo.nome}>
-                            {grupo.nome}
-                          </MenuItem>
-                        ))}
+                        {gruposAtivos.map((grupo) => {
+                          const gId = grupo.id_grupo || grupo.id;
+                          const gNome = grupo.nome_grupo || grupo.nome;
+                          return (
+                            <MenuItem key={gId} value={gNome}>
+                              {gNome}
+                            </MenuItem>
+                          );
+                        })}
                       </Select>
                     </FormControl>
                     <Button
