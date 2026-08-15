@@ -130,24 +130,41 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
   };
 
   const handleSave = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     setSaving(true);
+    
+    let codIbge = formData.codigo_municipio_ibge ? formData.codigo_municipio_ibge.replace(/\D/g, '').trim() : '';
+    const cepLimpo = (formData.cep || '').replace(/\D/g, '');
+
+    // Se o código IBGE estiver vazio mas o CEP tiver 8 dígitos, buscar rapidamente via ViaCEP
+    if (!codIbge && cepLimpo.length === 8) {
+      try {
+        const res = await axios.get(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+        if (res.data && res.data.ibge) {
+          codIbge = res.data.ibge.toString().trim();
+        }
+      } catch (err) {
+        console.warn('Não foi possível obter IBGE pelo CEP antes de salvar:', err);
+      }
+    }
+
     const data = {
       ...formData,
       limite_credito: parseFloat(formData.limite_credito) || 0,
       cpf_cnpj: formData.cpf_cnpj.replace(/\D/g, ''),
-      cep: formData.cep.replace(/\D/g, ''),
-      codigo_municipio_ibge: formData.codigo_municipio_ibge ? formData.codigo_municipio_ibge.replace(/\D/g, '') : null,
+      cep: cepLimpo,
+      codigo_municipio_ibge: codIbge || null,
       telefone: formData.telefone.replace(/\D/g, ''),
       logo_url: formData.logo_url || null
     };
+
     try {
       if (fornecedorToEdit) {
         await axiosInstance.put(`/fornecedores/${fornecedorToEdit.id_fornecedor}/`, data);
-        alert('Fornecedor atualizado!');
+        alert('Fornecedor atualizado com sucesso!');
       } else {
         await axiosInstance.post('/fornecedores/', data);
-        alert('Fornecedor cadastrado!');
+        alert('Fornecedor cadastrado com sucesso!');
       }
       onSaveSuccess();
       onClose();
@@ -160,6 +177,8 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
           msg += `\n${key} - ${err[key][0]}`;
         } else if (err.detail) {
           msg = err.detail;
+        } else if (typeof err === 'string') {
+          msg = err;
         }
       }
       alert(msg);
