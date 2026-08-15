@@ -37,6 +37,7 @@ const SpedContribuicoesPage = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [lastGeneratedFile, setLastGeneratedFile] = useState(null);
   const [config, setConfig] = useState(null);
   
   // Blocos a gerar
@@ -139,8 +140,6 @@ const SpedContribuicoesPage = () => {
       setTimeout(() => setError(''), 3000);
     }
   };
-
-  const [lastGeneratedFile, setLastGeneratedFile] = useState(null);
 
   const triggerBrowserDownload = (base64Data, filename, downloadUrl) => {
     try {

@@ -45,6 +45,7 @@ const SpedPage = () => {
   const [gerarRelatorio, setGerarRelatorio] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [lastGeneratedFile, setLastGeneratedFile] = useState(null);
 
   const [openEmailDialog, setOpenEmailDialog] = useState(false);
   const [contadorEmail, setContadorEmail] = useState('');
