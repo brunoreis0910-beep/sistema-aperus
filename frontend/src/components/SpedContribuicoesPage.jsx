@@ -142,50 +142,41 @@ const SpedContribuicoesPage = () => {
 
   const [lastGeneratedFile, setLastGeneratedFile] = useState(null);
 
-  const triggerBrowserDownload = async (base64Data, filename) => {
+  const triggerBrowserDownload = (base64Data, filename, downloadUrl) => {
     try {
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      if (downloadUrl) {
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = filename;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          if (link.parentNode) link.parentNode.removeChild(link);
+        }, 3000);
+        return true;
       }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'application/zip' });
 
-      // 1. Tenta API nativa do navegador (Salvar Como)
-      if (typeof window.showSaveFilePicker === 'function') {
-        try {
-          const handle = await window.showSaveFilePicker({
-            suggestedName: filename,
-            types: [{
-              description: 'Arquivo ZIP do SPED',
-              accept: { 'application/zip': ['.zip'] }
-            }]
-          });
-          const writable = await handle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-          return true;
-        } catch (pickerErr) {
-          if (pickerErr.name === 'AbortError') {
-            return false;
-          }
+      if (base64Data) {
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
         }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/zip' });
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          if (link.parentNode) link.parentNode.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+        }, 15000);
+        return true;
       }
-
-      // 2. Download direto via elemento <a>
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = filename;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      setTimeout(() => {
-        if (link.parentNode) link.parentNode.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
-      }, 15000);
-      return true;
     } catch (e) {
       console.error('Erro no download:', e);
       return false;
@@ -216,7 +207,7 @@ const SpedContribuicoesPage = () => {
         data_fim: dataFim,
         conjuntos: conjuntosSelecionados,
         versao,
-        diretorio,
+        diretorio: diretorio || 'C:\\SPED\\',
         blocos: blocosSelecionados,
         exportar_xml: exportarXml,
         gerar_relatorio: gerarRelatorio
@@ -225,19 +216,17 @@ const SpedContribuicoesPage = () => {
       if (response.data && response.data.success) {
         const d = response.data;
         const filename = d.filename || d.arquivo || `EFD_CONTRIBUICOES_${dataInicio.replace(/-/g, '')}_${dataFim.replace(/-/g, '')}.zip`;
+        const downloadUrl = d.download_url || `/api/sped/download/${encodeURIComponent(filename)}/`;
 
-        if (d.file_b64) {
-          setLastGeneratedFile({
-            base64: d.file_b64,
-            filename: filename
-          });
-          await triggerBrowserDownload(d.file_b64, filename);
-        }
+        setLastGeneratedFile({
+          base64: d.file_b64,
+          filename: filename,
+          downloadUrl: downloadUrl
+        });
 
-        let msg = `✅ Arquivo SPED Contribuições (${filename}) baixado com sucesso no seu computador/navegador!`;
-        if (d.filepath || d.caminho) {
-          msg += `\n📁 Cópia de segurança no servidor: ${d.filepath || d.caminho}`;
-        }
+        triggerBrowserDownload(d.file_b64, filename, downloadUrl);
+
+        let msg = `✅ Pacote SPED Contribuições (${filename}) gerado e disponível para download!`;
         setSuccess(msg);
         if (d.estatisticas) setEstatisticas(d.estatisticas);
         await salvarConfig();
@@ -281,26 +270,47 @@ const SpedContribuicoesPage = () => {
           </Alert>
         )}
 
-        {success && (
-          <Alert
-            severity="success"
-            sx={{ mb: 2, whiteSpace: 'pre-line' }}
-            onClose={() => setSuccess('')}
-            action={
-              lastGeneratedFile ? (
-                <Button
-                  color="inherit"
-                  size="small"
-                  variant="outlined"
-                  startIcon={<DownloadIcon />}
-                  onClick={() => triggerBrowserDownload(lastGeneratedFile.base64, lastGeneratedFile.filename)}
-                  sx={{ ml: 2, fontWeight: 'bold' }}
-                >
-                  Baixar Novamente
-                </Button>
-              ) : null
-            }
+        {lastGeneratedFile && (
+          <Paper
+            elevation={3}
+            sx={{
+              p: 2.5,
+              mb: 2.5,
+              bgcolor: '#e8f5e9',
+              border: '2px solid #2e7d32',
+              borderRadius: 2,
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 2
+            }}
           >
+            <Box>
+              <Typography variant="h6" color="#1b5e20" fontWeight="bold">
+                ✅ Pacote SPED Contribuições Gerado com Sucesso!
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Arquivo: <strong>{lastGeneratedFile.filename}</strong>
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              color="success"
+              size="large"
+              href={lastGeneratedFile.downloadUrl}
+              download={lastGeneratedFile.filename}
+              startIcon={<DownloadIcon fontSize="large" />}
+              onClick={() => triggerBrowserDownload(lastGeneratedFile.base64, lastGeneratedFile.filename, lastGeneratedFile.downloadUrl)}
+              sx={{ fontWeight: 'bold', fontSize: '1.05rem', px: 3, py: 1.5, boxShadow: 2, whiteSpace: 'nowrap' }}
+            >
+              📥 Salvar no meu Computador
+            </Button>
+          </Paper>
+        )}
+
+        {success && !lastGeneratedFile && (
+          <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>
             {success}
           </Alert>
         )}

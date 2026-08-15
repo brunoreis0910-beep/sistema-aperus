@@ -339,7 +339,7 @@ from .viewsets_config_produto import ConfiguracaoProdutoViewSet
 from .views_veiculo_novo import VeiculoNovoViewSet, VendaItemVeiculoNovoView
 from .views_intelligence import ProductIntelligenceViewSet
 from .views_pcp import OrdemProducaoViewSet, ComposicaoProdutoViewSet
-from .views_sped import SpedGerarView, SpedSalvarConfigView, SpedEnviarEmailView
+from .views_sped import SpedGerarView, SpedSalvarConfigView, SpedEnviarEmailView, SpedDownloadView
 from .views_sped_contribuicoes import SpedContribuicoesGerarView, SpedContribuicoesSalvarConfigView, SpedContribuicoesCarregarConfigView
 
 router = DefaultRouter()
@@ -717,6 +717,7 @@ urlpatterns = [
     path('churn/clientes-risco/', ChurnClientesRiscoView.as_view(), name='churn-clientes-risco'),
     path('churn/rfm/', ChurnRFMView.as_view(), name='churn-rfm'),    # SPED Fiscal (EFD ICMS/IPI)
     path('sped/gerar/', SpedGerarView.as_view(), name='sped-gerar'),
+    path('sped/download/<str:filename>/', SpedDownloadView.as_view(), name='sped-download'),
     path('sped/salvar-config/', SpedSalvarConfigView.as_view(), name='sped-salvar-config'),
     path('sped/enviar-email/', SpedEnviarEmailView.as_view(), name='sped-enviar-email'),
     # SPED Contribuições (EFD PIS/COFINS)

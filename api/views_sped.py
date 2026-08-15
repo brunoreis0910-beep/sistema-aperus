@@ -221,19 +221,22 @@ class SpedGerarView(APIView):
                                 arcname = os.path.join(foldername, file)
                                 zipf.write(file_path, arcname)
 
-            # Salvar cópia no servidor se diretório configurado
+            # Salvar cópia em C:\SPED para disponibilizar para download imediato
+            os.makedirs('C:\\SPED', exist_ok=True)
+            sped_dir_file = os.path.join('C:\\SPED', zip_filename)
+            shutil.copy2(zip_filepath, sped_dir_file)
+            final_path = sped_dir_file
+
             diretorio_destino = data.get('diretorio')
-            final_path = ""
-            if diretorio_destino:
+            if diretorio_destino and diretorio_destino != 'C:\\SPED' and diretorio_destino != 'C:\\SPED\\':
                 try:
                     os.makedirs(diretorio_destino, exist_ok=True)
-                    final_path = os.path.join(diretorio_destino, zip_filename)
-                    shutil.copy2(zip_filepath, final_path)
-                    logger.info(f"SPED ZIP cópia salva no servidor em: {final_path}")
+                    dest_file = os.path.join(diretorio_destino, zip_filename)
+                    shutil.copy2(zip_filepath, dest_file)
+                    final_path = dest_file
                 except Exception as save_err:
-                    logger.warning(f"Não foi possível salvar cópia local em {diretorio_destino}: {save_err}")
+                    logger.warning(f"Não foi possível salvar cópia em {diretorio_destino}: {save_err}")
             
-            # Retornar o arquivo como JSON com base64 para download seguro no navegador
             if os.path.exists(zip_filepath):
                 with open(zip_filepath, 'rb') as f:
                     zip_content = f.read()
@@ -251,6 +254,7 @@ class SpedGerarView(APIView):
                     'success': True,
                     'message': f'Arquivo SPED {zip_filename} gerado com sucesso!',
                     'filename': zip_filename,
+                    'download_url': f'/api/sped/download/{zip_filename}/',
                     'filepath': final_path or zip_filename,
                     'file_b64': zip_b64,
                     'xml_export': xml_stats if exportar_xml else None,
@@ -265,6 +269,37 @@ class SpedGerarView(APIView):
             logger.error(f"Erro gerando SPED: {str(e)}")
             logger.error(traceback.format_exc())
             return JsonResponse({"error": f"Erro ao gerar SPED: {str(e)}"}, status=500)
+
+
+class SpedDownloadView(APIView):
+    permission_classes = [AllowAny]
+    
+    def get(self, request, filename):
+        import tempfile
+        from django.http import HttpResponse, Http404
+        safe_filename = os.path.basename(filename)
+        
+        locais = [
+            os.path.join('C:\\SPED', safe_filename),
+            os.path.join(tempfile.gettempdir(), safe_filename),
+        ]
+        
+        caminho = None
+        for loc in locais:
+            if os.path.exists(loc):
+                caminho = loc
+                break
+                
+        if not caminho or not os.path.exists(caminho):
+            raise Http404("Arquivo SPED não encontrado")
+            
+        with open(caminho, 'rb') as f:
+            content = f.read()
+            
+        response = HttpResponse(content, content_type='application/zip')
+        response['Content-Disposition'] = f'attachment; filename="{safe_filename}"'
+        response['Content-Length'] = len(content)
+        return response
 
 
 class SpedSalvarConfigView(APIView):

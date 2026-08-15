@@ -186,8 +186,12 @@ class SpedContribuicoesGerarView(APIView):
                                     arc_path = os.path.join('XMLs', file)
                                     zipf.write(file_path, arc_path)
                 
-                # Salvar cópia no servidor e retornar download via base64
-                final_path = zip_path
+                # Salvar cópia em C:\SPED para disponibilizar para download imediato
+                os.makedirs('C:\\SPED', exist_ok=True)
+                sped_dir_file = os.path.join('C:\\SPED', zip_filename)
+                shutil.copy2(zip_path, sped_dir_file)
+                final_path = sped_dir_file
+
                 with open(zip_path, 'rb') as f:
                     zip_content = f.read()
 
@@ -208,6 +212,7 @@ class SpedContribuicoesGerarView(APIView):
                     "message": f"SPED Contribuições {zip_filename} gerado com sucesso!",
                     "arquivo": zip_filename,
                     "filename": zip_filename,
+                    "download_url": f"/api/sped/download/{zip_filename}/",
                     "caminho": final_path,
                     "filepath": final_path,
                     "file_b64": zip_b64,
