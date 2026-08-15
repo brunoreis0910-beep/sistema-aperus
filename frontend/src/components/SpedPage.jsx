@@ -317,6 +317,8 @@ const SpedPage = () => {
     try {
       const resp = await axiosInstance.post('/sped/enviar-email/', {
         filepath: spedFilepath,
+        filename: lastGeneratedFile?.filename || spedFilepath,
+        file_b64: lastGeneratedFile?.base64 || '',
         email: contadorEmail,
         periodo: spedPeriodo,
         contador_nome: contadorNome,

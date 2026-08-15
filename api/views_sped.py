@@ -221,14 +221,21 @@ class SpedGerarView(APIView):
                                 arcname = os.path.join(foldername, file)
                                 zipf.write(file_path, arcname)
 
-            # Salvar cópia em C:\SPED para disponibilizar para download imediato
-            os.makedirs('C:\\SPED', exist_ok=True)
-            sped_dir_file = os.path.join('C:\\SPED', zip_filename)
-            shutil.copy2(zip_filepath, sped_dir_file)
-            final_path = sped_dir_file
+            media_sped_dir = r'C:\APERUS\SistemaAperus\media\sped'
+            os.makedirs(media_sped_dir, exist_ok=True)
+            media_sped_file = os.path.join(media_sped_dir, zip_filename)
+            shutil.copy2(zip_filepath, media_sped_file)
+            final_path = media_sped_file
+
+            try:
+                os.makedirs('C:\\SPED', exist_ok=True)
+                sped_dir_file = os.path.join('C:\\SPED', zip_filename)
+                shutil.copy2(zip_filepath, sped_dir_file)
+            except Exception as copy_err:
+                logger.warning(f"Não foi possível salvar cópia em C:\\SPED: {copy_err}")
 
             diretorio_destino = data.get('diretorio')
-            if diretorio_destino and diretorio_destino != 'C:\\SPED' and diretorio_destino != 'C:\\SPED\\':
+            if diretorio_destino and diretorio_destino not in ['C:\\SPED', 'C:\\SPED\\', media_sped_dir]:
                 try:
                     os.makedirs(diretorio_destino, exist_ok=True)
                     dest_file = os.path.join(diretorio_destino, zip_filename)
@@ -280,15 +287,21 @@ class SpedDownloadView(APIView):
         safe_filename = os.path.basename(filename)
         
         locais = [
+            os.path.join(r'C:\APERUS\SistemaAperus\media\sped', safe_filename),
             os.path.join('C:\\SPED', safe_filename),
+            os.path.join('C:\\SPED\\CONTRIBUICOES', safe_filename),
             os.path.join(tempfile.gettempdir(), safe_filename),
         ]
         
         caminho = None
         for loc in locais:
-            if os.path.exists(loc):
-                caminho = loc
-                break
+            if loc and os.path.exists(loc) and os.path.isfile(loc):
+                try:
+                    with open(loc, 'rb') as f:
+                        caminho = loc
+                        break
+                except Exception:
+                    pass
                 
         if not caminho or not os.path.exists(caminho):
             raise Http404("Arquivo SPED não encontrado")
@@ -397,26 +410,57 @@ class SpedEnviarEmailView(APIView):
 
     def post(self, request):
         from api.services_email import EmailService, EmailServiceError
+        import base64
+        import re
+        import logging
+        logger = logging.getLogger(__name__)
 
         filepath = request.data.get('filepath', '').strip()
+        file_b64 = request.data.get('file_b64', '').strip()
+        filename_req = request.data.get('filename', '').strip()
         email = request.data.get('email', '').strip()
         periodo = request.data.get('periodo', 'SPED')
         contador_nome = request.data.get('contador_nome', 'Contador')
 
-        if not filepath or not email:
-            return Response({'success': False, 'error': 'filepath e email são obrigatórios'}, status=400)
+        if not email:
+            return Response({'success': False, 'error': 'E-mail do destinatário é obrigatório'}, status=400)
 
-        if not os.path.exists(filepath):
-            return Response({'success': False, 'error': f'Arquivo não encontrado: {filepath}'}, status=404)
+        filename = filename_req or os.path.basename(filepath) or f"SPED_{periodo.replace(' ', '_')}.zip"
+        file_content = None
+
+        if file_b64:
+            try:
+                clean_b64 = re.sub(r'^data:[^;]+;base64,', '', file_b64)
+                file_content = base64.b64decode(clean_b64)
+            except Exception as b64_err:
+                logger.warning(f"Erro ao decodificar base64 do SPED: {b64_err}")
+
+        if not file_content and filepath:
+            possiveis_caminhos = [
+                filepath,
+                os.path.join(r'C:\APERUS\SistemaAperus\media\sped', os.path.basename(filepath)),
+                os.path.join(r'C:\SPED', os.path.basename(filepath)),
+                os.path.join(r'C:\SPED\CONTRIBUICOES', os.path.basename(filepath)),
+                os.path.join(tempfile.gettempdir(), os.path.basename(filepath)),
+            ]
+            for p in possiveis_caminhos:
+                if p and os.path.exists(p) and os.path.isfile(p):
+                    try:
+                        with open(p, 'rb') as f:
+                            file_content = f.read()
+                            if file_content:
+                                filename = os.path.basename(p)
+                                break
+                    except Exception as read_err:
+                        logger.warning(f"Erro ao ler {p}: {read_err}")
+
+        if not file_content:
+            return Response({'success': False, 'error': f'Arquivo SPED não encontrado para anexo: {filename}'}, status=404)
 
         try:
             empresa = EmpresaConfig.get_ativa()
             if not empresa:
                 return Response({'success': False, 'error': 'Empresa não configurada no sistema'}, status=400)
-
-            filename = os.path.basename(filepath)
-            with open(filepath, 'rb') as f:
-                file_content = f.read()
 
             empresa_nome = empresa.nome_fantasia or empresa.nome_razao_social or 'APERUS'
 
