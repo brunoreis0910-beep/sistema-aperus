@@ -168,66 +168,42 @@ const SpedContribuicoesPage = () => {
         blocos: blocosSelecionados,
         exportar_xml: exportarXml,
         gerar_relatorio: gerarRelatorio
-      }, {
-        responseType: 'blob'
       });
 
-      if (response.data instanceof Blob) {
-        if (response.data.type === 'application/json') {
-          const text = await response.data.text();
-          try {
-            const errObj = JSON.parse(text);
-            setError(errObj.error || 'Erro ao gerar SPED Contribuições');
-          } catch (e) {
-            setError(text || 'Erro ao gerar SPED Contribuições');
+      if (response.data && response.data.success) {
+        const d = response.data;
+        const filename = d.filename || d.arquivo || `EFD_CONTRIBUICOES_${dataInicio.replace(/-/g, '')}_${dataFim.replace(/-/g, '')}.zip`;
+
+        if (d.file_b64) {
+          const byteCharacters = atob(d.file_b64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
           }
-          setLoading(false);
-          return;
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'application/zip' });
+          const blobUrl = window.URL.createObjectURL(blob);
+          const downloadLink = document.createElement('a');
+          downloadLink.href = blobUrl;
+          downloadLink.setAttribute('download', filename);
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          downloadLink.parentNode.removeChild(downloadLink);
+          window.URL.revokeObjectURL(blobUrl);
         }
 
-        let filename = `EFD_CONTRIBUICOES_${dataInicio.replace(/-/g, '')}_${dataFim.replace(/-/g, '')}.zip`;
-        const disposition = response.headers['content-disposition'] || response.headers['Content-Disposition'];
-        if (disposition && disposition.indexOf('filename=') !== -1) {
-          const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
-          if (matches != null && matches[1]) {
-            filename = matches[1].replace(/['"]/g, '').trim();
-          }
-        }
-
-        const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: 'application/zip' }));
-        const downloadLink = document.createElement('a');
-        downloadLink.href = blobUrl;
-        downloadLink.setAttribute('download', filename);
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        downloadLink.parentNode.removeChild(downloadLink);
-        window.URL.revokeObjectURL(blobUrl);
-
-        const serverPath = response.headers['x-file-path'] || response.headers['X-File-Path'] || '';
         let msg = `✅ Arquivo SPED Contribuições (${filename}) baixado com sucesso no seu navegador!`;
-        if (serverPath) {
-          msg += `\n📁 Cópia salva no servidor: ${serverPath}`;
+        if (d.filepath || d.caminho) {
+          msg += `\n📁 Cópia no servidor: ${d.filepath || d.caminho}`;
         }
         setSuccess(msg);
-        await salvarConfig();
-      } else if (response.data && response.data.success) {
-        setSuccess(response.data.message);
+        if (d.estatisticas) setEstatisticas(d.estatisticas);
         await salvarConfig();
       } else {
-        setSuccess('SPED Contribuições gerado com sucesso!');
+        setError(response.data?.error || 'Erro ao gerar arquivo SPED Contribuições');
       }
     } catch (err) {
-      if (err.response && err.response.data instanceof Blob) {
-        try {
-          const text = await err.response.data.text();
-          const errObj = JSON.parse(text);
-          setError(errObj.error || 'Erro ao gerar SPED Contribuições');
-        } catch (e) {
-          setError('Erro ao gerar arquivo SPED Contribuições');
-        }
-      } else {
-        setError(err.response?.data?.error || err.message || 'Erro ao gerar arquivo SPED Contribuições');
-      }
+      setError(err.response?.data?.error || err.message || 'Erro ao gerar arquivo SPED Contribuições');
     } finally {
       setLoading(false);
     }

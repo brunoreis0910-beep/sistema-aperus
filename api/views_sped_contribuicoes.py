@@ -186,7 +186,7 @@ class SpedContribuicoesGerarView(APIView):
                                     arc_path = os.path.join('XMLs', file)
                                     zipf.write(file_path, arc_path)
                 
-                # Salvar cópia no servidor e retornar download
+                # Salvar cópia no servidor e retornar download via base64
                 final_path = zip_path
                 with open(zip_path, 'rb') as f:
                     zip_content = f.read()
@@ -200,13 +200,33 @@ class SpedContribuicoesGerarView(APIView):
                 
                 logger.info(f"SPED Contribuições: Arquivo ZIP gerado para download: {zip_filename}")
                 
-                from django.http import HttpResponse
-                response = HttpResponse(zip_content, content_type='application/zip')
-                response['Content-Disposition'] = f'attachment; filename="{zip_filename}"'
-                response['Access-Control-Expose-Headers'] = 'Content-Disposition, X-File-Path, X-Message'
-                response['X-File-Path'] = final_path or zip_filename
-                response['X-Message'] = 'SPED Contribuições gerado com sucesso!'
-                return response
+                import base64
+                zip_b64 = base64.b64encode(zip_content).decode('ascii')
+                
+                return JsonResponse({
+                    "success": True,
+                    "message": f"SPED Contribuições {zip_filename} gerado com sucesso!",
+                    "arquivo": zip_filename,
+                    "filename": zip_filename,
+                    "caminho": final_path,
+                    "filepath": final_path,
+                    "file_b64": zip_b64,
+                    "tamanho": len(zip_content),
+                    "data_geracao": datetime.datetime.now().isoformat(),
+                    "periodo": {
+                        "inicio": data_inicio_str,
+                        "fim": data_fim_str
+                    },
+                    "estatisticas": {
+                        "total_vendas": generator.vendas.count() if hasattr(generator, 'vendas') else 0,
+                        "total_bc_pis": float(generator.total_bc_pis),
+                        "total_pis": float(generator.total_pis),
+                        "total_bc_cofins": float(generator.total_bc_cofins),
+                        "total_cofins": float(generator.total_cofins),
+                        "total_credito_pis": float(generator.total_credito_pis),
+                        "total_credito_cofins": float(generator.total_credito_cofins)
+                    }
+                })
                 
             except Exception as e:
                 # Limpar em caso de erro

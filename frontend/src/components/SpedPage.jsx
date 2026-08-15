@@ -216,74 +216,52 @@ const SpedPage = () => {
         diretorio,
         exportar_xml: exportarXml,
         gerar_relatorio: gerarRelatorio
-      }, {
-        responseType: 'blob'
       });
 
-      // Se retornou Blob (arquivo ZIP)
-      if (response.data instanceof Blob) {
-        // Se na verdade retornou um erro em JSON dentro do blob
-        if (response.data.type === 'application/json') {
-          const text = await response.data.text();
-          try {
-            const errObj = JSON.parse(text);
-            setError(errObj.error || 'Erro ao gerar SPED');
-          } catch (e) {
-            setError(text || 'Erro ao gerar SPED');
+      if (response.data && response.data.success) {
+        const d = response.data;
+        const filename = d.filename || `SPED_PACOTE_${dataInicio.replace(/-/g, '')}_${dataFim.replace(/-/g, '')}.zip`;
+
+        // Se veio file_b64, decodificar e baixar diretamente no navegador
+        if (d.file_b64) {
+          const byteCharacters = atob(d.file_b64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
           }
-          setLoading(false);
-          return;
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'application/zip' });
+          const blobUrl = window.URL.createObjectURL(blob);
+          const downloadLink = document.createElement('a');
+          downloadLink.href = blobUrl;
+          downloadLink.setAttribute('download', filename);
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          downloadLink.parentNode.removeChild(downloadLink);
+          window.URL.revokeObjectURL(blobUrl);
         }
 
-        // Extrair nome do arquivo do header Content-Disposition
-        let filename = `SPED_PACOTE_${dataInicio.replace(/-/g, '')}_${dataFim.replace(/-/g, '')}.zip`;
-        const disposition = response.headers['content-disposition'] || response.headers['Content-Disposition'];
-        if (disposition && disposition.indexOf('filename=') !== -1) {
-          const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
-          if (matches != null && matches[1]) {
-            filename = matches[1].replace(/['"]/g, '').trim();
-          }
-        }
-
-        // DISPARAR O DOWNLOAD DIRETO NO NAVEGADOR DO CLIENTE
-        const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: 'application/zip' }));
-        const downloadLink = document.createElement('a');
-        downloadLink.href = blobUrl;
-        downloadLink.setAttribute('download', filename);
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        downloadLink.parentNode.removeChild(downloadLink);
-        window.URL.revokeObjectURL(blobUrl);
-
-        const serverPath = response.headers['x-file-path'] || response.headers['X-File-Path'] || '';
         let msg = `✅ Arquivo SPED (${filename}) baixado com sucesso no seu navegador!`;
-        if (serverPath) {
-          msg += `\n📁 Cópia salva no servidor: ${serverPath}`;
+        if (d.filepath) {
+          msg += `\n📁 Cópia no servidor: ${d.filepath}`;
         }
+        if (d.xml_export) {
+          const x = d.xml_export;
+          msg += `\n\n📦 XMLs: Total ${x.total}${x.nfe > 0 ? ` | NFe ${x.nfe}` : ''}${x.nfce > 0 ? ` | NFCe ${x.nfce}` : ''}${x.cte > 0 ? ` | CTe ${x.cte}` : ''}`;
+        }
+        if (d.relatorio?.success) msg += `\n📊 Relatório: ${d.relatorio.filepath}`;
         setSuccess(msg);
-        setSpedFilepath(serverPath || filename);
+        setSpedFilepath(d.filepath || filename);
         setSpedPeriodo(`${dataInicio} a ${dataFim}`);
         await salvarConfig(conjuntosParaUsar);
         if (contadorEmail) {
           setOpenEmailDialog(true);
         }
-      } else if (response.data && response.data.success) {
-        setSuccess(`✅ ${response.data.message}`);
       } else {
-        setSuccess('Arquivo SPED gerado com sucesso!');
+        setError(response.data?.error || 'Erro ao gerar arquivo SPED');
       }
     } catch (err) {
-      if (err.response && err.response.data instanceof Blob) {
-        try {
-          const text = await err.response.data.text();
-          const errObj = JSON.parse(text);
-          setError(errObj.error || 'Erro ao gerar SPED');
-        } catch (e) {
-          setError('Erro ao gerar arquivo SPED');
-        }
-      } else {
-        setError(err.response?.data?.error || err.message || 'Erro ao gerar arquivo SPED');
-      }
+      setError(err.response?.data?.error || err.message || 'Erro ao gerar arquivo SPED');
     } finally {
       setLoading(false);
     }

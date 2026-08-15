@@ -230,7 +230,7 @@ class SpedGerarView(APIView):
                 except Exception as save_err:
                     logger.warning(f"Não foi possível salvar cópia local em {diretorio_destino}: {save_err}")
             
-            # Retornar o arquivo como download direto para o navegador
+            # Retornar o arquivo como JSON com base64 para download seguro no navegador
             if os.path.exists(zip_filepath):
                 with open(zip_filepath, 'rb') as f:
                     zip_content = f.read()
@@ -241,12 +241,18 @@ class SpedGerarView(APIView):
                 except:
                     pass
                 
-                response = HttpResponse(zip_content, content_type='application/zip')
-                response['Content-Disposition'] = f'attachment; filename="{zip_filename}"'
-                response['Access-Control-Expose-Headers'] = 'Content-Disposition, X-File-Path, X-Message'
-                response['X-File-Path'] = final_path or zip_filename
-                response['X-Message'] = f'Arquivo SPED {zip_filename} gerado com sucesso!'
-                return response
+                import base64
+                zip_b64 = base64.b64encode(zip_content).decode('ascii')
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Arquivo SPED {zip_filename} gerado com sucesso!',
+                    'filename': zip_filename,
+                    'filepath': final_path or zip_filename,
+                    'file_b64': zip_b64,
+                    'xml_export': xml_stats if exportar_xml else None,
+                    'relatorio': relatorio_stats if gerar_relatorio else None
+                })
             else:
                 return JsonResponse({"error": "Erro ao criar arquivo ZIP do SPED"}, status=500)
             
