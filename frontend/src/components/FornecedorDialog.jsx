@@ -33,6 +33,9 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
   useEffect(() => {
     setTabValue(0);
     if (fornecedorToEdit) {
+      const initialIbge = fornecedorToEdit.codigo_municipio_ibge || '';
+      const cepClean = (fornecedorToEdit.cep || '').replace(/\D/g, '');
+
       setFormData({
         nome_razao_social: fornecedorToEdit.nome_razao_social || '',
         nome_fantasia: fornecedorToEdit.nome_fantasia || '',
@@ -44,14 +47,37 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
         cidade: fornecedorToEdit.cidade || '',
         estado: fornecedorToEdit.estado || '',
         cep: fornecedorToEdit.cep || '',
-        codigo_municipio_ibge: fornecedorToEdit.codigo_municipio_ibge || '',
+        codigo_municipio_ibge: initialIbge,
         telefone: fornecedorToEdit.telefone || '',
         email: fornecedorToEdit.email || '',
         limite_credito: fornecedorToEdit.limite_credito || 0,
         logo_url: fornecedorToEdit.logo_url || ''
       });
+
+      // Se não tiver código IBGE mas tiver CEP, busca automaticamente
+      if (!initialIbge && cepClean.length === 8) {
+        axios.get(`https://viacep.com.br/ws/${cepClean}/json/`)
+          .then(res => {
+            if (res.data && !res.data.erro && res.data.ibge) {
+              const cod = res.data.ibge.toString().trim();
+              setFormData(prev => ({
+                ...prev,
+                codigo_municipio_ibge: cod,
+                endereco: prev.endereco || res.data.logradouro || '',
+                bairro: prev.bairro || res.data.bairro || '',
+                cidade: prev.cidade || res.data.localidade || '',
+                estado: prev.estado || res.data.uf || ''
+              }));
+            }
+          })
+          .catch(() => {});
+      }
     } else {
-      setFormData({ nome_razao_social: '', nome_fantasia: '', cpf_cnpj: '', inscricao_estadual: '', endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '', codigo_municipio_ibge: '', telefone: '', email: '', limite_credito: 0, logo_url: '' });
+      setFormData({
+        nome_razao_social: '', nome_fantasia: '', cpf_cnpj: '', inscricao_estadual: '',
+        endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '',
+        codigo_municipio_ibge: '', telefone: '', email: '', limite_credito: 0, logo_url: ''
+      });
     }
   }, [fornecedorToEdit, open]);
 
@@ -215,13 +241,13 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
 
                 <TabPanel value={tabValue} index={1}>
                   <Grid container spacing={2}>
-                    <Grid item xs={12} sm={4}><TextField name="cep" label="CEP" value={formData.cep} onChange={handleChange} disabled={!!(saving || loadingCEP)} fullWidth InputProps={{ endAdornment: ( <InputAdornment position="end"> <span> <IconButton aria-label="buscar cep" onClick={handleBuscaCEP} disabled={!!(loadingCEP || (formData.cep && formData.cep.replace(/\D/g, '').length !== 8))} edge="end"> {loadingCEP ? <CircularProgress size={20} /> : <SearchIcon />} </IconButton> </span> </InputAdornment> ), }}/></Grid>
-                    <Grid item xs={12} sm={6}><TextField name="endereco" label="Endereço (Logradouro)" value={formData.endereco} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
-                    <Grid item xs={12} sm={2}><TextField name="numero" label="Número" value={formData.numero} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
-                    <Grid item xs={12} sm={4}><TextField name="bairro" label="Bairro" value={formData.bairro} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
-                    <Grid item xs={12} sm={4}><TextField name="cidade" label="Cidade" value={formData.cidade} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
-                    <Grid item xs={12} sm={1}><TextField name="estado" label="UF" value={formData.estado} onChange={handleChange} disabled={!!saving} fullWidth inputProps={{ maxLength: 2 }}/></Grid>
-                    <Grid item xs={12} sm={3}><TextField name="codigo_municipio_ibge" label="Cód. IBGE Município" value={formData.codigo_municipio_ibge} onChange={handleChange} disabled={!!saving} fullWidth helperText="Preenchido via Busca CEP" inputProps={{ maxLength: 7 }}/></Grid>
+                    <Grid item xs={12} sm={4}><TextField name="cep" label="CEP" value={formData.cep || ''} onChange={handleChange} disabled={!!(saving || loadingCEP)} fullWidth InputProps={{ endAdornment: ( <InputAdornment position="end"> <span> <IconButton aria-label="buscar cep" onClick={handleBuscaCEP} disabled={!!(loadingCEP || ((formData.cep || '').replace(/\D/g, '').length !== 8))} edge="end"> {loadingCEP ? <CircularProgress size={20} /> : <SearchIcon />} </IconButton> </span> </InputAdornment> ), }}/></Grid>
+                    <Grid item xs={12} sm={6}><TextField name="endereco" label="Endereço (Logradouro)" value={formData.endereco || ''} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
+                    <Grid item xs={12} sm={2}><TextField name="numero" label="Número" value={formData.numero || ''} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
+                    <Grid item xs={12} sm={4}><TextField name="bairro" label="Bairro" value={formData.bairro || ''} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
+                    <Grid item xs={12} sm={4}><TextField name="cidade" label="Cidade" value={formData.cidade || ''} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
+                    <Grid item xs={12} sm={1}><TextField name="estado" label="UF" value={formData.estado || ''} onChange={handleChange} disabled={!!saving} fullWidth inputProps={{ maxLength: 2 }}/></Grid>
+                    <Grid item xs={12} sm={3}><TextField name="codigo_municipio_ibge" label="Cód. IBGE Município" value={formData.codigo_municipio_ibge || ''} onChange={handleChange} disabled={!!saving} fullWidth helperText="Preenchido via Busca CEP" inputProps={{ maxLength: 7 }}/></Grid>
                   </Grid>
                 </TabPanel>
 
