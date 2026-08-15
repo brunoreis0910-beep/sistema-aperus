@@ -260,9 +260,56 @@ class ClienteSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['id_cliente', 'data_cadastro']
 
+    def _sync_ibge(self, validated_data, instance=None):
+        import re
+        import unicodedata
+        ibge = validated_data.get('codigo_municipio_ibge')
+        if ibge:
+            clean = re.sub(r'\D', '', str(ibge)).strip()
+            if clean:
+                validated_data['codigo_municipio_ibge'] = clean
+                return
+
+        cep = validated_data.get('cep') or (instance.cep if instance else None)
+        cidade = validated_data.get('cidade') or (instance.cidade if instance else None)
+        estado = validated_data.get('estado') or (instance.estado if instance else None)
+
+        cep_limpo = re.sub(r'\D', '', str(cep or '')).strip()
+        if len(cep_limpo) == 8:
+            try:
+                import urllib.request
+                import json
+                req = urllib.request.Request(
+                    f"https://viacep.com.br/ws/{cep_limpo}/json/",
+                    headers={'User-Agent': 'Mozilla/5.0'}
+                )
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    d = json.loads(resp.read().decode('utf-8'))
+                    if not d.get('erro') and d.get('ibge'):
+                        validated_data['codigo_municipio_ibge'] = str(d['ibge']).strip()
+                        return
+            except Exception:
+                pass
+
+        if cidade and estado:
+            try:
+                from .models import CodigoMunicipio
+                def norm(s):
+                    return unicodedata.normalize('NFKD', str(s or '')).encode('ASCII', 'ignore').decode('ASCII').strip().upper()
+                cidade_norm = norm(cidade)
+                uf_norm = str(estado).strip().upper()
+                mun = CodigoMunicipio.objects.filter(uf=uf_norm).all()
+                for m in mun:
+                    if norm(m.nome_municipio) == cidade_norm:
+                        validated_data['codigo_municipio_ibge'] = str(m.codigo_ibge).strip()
+                        return
+            except Exception:
+                pass
+
     def create(self, validated_data):
         from .models import ClienteGrupoExcecao
         grupos_data = validated_data.pop('grupos_excecao', None)
+        self._sync_ibge(validated_data)
         
         cliente = super().create(validated_data)
         
@@ -275,6 +322,7 @@ class ClienteSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         from .models import ClienteGrupoExcecao
         grupos_data = validated_data.pop('grupos_excecao', None)
+        self._sync_ibge(validated_data, instance=instance)
         
         cliente = super().update(instance, validated_data)
         

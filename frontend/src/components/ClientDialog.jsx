@@ -41,6 +41,9 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
   useEffect(() => {
     setClientTabValue(0);
     if (clientToEdit) {
+      const initialIbge = clientToEdit.codigo_municipio_ibge || '';
+      const cepClean = (clientToEdit.cep || '').replace(/\D/g, '');
+
       setClientFormData({
         nome_razao_social: clientToEdit.nome_razao_social || '',
         nome_fantasia: clientToEdit.nome_fantasia || '',
@@ -52,7 +55,7 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
         cidade: clientToEdit.cidade || '',
         estado: clientToEdit.estado || '',
         cep: clientToEdit.cep || '',
-        codigo_municipio_ibge: clientToEdit.codigo_municipio_ibge || '',
+        codigo_municipio_ibge: initialIbge,
         telefone: clientToEdit.telefone || '',
         email: clientToEdit.email || '',
         limite_credito: clientToEdit.limite_credito || 0,
@@ -64,6 +67,19 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
         priorizar_desconto_cliente: clientToEdit.priorizar_desconto_cliente || false,
         grupos_excecao: clientToEdit.grupos_excecao ? clientToEdit.grupos_excecao.map(g => g.id_grupo || g.id || g) : [],
       });
+
+      if (!initialIbge && cepClean.length === 8) {
+        axios.get(`https://viacep.com.br/ws/${cepClean}/json/`)
+          .then(res => {
+            if (res.data && !res.data.erro && res.data.ibge) {
+              setClientFormData(prev => ({
+                ...prev,
+                codigo_municipio_ibge: res.data.ibge.toString().trim()
+              }));
+            }
+          })
+          .catch(() => {});
+      }
     } else {
       // Limpa o form para "Adicionar Novo"
       setClientFormData({

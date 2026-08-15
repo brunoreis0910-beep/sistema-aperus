@@ -82,6 +82,7 @@ const ClienteFormModal = ({ open, onClose, onSaved, clienteToEdit = null }) => {
     bairro: '',
     cidade: '',
     estado: '',
+    codigo_municipio_ibge: '',
     data_aniversario: '',
     observacoes: '',
     limite_credito: 0,
@@ -98,6 +99,9 @@ const ClienteFormModal = ({ open, onClose, onSaved, clienteToEdit = null }) => {
       carregarGruposProduto();
       if (clienteToEdit) {
         const clienteNormalizado = normalizeClienteData(clienteToEdit);
+        const initialIbge = clienteNormalizado.codigo_municipio_ibge || '';
+        const cepClean = (clienteNormalizado.cep || '').replace(/\D/g, '');
+
         setFormData({
           nome: clienteNormalizado.nome,
           razao_social: clienteNormalizado.razao_social,
@@ -114,6 +118,7 @@ const ClienteFormModal = ({ open, onClose, onSaved, clienteToEdit = null }) => {
           bairro: clienteNormalizado.bairro,
           cidade: clienteNormalizado.cidade,
           estado: clienteNormalizado.estado,
+          codigo_municipio_ibge: initialIbge,
           data_aniversario: clienteNormalizado.data_aniversario,
           observacoes: clienteNormalizado.observacoes,
           limite_credito: clienteNormalizado.limite_credito || 0,
@@ -124,6 +129,20 @@ const ClienteFormModal = ({ open, onClose, onSaved, clienteToEdit = null }) => {
           priorizar_desconto_cliente: Boolean(clienteNormalizado.priorizar_desconto_cliente),
           grupos_excecao: clienteNormalizado.grupos_excecao || []
         });
+
+        // Se não tiver código IBGE mas tiver CEP, busca automaticamente via ViaCEP
+        if (!initialIbge && cepClean.length === 8) {
+          buscarCEP(cepClean)
+            .then(res => {
+              if (res && res.ibge) {
+                setFormData(prev => ({
+                  ...prev,
+                  codigo_municipio_ibge: res.ibge.toString().trim()
+                }));
+              }
+            })
+            .catch(() => {});
+        }
       } else {
         resetForm();
       }
@@ -157,6 +176,7 @@ const ClienteFormModal = ({ open, onClose, onSaved, clienteToEdit = null }) => {
       bairro: '',
       cidade: '',
       estado: '',
+      codigo_municipio_ibge: '',
       data_aniversario: '',
       observacoes: '',
       limite_credito: 0,
@@ -197,6 +217,17 @@ const ClienteFormModal = ({ open, onClose, onSaved, clienteToEdit = null }) => {
     setWarning('');
     try {
       const data = await buscarCNPJ(cleanCNPJ);
+      let codIbge = data.codigo_municipio_ibge || data.codigo_ibge || data.ibge || '';
+      const cepLimpo = (data.cep || '').replace(/\D/g, '');
+      if (!codIbge && cepLimpo.length === 8) {
+        try {
+          const resCep = await buscarCEP(cepLimpo);
+          if (resCep && resCep.ibge) {
+            codIbge = resCep.ibge.toString().trim();
+          }
+        } catch (err) {}
+      }
+
       setFormData(prev => ({
         ...prev,
         nome: data.razao_social || data.nome || prev.nome,
@@ -213,6 +244,7 @@ const ClienteFormModal = ({ open, onClose, onSaved, clienteToEdit = null }) => {
         bairro: data.bairro || prev.bairro,
         cidade: data.cidade || prev.cidade,
         estado: data.estado || prev.estado,
+        codigo_municipio_ibge: codIbge || prev.codigo_municipio_ibge || '',
       }));
     } catch (err) {
       setError(err.message || 'Erro ao buscar CNPJ');
@@ -236,12 +268,14 @@ const ClienteFormModal = ({ open, onClose, onSaved, clienteToEdit = null }) => {
     setWarning('');
     try {
       const data = await buscarCEP(cleanCEP);
+      const codIbge = data.ibge ? data.ibge.toString().trim() : '';
       setFormData(prev => ({
         ...prev,
         endereco: data.endereco || prev.endereco,
         bairro: data.bairro || prev.bairro,
         cidade: data.cidade || prev.cidade,
         estado: data.estado || prev.estado,
+        codigo_municipio_ibge: codIbge || prev.codigo_municipio_ibge || '',
       }));
     } catch (err) {
       setError(err.message || 'Erro ao buscar CEP');
@@ -261,6 +295,18 @@ const ClienteFormModal = ({ open, onClose, onSaved, clienteToEdit = null }) => {
       }
 
       setLoading(true);
+
+      let codIbge = formData.codigo_municipio_ibge ? formData.codigo_municipio_ibge.replace(/\D/g, '').trim() : '';
+      const cepLimpo = formData.cep ? formData.cep.replace(/\D/g, '') : '';
+      if (!codIbge && cepLimpo.length === 8) {
+        try {
+          const resCep = await buscarCEP(cepLimpo);
+          if (resCep && resCep.ibge) {
+            codIbge = resCep.ibge.toString().trim();
+          }
+        } catch (err) {}
+      }
+
       const dadosParaSalvar = {
         nome_razao_social: nomeSalvar,
         nome_fantasia: formData.nome_fantasia || '',
@@ -269,13 +315,14 @@ const ClienteFormModal = ({ open, onClose, onSaved, clienteToEdit = null }) => {
         telefone: formData.telefone ? formData.telefone.replace(/\D/g, '') : '',
         whatsapp: formData.whatsapp ? formData.whatsapp.replace(/\D/g, '') : '',
         email: formData.email || '',
-        cep: formData.cep ? formData.cep.replace(/\D/g, '') : '',
+        cep: cepLimpo,
         endereco: formData.endereco || '',
         numero: formData.numero || '',
         complemento: formData.complemento || '',
         bairro: formData.bairro || '',
         cidade: formData.cidade || '',
         estado: formData.estado || '',
+        codigo_municipio_ibge: codIbge || null,
         data_nascimento: formData.data_aniversario || null,
         observacoes: formData.observacoes || '',
         limite_credito: parseFloat(formData.limite_credito) || 0,
@@ -741,20 +788,20 @@ const ClienteFormModal = ({ open, onClose, onSaved, clienteToEdit = null }) => {
             />
           </Grid>
 
-          <Grid item xs={12} sm={8}>
+          <Grid item xs={12} sm={5}>
             <TextField
               fullWidth
               label="Cidade"
-              value={formData.cidade}
+              value={formData.cidade || ''}
               onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
             />
           </Grid>
 
-          <Grid item xs={12} sm={4}>
+          <Grid item xs={12} sm={3}>
             <FormControl fullWidth>
               <InputLabel>Estado</InputLabel>
               <Select
-                value={formData.estado}
+                value={formData.estado || ''}
                 label="Estado"
                 onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
               >
@@ -765,6 +812,18 @@ const ClienteFormModal = ({ open, onClose, onSaved, clienteToEdit = null }) => {
                 ))}
               </Select>
             </FormControl>
+          </Grid>
+
+          <Grid item xs={12} sm={4}>
+            <TextField
+              fullWidth
+              label="Cód. IBGE Município"
+              name="codigo_municipio_ibge"
+              value={formData.codigo_municipio_ibge || ''}
+              onChange={(e) => setFormData({ ...formData, codigo_municipio_ibge: e.target.value })}
+              helperText="Preenchido via Busca CEP"
+              inputProps={{ maxLength: 7 }}
+            />
           </Grid>
 
           <Grid item xs={12}>
