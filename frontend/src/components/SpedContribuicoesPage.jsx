@@ -141,43 +141,35 @@ const SpedContribuicoesPage = () => {
     }
   };
 
-  const triggerBrowserDownload = (base64Data, filename, downloadUrl) => {
+  const triggerBrowserDownload = (base64Data, filename) => {
     try {
-      if (downloadUrl) {
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = filename;
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-          if (link.parentNode) link.parentNode.removeChild(link);
-        }, 3000);
-        return true;
+      if (!base64Data) {
+        console.warn('Sem dados base64 para download');
+        return false;
       }
 
-      if (base64Data) {
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'application/zip' });
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-          if (link.parentNode) link.parentNode.removeChild(link);
-          window.URL.revokeObjectURL(blobUrl);
-        }, 15000);
-        return true;
+      const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '').trim();
+      const byteCharacters = atob(cleanBase64);
+      const byteNumbers = new Uint8Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
       }
+      const blob = new Blob([byteNumbers], { type: 'application/zip' });
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.style.display = 'none';
+      link.href = blobUrl;
+      const finalFilename = filename.endsWith('.zip') ? filename : `${filename}.zip`;
+      link.setAttribute('download', finalFilename);
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        if (link.parentNode) link.parentNode.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+      }, 15000);
+      return true;
     } catch (e) {
-      console.error('Erro no download:', e);
+      console.error('Erro no download via Blob:', e);
       return false;
     }
   };
@@ -297,10 +289,8 @@ const SpedContribuicoesPage = () => {
               variant="contained"
               color="success"
               size="large"
-              href={lastGeneratedFile.downloadUrl}
-              download={lastGeneratedFile.filename}
               startIcon={<DownloadIcon fontSize="large" />}
-              onClick={() => triggerBrowserDownload(lastGeneratedFile.base64, lastGeneratedFile.filename, lastGeneratedFile.downloadUrl)}
+              onClick={() => triggerBrowserDownload(lastGeneratedFile.base64, lastGeneratedFile.filename)}
               sx={{ fontWeight: 'bold', fontSize: '1.05rem', px: 3, py: 1.5, boxShadow: 2, whiteSpace: 'nowrap' }}
             >
               📥 Salvar no meu Computador
