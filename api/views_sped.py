@@ -1,6 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.http import HttpResponse, JsonResponse
 from api.services.sped_service import SpedEFDGenerator
 from api.services.export_xml_service import ExportXMLService
