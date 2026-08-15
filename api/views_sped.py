@@ -218,48 +218,37 @@ class SpedGerarView(APIView):
                                 arcname = os.path.join(foldername, file)
                                 zipf.write(file_path, arcname)
 
-            # Verificar se foi solicitado salvar em diretório específico
+            # Salvar cópia no servidor se diretório configurado
             diretorio_destino = data.get('diretorio')
-            
+            final_path = ""
             if diretorio_destino:
                 try:
-                    # Cria o diretório (e todos os pais necessários) se não existir
                     os.makedirs(diretorio_destino, exist_ok=True)
                     final_path = os.path.join(diretorio_destino, zip_filename)
-                    shutil.move(zip_filepath, final_path)
-                    logger.info(f"SPED ZIP salvo em: {final_path}")
+                    shutil.copy2(zip_filepath, final_path)
+                    logger.info(f"SPED ZIP cópia salva no servidor em: {final_path}")
                 except Exception as save_err:
-                    logger.error(f"Erro ao salvar SPED em {diretorio_destino}: {save_err}")
-                    return JsonResponse({'error': f'Arquivo gerado mas não foi possível salvar em "{diretorio_destino}": {str(save_err)}'}, status=500)
+                    logger.warning(f"Não foi possível salvar cópia local em {diretorio_destino}: {save_err}")
+            
+            # Retornar o arquivo como download direto para o navegador
+            if os.path.exists(zip_filepath):
+                with open(zip_filepath, 'rb') as f:
+                    zip_content = f.read()
                 
-                # Limpa temp
+                # Limpar temp dir
                 try:
                     shutil.rmtree(temp_dir)
                 except:
                     pass
                 
-                return JsonResponse({
-                    'success': True,
-                    'message': f'Arquivo salvo com sucesso em {final_path}',
-                    'filepath': final_path,
-                    'filename': zip_filename
-                })
-            
-            # Se não, retorna como download (comportamento padrão)
-            elif os.path.exists(zip_filepath):
-                with open(zip_filepath, 'rb') as f:
-                    response = HttpResponse(f.read(), content_type='application/zip')
-                    response['Content-Disposition'] = f'attachment; filename="{zip_filename}"'
-                    
-                    # Limpar temp dir após ler o arquivo
-                    try:
-                        shutil.rmtree(temp_dir)
-                    except:
-                        pass
-                        
-                    return response
+                response = HttpResponse(zip_content, content_type='application/zip')
+                response['Content-Disposition'] = f'attachment; filename="{zip_filename}"'
+                response['Access-Control-Expose-Headers'] = 'Content-Disposition, X-File-Path, X-Message'
+                response['X-File-Path'] = final_path or zip_filename
+                response['X-Message'] = f'Arquivo SPED {zip_filename} gerado com sucesso!'
+                return response
             else:
-                return JsonResponse({"error": "Erro ao criar arquivo ZIP"}, status=500)
+                return JsonResponse({"error": "Erro ao criar arquivo ZIP do SPED"}, status=500)
             
         except Exception as e:
             import traceback

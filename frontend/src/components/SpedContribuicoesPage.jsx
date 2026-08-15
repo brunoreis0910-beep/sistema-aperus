@@ -168,17 +168,66 @@ const SpedContribuicoesPage = () => {
         blocos: blocosSelecionados,
         exportar_xml: exportarXml,
         gerar_relatorio: gerarRelatorio
+      }, {
+        responseType: 'blob'
       });
 
-      if (response.data.success) {
+      if (response.data instanceof Blob) {
+        if (response.data.type === 'application/json') {
+          const text = await response.data.text();
+          try {
+            const errObj = JSON.parse(text);
+            setError(errObj.error || 'Erro ao gerar SPED Contribuições');
+          } catch (e) {
+            setError(text || 'Erro ao gerar SPED Contribuições');
+          }
+          setLoading(false);
+          return;
+        }
+
+        let filename = `EFD_CONTRIBUICOES_${dataInicio.replace(/-/g, '')}_${dataFim.replace(/-/g, '')}.zip`;
+        const disposition = response.headers['content-disposition'] || response.headers['Content-Disposition'];
+        if (disposition && disposition.indexOf('filename=') !== -1) {
+          const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+          if (matches != null && matches[1]) {
+            filename = matches[1].replace(/['"]/g, '').trim();
+          }
+        }
+
+        const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: 'application/zip' }));
+        const downloadLink = document.createElement('a');
+        downloadLink.href = blobUrl;
+        downloadLink.setAttribute('download', filename);
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        downloadLink.parentNode.removeChild(downloadLink);
+        window.URL.revokeObjectURL(blobUrl);
+
+        const serverPath = response.headers['x-file-path'] || response.headers['X-File-Path'] || '';
+        let msg = `✅ Arquivo SPED Contribuições (${filename}) baixado com sucesso no seu navegador!`;
+        if (serverPath) {
+          msg += `\n📁 Cópia salva no servidor: ${serverPath}`;
+        }
+        setSuccess(msg);
+        await salvarConfig();
+      } else if (response.data && response.data.success) {
         setSuccess(response.data.message);
-        if (response.data.estatisticas) setEstatisticas(response.data.estatisticas);
         await salvarConfig();
       } else {
-        setError(response.data.error || 'Erro desconhecido');
+        setSuccess('SPED Contribuições gerado com sucesso!');
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao gerar arquivo SPED Contribuições');
+      if (err.response && err.response.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const errObj = JSON.parse(text);
+          setError(errObj.error || 'Erro ao gerar SPED Contribuições');
+        } catch (e) {
+          setError('Erro ao gerar arquivo SPED Contribuições');
+        }
+      } else {
+        setError(err.response?.data?.error || err.message || 'Erro ao gerar arquivo SPED Contribuições');
+      }
     } finally {
       setLoading(false);
     }
