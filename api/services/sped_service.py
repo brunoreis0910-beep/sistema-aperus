@@ -638,17 +638,17 @@ class SpedEFDGenerator:
                     self.total_vl_icms += vals['vl_icms']
                     
                     self.add_line("C190", 
-                                  cst,                                   # CST_ICMS
-                                  cfop,                                  # CFOP
-                                  self.format_decimal(aliq),            # ALIQ_ICMS
-                                  self.format_decimal(vals['vl_opr']),  # VL_OPR
-                                  self.format_decimal(vals['vl_bc']),   # VL_BC_ICMS
-                                  self.format_decimal(vals['vl_icms']), # VL_ICMS
-                                  "0,00",                                # VL_BC_ICMS_ST
-                                  "0,00",                                # ALIQ_ST
-                                  "0,00",                                # VL_ICMS_ST
-                                  "0,00",                                # VL_RED_BC
-                                  ""                                     # COD_OBS
+                                  cst,                                   # 02 CST_ICMS
+                                  cfop,                                  # 03 CFOP
+                                  self.format_decimal(aliq),            # 04 ALIQ_ICMS
+                                  self.format_decimal(vals['vl_opr']),  # 05 VL_OPR
+                                  self.format_decimal(vals['vl_bc']),   # 06 VL_BC_ICMS
+                                  self.format_decimal(vals['vl_icms']), # 07 VL_ICMS
+                                  "0,00",                                # 08 VL_BC_ICMS_ST
+                                  "0,00",                                # 09 VL_ICMS_ST
+                                  "0,00",                                # 10 VL_RED_BC
+                                  "0,00",                                # 11 VL_IPI
+                                  ""                                     # 12 COD_OBS
                                  )
 
         # Processar Compras (Notas Fiscais de Entrada / Débito / Complementares)
@@ -777,13 +777,17 @@ class SpedEFDGenerator:
 
             for (cst_icms, cfop, aliq_icms), vals in c190_agg_compra.items():
                 self.add_line("C190",
-                              cst_icms,
-                              cfop,
-                              self.format_decimal(aliq_icms),
-                              self.format_decimal(vals['vl_opr']),
-                              self.format_decimal(vals['vl_bc']),
-                              self.format_decimal(vals['vl_icms']),
-                              "0,00", "0,00", "0,00", ""
+                              cst_icms,                             # 02 CST_ICMS
+                              cfop,                                 # 03 CFOP
+                              self.format_decimal(aliq_icms),       # 04 ALIQ_ICMS
+                              self.format_decimal(vals['vl_opr']),  # 05 VL_OPR
+                              self.format_decimal(vals['vl_bc']),   # 06 VL_BC_ICMS
+                              self.format_decimal(vals['vl_icms']), # 07 VL_ICMS
+                              "0,00",                               # 08 VL_BC_ICMS_ST
+                              "0,00",                               # 09 VL_ICMS_ST
+                              "0,00",                               # 10 VL_RED_BC
+                              "0,00",                               # 11 VL_IPI
+                              ""                                    # 12 COD_OBS
                               )
 
         self.add_line("C990", self.count_reg_block("C"))
