@@ -119,6 +119,8 @@ class SpedGerarView(APIView):
             
             arquivos_para_zip = [filepath_sped]
             pastas_para_zip = []
+            xml_stats = None
+            relatorio_stats = None
 
             # 2. Exportar XMLs
             if exportar_xml:
@@ -146,6 +148,7 @@ class SpedGerarView(APIView):
                     
                     if report_service.gerar_pdf(filepath_pdf):
                         arquivos_para_zip.append(filepath_pdf)
+                        relatorio_stats = {'success': True, 'filepath': filepath_pdf}
                 except Exception as e:
                     logger.error(f"Erro ao gerar relatório: {str(e)}")
 
