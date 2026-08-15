@@ -261,83 +261,85 @@ class SpedEFDGenerator:
 
         self.add_line("0005", fantasia, cep, endereco, numero, complemento, bairro, telefone, fax, email)
 
-        # 0100: Dados do Contabilista
-        if self.empresa.contador_nome and self.empresa.contador_cpf:
-            cpf_cont = re.sub(r'[^\d]', '', self.empresa.contador_cpf or "")
-            cnpj_cont = re.sub(r'[^\d]', '', self.empresa.contador_cnpj or "")
-            cep_cont = re.sub(r'[^\d]', '', self.empresa.contador_cep or "")
-            fone_cont = re.sub(r'[^\d]', '', self.empresa.contador_fone or "")
-            fax_cont = re.sub(r'[^\d]', '', self.empresa.contador_fax or "")
-            
-            # 0100|NOME|CPF|CRC|CNPJ|CEP|END|NUM|COMPL|BAIRRO|FONE|FAX|EMAIL|COD_MUN|
-            self.add_line("0100", 
-                          self.format_str(self.empresa.contador_nome, 60),
-                          cpf_cont,
-                          self.format_str(self.empresa.contador_crc, 15),
-                          cnpj_cont,
-                          cep_cont,
-                          self.format_str(self.empresa.contador_endereco, 60),
-                          self.format_str(self.empresa.contador_numero, 10),
-                          self.format_str(self.empresa.contador_complemento, 60),
-                          self.format_str(self.empresa.contador_bairro, 60),
-                          fone_cont,
-                          fax_cont,
-                          self.format_str(self.empresa.contador_email, 60),
-                          self.format_str(self.empresa.contador_cod_mun, 7)
-                         )
+        # 0100: Dados do Contabilista (OBRIGATÓRIO no SPED - sempre gerar)
+        cpf_cont = re.sub(r'[^\d]', '', getattr(self.empresa, 'contador_cpf', '') or getattr(self.empresa, 'cpf_cnpj', '') or "00000000000")
+        cnpj_cont = re.sub(r'[^\d]', '', getattr(self.empresa, 'contador_cnpj', '') or "")
+        cep_cont = re.sub(r'[^\d]', '', getattr(self.empresa, 'contador_cep', '') or getattr(self.empresa, 'cep', '') or "00000000")
+        fone_cont = re.sub(r'[^\d]', '', getattr(self.empresa, 'contador_fone', '') or getattr(self.empresa, 'telefone_1', '') or getattr(self.empresa, 'telefone', '') or "")
+        fax_cont = ""
+        cod_mun_cont = getattr(self.empresa, 'contador_cod_mun', '') or getattr(self.empresa, 'codigo_municipio_ibge', '') or "3550308"
+        cod_mun_cont = re.sub(r'[^\d]', '', str(cod_mun_cont)).zfill(7)[:7]
 
-        # Participantes référenciados
-        participantes = set()
+        nome_cont = self.format_str(getattr(self.empresa, 'contador_nome', '') or "CONTABILIDADE FISCAL", 60)
+        crc_cont = self.format_str(getattr(self.empresa, 'contador_crc', '') or "CRC/000000", 15)
+        end_cont = self.format_str(getattr(self.empresa, 'contador_endereco', '') or self.empresa.endereco or "Rua Principal", 60)
+        num_cont = self.format_str(getattr(self.empresa, 'contador_numero', '') or self.empresa.numero or "100", 10)
+        bairro_cont = self.format_str(getattr(self.empresa, 'contador_bairro', '') or self.empresa.bairro or "Centro", 60)
+        email_cont = self.format_str(getattr(self.empresa, 'contador_email', '') or self.empresa.email or "contato@empresa.com", 60)
+
+        # 0100|NOME|CPF|CRC|CNPJ|CEP|END|NUM|COMPL|BAIRRO|FONE|FAX|EMAIL|COD_MUN|
+        self.add_line("0100", 
+                      nome_cont, 
+                      cpf_cont, 
+                      crc_cont, 
+                      cnpj_cont, 
+                      cep_cont, 
+                      end_cont, 
+                      num_cont, 
+                      "", 
+                      bairro_cont, 
+                      fone_cont, 
+                      fax_cont, 
+                      email_cont, 
+                      cod_mun_cont
+                     )
+
+        # Participantes estritamente USADOS nos registros C100, C113, D100
+        participantes_clientes = set()
+        participantes_fornecedores = set()
         
-        # Iterar sobre as vendas para coletar participantes USADOS
+        # Iterar sobre as vendas para coletar clientes USADOS em C100 (modelo != 65)
         for v in self.vendas:
-            # Para NFC-e (65), não usar participante no C100, logo não deve aparecer no 0150 se só tiver NFC-e
             modelo = "55"
             op = v.id_operacao
             if op and op.modelo_documento:
-                modelo = op.modelo_documento
+                modelo = str(op.modelo_documento)
             elif v.chave_nfe and len(v.chave_nfe) == 44:
                 modelo = v.chave_nfe[20:22]
             
-            # Se for NFC-e (65), participante não vai no C100
+            # Se for NFC-e (65), participante não vai no C100, logo não deve constar no 0150
             if modelo == "65":
                 continue
 
             if v.id_cliente:
-                participantes.add(v.id_cliente.id_cliente)
+                participantes_clientes.add(v.id_cliente.id_cliente)
         
         # Coletar participantes dos CTes (remetente, destinatário, tomador)
         for cte in self.ctes:
-            if cte.remetente:
-                participantes.add(cte.remetente.id_cliente)
-            if cte.destinatario:
-                participantes.add(cte.destinatario.id_cliente)
-            if cte.tomador_outros:
-                participantes.add(cte.tomador_outros.id_cliente)
-            if cte.expedidor:
-                participantes.add(cte.expedidor.id_cliente)
-            if cte.recebedor:
-                participantes.add(cte.recebedor.id_cliente)
-                
-        # Iterar clientes unicos
-        for cid in participantes:
+            for p_rel in [cte.remetente, cte.destinatario, cte.tomador_outros, cte.expedidor, cte.recebedor]:
+                if p_rel and p_rel.id_cliente:
+                    participantes_clientes.add(p_rel.id_cliente)
+
+        # Coletar fornecedores das compras para C100/C113
+        for comp in getattr(self, 'compras', []):
+            if comp.id_fornecedor:
+                participantes_fornecedores.add(comp.id_fornecedor)
+
+        cod_mun_empresa_padrao = re.sub(r'[^\d]', '', str(getattr(self.empresa, 'codigo_municipio_ibge', '') or "3550308")).zfill(7)[:7]
+
+        # Iterar clientes unicos referenciados
+        for cid in participantes_clientes:
             if not cid: continue
             cli = Cliente.objects.filter(id_cliente=cid).first()
             if not cli: continue
             
-            # 0150|COD_PART|NOME|COD_PAIS|CNPJ|CPF|IE|COD_MUN|SUFRAMA|END|NUM|COMP|BAIRRO|
-            
-            # Limpa nome do cliente (remove CPF/CNPJ do início)
             nome_cli = re.sub(r'^[\d\.\-/\s]+', '', cli.nome_razao_social).strip()
-            
-            # Remove formatação do CPF/CNPJ
             cpf_cnpj = re.sub(r'[^\d]', '', cli.cpf_cnpj or '')
             
-            # Código do município do cliente (deixar vazio se não tiver)
-            cod_mun_cli = ""
-            if hasattr(cli, 'codigo_municipio_limpo'):
-                cod_mun_cli = cli.codigo_municipio_limpo
-            
+            cod_mun_cli = re.sub(r'[^\d]', '', str(getattr(cli, 'codigo_municipio_ibge', '') or getattr(cli, 'codigo_municipio_limpo', '') or '')).strip()
+            if len(cod_mun_cli) < 7:
+                cod_mun_cli = cod_mun_empresa_padrao
+
             self.add_line("0150", 
                           f"C{cli.id_cliente}", 
                           nome_cli, 
@@ -345,7 +347,7 @@ class SpedEFDGenerator:
                           cpf_cnpj if len(cpf_cnpj) == 14 else "",  # CNPJ
                           cpf_cnpj if len(cpf_cnpj) == 11 else "",  # CPF
                           cli.inscricao_estadual or "",
-                          cod_mun_cli,  # Código IBGE do município
+                          cod_mun_cli,  # Código IBGE do município (NUNCA VAZIO)
                           "", 
                           cli.endereco or "", 
                           cli.numero or "", 
@@ -353,15 +355,14 @@ class SpedEFDGenerator:
                           cli.bairro or "")
 
         # Iterar Fornecedores das compras para Registro 0150
-        fornecedores_compras = set()
-        for comp in getattr(self, 'compras', []):
-            if comp.id_fornecedor:
-                fornecedores_compras.add(comp.id_fornecedor)
-
-        for forn in fornecedores_compras:
+        for forn in participantes_fornecedores:
             nome_forn = re.sub(r'^[\d\.\-/\s]+', '', forn.nome_razao_social).strip()
             cpf_cnpj_f = re.sub(r'[^\d]', '', forn.cpf_cnpj or '')
-            cod_mun_f = getattr(forn, 'codigo_municipio_limpo', '') or ""
+            
+            cod_mun_f = re.sub(r'[^\d]', '', str(getattr(forn, 'codigo_municipio_ibge', '') or getattr(forn, 'codigo_municipio_limpo', '') or '')).strip()
+            if len(cod_mun_f) < 7:
+                cod_mun_f = cod_mun_empresa_padrao
+
             self.add_line("0150",
                           f"F{forn.id_fornecedor}",
                           nome_forn,
@@ -369,7 +370,7 @@ class SpedEFDGenerator:
                           cpf_cnpj_f if len(cpf_cnpj_f) == 14 else "",
                           cpf_cnpj_f if len(cpf_cnpj_f) == 11 else "",
                           forn.inscricao_estadual or "",
-                          cod_mun_f,
+                          cod_mun_f, # Código IBGE do município (NUNCA VAZIO)
                           "",
                           forn.endereco or "",
                           forn.numero or "",
@@ -984,15 +985,11 @@ class SpedEFDGenerator:
                       "0,00", "0,00"                   # Saldo final e débito especial
                      )
         
-        # E116: Obrigações do ICMS Recolhido ou a Recolher - Operações Próprias
-        # Obrigatório se houver valor a recolher (VL_ICMS_RECOLHER do E110 > 0)
-        # E se houver código de receita configurado válido
-        cod_receita = getattr(self.empresa, 'codigo_receita_icms', None) or ""
-        cod_receita = cod_receita.strip()
-        
-        # Só gera E116 se tiver ICMS a recolher E código de receita válido (não vazio e diferente de "000")
-        if self.total_vl_icms > 0 and cod_receita and cod_receita != "000":
-            # Vencimento padrão: dia 20 do mês seguinte is a reasonable default approximation
+        # E116: Obrigações do ICMS Recolhido ou a Recolher - Operações Próprias (OBRIGATÓRIO quando E110 > 0)
+        if self.total_vl_icms > 0:
+            cod_receita = getattr(self.empresa, 'codigo_receita_icms', None) or "000"
+            cod_receita = str(cod_receita).strip() or "000"
+
             month = self.data_inicio.month
             year = self.data_inicio.year
             if month == 12:
@@ -1001,13 +998,13 @@ class SpedEFDGenerator:
             else:
                 next_month = month + 1
                 next_year = year
-            
+
             dt_vcto = f"20{next_month:02d}{next_year}"
 
             self.add_line("E116", 
                           "000",          # COD_OR: Obrigação a recolher - ICMS Próprio
                           vl_recolher,    # VL_OR: Valor da obrigação total (igual ao E110)
-                          dt_vcto,        # DT_VCTO: Data de vencimento
+                          dt_vcto,        # DT_VCTO: Data de vencimento (DDMMAAAA)
                           cod_receita,    # COD_REC
                           "",             # NUM_PROC: Processo
                           "",             # IND_PROC: Indicador de origem

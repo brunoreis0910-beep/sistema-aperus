@@ -6414,6 +6414,40 @@ class ContratoResponsabilidade(models.Model):
         ordering = ['-criado_em']
 
 
+class CodigoMunicipio(models.Model):
+    codigo_ibge = models.CharField(max_length=7, primary_key=True, help_text="Código IBGE do Município (7 dígitos)")
+    nome_municipio = models.CharField(max_length=100, help_text="Nome do Município")
+    uf = models.CharField(max_length=2, help_text="Unidade da Federação (UF)")
+    data_atualizacao = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'codigo_municipio'
+        managed = True
+        ordering = ['uf', 'nome_municipio']
+        verbose_name = 'Código de Município IBGE'
+        verbose_name_plural = 'Códigos de Municípios IBGE'
+
+    def __str__(self):
+        return f"{self.codigo_ibge} - {self.nome_municipio}/{self.uf}"
+
+
+class CodigoReceitaSPED(models.Model):
+    codigo_receita = models.CharField(max_length=20, primary_key=True, help_text="Código de Receita (ex: 000, 046-2, 100080)")
+    descricao = models.CharField(max_length=200, help_text="Descrição da Obrigação de ICMS/Tributo")
+    uf = models.CharField(max_length=2, blank=True, null=True, help_text="UF de aplicação (opcional)")
+    data_atualizacao = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'codigo_receita_sped'
+        managed = True
+        ordering = ['codigo_receita']
+        verbose_name = 'Código de Receita SPED'
+        verbose_name_plural = 'Códigos de Receitas SPED'
+
+    def __str__(self):
+        return f"{self.codigo_receita} - {self.descricao}"
+
+
 
 
 
