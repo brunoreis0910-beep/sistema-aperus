@@ -1,4 +1,4 @@
-﻿// Em: src/components/EmpresaDialog.jsx
+// Em: src/components/EmpresaDialog.jsx
 
 import React, { useState, useEffect } from 'react';
 import axios from 'axios'; // Para o ViaCEP e BrasilAPI
@@ -183,11 +183,22 @@ function EmpresaDialog({
     if (cep.length !== 8) { alert('Digite CEP com 8 números.'); return; } 
     setLoadingEmpresaCEP(true);
     try { 
-      const res = await axios.get(`https://viacep.com.br/ws/${cep}/json/`); const d = res.data; 
+      const res = await axios.get(`https://viacep.com.br/ws/${cep}/json/`);
+      const d = res.data; 
       if (d.erro) { alert('CEP não encontrado.'); } 
-      else { setEmpresaFormData(p => ({ ...p, endereco: d.logradouro || '', bairro: d.bairro || '', cidade: d.localidade || '', estado: d.uf || '', })); 
-      alert('Endereço carregado!'); } 
-    } catch (e) { alert('não foi possível buscar os dados do CEP.'); } 
+      else {
+        const codIbge = d.ibge ? d.ibge.toString().trim() : '';
+        setEmpresaFormData(p => ({
+          ...p,
+          endereco: d.logradouro || '',
+          bairro: d.bairro || '',
+          cidade: d.localidade || '',
+          estado: d.uf || '',
+          codigo_municipio_ibge: codIbge || p.codigo_municipio_ibge || '',
+        })); 
+        alert('Endereço e Código IBGE carregados com sucesso!');
+      } 
+    } catch (e) { alert('Não foi possível buscar os dados do CEP.'); } 
     finally { setLoadingEmpresaCEP(false); }
   };
   
@@ -200,6 +211,7 @@ function EmpresaDialog({
       ...empresaFormData,
       cpf_cnpj: empresaFormData.cpf_cnpj.replace(/\D/g, ''),
       cep: empresaFormData.cep.replace(/\D/g, ''),
+      codigo_municipio_ibge: empresaFormData.codigo_municipio_ibge ? empresaFormData.codigo_municipio_ibge.replace(/\D/g, '') : null,
       telefone: empresaFormData.telefone.replace(/\D/g, ''),
       logo_url: empresaFormData.logo_url || null
     };
@@ -218,43 +230,46 @@ function EmpresaDialog({
       onClose();
     } catch (error) {
        let errorMsg = 'Erro ao salvar os dados da Empresa.';
-       if (error.response && error.response.status === 400 && error.response.data) {
-         try {
-           const firstErrorKey = Object.keys(error.response.data)[0];
-           const firstErrorMessage = error.response.data[firstErrorKey][0];
-           errorMsg += `\nDetalhe: ${firstErrorKey} - ${firstErrorMessage}`;
-         } catch (e) {
-           errorMsg += `\nDetalhe: ${JSON.stringify(error.response.data)}`;
-         }
+       if (error.response && error.response.data) {
+          const err = error.response.data;
+          const key = Object.keys(err)[0];
+          if(key && Array.isArray(err[key])) {
+             errorMsg += `\n${key} - ${err[key][0]}`;
+          } else if(err.detail) {
+             errorMsg = err.detail;
+          }
        }
        alert(errorMsg);
+       console.error("Erro ao salvar empresa:", error);
     } finally {
       setSavingEmpresa(false);
     }
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>Dados da Empresa</DialogTitle>
-      <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveEmpresa(); }}>
-        <DialogContent sx={{ p: 0 }}>
-          {loadingData ? <CircularProgress sx={{ m: 4 }} /> : (
-            <>
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
+      <DialogTitle>Configurações da Empresa</DialogTitle>
+      <DialogContent sx={{ p: 0 }}>
+        <Paper elevation={0} sx={{ width: '100%' }}>
+          {loadingData ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>
+          ) : (
+            <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveEmpresa(); }}>
               <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
                 <Tabs value={empresaTabValue} onChange={handleEmpresaTabChange}>
                   <Tab label="Dados Principais" />
                   <Tab label="Endereço" />
                   <Tab label="Logotipo" />
-                  <Tab label="SPED Icms" />
+                  <Tab label="SPED Fiscal" />
                 </Tabs>
               </Box>
-              
+
               <TabPanel value={empresaTabValue} index={0}>
                 <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}><TextField name="nome_razao_social" label="Nome / Razéo Social" value={empresaFormData.nome_razao_social} onChange={handleEmpresaFormChange} disabled={savingEmpresa} required fullWidth /></Grid>
+                  <Grid item xs={12} sm={6}><TextField name="nome_razao_social" label="Razéo Social" value={empresaFormData.nome_razao_social} onChange={handleEmpresaFormChange} disabled={savingEmpresa} required fullWidth /></Grid>
                   <Grid item xs={12} sm={6}><TextField name="nome_fantasia" label="Nome Fantasia" value={empresaFormData.nome_fantasia} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth /></Grid>
-                  <Grid item xs={12} sm={6}><TextField name="cpf_cnpj" label="CPF / CNPJ" value={empresaFormData.cpf_cnpj} onChange={handleEmpresaFormChange} disabled={savingEmpresa || loadingEmpresaCNPJ} required fullWidth InputProps={{ endAdornment: ( <InputAdornment position="end"> <span> <IconButton aria-label="buscar cnpj" onClick={handleEmpresaBuscaCNPJ} disabled={loadingEmpresaCNPJ || (empresaFormData.cpf_cnpj && empresaFormData.cpf_cnpj.replace(/\D/g, '').length !== 14)} edge="end"> {loadingEmpresaCNPJ ? <CircularProgress size={20} /> : <SearchIcon />} </IconButton> </span> </InputAdornment> ), }}/></Grid>
-                  <Grid item xs={12} sm={6}><TextField name="inscricao_estadual" label="Inscriçéo Estadual" value={empresaFormData.inscricao_estadual} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth /></Grid>
+                  <Grid item xs={12} sm={6}><TextField name="cpf_cnpj" label="CNPJ" value={empresaFormData.cpf_cnpj} onChange={handleEmpresaFormChange} disabled={savingEmpresa || loadingEmpresaCNPJ} required fullWidth InputProps={{ endAdornment: ( <InputAdornment position="end"> <span> <IconButton aria-label="buscar cnpj" onClick={handleEmpresaBuscaCNPJ} disabled={loadingEmpresaCNPJ || (empresaFormData.cpf_cnpj && empresaFormData.cpf_cnpj.replace(/\D/g, '').length !== 14)}> {loadingEmpresaCNPJ ? <CircularProgress size={20} /> : <SearchIcon />} </IconButton> </span> </InputAdornment> ), }}/></Grid>
+                  <Grid item xs={12} sm={6}><TextField name="inscricao_estadual" label="Inscrição Estadual" value={empresaFormData.inscricao_estadual} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth /></Grid>
                   <Grid item xs={12} sm={6}><TextField name="telefone" label="Telefone" value={empresaFormData.telefone} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth /></Grid>
                   <Grid item xs={12} sm={6}><TextField name="email" label="Email" type="email" value={empresaFormData.email} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth /></Grid>
                 </Grid>
@@ -265,9 +280,10 @@ function EmpresaDialog({
                   <Grid item xs={12} sm={4}><TextField name="cep" label="CEP" value={empresaFormData.cep} onChange={handleEmpresaFormChange} disabled={savingEmpresa || loadingEmpresaCEP} fullWidth InputProps={{ endAdornment: ( <InputAdornment position="end"> <span> <IconButton aria-label="buscar cep" onClick={handleEmpresaBuscaCEP} disabled={loadingEmpresaCEP || (empresaFormData.cep && empresaFormData.cep.replace(/\D/g, '').length !== 8)}> {loadingEmpresaCEP ? <CircularProgress size={20} /> : <SearchIcon />} </IconButton> </span> </InputAdornment> ), }}/></Grid>
                   <Grid item xs={12} sm={6}><TextField name="endereco" label="Endereço (Logradouro)" value={empresaFormData.endereco} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth /></Grid>
                   <Grid item xs={12} sm={2}><TextField name="numero" label="Número" value={empresaFormData.numero} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth /></Grid>
-                  <Grid item xs={12} sm={5}><TextField name="bairro" label="Bairro" value={empresaFormData.bairro} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth /></Grid>
-                  <Grid item xs={12} sm={5}><TextField name="cidade" label="Cidade" value={empresaFormData.cidade} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth /></Grid>
-                  <Grid item xs={12} sm={2}><TextField name="estado" label="UF" value={empresaFormData.estado} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth inputProps={{ maxLength: 2 }}/></Grid>
+                  <Grid item xs={12} sm={4}><TextField name="bairro" label="Bairro" value={empresaFormData.bairro} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth /></Grid>
+                  <Grid item xs={12} sm={4}><TextField name="cidade" label="Cidade" value={empresaFormData.cidade} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth /></Grid>
+                  <Grid item xs={12} sm={1}><TextField name="estado" label="UF" value={empresaFormData.estado} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth inputProps={{ maxLength: 2 }}/></Grid>
+                  <Grid item xs={12} sm={3}><TextField name="codigo_municipio_ibge" label="Cód. IBGE Município" value={empresaFormData.codigo_municipio_ibge} onChange={handleEmpresaFormChange} disabled={savingEmpresa} fullWidth helperText="Preenchido via Busca CEP" inputProps={{ maxLength: 7 }}/></Grid>
                 </Grid>
               </TabPanel>
 

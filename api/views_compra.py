@@ -881,6 +881,13 @@ class CompraViewSet(viewsets.ModelViewSet):
                 if fornecedor:
                     fornecedor_nome = fornecedor.nome_razao_social
                     id_fornecedor = fornecedor.id_fornecedor
+                    # Se fornecedor existe mas não tem código IBGE, atualizar do XML
+                    enderEmit = get_node(emit, 'enderEmit')
+                    if enderEmit is not None and not getattr(fornecedor, 'codigo_municipio_ibge', None):
+                        cMun_val = get_text(enderEmit, 'cMun')
+                        if cMun_val:
+                            fornecedor.codigo_municipio_ibge = cMun_val.strip()[:7]
+                            fornecedor.save(update_fields=['codigo_municipio_ibge'])
                 elif nome_emit:
                     enderEmit = get_node(emit, 'enderEmit')
                     telefone = ''
@@ -890,6 +897,7 @@ class CompraViewSet(viewsets.ModelViewSet):
                     cidade = ''
                     estado = ''
                     cep = ''
+                    cMun = ''
 
                     if enderEmit is not None:
                         telefone = get_text(enderEmit, 'fone')
@@ -899,6 +907,7 @@ class CompraViewSet(viewsets.ModelViewSet):
                         cidade = get_text(enderEmit, 'xMun')
                         estado = get_text(enderEmit, 'UF')
                         cep = get_text(enderEmit, 'CEP')
+                        cMun = get_text(enderEmit, 'cMun')
 
                     try:
                         fornecedor = Fornecedor.objects.create(
@@ -912,6 +921,7 @@ class CompraViewSet(viewsets.ModelViewSet):
                             cidade=cidade or '',
                             estado=estado or '',
                             cep=cep or '',
+                            codigo_municipio_ibge=cMun or '',
                         )
                         fornecedor_criado = True
                         fornecedor_nome = nome_emit
@@ -926,6 +936,9 @@ class CompraViewSet(viewsets.ModelViewSet):
                                     fornecedor = _f
                                     fornecedor_nome = _f.nome_razao_social or nome_emit
                                     id_fornecedor = _f.id_fornecedor
+                                    if cMun and not _f.codigo_municipio_ibge:
+                                        _f.codigo_municipio_ibge = cMun.strip()[:7]
+                                        _f.save(update_fields=['codigo_municipio_ibge'])
                                     break
 
             # Itens
