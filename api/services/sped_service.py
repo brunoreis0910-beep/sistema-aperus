@@ -314,11 +314,25 @@ class SpedEFDGenerator:
             if v.id_cliente:
                 participantes_clientes.add(v.id_cliente.id_cliente)
         
-        # Coletar participantes dos CTes (remetente, destinatário, tomador)
-        for cte in self.ctes:
-            for p_rel in [cte.remetente, cte.destinatario, cte.tomador_outros, cte.expedidor, cte.recebedor]:
-                if p_rel and p_rel.id_cliente:
-                    participantes_clientes.add(p_rel.id_cliente)
+        # Coletar participantes dos CTes (somente o tomador efetivamente referenciado no D100)
+        if 'D' in self.blocos_gerar:
+            for cte in self.ctes:
+                tomador_id = None
+                if cte.tomador_servico == 0 and cte.remetente:
+                    tomador_id = cte.remetente.id_cliente
+                elif cte.tomador_servico == 1 and cte.expedidor:
+                    tomador_id = cte.expedidor.id_cliente
+                elif cte.tomador_servico == 2 and cte.recebedor:
+                    tomador_id = cte.recebedor.id_cliente
+                elif cte.tomador_servico == 3 and cte.destinatario:
+                    tomador_id = cte.destinatario.id_cliente
+                elif cte.tomador_servico == 4 and cte.tomador_outros:
+                    tomador_id = cte.tomador_outros.id_cliente
+                elif cte.destinatario:
+                    tomador_id = cte.destinatario.id_cliente
+                
+                if tomador_id:
+                    participantes_clientes.add(tomador_id)
 
         # Coletar fornecedores das compras para C100/C113
         for comp in getattr(self, 'compras', []):
@@ -379,11 +393,10 @@ class SpedEFDGenerator:
 
         # 0190: Unidades de Medida (gerar apenas uma vez por unidade)
         # 0200: Tabela de Identificação do Item (Produto)
-        # Apenas para produtos que aparecem em registros que referenciam itens (C170, C800, D100, etc.)
-        # Para NF-e/NFC-e (55/65) que só têm C190, NÃO gerar 0190/0200
+        # Para todos os produtos referenciados em itens de entrada (C170) ou saída (C170)
+        produtos_usados_ids = set()
         
-        # Filtrar apenas vendas com modelos que exigem C170
-        vendas_com_c170 = []
+        # Produtos das vendas com C170
         for v in self.vendas:
             modelo = "55"
             if v.id_operacao and v.id_operacao.modelo_documento:
@@ -391,33 +404,34 @@ class SpedEFDGenerator:
             elif v.chave_nfe and len(v.chave_nfe) == 44:
                 modelo = v.chave_nfe[20:22]
             
-            if modelo not in ['55', '65']:  # Apenas modelos que geram C170
-                vendas_com_c170.append(v.id_venda)
-        
-        # Se há vendas com C170, gerar 0190/0200
-        if vendas_com_c170:
-            produtos_ids = VendaItem.objects.filter(id_venda__in=vendas_com_c170).values_list('id_produto', flat=True).distinct()
-            
-            # Coleta unidades únicas
+            if modelo not in ['55', '65']:
+                p_ids = VendaItem.objects.filter(id_venda=v.id_venda).values_list('id_produto', flat=True)
+                produtos_usados_ids.update([p for p in p_ids if p])
+
+        # Produtos das compras (que geram C170)
+        for comp in getattr(self, 'compras', []):
+            for it in comp.itens.all():
+                if it.id_produto_id:
+                    produtos_usados_ids.add(it.id_produto_id)
+
+        if produtos_usados_ids:
             unidades_usadas = set()
             produtos_list = []
-            for pid in produtos_ids:
+            for pid in produtos_usados_ids:
                 prod = Produto.objects.filter(id_produto=pid).first()
                 if prod:
                     unidade = prod.unidade_medida or "UN"
                     unidades_usadas.add(unidade)
                     produtos_list.append((prod, unidade))
-            
+
             # Gera 0190 apenas uma vez por unidade
-            for unidade in unidades_usadas:
+            for unidade in sorted(unidades_usadas):
                 self.add_line("0190", unidade, unidade)
-            
+
             # Gera 0200 para cada produto
             for prod, unidade in produtos_list:
-                # 0200|COD_ITEM|DESCR_ITEM|COD_BARRA|COD_ANT_ITEM|UNID_INV|TIPO_ITEM|COD_NCM|EX_IPI|COD_GEN|COD_LST|ALIQ_ICMS|CEST|
-                # Tentar achar aliquota padrao
                 aliq = "0"
-                if hasattr(prod, 'tributacao_detalhada'):
+                if hasattr(prod, 'tributacao_detalhada') and prod.tributacao_detalhada:
                     aliq = prod.tributacao_detalhada.icms_aliquota
                 
                 self.add_line("0200", 
@@ -434,7 +448,7 @@ class SpedEFDGenerator:
                               self.format_decimal(aliq), # ALIQ_ICMS
                               "" # CEST
                              )
-                             
+
         self.add_line("0990", self.count_reg_block("0"))
 
     def generate_block_b(self):
@@ -991,8 +1005,12 @@ class SpedEFDGenerator:
         
         # E116: Obrigações do ICMS Recolhido ou a Recolher - Operações Próprias (OBRIGATÓRIO quando E110 > 0)
         if self.total_vl_icms > 0:
-            cod_receita = getattr(self.empresa, 'codigo_receita_icms', None) or "000"
-            cod_receita = str(cod_receita).strip() or "000"
+            uf_emp = (getattr(self.empresa, 'estado', '') or 'MG').upper().strip()
+            padrao_uf = "313-1" if uf_emp == "MG" else ("046-2" if uf_emp == "SP" else "100080")
+            cod_receita = getattr(self.empresa, 'codigo_receita_icms', None) or padrao_uf
+            cod_receita = str(cod_receita).strip()
+            if not cod_receita or cod_receita in ['000', 'None']:
+                cod_receita = padrao_uf
 
             month = self.data_inicio.month
             year = self.data_inicio.year
