@@ -856,15 +856,18 @@ class CompraViewSet(viewsets.ModelViewSet):
                                     except: pass
 
                         # IPI
+                        cst_ipi_orig = ''
                         cst_ipi = ''
                         p_ipi = 0.0
                         ipi_node = get_node(imposto, 'IPI')
                         if ipi_node is not None:
-                            ipi_trib = get_node(ipi_node, 'IPITrib')
+                            # Procura em IPITrib, IPINT ou direto no IPI
+                            ipi_trib = get_node(ipi_node, 'IPITrib') or get_node(ipi_node, 'IPINT')
                             target_ipi = ipi_trib if ipi_trib is not None else ipi_node
                             
                             cst_ipi_el = get_node(target_ipi, 'CST')
-                            if cst_ipi_el is not None: cst_ipi = cst_ipi_el.text or ''
+                            if cst_ipi_el is not None: 
+                                cst_ipi_orig = cst_ipi_el.text or ''
                             
                             p_ipi_el = get_node(target_ipi, 'pIPI')
                             if p_ipi_el is not None:
@@ -876,7 +879,15 @@ class CompraViewSet(viewsets.ModelViewSet):
                                 try: vipi = float(vipi_el.text)
                                 except: pass
 
+                        # Converter CST IPI de Saída (ex: 50) para Entrada (ex: 00)
+                        from .services.tax_converter import converter_cst_ipi_entrada, converter_cst_pis_cofins_entrada
+                        if cst_ipi_orig:
+                            cst_ipi = converter_cst_ipi_entrada(cst_ipi_orig, padrao_se_vazio='00')
+                        else:
+                            cst_ipi = ''
+
                         # PIS
+                        cst_pis_orig = ''
                         cst_pis = ''
                         vbc_pis = 0.0
                         p_pis = 0.0
@@ -885,7 +896,8 @@ class CompraViewSet(viewsets.ModelViewSet):
                             # Geralmente PISAliq, PISQtde, PISNT, PISOutr
                             for child in pis_node:
                                 cst_pis_el = get_node(child, 'CST')
-                                if cst_pis_el is not None: cst_pis = cst_pis_el.text or ''
+                                if cst_pis_el is not None: 
+                                    cst_pis_orig = cst_pis_el.text or ''
                                 
                                 vbc_pis_el = get_node(child, 'vBC')
                                 if vbc_pis_el is not None:
@@ -903,7 +915,14 @@ class CompraViewSet(viewsets.ModelViewSet):
                                     except: pass
                                 break
 
+                        # Converter CST PIS de Saída (ex: 01) para Entrada (ex: 50)
+                        if cst_pis_orig:
+                            cst_pis = converter_cst_pis_cofins_entrada(cst_pis_orig, padrao_se_vazio='50')
+                        else:
+                            cst_pis = ''
+
                         # COFINS
+                        cst_cofins_orig = ''
                         cst_cofins = ''
                         vbc_cofins = 0.0
                         p_cofins = 0.0
@@ -911,7 +930,8 @@ class CompraViewSet(viewsets.ModelViewSet):
                         if cofins_node is not None:
                             for child in cofins_node:
                                 cst_cofins_el = get_node(child, 'CST')
-                                if cst_cofins_el is not None: cst_cofins = cst_cofins_el.text or ''
+                                if cst_cofins_el is not None: 
+                                    cst_cofins_orig = cst_cofins_el.text or ''
                                 
                                 vbc_cofins_el = get_node(child, 'vBC')
                                 if vbc_cofins_el is not None:
@@ -928,6 +948,12 @@ class CompraViewSet(viewsets.ModelViewSet):
                                     try: vcofins = float(vcofins_el.text)
                                     except: pass
                                 break
+
+                        # Converter CST COFINS de Saída (ex: 01) para Entrada (ex: 50)
+                        if cst_cofins_orig:
+                            cst_cofins = converter_cst_pis_cofins_entrada(cst_cofins_orig, padrao_se_vazio='50')
+                        else:
+                            cst_cofins = ''
 
                         # Reforma Tributária (IBS / CBS - tags <IBS>, <CBS> ou <IBSCBS>)
                         cst_ibs_cbs = ''
@@ -1111,17 +1137,20 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'valor_icms': vicms,
                         # IPI
                         'cst_ipi': cst_ipi,
+                        'cst_ipi_original': cst_ipi_orig,
                         'p_ipi': p_ipi,
                         'vipi': vipi,
                         'valor_ipi': vipi,
                         # PIS
                         'cst_pis': cst_pis,
+                        'cst_pis_original': cst_pis_orig,
                         'vbc_pis': vbc_pis,
                         'p_pis': p_pis,
                         'vpis': vpis,
                         'valor_pis': vpis,
                         # COFINS
                         'cst_cofins': cst_cofins,
+                        'cst_cofins_original': cst_cofins_orig,
                         'vbc_cofins': vbc_cofins,
                         'p_cofins': p_cofins,
                         'vcofins': vcofins,
