@@ -6437,3 +6437,24 @@ class ContratoResponsabilidade(models.Model):
 
 
 
+
+
+class FornecedorProdutoFracao(models.Model):
+    id = models.AutoField(primary_key=True)
+    fornecedor = models.ForeignKey('Fornecedor', on_delete=models.CASCADE, db_column='id_fornecedor', related_name='fracoes_produto')
+    produto = models.ForeignKey('Produto', on_delete=models.CASCADE, db_column='id_produto', related_name='fracoes_fornecedor')
+    gtin = models.CharField(max_length=14, db_index=True, help_text='GTIN/EAN do produto no XML do fornecedor')
+    fracao = models.DecimalField(max_digits=15, decimal_places=6, help_text='Fator de conversao (ex: 10.0 para caixa com 10 unidades)')
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_atualizacao = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'fornecedor_produto_fracao'
+        managed = True
+        ordering = ['-data_atualizacao']
+        constraints = [
+            models.UniqueConstraint(fields=['fornecedor', 'produto', 'gtin'], name='unique_fornecedor_produto_gtin')
+        ]
+
+    def __str__(self):
+        return f'{self.fornecedor} - {self.produto}: {self.fracao} un'

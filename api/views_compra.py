@@ -1100,6 +1100,18 @@ class CompraViewSet(viewsets.ModelViewSet):
                                 Q(codigo_produto=codigo) | Q(referencia=codigo)
                             ).first()
                         
+                        # Se encontrou o produto, busca fração memorizada por fornecedor caso ainda não tenha achado
+                        if produto_db and fornecedor and not tem_fracao_memorizada:
+                            from .models import FornecedorProdutoFracao
+                            lookup_gtin = ean or ean_trib or getattr(produto_db, 'gtin', '') or ''
+                            fracao_obj = FornecedorProdutoFracao.objects.filter(
+                                fornecedor=fornecedor,
+                                produto=produto_db
+                            ).first()
+                            if fracao_obj:
+                                fracao_memorizada = float(fracao_obj.fracao)
+                                tem_fracao_memorizada = True
+                        
                         # Se encontrou o produto, usa o nome cadastrado no sistema
                         if produto_db:
                             nome_produto_encontrado = produto_db.nome_produto or descricao
