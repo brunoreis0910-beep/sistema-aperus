@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './styles.css'
@@ -9,6 +9,7 @@ import CssBaseline from '@mui/material/CssBaseline'
 import { AuthProvider } from './context/AuthContext'
 import { OfflineSyncProvider } from './context/OfflineSyncContext'
 import responsiveTheme from './theme/responsiveTheme'
+import ErrorBoundary from './components/ErrorBoundary'
 import axios from 'axios'
 
 // Aumenta timeout global do axios durante desenvolvimento para evitar erros
@@ -19,20 +20,22 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ThemeProvider theme={responsiveTheme}>
       <CssBaseline />
-      <BrowserRouter
-        future={{
-          // Flags de compatibilidade futura do React Router v7
-          // Eliminam avisos de deprecação no console
-          v7_startTransition: true,      // Usa React.startTransition para state updates
-          v7_relativeSplatPath: true     // Nova resolução relativa de rotas Splat
-        }}
-      >
-        <AuthProvider>
-          <OfflineSyncProvider>
-            <App />
-          </OfflineSyncProvider>
-        </AuthProvider>
-      </BrowserRouter>
+      <ErrorBoundary>
+        <BrowserRouter
+          future={{
+            // Flags de compatibilidade futura do React Router v7
+            // Eliminam avisos de deprecação no console
+            v7_startTransition: true,      // Usa React.startTransition para state updates
+            v7_relativeSplatPath: true     // Nova resolução relativa de rotas Splat
+          }}
+        >
+          <AuthProvider>
+            <OfflineSyncProvider>
+              <App />
+            </OfflineSyncProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </ErrorBoundary>
     </ThemeProvider>
   </React.StrictMode>
 )
