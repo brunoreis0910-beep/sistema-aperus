@@ -1984,13 +1984,13 @@ function CompraPage() {
       const response = await axiosInstance.get(`/compras/${id}/`)
       const compraCompleta = response.data
 
-      // Mapeia os itens da compra e lê a fração salva no cache/API se existir
+      // Mapeia os itens da compra preservando 100% dos impostos salvos na tabela compra_itens
       const itensRestaurados = (compraCompleta.itens || []).map(item => {
         const qtdNoEstoque = parseFloat(item.quantidade) || 0;
-        const valorCustoEstoque = parseFloat(item.valor_unitario) || 0;
+        const valorCustoEstoque = parseFloat(item.valor_unitario || item.valor_compra) || 0;
         const fracao = parseFloat(item.fracao_memorizada || 1);
 
-        // Buscar dados fiscais do produto se vierem vazios na API
+        // Buscar dados fiscais do cadastro do produto apenas como fallback se nunca foi salvo na compra
         const prod = produtos.find(p => p.id_produto === (item.id_produto || item.id_produto_id));
         const trib = prod?.tributacao_detalhada;
         
@@ -2003,32 +2003,133 @@ function CompraPage() {
           }
         }
 
-        const cst = item.cst !== undefined && item.cst !== null && item.cst !== '' ? item.cst : (trib?.cst_icms || '');
-        const csosn = item.csosn !== undefined && item.csosn !== null && item.csosn !== '' ? item.csosn : (trib?.csosn || '');
-        const cst_ipi = item.cst_ipi !== undefined && item.cst_ipi !== null && item.cst_ipi !== '' ? item.cst_ipi : (trib?.cst_ipi || '');
-        const cst_pis = item.cst_pis !== undefined && item.cst_pis !== null && item.cst_pis !== '' ? item.cst_pis : (trib?.cst_pis_cofins || '');
-        const cst_cofins = item.cst_cofins !== undefined && item.cst_cofins !== null && item.cst_cofins !== '' ? item.cst_cofins : (trib?.cst_pis_cofins || '');
-        const picms = item.picms !== undefined && item.picms !== null && item.picms !== '' ? item.picms : (trib?.icms_aliquota || '');
-        const vbc_icms = item.vbc_icms !== undefined && item.vbc_icms !== null && item.vbc_icms !== '' ? item.vbc_icms : (item.valor_total || '');
-        const vicms = item.vicms !== undefined && item.vicms !== null && item.vicms !== '' ? item.vicms : '';
-        const vipi = item.vipi !== undefined && item.vipi !== null && item.vipi !== '' ? item.vipi : '';
-        const vpis = item.vpis !== undefined && item.vpis !== null && item.vpis !== '' ? item.vpis : '';
-        const vcofins = item.vcofins !== undefined && item.vcofins !== null && item.vcofins !== '' ? item.vcofins : '';
+        const cst_icms = (item.cst_icms !== undefined && item.cst_icms !== null && item.cst_icms !== '')
+          ? item.cst_icms
+          : (item.cst !== undefined && item.cst !== null && item.cst !== '' ? item.cst : (trib?.cst_icms || ''));
+
+        const csosn = (item.csosn !== undefined && item.csosn !== null && item.csosn !== '')
+          ? item.csosn
+          : (trib?.csosn || '');
+
+        const vbc_icms = (item.vbc_icms !== undefined && item.vbc_icms !== null && item.vbc_icms !== '')
+          ? item.vbc_icms
+          : (item.valor_total || '');
+
+        const picms = (item.picms !== undefined && item.picms !== null && item.picms !== '')
+          ? item.picms
+          : (trib?.icms_aliquota !== undefined && trib?.icms_aliquota !== null ? trib.icms_aliquota : '');
+
+        const vicms = (item.valor_icms !== undefined && item.valor_icms !== null && item.valor_icms !== '')
+          ? item.valor_icms
+          : (item.vicms !== undefined && item.vicms !== null && item.vicms !== '' ? item.vicms : '');
+
+        const cst_ipi = (item.cst_ipi !== undefined && item.cst_ipi !== null && item.cst_ipi !== '')
+          ? item.cst_ipi
+          : (trib?.cst_ipi || '');
+
+        const p_ipi = (item.p_ipi !== undefined && item.p_ipi !== null && item.p_ipi !== '')
+          ? item.p_ipi
+          : (trib?.ipi_aliquota !== undefined && trib?.ipi_aliquota !== null ? trib.ipi_aliquota : '');
+
+        const vipi = (item.valor_ipi !== undefined && item.valor_ipi !== null && item.valor_ipi !== '')
+          ? item.valor_ipi
+          : (item.vipi !== undefined && item.vipi !== null && item.vipi !== '' ? item.vipi : '');
+
+        const cst_pis = (item.cst_pis !== undefined && item.cst_pis !== null && item.cst_pis !== '')
+          ? item.cst_pis
+          : (trib?.cst_pis_sn || trib?.cst_pis_cofins || '');
+
+        const vbc_pis = (item.vbc_pis !== undefined && item.vbc_pis !== null && item.vbc_pis !== '')
+          ? item.vbc_pis
+          : '';
+
+        const p_pis = (item.p_pis !== undefined && item.p_pis !== null && item.p_pis !== '')
+          ? item.p_pis
+          : (trib?.pis_aliquota_sn || trib?.pis_aliquota || '');
+
+        const vpis = (item.valor_pis !== undefined && item.valor_pis !== null && item.valor_pis !== '')
+          ? item.valor_pis
+          : (item.vpis !== undefined && item.vpis !== null && item.vpis !== '' ? item.vpis : '');
+
+        const cst_cofins = (item.cst_cofins !== undefined && item.cst_cofins !== null && item.cst_cofins !== '')
+          ? item.cst_cofins
+          : (trib?.cst_cofins_sn || trib?.cst_pis_cofins || '');
+
+        const vbc_cofins = (item.vbc_cofins !== undefined && item.vbc_cofins !== null && item.vbc_cofins !== '')
+          ? item.vbc_cofins
+          : '';
+
+        const p_cofins = (item.p_cofins !== undefined && item.p_cofins !== null && item.p_cofins !== '')
+          ? item.p_cofins
+          : (trib?.cofins_aliquota_sn || trib?.cofins_aliquota || '');
+
+        const vcofins = (item.valor_cofins !== undefined && item.valor_cofins !== null && item.valor_cofins !== '')
+          ? item.valor_cofins
+          : (item.vcofins !== undefined && item.vcofins !== null && item.vcofins !== '' ? item.vcofins : '');
+
+        const cst_ibs_cbs = (item.cst_ibs_cbs !== undefined && item.cst_ibs_cbs !== null && item.cst_ibs_cbs !== '')
+          ? item.cst_ibs_cbs
+          : (trib?.cst_ibs_cbs || '');
+
+        const vbc_ibs = (item.vbc_ibs !== undefined && item.vbc_ibs !== null && item.vbc_ibs !== '')
+          ? item.vbc_ibs
+          : '';
+
+        const p_ibs = (item.p_ibs !== undefined && item.p_ibs !== null && item.p_ibs !== '')
+          ? item.p_ibs
+          : (trib?.ibs_aliquota || '');
+
+        const valor_ibs = (item.valor_ibs !== undefined && item.valor_ibs !== null && item.valor_ibs !== '')
+          ? item.valor_ibs
+          : '';
+
+        const vbc_cbs = (item.vbc_cbs !== undefined && item.vbc_cbs !== null && item.vbc_cbs !== '')
+          ? item.vbc_cbs
+          : '';
+
+        const p_cbs = (item.p_cbs !== undefined && item.p_cbs !== null && item.p_cbs !== '')
+          ? item.p_cbs
+          : (trib?.cbs_aliquota || '');
+
+        const valor_cbs = (item.valor_cbs !== undefined && item.valor_cbs !== null && item.valor_cbs !== '')
+          ? item.valor_cbs
+          : '';
 
         const itemBase = {
           ...item,
           cfop: cfop || '1102',
-          cst: cst,
+          cst: cst_icms,
+          cst_icms: cst_icms,
           csosn: csosn,
-          cst_ipi: cst_ipi,
-          cst_pis: cst_pis,
-          cst_cofins: cst_cofins,
-          picms: picms,
           vbc_icms: vbc_icms,
+          picms: picms,
           vicms: vicms,
+          valor_icms: vicms,
+          cst_ipi: cst_ipi,
+          p_ipi: p_ipi,
           vipi: vipi,
+          valor_ipi: vipi,
+          cst_pis: cst_pis,
+          vbc_pis: vbc_pis,
+          p_pis: p_pis,
           vpis: vpis,
+          valor_pis: vpis,
+          cst_cofins: cst_cofins,
+          vbc_cofins: vbc_cofins,
+          p_cofins: p_cofins,
           vcofins: vcofins,
+          valor_cofins: vcofins,
+          cst_ibs_cbs: cst_ibs_cbs,
+          vbc_ibs: vbc_ibs,
+          p_ibs: p_ibs,
+          valor_ibs: valor_ibs,
+          vbc_cbs: vbc_cbs,
+          p_cbs: p_cbs,
+          valor_cbs: valor_cbs,
+          _codigo: prod?.codigo_produto || '',
+          _descricao: prod?.nome_produto || '',
+          _ncm: prod?.ncm || '',
+          _unidade: prod?.unidade_medida || item.unidade || 'UN',
           _encontrado: true
         };
 
