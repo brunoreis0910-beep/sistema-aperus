@@ -82,6 +82,35 @@ import SolicitarAprovacaoModal from '../components/SolicitarAprovacaoModal'
 import CartaCorrecaoDialog from '../components/CartaCorrecaoDialog'
 import { toast } from 'react-toastify'
 
+// Helpers de Conversão Fiscal (Saída Fornecedor -> Entrada Comprador)
+const converterCstIpiEntrada = (cstSaida, padrao = '00') => {
+  if (!cstSaida && cstSaida !== 0) return padrao;
+  const cst = String(cstSaida).trim().padStart(2, '0');
+  const mapa = {
+    '50': '00', // Saída tributada -> Entrada c/ recuperação
+    '51': '01', // Saída tributada aliq zero -> Entrada tributada aliq zero
+    '52': '02', // Saída isenta -> Entrada isenta
+    '53': '03', // Saída não-tributada -> Entrada não-tributada
+    '54': '04', // Saída imune -> Entrada imune
+    '55': '05', // Saída c/ suspensão -> Entrada c/ suspensão
+    '99': '49', // Outras saídas / Padrão -> Outras entradas
+    '000': '00',
+  };
+  return mapa[cst] || (['00','01','02','03','04','05','49'].includes(cst) ? cst : '49');
+};
+
+const converterCstPisCofinsEntrada = (cstSaida, padrao = '50') => {
+  if (!cstSaida && cstSaida !== 0) return padrao;
+  const cst = String(cstSaida).trim().padStart(2, '0');
+  const mapa = {
+    '01': '50', '02': '50', '03': '50',
+    '04': '70', '05': '70', '06': '73',
+    '07': '71', '08': '71', '09': '74',
+    '49': '98', '99': '98'
+  };
+  return mapa[cst] || (parseInt(cst, 10) >= 50 ? cst : padrao);
+};
+
 function CompraPage() {
   const { axiosInstance, user, permissions, isLoading: authLoading } = useAuth()
   const navigate = useNavigate()
@@ -1043,16 +1072,16 @@ function CompraPage() {
           picms: item.picms != null ? item.picms : '',
           vicms: item.vicms != null ? item.vicms : (item.valor_icms != null ? item.valor_icms : ''),
           valor_icms: item.valor_icms != null ? item.valor_icms : (item.vicms != null ? item.vicms : ''),
-          cst_ipi: item.cst_ipi || '',
+          cst_ipi: item.cst_ipi ? converterCstIpiEntrada(item.cst_ipi, '00') : '00',
           p_ipi: item.p_ipi != null ? item.p_ipi : '',
           vipi: item.vipi != null ? item.vipi : (item.valor_ipi != null ? item.valor_ipi : ''),
           valor_ipi: item.valor_ipi != null ? item.valor_ipi : (item.vipi != null ? item.vipi : ''),
-          cst_pis: item.cst_pis || '',
+          cst_pis: item.cst_pis ? converterCstPisCofinsEntrada(item.cst_pis, '50') : '50',
           vbc_pis: item.vbc_pis != null ? item.vbc_pis : '',
           p_pis: item.p_pis != null ? item.p_pis : '',
           vpis: item.vpis != null ? item.vpis : (item.valor_pis != null ? item.valor_pis : ''),
           valor_pis: item.valor_pis != null ? item.valor_pis : (item.vpis != null ? item.vpis : ''),
-          cst_cofins: item.cst_cofins || '',
+          cst_cofins: item.cst_cofins ? converterCstPisCofinsEntrada(item.cst_cofins, '50') : '50',
           vbc_cofins: item.vbc_cofins != null ? item.vbc_cofins : '',
           p_cofins: item.p_cofins != null ? item.p_cofins : '',
           vcofins: item.vcofins != null ? item.vcofins : (item.valor_cofins != null ? item.valor_cofins : ''),
@@ -2023,9 +2052,10 @@ function CompraPage() {
           ? item.valor_icms
           : (item.vicms !== undefined && item.vicms !== null && item.vicms !== '' ? item.vicms : '');
 
-        const cst_ipi = (item.cst_ipi !== undefined && item.cst_ipi !== null && item.cst_ipi !== '')
+        const raw_cst_ipi = (item.cst_ipi !== undefined && item.cst_ipi !== null && item.cst_ipi !== '')
           ? item.cst_ipi
           : (trib?.cst_ipi || '');
+        const cst_ipi = raw_cst_ipi ? converterCstIpiEntrada(raw_cst_ipi, '00') : '00';
 
         const p_ipi = (item.p_ipi !== undefined && item.p_ipi !== null && item.p_ipi !== '')
           ? item.p_ipi
@@ -2035,9 +2065,10 @@ function CompraPage() {
           ? item.valor_ipi
           : (item.vipi !== undefined && item.vipi !== null && item.vipi !== '' ? item.vipi : '');
 
-        const cst_pis = (item.cst_pis !== undefined && item.cst_pis !== null && item.cst_pis !== '')
+        const raw_cst_pis = (item.cst_pis !== undefined && item.cst_pis !== null && item.cst_pis !== '')
           ? item.cst_pis
           : (trib?.cst_pis_sn || trib?.cst_pis_cofins || '');
+        const cst_pis = raw_cst_pis ? converterCstPisCofinsEntrada(raw_cst_pis, '50') : '50';
 
         const vbc_pis = (item.vbc_pis !== undefined && item.vbc_pis !== null && item.vbc_pis !== '')
           ? item.vbc_pis
@@ -2051,9 +2082,10 @@ function CompraPage() {
           ? item.valor_pis
           : (item.vpis !== undefined && item.vpis !== null && item.vpis !== '' ? item.vpis : '');
 
-        const cst_cofins = (item.cst_cofins !== undefined && item.cst_cofins !== null && item.cst_cofins !== '')
+        const raw_cst_cofins = (item.cst_cofins !== undefined && item.cst_cofins !== null && item.cst_cofins !== '')
           ? item.cst_cofins
           : (trib?.cst_cofins_sn || trib?.cst_pis_cofins || '');
+        const cst_cofins = raw_cst_cofins ? converterCstPisCofinsEntrada(raw_cst_cofins, '50') : '50';
 
         const vbc_cofins = (item.vbc_cofins !== undefined && item.vbc_cofins !== null && item.vbc_cofins !== '')
           ? item.vbc_cofins
