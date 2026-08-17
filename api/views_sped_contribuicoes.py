@@ -186,37 +186,25 @@ class SpedContribuicoesGerarView(APIView):
                                     arc_path = os.path.join('XMLs', file)
                                     zipf.write(file_path, arc_path)
                 
-                # Salvar cópia em C:\SPED para disponibilizar para download imediato
-                os.makedirs('C:\\SPED', exist_ok=True)
-                sped_dir_file = os.path.join('C:\\SPED', zip_filename)
-                shutil.copy2(zip_path, sped_dir_file)
-                final_path = sped_dir_file
-
-                with open(zip_path, 'rb') as f:
-                    zip_content = f.read()
-
-                # Limpar diretório temporário
+                # Salvar caminho final
+                final_path = zip_path
+                
+                # Limpar diret ório temporário
                 import shutil
                 try:
                     shutil.rmtree(temp_dir)
                 except Exception as e:
                     logger.warning(f"Erro ao limpar diretório temporário: {e}")
                 
-                logger.info(f"SPED Contribuições: Arquivo ZIP gerado para download: {zip_filename}")
+                logger.info(f"SPED Contribuições: Arquivo ZIP salvo em: {final_path}")
                 
-                import base64
-                zip_b64 = base64.b64encode(zip_content).decode('ascii')
-                
+                # Retornar resposta de sucesso
                 return JsonResponse({
                     "success": True,
-                    "message": f"SPED Contribuições {zip_filename} gerado com sucesso!",
+                    "message": "SPED Contribuições gerado com sucesso!",
                     "arquivo": zip_filename,
-                    "filename": zip_filename,
-                    "download_url": f"/api/sped/download/{zip_filename}/",
                     "caminho": final_path,
-                    "filepath": final_path,
-                    "file_b64": zip_b64,
-                    "tamanho": len(zip_content),
+                    "tamanho": os.path.getsize(final_path),
                     "data_geracao": datetime.datetime.now().isoformat(),
                     "periodo": {
                         "inicio": data_inicio_str,

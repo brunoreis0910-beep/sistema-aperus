@@ -1,6 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from django.http import HttpResponse, JsonResponse
 from api.services.sped_service import SpedEFDGenerator
 from api.services.export_xml_service import ExportXMLService
@@ -119,8 +119,6 @@ class SpedGerarView(APIView):
             
             arquivos_para_zip = [filepath_sped]
             pastas_para_zip = []
-            xml_stats = None
-            relatorio_stats = None
 
             # 2. Exportar XMLs
             if exportar_xml:
@@ -148,7 +146,6 @@ class SpedGerarView(APIView):
                     
                     if report_service.gerar_pdf(filepath_pdf):
                         arquivos_para_zip.append(filepath_pdf)
-                        relatorio_stats = {'success': True, 'filepath': filepath_pdf}
                 except Exception as e:
                     logger.error(f"Erro ao gerar relatório: {str(e)}")
 
@@ -221,54 +218,48 @@ class SpedGerarView(APIView):
                                 arcname = os.path.join(foldername, file)
                                 zipf.write(file_path, arcname)
 
-            media_sped_dir = r'C:\APERUS\SistemaAperus\media\sped'
-            os.makedirs(media_sped_dir, exist_ok=True)
-            media_sped_file = os.path.join(media_sped_dir, zip_filename)
-            shutil.copy2(zip_filepath, media_sped_file)
-            final_path = media_sped_file
-
-            try:
-                os.makedirs('C:\\SPED', exist_ok=True)
-                sped_dir_file = os.path.join('C:\\SPED', zip_filename)
-                shutil.copy2(zip_filepath, sped_dir_file)
-            except Exception as copy_err:
-                logger.warning(f"Não foi possível salvar cópia em C:\\SPED: {copy_err}")
-
+            # Verificar se foi solicitado salvar em diretório específico
             diretorio_destino = data.get('diretorio')
-            if diretorio_destino and diretorio_destino not in ['C:\\SPED', 'C:\\SPED\\', media_sped_dir]:
-                try:
-                    os.makedirs(diretorio_destino, exist_ok=True)
-                    dest_file = os.path.join(diretorio_destino, zip_filename)
-                    shutil.copy2(zip_filepath, dest_file)
-                    final_path = dest_file
-                except Exception as save_err:
-                    logger.warning(f"Não foi possível salvar cópia em {diretorio_destino}: {save_err}")
             
-            if os.path.exists(zip_filepath):
-                with open(zip_filepath, 'rb') as f:
-                    zip_content = f.read()
+            if diretorio_destino:
+                try:
+                    # Cria o diretório (e todos os pais necessários) se não existir
+                    os.makedirs(diretorio_destino, exist_ok=True)
+                    final_path = os.path.join(diretorio_destino, zip_filename)
+                    shutil.move(zip_filepath, final_path)
+                    logger.info(f"SPED ZIP salvo em: {final_path}")
+                except Exception as save_err:
+                    logger.error(f"Erro ao salvar SPED em {diretorio_destino}: {save_err}")
+                    return JsonResponse({'error': f'Arquivo gerado mas não foi possível salvar em "{diretorio_destino}": {str(save_err)}'}, status=500)
                 
-                # Limpar temp dir
+                # Limpa temp
                 try:
                     shutil.rmtree(temp_dir)
                 except:
                     pass
                 
-                import base64
-                zip_b64 = base64.b64encode(zip_content).decode('ascii')
-                
                 return JsonResponse({
                     'success': True,
-                    'message': f'Arquivo SPED {zip_filename} gerado com sucesso!',
-                    'filename': zip_filename,
-                    'download_url': f'/api/sped/download/{zip_filename}/',
-                    'filepath': final_path or zip_filename,
-                    'file_b64': zip_b64,
-                    'xml_export': xml_stats if exportar_xml else None,
-                    'relatorio': relatorio_stats if gerar_relatorio else None
+                    'message': f'Arquivo salvo com sucesso em {final_path}',
+                    'filepath': final_path,
+                    'filename': zip_filename
                 })
+            
+            # Se não, retorna como download (comportamento padrão)
+            elif os.path.exists(zip_filepath):
+                with open(zip_filepath, 'rb') as f:
+                    response = HttpResponse(f.read(), content_type='application/zip')
+                    response['Content-Disposition'] = f'attachment; filename="{zip_filename}"'
+                    
+                    # Limpar temp dir após ler o arquivo
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except:
+                        pass
+                        
+                    return response
             else:
-                return JsonResponse({"error": "Erro ao criar arquivo ZIP do SPED"}, status=500)
+                return JsonResponse({"error": "Erro ao criar arquivo ZIP"}, status=500)
             
         except Exception as e:
             import traceback
@@ -276,43 +267,6 @@ class SpedGerarView(APIView):
             logger.error(f"Erro gerando SPED: {str(e)}")
             logger.error(traceback.format_exc())
             return JsonResponse({"error": f"Erro ao gerar SPED: {str(e)}"}, status=500)
-
-
-class SpedDownloadView(APIView):
-    permission_classes = [AllowAny]
-    
-    def get(self, request, filename):
-        import tempfile
-        from django.http import HttpResponse, Http404
-        safe_filename = os.path.basename(filename)
-        
-        locais = [
-            os.path.join(r'C:\APERUS\SistemaAperus\media\sped', safe_filename),
-            os.path.join('C:\\SPED', safe_filename),
-            os.path.join('C:\\SPED\\CONTRIBUICOES', safe_filename),
-            os.path.join(tempfile.gettempdir(), safe_filename),
-        ]
-        
-        caminho = None
-        for loc in locais:
-            if loc and os.path.exists(loc) and os.path.isfile(loc):
-                try:
-                    with open(loc, 'rb') as f:
-                        caminho = loc
-                        break
-                except Exception:
-                    pass
-                
-        if not caminho or not os.path.exists(caminho):
-            raise Http404("Arquivo SPED não encontrado")
-            
-        with open(caminho, 'rb') as f:
-            content = f.read()
-            
-        response = HttpResponse(content, content_type='application/zip')
-        response['Content-Disposition'] = f'attachment; filename="{safe_filename}"'
-        response['Content-Length'] = len(content)
-        return response
 
 
 class SpedSalvarConfigView(APIView):
@@ -410,57 +364,26 @@ class SpedEnviarEmailView(APIView):
 
     def post(self, request):
         from api.services_email import EmailService, EmailServiceError
-        import base64
-        import re
-        import logging
-        logger = logging.getLogger(__name__)
 
         filepath = request.data.get('filepath', '').strip()
-        file_b64 = request.data.get('file_b64', '').strip()
-        filename_req = request.data.get('filename', '').strip()
         email = request.data.get('email', '').strip()
         periodo = request.data.get('periodo', 'SPED')
         contador_nome = request.data.get('contador_nome', 'Contador')
 
-        if not email:
-            return Response({'success': False, 'error': 'E-mail do destinatário é obrigatório'}, status=400)
+        if not filepath or not email:
+            return Response({'success': False, 'error': 'filepath e email são obrigatórios'}, status=400)
 
-        filename = filename_req or os.path.basename(filepath) or f"SPED_{periodo.replace(' ', '_')}.zip"
-        file_content = None
-
-        if file_b64:
-            try:
-                clean_b64 = re.sub(r'^data:[^;]+;base64,', '', file_b64)
-                file_content = base64.b64decode(clean_b64)
-            except Exception as b64_err:
-                logger.warning(f"Erro ao decodificar base64 do SPED: {b64_err}")
-
-        if not file_content and filepath:
-            possiveis_caminhos = [
-                filepath,
-                os.path.join(r'C:\APERUS\SistemaAperus\media\sped', os.path.basename(filepath)),
-                os.path.join(r'C:\SPED', os.path.basename(filepath)),
-                os.path.join(r'C:\SPED\CONTRIBUICOES', os.path.basename(filepath)),
-                os.path.join(tempfile.gettempdir(), os.path.basename(filepath)),
-            ]
-            for p in possiveis_caminhos:
-                if p and os.path.exists(p) and os.path.isfile(p):
-                    try:
-                        with open(p, 'rb') as f:
-                            file_content = f.read()
-                            if file_content:
-                                filename = os.path.basename(p)
-                                break
-                    except Exception as read_err:
-                        logger.warning(f"Erro ao ler {p}: {read_err}")
-
-        if not file_content:
-            return Response({'success': False, 'error': f'Arquivo SPED não encontrado para anexo: {filename}'}, status=404)
+        if not os.path.exists(filepath):
+            return Response({'success': False, 'error': f'Arquivo não encontrado: {filepath}'}, status=404)
 
         try:
             empresa = EmpresaConfig.get_ativa()
             if not empresa:
                 return Response({'success': False, 'error': 'Empresa não configurada no sistema'}, status=400)
+
+            filename = os.path.basename(filepath)
+            with open(filepath, 'rb') as f:
+                file_content = f.read()
 
             empresa_nome = empresa.nome_fantasia or empresa.nome_razao_social or 'APERUS'
 

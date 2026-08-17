@@ -889,26 +889,31 @@ const ProdutoPageResponsive = () => {
       return;
     }
 
-    // Resolver id_grupo a partir do grupo selecionado no dropdown (formData.grupo)
-    if (formData.grupo) {
-      const grupoEncontrado = gruposAtivos.find(g => (g.nome === formData.grupo || g.nome_grupo === formData.grupo));
-      if (grupoEncontrado) {
-        const gid = Number(grupoEncontrado.id_grupo || grupoEncontrado.id);
-        if (!isNaN(gid) && gid > 0) {
-          produtoData.id_grupo = gid;
-          console.log('✅ id_grupo resolvido pelo grupo selecionado:', gid, '(', formData.grupo, ')');
-        }
-      }
-    }
-    
-    // Fallback: se não encontrou pelo nome, usa o id_grupo do formData se for válido
-    if (!produtoData.id_grupo && formData.id_grupo && Number(formData.id_grupo) > 0) {
-      produtoData.id_grupo = Number(formData.id_grupo);
-    }
-
     // Campos opcionais - só incluir se tiverem valor válido
     if (formData.categoria && String(formData.categoria).trim()) {
       produtoData.categoria = String(formData.categoria).trim();
+    }
+    // Prioridade: se já tem id_grupo no formData (produto editado), usar ele
+    if (formData.id_grupo && Number(formData.id_grupo) > 0) {
+      console.log('✅ id_grupo já existe no formData:', formData.id_grupo);
+      produtoData.id_grupo = Number(formData.id_grupo);
+    } else if (formData.grupo && gruposAtivos.find(g => g.nome === formData.grupo)) {
+      const grupo = gruposAtivos.find(g => g.nome === formData.grupo);
+      console.log('🔍 Grupo selecionado:', formData.grupo);
+      console.log('🔍 Grupo encontrado:', grupo);
+      console.log('🔍 Todos os grupos disponíveis:', gruposAtivos);
+
+      // Validação: só adicionar se ID existe e é válido
+      if (grupo && grupo.id && Number(grupo.id) > 0 && !isNaN(Number(grupo.id))) {
+        console.log('✅ ID do grupo válido, adicionando:', Number(grupo.id));
+        produtoData.id_grupo = Number(grupo.id);
+      } else {
+        console.log('⚠️ Grupo encontrado mas ID inválido, criando produto sem grupo');
+        console.log('⚠️ Detalhes do grupo:', grupo);
+      }
+    } else if (formData.grupo) {
+      console.log('⚠️ Grupo não encontrado nos grupos ativos:', formData.grupo);
+      console.log('⚠️ Criando produto sem grupo para evitar erro');
     }
 
     
@@ -1072,16 +1077,15 @@ const ProdutoPageResponsive = () => {
         console.log('🔍 Validando id_grupo antes de enviar:', payloadLimpo.id_grupo);
         console.log('🔍 Grupos disponíveis:', gruposAtivos.map(g => `ID: ${g.id}, Nome: ${g.nome}`));
 
-        // Verificar se o grupo existe nos grupos ativos (checar g.id_grupo || g.id)
-        const grupoValido = gruposAtivos.find(g => Number(g.id_grupo || g.id) === Number(payloadLimpo.id_grupo) && g.ativo !== false);
+        // Verificar se o grupo existe nos grupos ativos
+        const grupoValido = gruposAtivos.find(g => Number(g.id) === Number(payloadLimpo.id_grupo) && g.ativo !== false);
         console.log('🔍 Grupo válido encontrado:', grupoValido);
 
         if (!grupoValido) {
-          // Se for um número válido > 0, mantém mesmo assim para não perder a edição
-          const numG = Number(payloadLimpo.id_grupo);
-          if (isNaN(numG) || numG <= 0) {
-            delete payloadLimpo.id_grupo;
-          }
+          console.log('⚠️ id_grupo não encontrado nos grupos válidos, removendo do payload');
+          console.log('⚠️ ID procurado:', payloadLimpo.id_grupo);
+          console.log('⚠️ IDs disponíveis:', gruposAtivos.map(g => g.id));
+          delete payloadLimpo.id_grupo;
         } else {
           console.log('✅ Grupo válido confirmado, mantendo id_grupo:', payloadLimpo.id_grupo);
         }
@@ -1160,10 +1164,12 @@ const ProdutoPageResponsive = () => {
       // Fechar dialog do produto
       handleCloseDialog();
 
-      // Abrir dialog de configuração de depósitos após salvar o produto
+      // Abrir dialog de configuração de depósitos
       if (productId) {
         console.log('🏢 Abrindo configuração de depósitos...');
         await handleOpenDepotDialog(productId);
+      } else {
+        alert(selectedProduto ? 'Produto editado com sucesso!' : 'Produto criado com sucesso!');
       }
     } catch (error) {
       console.error('❌ Erro ao salvar produto:', error);
@@ -1360,18 +1366,16 @@ const ProdutoPageResponsive = () => {
               });
             });
 
-            setDepotValues(estoqueData.map(dep => {
-              const custoReal = dep.valor_custo || dep.custo_medio || dep.valor_ultima_compra || produto.preco_custo || produto.custo_medio || 0;
-              return {
-                id_estoque: dep.id_estoque ?? null,
-                id_deposito: dep.id_deposito,
-                nome_deposito: dep.nome_deposito,
-                quantidade: dep.quantidade ?? dep.quantidade_atual ?? 0,
-                quantidade_minima: dep.quantidade_minima ?? 0,
-                valor_venda: dep.valor_venda ?? 0,
-                valor_custo: custoReal
-              };
-            }));
+            setDepotValues(estoqueData.map(dep => ({
+              id_estoque: dep.id_estoque ?? null,
+              id_deposito: dep.id_deposito,
+              nome_deposito: dep.nome_deposito,
+              quantidade: dep.quantidade ?? 0,
+              quantidade_minima: dep.quantidade_minima ?? 0,
+              valor_venda: dep.valor_venda ?? 0,
+              // suportar ambos nomes: valor_ultima_compra (backend) ou valor_custo (legado)
+              valor_custo: dep.valor_ultima_compra ?? dep.valor_custo ?? 0
+            })));
 
             return true; // Sucesso
           } else {
@@ -1433,16 +1437,11 @@ const ProdutoPageResponsive = () => {
 
       // Atualizar ou criar cada depósito via API
       for (const depot of depotValues) {
-        const valCustoNum = parseFloat(depot.valor_custo);
         const updateData = {
           quantidade_minima: parseFloat(depot.quantidade_minima) || 0,
           valor_venda: parseFloat(depot.valor_venda) || 0,
+          valor_ultima_compra: parseFloat(depot.valor_custo) || 0
         };
-        // Só atualiza o custo se foi informado um valor positivo
-        if (!isNaN(valCustoNum) && valCustoNum > 0) {
-          updateData.valor_ultima_compra = valCustoNum;
-          updateData.custo_medio = valCustoNum;
-        }
 
         try {
           if (depot.id_estoque) {
@@ -3130,28 +3129,16 @@ const ProdutoPageResponsive = () => {
                       <InputLabel>Grupo</InputLabel>
                       <Select
                         value={formData.grupo}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const gMatch = gruposAtivos.find(g => (g.nome === val || g.nome_grupo === val));
-                          setFormData({
-                            ...formData,
-                            grupo: val,
-                            id_grupo: gMatch ? Number(gMatch.id_grupo || gMatch.id) : formData.id_grupo
-                          });
-                        }}
+                        onChange={(e) => setFormData({ ...formData, grupo: e.target.value })}
                         label="Grupo"
                         required
                         disabled={loadingGrupos}
                       >
-                        {gruposAtivos.map((grupo) => {
-                          const gId = grupo.id_grupo || grupo.id;
-                          const gNome = grupo.nome_grupo || grupo.nome;
-                          return (
-                            <MenuItem key={gId} value={gNome}>
-                              {gNome}
-                            </MenuItem>
-                          );
-                        })}
+                        {gruposAtivos.map((grupo) => (
+                          <MenuItem key={grupo.id} value={grupo.nome}>
+                            {grupo.nome}
+                          </MenuItem>
+                        ))}
                       </Select>
                     </FormControl>
                     <Button

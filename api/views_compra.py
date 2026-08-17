@@ -19,74 +19,16 @@ class CompraItemSerializer(serializers.ModelSerializer):
         fields = ['id_item', 'id_produto', 'quantidade', 'valor_compra', 'valor_unitario', 'valor_total', 'desconto']
     
     def to_representation(self, instance):
-        """Adiciona valor_unitario como alias de valor_compra na saída e restaura impostos e tributação"""
+        """Adiciona valor_unitario como alias de valor_compra na saída"""
         representation = super().to_representation(instance)
         # Inclui valor_unitario como alias de valor_compra para compatibilidade com frontend
         representation['valor_unitario'] = representation.get('valor_compra')
         # Retorna fração salva para o frontend restaurar os campos de fração
+        # Usa getattr com fallback pois fracao_aplicada não é campo formal do modelo
         fracao = getattr(instance, 'fracao_aplicada', None)
         qtd_fracionada = getattr(instance, 'quantidade_fracionada', None)
         representation['fracao_memorizada'] = float(fracao) if fracao is not None else 1
         representation['quantidade_com_fracao'] = float(qtd_fracionada) if qtd_fracionada is not None else None
-        
-        # Valores de impostos gravados no CompraItem
-        representation['vipi'] = float(instance.valor_ipi) if instance.valor_ipi is not None else ''
-        representation['vicms'] = float(instance.valor_icms) if instance.valor_icms is not None else ''
-        representation['vpis'] = float(instance.valor_pis) if instance.valor_pis is not None else ''
-        representation['vcofins'] = float(instance.valor_cofins) if instance.valor_cofins is not None else ''
-        
-        # Obter dados fiscais do produto vinculado (tributacao_detalhada)
-        prod = instance.id_produto
-        if prod:
-            representation['_codigo'] = prod.codigo_produto or ''
-            representation['_ean'] = prod.gtin or ''
-            representation['_descricao'] = prod.nome_produto or ''
-            representation['_ncm'] = prod.ncm or ''
-            representation['_unidade'] = prod.unidade_medida or 'UN'
-            
-            trib = getattr(prod, 'tributacao_detalhada', None)
-            if trib:
-                cfop_val = trib.cfop or ''
-                # Converte CFOP de saída para entrada (5->1, 6->2, 7->3) se necessário
-                if cfop_val and cfop_val[0] in ['5', '6', '7'] and len(cfop_val) == 4:
-                    mapa_cfop = {'5': '1', '6': '2', '7': '3'}
-                    cfop_val = mapa_cfop[cfop_val[0]] + cfop_val[1:]
-                
-                representation['cfop'] = cfop_val
-                representation['cst'] = trib.cst_icms or ''
-                representation['csosn'] = trib.csosn or ''
-                representation['cst_ipi'] = trib.cst_ipi or ''
-                representation['cst_pis'] = trib.cst_pis_cofins or ''
-                representation['cst_cofins'] = trib.cst_pis_cofins or ''
-                representation['picms'] = float(trib.icms_aliquota) if trib.icms_aliquota is not None else ''
-                representation['pipi'] = float(trib.ipi_aliquota) if trib.ipi_aliquota is not None else ''
-                representation['ppis'] = float(trib.pis_aliquota) if trib.pis_aliquota is not None else ''
-                representation['pcofins'] = float(trib.cofins_aliquota) if trib.cofins_aliquota is not None else ''
-                
-                # Se houver ICMS ou alíquota > 0, base de cálculo ICMS é o valor total
-                if trib.cst_icms in ['000', '020', '090'] and trib.icms_aliquota and trib.icms_aliquota > 0:
-                    representation['vbc_icms'] = float(instance.valor_total) if instance.valor_total is not None else ''
-                else:
-                    representation['vbc_icms'] = ''
-            else:
-                representation['cfop'] = '1102'
-                representation['cst'] = ''
-                representation['csosn'] = ''
-                representation['cst_ipi'] = ''
-                representation['cst_pis'] = ''
-                representation['cst_cofins'] = ''
-                representation['picms'] = ''
-                representation['vbc_icms'] = ''
-        else:
-            representation['cfop'] = ''
-            representation['cst'] = ''
-            representation['csosn'] = ''
-            representation['cst_ipi'] = ''
-            representation['cst_pis'] = ''
-            representation['cst_cofins'] = ''
-            representation['picms'] = ''
-            representation['vbc_icms'] = ''
-
         return representation
     
     def to_internal_value(self, data):
@@ -232,13 +174,7 @@ class CompraSerializer(serializers.ModelSerializer):
             
             for item in itens_data:
                 print(f'[DEBUG] Item recebido: {item}')
-                prod_id = item.get('id_produto')
-                if isinstance(prod_id, Produto):
-                    produto_obj = prod_id
-                elif prod_id:
-                    produto_obj = Produto.objects.filter(id_produto=prod_id).first()
-                else:
-                    produto_obj = None
+                produto = item.get('id_produto')
 
                 # Frontend envia 'quantidade' e 'valor_unitario' como da NF.
                 # O backend deve calcular a quantidade de estoque e o custo unitário de estoque.
@@ -252,6 +188,8 @@ class CompraSerializer(serializers.ModelSerializer):
                 qtd_estoque = qtd_nf * fracao
                 
                 # Calcula o custo unitário para o estoque
+                # Se a fração for > 1, o custo unitário é dividido.
+                # Ex: Caixa com 6 custa R$60 (valor_unit_nf). Custo por unidade é R$10.
                 custo_unit_estoque = valor_unit_nf / fracao if fracao > 1 else valor_unit_nf
                 
                 # O valor total do item na compra é sempre baseado nos valores da NF
@@ -261,25 +199,16 @@ class CompraSerializer(serializers.ModelSerializer):
                 print(f'[DEBUG_CALC] -> Qtd Estoque: {qtd_estoque}, Custo Unit Estoque: {custo_unit_estoque}')
                 print(f'[DEBUG_CALC] -> Valor Total Item: {valor_total_item}')
 
-                # Preparar dados do item para salvar no banco com impostos
-                vipi_val = Decimal(str(item.get('vipi') or 0)) if item.get('vipi') is not None else Decimal('0.00')
-                vicms_val = Decimal(str(item.get('vicms') or 0)) if item.get('vicms') is not None else Decimal('0.00')
-                vpis_val = Decimal(str(item.get('vpis') or 0)) if item.get('vpis') is not None else Decimal('0.00')
-                vcofins_val = Decimal(str(item.get('vcofins') or 0)) if item.get('vcofins') is not None else Decimal('0.00')
-
+                # Preparar dados do item para salvar no banco
                 item_data = {
                     'id_compra': compra,
-                    'id_produto': produto_obj,
+                    'id_produto': produto,
                     'quantidade': qtd_estoque,          # Salva a quantidade convertida para o estoque
                     'valor_compra': custo_unit_estoque, # Salva o custo unitário de estoque
                     'valor_total': valor_total_item,    # Valor total do item (baseado na NF)
                     'desconto': desconto,
                     'fracao_aplicada': fracao,
                     'quantidade_fracionada': qtd_estoque if fracao > 1 else None,
-                    'valor_ipi': vipi_val,
-                    'valor_icms': vicms_val,
-                    'valor_pis': vpis_val,
-                    'valor_cofins': vcofins_val,
                 }
                 
                 print(f'[DEBUG_CREATE] Criando item - {item_data}')
@@ -288,15 +217,17 @@ class CompraSerializer(serializers.ModelSerializer):
 
                 # Salvar/atualizar fração por fornecedor+produto quando fracao > 1
                 ean_val = item.get('_ean') or '' # O _ean é passado pelo frontend
-                if produto_obj and compra.id_fornecedor and ean_val:
+                # Sempre atualiza a fração (mesmo fracao=1 para resetar) quando há EAN
+                if produto and compra.id_fornecedor and ean_val:
                     try:
                         from .models import FornecedorProdutoFracao
                         FornecedorProdutoFracao.objects.update_or_create(
                             fornecedor=compra.id_fornecedor,
-                            produto=produto_obj,
+                            produto=produto,
                             gtin=ean_val,
                             defaults={'fracao': fracao}
                         )
+                        print(f'[FRACAO] Fração {fracao} salva/atualizada para Fornecedor {compra.id_fornecedor.id} e Produto {produto.id}')
                     except Exception as _fe:
                         print(f'[FRACAO] erro ao salvar fracao: {_fe}')
                 
@@ -306,89 +237,57 @@ class CompraSerializer(serializers.ModelSerializer):
                 print(f'[DEBUG_TOTAL] Total acumulado: {total}, Desconto total: {desconto_total}')
 
                 # Atualiza estoque
-                if produto_obj and operacao:
-                    op_inc_estoque = getattr(operacao, 'incrementar_estoque', 1)
-                    op_tipo_inc = getattr(operacao, 'tipo_estoque_incremento', 'Deposito')
-                    op_gera_estoque = (op_inc_estoque not in [0, '0', False]) and (op_tipo_inc not in ['Nenhum', '0', None, ''])
-                    compra_movimenta = getattr(compra, 'movimenta_estoque_fisico', True)
+                if produto and operacao:
+                    print(f'[DEBUG_IF] Entrando no if - produto: {produto}, operacao: {operacao}')
+                    deposito_id = getattr(operacao, 'id_deposito_incremento', None) or 1
+                    print(f'[DEBUG_IF] deposito_id: {deposito_id}')
+                    print(f'[DEBUG_ANTES_QUERY] Vai buscar estoque - produto.pk={produto.pk}, deposito_id={deposito_id}')
 
-                    movimenta_estoque = compra_movimenta and op_gera_estoque
-                    is_ajuste_custo = getattr(compra, 'ajuste_custo', False) or getattr(compra, 'finalidade', '1') == '6'
-
-                    dep_obj = getattr(operacao, 'id_deposito_incremento', None)
-                    if dep_obj and hasattr(dep_obj, 'pk'):
-                        deposito_id = dep_obj.pk
-                    elif isinstance(dep_obj, int):
-                        deposito_id = dep_obj
-                    else:
-                        deposito_id = 1
-
-                    estoque_obj = Estoque.objects.filter(
-                        id_produto=produto_obj,
-                        id_deposito_id=deposito_id
-                    ).first()
-
-                    if not estoque_obj:
-                        estoque_obj = Estoque.objects.filter(id_produto=produto_obj).first()
-
-                    if not estoque_obj:
-                        dep_instance = Deposito.objects.filter(id_deposito=deposito_id).first() or Deposito.objects.first()
-                        qtd_inicial = Decimal('0.000') if not movimenta_estoque else qtd_estoque
-                        estoque_obj = Estoque.objects.create(
-                            id_produto=produto_obj,
-                            id_deposito=dep_instance,
-                            quantidade=qtd_inicial,
-                            custo_medio=custo_unit_estoque.quantize(Decimal('0.0001')),
-                            valor_ultima_compra=custo_unit_estoque.quantize(Decimal('0.0001')),
-                            valor_total=(qtd_inicial * custo_unit_estoque).quantize(Decimal('0.0001'))
+                    try:
+                        estoque_obj = Estoque.objects.get(
+                            id_produto=produto,
+                            id_deposito_id=deposito_id
                         )
-                    else:
-                        qtd_estoque_atual = Decimal(str(estoque_obj.quantidade or 0))
-                        custo_medio_atual = Decimal(str(estoque_obj.custo_medio or 0))
-
-                        if not movimenta_estoque:
-                            nova_quantidade = qtd_estoque_atual
-                            if is_ajuste_custo:
-                                if qtd_estoque_atual > 0:
-                                    acrescimo_por_unidade = (qtd_estoque * custo_unit_estoque) / qtd_estoque_atual
-                                    novo_custo_medio = custo_medio_atual + acrescimo_por_unidade
-                                else:
-                                    novo_custo_medio = custo_medio_atual + custo_unit_estoque
-                            else:
-                                novo_custo_medio = custo_medio_atual
-                        else:
-                            nova_quantidade = qtd_estoque_atual + qtd_estoque
-                            valor_estoque_atual = qtd_estoque_atual * custo_medio_atual
-                            valor_nova_compra = qtd_estoque * custo_unit_estoque
-                            novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else custo_unit_estoque
+                        print(f'[DEBUG_ESTOQUE] Estoque encontrado - Qtd atual: {estoque_obj.quantidade} ({type(estoque_obj.quantidade)})')
+                        
+                        qtd_estoque_atual = estoque_obj.quantidade or Decimal('0.000')
+                        custo_medio_atual = estoque_obj.custo_medio or Decimal('0.0000')
+                        
+                        print(f'[DEBUG_ESTOQUE] Tipo antes de Decimal(): {type(qtd_estoque_atual)}')
+                        
+                        qtd_estoque_decimal = Decimal(str(qtd_estoque_atual))
+                        print(f'[DEBUG_ESTOQUE] Tipo depois de Decimal(): {type(qtd_estoque_decimal)}')
+                        print(f'[DEBUG_ESTOQUE] quantidade a adicionar: {qtd_estoque} ({type(qtd_estoque)})')
+                        
+                        nova_quantidade = qtd_estoque_decimal + qtd_estoque
+                        print(f'[DEBUG_ESTOQUE] Nova quantidade calculada: {nova_quantidade} ({type(nova_quantidade)})')
+                        
+                        # Calcula novo custo médio ponderado
+                        valor_estoque_atual = qtd_estoque_decimal * custo_medio_atual
+                        valor_nova_compra = qtd_estoque * custo_unit_estoque
+                        novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else custo_unit_estoque
                         
                         estoque_obj.quantidade = nova_quantidade
                         estoque_obj.custo_medio = novo_custo_medio.quantize(Decimal('0.0001'))
-                        estoque_obj.valor_ultima_compra = custo_unit_estoque.quantize(Decimal('0.0001'))
-                        estoque_obj.valor_total = (nova_quantidade * novo_custo_medio).quantize(Decimal('0.0001'))
+                        estoque_obj.valor_ultima_compra = custo_unit_estoque
+                        estoque_obj.valor_total = nova_quantidade * novo_custo_medio
                         estoque_obj.save()
-
-                        # Sincronizar valor_ultima_compra em TODOS os depósitos do produto
-                        Estoque.objects.filter(id_produto=produto_obj).update(
-                            valor_ultima_compra=custo_unit_estoque.quantize(Decimal('0.0001'))
+                        print(f'[DEBUG_ESTOQUE] Estoque atualizado - Custo médio: {novo_custo_medio}, Última compra: {custo_unit_estoque}')
+                    except Estoque.DoesNotExist:
+                        print(f'[DEBUG_ESTOQUE] Estoque não existe, criando novo')
+                        print(f'[DEBUG_ESTOQUE_CREATE] Vai criar - produto={produto} (tipo: {type(produto)})')
+                        print(f'[DEBUG_ESTOQUE_CREATE] deposito_id={deposito_id} (tipo: {type(deposito_id)})')
+                        print(f'[DEBUG_ESTOQUE_CREATE] quantidade={qtd_estoque} (tipo: {type(qtd_estoque)})')
+                        
+                        Estoque.objects.create(
+                            id_produto=produto,
+                            id_deposito_id=deposito_id,
+                            quantidade=qtd_estoque,
+                            custo_medio=custo_unit_estoque,
+                            valor_ultima_compra=custo_unit_estoque,
+                            valor_total=qtd_estoque * custo_unit_estoque
                         )
-
-                    # Registrar no Histórico / Kardex
-                    try:
-                        from .models import EstoqueMovimentacao
-                        EstoqueMovimentacao.objects.create(
-                            id_estoque=estoque_obj,
-                            id_produto=produto_obj,
-                            tipo_movimentacao='AJUSTE' if not movimenta_estoque else 'ENTRADA',
-                            tipo_documento='COMPRA',
-                            id_documento=compra.pk,
-                            quantidade_anterior=qtd_estoque_decimal if 'qtd_estoque_decimal' in locals() else Decimal('0'),
-                            quantidade_movimentada=Decimal('0') if not movimenta_estoque else qtd_estoque,
-                            quantidade_atual=estoque_obj.quantidade,
-                            observacoes=f'Entrada NF {compra.numero_documento} - Finalidade {compra.finalidade}'
-                        )
-                    except Exception as kex:
-                        print(f"Erro ao registrar Kardex: {kex}")
+                        print(f'[DEBUG_ESTOQUE] Novo estoque criado com custo médio: {custo_unit_estoque}')
             compra.save()
 
             # Verifica se operação gera financeiro
@@ -509,34 +408,10 @@ class CompraSerializer(serializers.ModelSerializer):
                 else:
                     item_data['quantidade_fracionada'] = None
 
-                # Salvar impostos do item
-                if 'vipi' in item_data or 'valor_ipi' in item_data:
-                    item_data['valor_ipi'] = Decimal(str(item_data.get('vipi') or item_data.get('valor_ipi') or 0))
-                if 'vicms' in item_data or 'valor_icms' in item_data:
-                    item_data['valor_icms'] = Decimal(str(item_data.get('vicms') or item_data.get('valor_icms') or 0))
-                if 'vpis' in item_data or 'valor_pis' in item_data:
-                    item_data['valor_pis'] = Decimal(str(item_data.get('vpis') or item_data.get('valor_pis') or 0))
-                if 'vcofins' in item_data or 'valor_cofins' in item_data:
-                    item_data['valor_cofins'] = Decimal(str(item_data.get('vcofins') or item_data.get('valor_cofins') or 0))
-
-                campos_validos_item = {
-                    'id_compra': instance,
-                    'id_produto': item_data.get('id_produto'),
-                    'quantidade': item_data.get('quantidade', 0),
-                    'quantidade_fracionada': item_data.get('quantidade_fracionada'),
-                    'fracao_aplicada': item_data.get('fracao_aplicada'),
-                    'valor_compra': item_data.get('valor_compra', 0),
-                    'valor_total': item_data.get('valor_total', 0),
-                    'desconto': item_data.get('desconto', 0),
-                    'valor_ipi': item_data.get('valor_ipi', 0),
-                    'valor_icms': item_data.get('valor_icms', 0),
-                    'valor_pis': item_data.get('valor_pis', 0),
-                    'valor_cofins': item_data.get('valor_cofins', 0),
-                    'chave_origem': item_data.get('chave_origem'),
-                    'n_item_origem': item_data.get('n_item_origem'),
-                }
-
-                CompraItem.objects.create(**campos_validos_item)
+                CompraItem.objects.create(id_compra=instance, **{
+                    k: v for k, v in item_data.items()
+                    if k not in ('_ean', 'ean', '_cfop_original', '_encontrado', '_vicms', '_vipi', '_vpis', '_vcofins')
+                })
 
                 # Salvar/atualizar fração por fornecedor+produto quando fracao > 1
                 if fracao_memorizada and instance.id_fornecedor:
@@ -558,53 +433,36 @@ class CompraSerializer(serializers.ModelSerializer):
                         except Exception as _fe:
                             print(f'[FRACAO] erro ao salvar fracao no update: {_fe}')
 
-                # Definir se movimenta estoque físico
-                operacao_obj = instance.id_operacao
-                op_inc_estoque = getattr(operacao_obj, 'incrementar_estoque', 1) if operacao_obj else 1
-                op_tipo_inc = getattr(operacao_obj, 'tipo_estoque_incremento', 'Deposito') if operacao_obj else 'Deposito'
-                op_gera_estoque = (op_inc_estoque not in [0, '0', False]) and (str(op_tipo_inc).strip().lower() not in ['nenhum', '0', 'none', ''])
-                compra_movimenta = getattr(instance, 'movimenta_estoque_fisico', True)
-
-                movimenta_estoque = compra_movimenta and op_gera_estoque
+                # Atualizar estoque com novo item
+                id_produto = item_data['id_produto']
+                quantidade = Decimal(str(item_data['quantidade']))
+                valor_compra = Decimal(str(item_data.get('valor_compra') or item_data.get('valor_unitario') or 0))
 
                 try:
-                    estoque_obj = Estoque.objects.filter(
+                    estoque_obj = Estoque.objects.get(
                         id_produto=id_produto,
                         id_deposito_id=novo_deposito_id
-                    ).first()
-                    if not estoque_obj:
-                        estoque_obj = Estoque.objects.filter(id_produto=id_produto).first()
-
-                    if estoque_obj:
-                        qtd_estoque_decimal = Decimal(str(estoque_obj.quantidade or 0))
-                        custo_medio_atual = Decimal(str(estoque_obj.custo_medio or 0))
-
-                        if not movimenta_estoque:
-                            nova_quantidade = qtd_estoque_decimal
-                            novo_custo_medio = custo_medio_atual
-                        else:
-                            nova_quantidade = qtd_estoque_decimal + quantidade
-                            valor_estoque_atual = qtd_estoque_decimal * custo_medio_atual
-                            valor_nova_compra = quantidade * valor_compra
-                            novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else valor_compra
-
-                        estoque_obj.quantidade = nova_quantidade
-                        estoque_obj.custo_medio = novo_custo_medio.quantize(Decimal('0.0001'))
-                        estoque_obj.valor_ultima_compra = valor_compra
-                        estoque_obj.valor_total = (nova_quantidade * novo_custo_medio).quantize(Decimal('0.0001'))
-                        estoque_obj.save()
-                    else:
-                        qtd_init = Decimal('0.000') if not movimenta_estoque else quantidade
-                        Estoque.objects.create(
-                            id_produto=id_produto,
-                            id_deposito_id=novo_deposito_id,
-                            quantidade=qtd_init,
-                            custo_medio=valor_compra,
-                            valor_ultima_compra=valor_compra,
-                            valor_total=(qtd_init * valor_compra).quantize(Decimal('0.0001'))
-                        )
-                except Exception as e_est:
-                    print(f"[ERRO] Falha ao atualizar estoque no update: {e_est}")
+                    )
+                    qtd_estoque_decimal = Decimal(str(estoque_obj.quantidade or 0))
+                    custo_medio_atual = Decimal(str(estoque_obj.custo_medio or 0))
+                    nova_quantidade = qtd_estoque_decimal + quantidade
+                    valor_estoque_atual = qtd_estoque_decimal * custo_medio_atual
+                    valor_nova_compra = quantidade * valor_compra
+                    novo_custo_medio = (valor_estoque_atual + valor_nova_compra) / nova_quantidade if nova_quantidade > 0 else valor_compra
+                    estoque_obj.quantidade = nova_quantidade
+                    estoque_obj.custo_medio = novo_custo_medio.quantize(Decimal('0.0001'))
+                    estoque_obj.valor_ultima_compra = valor_compra
+                    estoque_obj.valor_total = nova_quantidade * novo_custo_medio
+                    estoque_obj.save()
+                except Estoque.DoesNotExist:
+                    Estoque.objects.create(
+                        id_produto=id_produto,
+                        id_deposito_id=novo_deposito_id,
+                        quantidade=quantidade,
+                        custo_medio=valor_compra,
+                        valor_ultima_compra=valor_compra,
+                        valor_total=quantidade * valor_compra
+                    )
             
             # Deletar financeiros pendentes antigos
             financeiros.filter(status_conta='Pendente').delete()
@@ -638,29 +496,12 @@ class CompraViewSet(viewsets.ModelViewSet):
         except serializers.ValidationError as e:
             print(f"ERRO DE VALIDAÇÃO: {e}")
             print("="*80)
-            if hasattr(e, 'detail') and isinstance(e.detail, dict):
-                msgs = []
-                for field, errors in e.detail.items():
-                    err_str = ", ".join([str(err) for err in errors]) if isinstance(errors, list) else str(errors)
-                    if field == 'dados_entrada':
-                        msgs.append(f"Chave NF-e ({err_str})")
-                    elif field == 'id_fornecedor':
-                        msgs.append(f"Fornecedor: {err_str}")
-                    elif field == 'id_operacao':
-                        msgs.append(f"Operação: {err_str}")
-                    else:
-                        msgs.append(f"{field}: {err_str}")
-                clean_msg = " | ".join(msgs)
-            elif hasattr(e, 'detail') and isinstance(e.detail, list):
-                clean_msg = ", ".join([str(err) for err in e.detail])
-            else:
-                clean_msg = str(e)
-            return Response({'erro': clean_msg, 'message': clean_msg, 'detail': clean_msg}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'erro': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             print(f"[CREATE_COMPRA_v5] ERRO: {type(e).__name__}: {e}")
             traceback.print_exc()
             print("="*80)
-            return Response({'erro': str(e), 'message': str(e), 'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'erro': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'])
     def importar_xml(self, request):
@@ -677,33 +518,25 @@ class CompraViewSet(viewsets.ModelViewSet):
             # Lê conteúdo completo do XML
             xml_bytes = xml_file.read()
             
-            # Tenta decodificar com detecção robusta de codificação (BOM UTF-16, UTF-8, Latin-1)
-            xml_conteudo_str = ""
-            if xml_bytes.startswith(b'\xff\xfe') or xml_bytes.startswith(b'\xfe\xff'):
-                try:
-                    xml_conteudo_str = xml_bytes.decode('utf-16')
-                except Exception:
-                    xml_conteudo_str = xml_bytes.decode('utf-16-le', errors='replace')
-            else:
-                try:
-                    xml_conteudo_str = xml_bytes.decode('utf-8')
-                except UnicodeDecodeError:
-                    try:
-                        xml_conteudo_str = xml_bytes.decode('utf-16', errors='replace')
-                    except Exception:
-                        xml_conteudo_str = xml_bytes.decode('latin-1', errors='replace')
+            # Tenta decodificar de várias formas
+            try:
+                xml_conteudo_str = xml_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                xml_conteudo_str = xml_bytes.decode('latin-1', errors='replace')
+            
+            # Remove declaração de encoding se existir para evitar conflito com ET
+            if 'encoding="UTF-8"' in xml_conteudo_str or "encoding='UTF-8'" in xml_conteudo_str:
+                # ET.parse lida, mas às vezes stringIO precisa cuidado. 
+                # Vamos usar BytesIO direto no xml_bytes original para segurança
+                pass
 
-            # Garantir limpeza de declaração encoding no cabeçalho se houver incompatibilidade de string
-            import re as _re
-            clean_xml_str = _re.sub(r'<\?xml[^>]+\?>', '<?xml version="1.0" encoding="UTF-8"?>', xml_conteudo_str, count=1)
+            xml_file_io = io.BytesIO(xml_bytes)
 
             try:
-                root = ET.fromstring(clean_xml_str.encode('utf-8'))
+                tree = ET.parse(xml_file_io)
+                root = tree.getroot()
             except ET.ParseError as e:
-                try:
-                    root = ET.fromstring(xml_conteudo_str.encode('utf-8'))
-                except ET.ParseError as e2:
-                    return Response({'error': f'Erro ao ler XML: {str(e2)}'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': f'Erro ao ler XML: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
             
             # Namespace da NF-e (tenta com e sem namespace)
             ns = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
@@ -785,116 +618,6 @@ class CompraViewSet(viewsets.ModelViewSet):
             numero_nf = get_text(ide, 'nNF')
             data_emissao = get_text(ide, 'dhEmi')
             
-            # Finalidade e Débito (RTC / Reforma)
-            fin_nfe = get_text(ide, 'finNFe', '1')
-            tp_debito = get_text(ide, 'tpNFDebito', '')
-
-            # Extrair chave NFe da própria nota atual FIRST
-            chave_nfe = ''
-            id_attr = infNFe.get('Id', '') if infNFe is not None else ''
-            if id_attr:
-                chave_nfe = id_attr.replace('NFe', '').strip()
-            if not chave_nfe:
-                chave_nfe = get_text(infNFe, 'chNFe', '').strip()
-
-            # Extraction ultra-inteligente de chaves referenciadas (<chaveAcesso>, <refNFe>, <DFeReferenciado>)
-            chaves_referenciadas_encontradas = []
-            numeros_nf_referenciados = []
-
-            # 1. Varredura direta de nós específicos de referência (<chaveAcesso>, <refNFe>, <refNFCe>, <DFeReferenciado>)
-            import re as _re
-            for elem in root.iter():
-                tag_clean = elem.tag.split('}')[-1].lower()
-                if tag_clean in ['chaveacesso', 'refnfe', 'refnfce', 'refcte']:
-                    val_raw = (elem.text or '').strip()
-                    val_digits = _re.sub(r'\D', '', val_raw) if val_raw else ''
-                    if len(val_digits) == 44 and val_digits != chave_nfe:
-                        if val_digits not in chaves_referenciadas_encontradas:
-                            chaves_referenciadas_encontradas.append(val_digits)
-
-                if tag_clean in ['refnf', 'dfereferenciado']:
-                    for child in elem:
-                        child_tag = child.tag.split('}')[-1].lower()
-                        if child_tag == 'nnf' and child.text:
-                            num_clean = _re.sub(r'\D', '', child.text)
-                            if num_clean and num_clean not in numeros_nf_referenciados:
-                                numeros_nf_referenciados.append(num_clean)
-
-            # 2. Fallback regex em todo o XML para quaisquer outros 44 dígitos que não sejam a própria chave da nota
-            if not chaves_referenciadas_encontradas:
-                try:
-                    raw_xml_str = ET.tostring(root, encoding='utf-8').decode('utf-8', errors='ignore')
-                    all_44_digits = _re.findall(r'\b\d{44}\b', raw_xml_str)
-                    for d44 in all_44_digits:
-                        if d44 != chave_nfe and d44 not in chaves_referenciadas_encontradas:
-                            chaves_referenciadas_encontradas.append(d44)
-                except Exception:
-                    pass
-
-            chave_referenciada_global = chaves_referenciadas_encontradas[0] if chaves_referenciadas_encontradas else ''
-
-            # Busca ultra-inteligente da Nota de Origem no banco de dados
-            compra_origem_sugerida = None
-            from django.db.models import Q
-
-            # Estratégia 1: Busca pelas chaves de 44 dígitos encontradas no XML
-            for ch_ref in chaves_referenciadas_encontradas:
-                c_orig = Compra.objects.filter(
-                    Q(dados_entrada=ch_ref) | Q(dados_entrada__icontains=ch_ref)
-                ).first()
-
-                # Se não achou pela chave completa, extrai o número da nota (posições 25:34)
-                if not c_orig and len(ch_ref) == 44:
-                    try:
-                        n_nf_ref = str(int(ch_ref[25:34]))  # Remove zeros à esquerda (ex: 000057329 -> 57329)
-                        cnpj_ref = ch_ref[6:20]
-                        c_orig = Compra.objects.filter(numero_documento__icontains=n_nf_ref).filter(
-                            Q(id_fornecedor__cpf_cnpj__icontains=cnpj_ref) | Q(id_fornecedor_id=id_fornecedor) | Q(dados_entrada__icontains=n_nf_ref)
-                        ).first()
-                        if not c_orig:
-                            c_orig = Compra.objects.filter(numero_documento=n_nf_ref).first()
-                    except Exception:
-                        pass
-
-                if c_orig:
-                    compra_origem_sugerida = {
-                        'id_compra': c_orig.id_compra,
-                        'numero_documento': c_orig.numero_documento,
-                        'data_entrada': str(c_orig.data_entrada) if c_orig.data_entrada else '',
-                        'valor_total': float(c_orig.valor_total or 0),
-                        'chave_nfe': c_orig.dados_entrada or ch_ref,
-                        'fornecedor_nome': c_orig.id_fornecedor.nome_razao_social if c_orig.id_fornecedor else ''
-                    }
-                    if not chave_referenciada_global:
-                        chave_referenciada_global = ch_ref
-                    break
-
-            # Estratégia 2: Se não achou por chave, busca pelos números de nota referenciados (ex: <refNF>)
-            if not compra_origem_sugerida and numeros_nf_referenciados:
-                for n_ref in numeros_nf_referenciados:
-                    c_orig = Compra.objects.filter(numero_documento__icontains=n_ref).filter(
-                        Q(id_fornecedor_id=id_fornecedor) | Q(id_fornecedor__cpf_cnpj__icontains=cnpj_emit)
-                    ).first()
-                    if not c_orig:
-                        c_orig = Compra.objects.filter(numero_documento=n_ref).first()
-                    if c_orig:
-                        compra_origem_sugerida = {
-                            'id_compra': c_orig.id_compra,
-                            'numero_documento': c_orig.numero_documento,
-                            'data_entrada': str(c_orig.data_entrada) if c_orig.data_entrada else '',
-                            'valor_total': float(c_orig.valor_total or 0),
-                            'chave_nfe': c_orig.dados_entrada or '',
-                            'fornecedor_nome': c_orig.id_fornecedor.nome_razao_social if c_orig.id_fornecedor else ''
-                        }
-                        break
-
-            # Definição automática de comportamento para Nota de Débito (finNFe = 6)
-            movimenta_estoque_fisico = True
-            ajuste_custo = False
-            if fin_nfe == '6':
-                movimenta_estoque_fisico = False
-                ajuste_custo = True
-            
             # Extrair chave NFe corretamente
             chave_nfe = ''
             # Tenta pegar do atributo Id
@@ -972,13 +695,6 @@ class CompraViewSet(viewsets.ModelViewSet):
                 if fornecedor:
                     fornecedor_nome = fornecedor.nome_razao_social
                     id_fornecedor = fornecedor.id_fornecedor
-                    # Se fornecedor existe mas não tem código IBGE, atualizar do XML
-                    enderEmit = get_node(emit, 'enderEmit')
-                    if enderEmit is not None and not getattr(fornecedor, 'codigo_municipio_ibge', None):
-                        cMun_val = get_text(enderEmit, 'cMun')
-                        if cMun_val:
-                            fornecedor.codigo_municipio_ibge = cMun_val.strip()[:7]
-                            fornecedor.save(update_fields=['codigo_municipio_ibge'])
                 elif nome_emit:
                     enderEmit = get_node(emit, 'enderEmit')
                     telefone = ''
@@ -988,7 +704,6 @@ class CompraViewSet(viewsets.ModelViewSet):
                     cidade = ''
                     estado = ''
                     cep = ''
-                    cMun = ''
 
                     if enderEmit is not None:
                         telefone = get_text(enderEmit, 'fone')
@@ -998,7 +713,6 @@ class CompraViewSet(viewsets.ModelViewSet):
                         cidade = get_text(enderEmit, 'xMun')
                         estado = get_text(enderEmit, 'UF')
                         cep = get_text(enderEmit, 'CEP')
-                        cMun = get_text(enderEmit, 'cMun')
 
                     try:
                         fornecedor = Fornecedor.objects.create(
@@ -1012,7 +726,6 @@ class CompraViewSet(viewsets.ModelViewSet):
                             cidade=cidade or '',
                             estado=estado or '',
                             cep=cep or '',
-                            codigo_municipio_ibge=cMun or '',
                         )
                         fornecedor_criado = True
                         fornecedor_nome = nome_emit
@@ -1027,9 +740,6 @@ class CompraViewSet(viewsets.ModelViewSet):
                                     fornecedor = _f
                                     fornecedor_nome = _f.nome_razao_social or nome_emit
                                     id_fornecedor = _f.id_fornecedor
-                                    if cMun and not _f.codigo_municipio_ibge:
-                                        _f.codigo_municipio_ibge = cMun.strip()[:7]
-                                        _f.save(update_fields=['codigo_municipio_ibge'])
                                     break
 
             # Itens
@@ -1047,16 +757,6 @@ class CompraViewSet(viewsets.ModelViewSet):
                     cfop_orig = get_text(prod, 'CFOP')
                     unidade = get_text(prod, 'uCom')
 
-                    # Leitura de vínculos item a item (DFeReferenciado)
-                    dfe_ref = get_node(det, 'DFeReferenciado')
-                    chave_origem_item = ''
-                    n_item_origem_item = None
-                    if dfe_ref is not None:
-                        chave_origem_item = get_text(dfe_ref, 'chaveAcesso', '') or get_text(dfe_ref, 'refNFe', '')
-                        n_item_ref_str = get_text(dfe_ref, 'nItem', '')
-                        if n_item_ref_str and n_item_ref_str.isdigit():
-                            n_item_origem_item = int(n_item_ref_str)
-
                     # Converter CFOP para entrada (5→1, 6→2, 7→3)
                     cfop_entrada = cfop_orig
                     if cfop_orig and len(cfop_orig) > 0 and cfop_orig[0] in ('5', '6', '7'):
@@ -1070,11 +770,8 @@ class CompraViewSet(viewsets.ModelViewSet):
                     vbc_icms = 0.0
                     picms = 0.0
                     vicms = 0.0
-                    cst_ipi_orig = ''
                     vipi = 0.0
-                    cst_pis_orig = ''
                     vpis = 0.0
-                    cst_cofins_orig = ''
                     vcofins = 0.0
 
                     if imposto is not None:
@@ -1105,21 +802,10 @@ class CompraViewSet(viewsets.ModelViewSet):
                         # IPI
                         ipi_node = get_node(imposto, 'IPI')
                         if ipi_node is not None:
-                            for child in ipi_node:
-                                cst_ipi_el = get_node(child, 'CST')
-                                if cst_ipi_el is not None and cst_ipi_el.text:
-                                    cst_ipi_orig = cst_ipi_el.text.strip()
-                                    break
-                            
                             vipi_el = get_node(ipi_node, 'vIPI') # Pode estar dentro de IPITrib
                             if vipi_el is None:
                                 ipi_trib = get_node(ipi_node, 'IPITrib')
-                                if ipi_trib: 
-                                    vipi_el = get_node(ipi_trib, 'vIPI')
-                                    if not cst_ipi_orig:
-                                        cst_ipi_trib_el = get_node(ipi_trib, 'CST')
-                                        if cst_ipi_trib_el is not None and cst_ipi_trib_el.text:
-                                            cst_ipi_orig = cst_ipi_trib_el.text.strip()
+                                if ipi_trib: vipi_el = get_node(ipi_trib, 'vIPI')
                             
                             if vipi_el is not None:
                                 try: vipi = float(vipi_el.text)
@@ -1128,40 +814,23 @@ class CompraViewSet(viewsets.ModelViewSet):
                         # PIS
                         pis_node = get_node(imposto, 'PIS')
                         if pis_node is not None:
-                            # Geralmente PISAliq, PISNT, PISOutr etc.
+                            # Geralmente PISAliq ou PISOutr
                             for child in pis_node:
-                                cst_pis_el = get_node(child, 'CST')
-                                if cst_pis_el is not None and cst_pis_el.text:
-                                    cst_pis_orig = cst_pis_el.text.strip()
                                 vpis_el = get_node(child, 'vPIS')
                                 if vpis_el is not None:
                                     try: vpis = float(vpis_el.text)
                                     except: pass
-                                if cst_pis_orig:
                                     break
 
                         # COFINS
                         cofins_node = get_node(imposto, 'COFINS')
                         if cofins_node is not None:
                             for child in cofins_node:
-                                cst_cofins_el = get_node(child, 'CST')
-                                if cst_cofins_el is not None and cst_cofins_el.text:
-                                    cst_cofins_orig = cst_cofins_el.text.strip()
                                 vcofins_el = get_node(child, 'vCOFINS')
                                 if vcofins_el is not None:
                                     try: vcofins = float(vcofins_el.text)
                                     except: pass
-                                if cst_cofins_orig:
                                     break
-
-                    # Conversão automática de CST de Saída para CST de Entrada
-                    from api.services.tax_converter import (
-                        converter_cst_pis_cofins_entrada,
-                        converter_cst_ipi_entrada
-                    )
-                    cst_ipi_entrada = converter_cst_ipi_entrada(cst_ipi_orig, padrao_se_vazio='00' if vipi > 0 else '49')
-                    cst_pis_entrada = converter_cst_pis_cofins_entrada(cst_pis_orig, padrao_se_vazio='50' if vpis > 0 else '70')
-                    cst_cofins_entrada = converter_cst_pis_cofins_entrada(cst_cofins_orig, padrao_se_vazio='50' if vcofins > 0 else '70')
 
                     # Buscar produto no banco pelo código
                     # Prioridade: 1) EAN/Código de barras, 2) Código do produto, 3) Referência
@@ -1260,49 +929,13 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'vbc_icms': vbc_icms,
                         'picms': picms,
                         'vicms': vicms,
-                        'cst_ipi': cst_ipi_entrada,
-                        'cst_ipi_original': cst_ipi_orig,
                         'vipi': vipi,
-                        'cst_pis': cst_pis_entrada,
-                        'cst_pis_original': cst_pis_orig,
                         'vpis': vpis,
-                        'cst_cofins': cst_cofins_entrada,
-                        'cst_cofins_original': cst_cofins_orig,
                         'vcofins': vcofins,
                         'id_produto': produto_db.id_produto if produto_db else None,
-                        'produto_encontrado': produto_db is not None,  # Flag indicando se o produto foi encontrado
-                        'chave_origem': chave_origem_item or chave_referenciada_global,
-                        'n_item_origem': n_item_origem_item,
+                        'produto_encontrado': produto_db is not None  # Flag indicando se o produto foi encontrado
                     })
             
-            # Buscar compras do fornecedor ou compras recentes do sistema para escolha manual
-            compras_fornecedor_opcoes = []
-            ids_inseridos = set()
-
-            if id_fornecedor:
-                qs_forn = Compra.objects.filter(id_fornecedor_id=id_fornecedor).order_by('-id_compra')[:20]
-                for cf in qs_forn:
-                    ids_inseridos.add(cf.id_compra)
-                    compras_fornecedor_opcoes.append({
-                        'id_compra': cf.id_compra,
-                        'numero_documento': cf.numero_documento or f"#{cf.id_compra}",
-                        'data_entrada': str(cf.data_entrada) if cf.data_entrada else '',
-                        'valor_total': float(cf.valor_total or 0),
-                        'chave_nfe': cf.dados_entrada or ''
-                    })
-
-            # Adicionar compras recentes do sistema como fallback
-            qs_geral = Compra.objects.exclude(id_compra__in=ids_inseridos).order_by('-id_compra')[:30]
-            for cf in qs_geral:
-                forn_nome = cf.id_fornecedor.nome_razao_social if cf.id_fornecedor else ''
-                compras_fornecedor_opcoes.append({
-                    'id_compra': cf.id_compra,
-                    'numero_documento': f"{cf.numero_documento or '#' + str(cf.id_compra)} ({forn_nome})",
-                    'data_entrada': str(cf.data_entrada) if cf.data_entrada else '',
-                    'valor_total': float(cf.valor_total or 0),
-                    'chave_nfe': cf.dados_entrada or ''
-                })
-
             return Response({
                 'numero_nf': numero_nf,
                 'numero_documento': numero_nf,  # Alias para compatibilidade
@@ -1314,15 +947,6 @@ class CompraViewSet(viewsets.ModelViewSet):
                 'fornecedor_nome': fornecedor_nome,
                 'fornecedor_criado': fornecedor_criado,
                 
-                # Suporte a Nota de Débito (finNFe = 6) / RTC / Reforma
-                'finalidade': fin_nfe,
-                'tipo_debito': tp_debito,
-                'chave_referenciada': chave_referenciada_global,
-                'movimenta_estoque_fisico': movimenta_estoque_fisico,
-                'ajuste_custo': ajuste_custo,
-                'compra_origem_sugerida': compra_origem_sugerida,
-                'compras_fornecedor_opcoes': compras_fornecedor_opcoes,
-
                 # Totais da NF-e
                 'valor_total': valor_total,
                 'valor_produtos': valor_produtos,
@@ -1646,7 +1270,6 @@ class CompraViewSet(viewsets.ModelViewSet):
                     id_produto = item.get('id_produto')
                     id_deposito = item.get('id_deposito', 1)
                     valor_venda = Decimal(str(item.get('valor_venda', 0)))
-                    valor_custo_raw = item.get('valor_custo') or item.get('custo_total') or item.get('valor_compra')
                     
                     if valor_venda <= 0:
                         itens_erro.append({
@@ -1655,26 +1278,26 @@ class CompraViewSet(viewsets.ModelViewSet):
                         })
                         continue
                     
-                    # Atualizar valor_venda em TODOS os depósitos do produto
-                    Estoque.objects.filter(id_produto_id=id_produto).update(valor_venda=valor_venda)
-
-                    # Se foi informado custo total (ex: Nota de Débito com custo acumulado), atualizar custo_medio e valor_ultima_compra em todos os depósitos
-                    if valor_custo_raw:
-                        try:
-                            v_custo_dec = Decimal(str(valor_custo_raw)).quantize(Decimal('0.0001'))
-                            if v_custo_dec > 0:
-                                Estoque.objects.filter(id_produto_id=id_produto).update(
-                                    custo_medio=v_custo_dec,
-                                    valor_ultima_compra=v_custo_dec
-                                )
-                        except Exception as _ce:
-                            print(f"[PRECIFICACAO] Erro ao atualizar custo: {_ce}")
+                    # Busca ou cria estoque
+                    estoque, created = Estoque.objects.get_or_create(
+                        id_produto_id=id_produto,
+                        id_deposito_id=id_deposito,
+                        defaults={
+                            'quantidade': Decimal('0'),
+                            'custo_medio': Decimal('0'),
+                            'valor_venda': valor_venda
+                        }
+                    )
+                    
+                    if not created:
+                        estoque.valor_venda = valor_venda
+                        estoque.save()
                     
                     itens_atualizados.append({
                         'id_produto': id_produto,
                         'id_deposito': id_deposito,
                         'valor_venda': str(valor_venda),
-                        'status': 'atualizado'
+                        'status': 'criado' if created else 'atualizado'
                     })
                     
                 except (InvalidOperation, ValueError, TypeError, Estoque.DoesNotExist) as e:
@@ -1710,53 +1333,24 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'detail': 'Para excluir esta compra, primeiro estorne os pagamentos no módulo Financeiro.'
                     }, status=status.HTTP_403_FORBIDDEN)
 
-            # Abate estoque dos itens apenas se a operação gerava estoque físico
+            # Abate estoque dos itens
             operacao = compra.id_operacao
-            op_inc_estoque = getattr(operacao, 'incrementar_estoque', 1) if operacao else 1
-            op_tipo_inc = getattr(operacao, 'tipo_estoque_incremento', 'Deposito') if operacao else 'Deposito'
-            op_gera_estoque = (op_inc_estoque not in [0, '0', False]) and (str(op_tipo_inc).strip().lower() not in ['nenhum', '0', 'none', ''])
-            compra_movimenta = getattr(compra, 'movimenta_estoque_fisico', True)
-
-            movimenta_estoque = compra_movimenta and op_gera_estoque
             itens = compra.itens.all()
             deposito_id = getattr(operacao, 'id_deposito_incremento', None) or 1
             
             with transaction.atomic():
-                # 1. Abate estoque dos produtos apenas se a compra incrementou o estoque
+                # 1. Abate estoque dos produtos
                 for item in itens:
                     produto = item.id_produto
                     if produto:
-                        if movimenta_estoque:
-                            try:
-                                estoque_obj = Estoque.objects.filter(id_produto=produto, id_deposito_id=deposito_id).first()
-                                if estoque_obj:
-                                    estoque_obj.quantidade = max(Decimal('0'), (estoque_obj.quantidade or Decimal('0')) - item.quantidade)
-                                    estoque_obj.save()
-                            except Exception as _e_q:
-                                print(f"[DESTAQUE_DELECAO] Erro ao abater quantidade: {_e_q}")
-
-                        # 2. Reverter custo_medio e valor_ultima_compra para o valor da compra anterior
                         try:
-                            item_anterior = CompraItem.objects.filter(
-                                id_produto=produto
-                            ).exclude(
-                                id_compra=compra.pk
-                            ).order_by('-id_item').first()
-
-                            if item_anterior and item_anterior.valor_compra:
-                                custo_revertido = Decimal(str(item_anterior.valor_compra)).quantize(Decimal('0.0001'))
-                            else:
-                                custo_revertido = Decimal('0.0000')
-
-                            Estoque.objects.filter(id_produto=produto).update(
-                                valor_ultima_compra=custo_revertido,
-                                custo_medio=custo_revertido
-                            )
-                            print(f"🔄 Custo do produto {produto.id_produto} ({produto.nome_produto}) revertido para R$ {custo_revertido}")
-                        except Exception as _e_c:
-                            print(f"[DESTAQUE_DELECAO] Erro ao reverter custo: {_e_c}")
+                            estoque_obj = Estoque.objects.get(id_produto=produto, id_deposito_id=deposito_id)
+                            estoque_obj.quantidade = (estoque_obj.quantidade or Decimal('0')) - item.quantidade
+                            estoque_obj.save()
+                        except Estoque.DoesNotExist:
+                            pass
                 
-                # 3. Exclui financeiros pendentes (se houver)
+                # 2. Exclui financeiros pendentes (se houver)
                 if financeiros.exists():
                     financeiros.delete()
                 

@@ -101,3 +101,29 @@ class ApiConfig(AppConfig):
 
             import threading
             threading.Thread(target=_iniciar_desktop_listener, daemon=True).start()
+
+            # ── Auto-inicia Monitor SEFAZ TecnoSpeed em background ──────────────
+            def _iniciar_monitor_sefaz_safe():
+                try:
+                    from api.services.tecnospeed_monitor import iniciar_monitor_sefaz
+                    iniciar_monitor_sefaz()
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        f"Monitor SEFAZ não pôde ser iniciado: {exc}"
+                    )
+
+            threading.Thread(target=_iniciar_monitor_sefaz_safe, daemon=True).start()
+
+            # ── Auto-inicia Coletor de Métricas de Infraestrutura em background ──
+            def _iniciar_monitor_infra_safe():
+                try:
+                    from api.services.infra_monitor import iniciar_monitor_infra
+                    iniciar_monitor_infra()
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        f"Coletor de Infraestrutura não pôde ser iniciado: {exc}"
+                    )
+
+            threading.Thread(target=_iniciar_monitor_infra_safe, daemon=True).start()

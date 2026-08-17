@@ -59,11 +59,8 @@ import {
   ExpandMore as ExpandMoreIcon,
   KeyboardArrowUp as KeyboardArrowUpIcon,
   FilterList as FilterListIcon,
-  Edit as EditIcon,
-  Visibility as VisibilityIcon,
   WhatsApp as WhatsAppIcon,
-  Email as EmailIcon,
-  Autorenew as AutorenewIcon
+  Email as EmailIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
@@ -73,7 +70,6 @@ import WhatsAppQuickSend, { useWhatsAppTemplates } from '../components/WhatsAppQ
 import CartaCorrecaoDialog from '../components/CartaCorrecaoDialog';
 import ComplementoICMSDialog from '../components/ComplementoICMSDialog';
 import EmailDocumentoDialog from '../components/EmailDocumentoDialog';
-import ClienteFormModal from '../components/ClienteFormModal';
 
 const NFePage = () => {
     const theme = useTheme();
@@ -216,132 +212,6 @@ const NFePage = () => {
         }
     };
 
-    // Estado para Alerta Inteligente de Cliente Incompleto para NF-e
-    const [clienteIncompletoDialog, setClienteIncompletoDialog] = useState({
-        open: false,
-        vendaId: null,
-        contingencia: false,
-        cliente: null,
-        pendencias: []
-    });
-    const [openModalEditarCliente, setOpenModalEditarCliente] = useState(false);
-    const [clienteParaEditarNFe, setClienteParaEditarNFe] = useState(null);
-
-    const validarClienteParaNFe = (clienteData) => {
-        const pendencias = [];
-        if (!clienteData) {
-            return ['Cliente não cadastrado ou não informado na venda'];
-        }
-
-        const nome = (clienteData.nome_razao_social || clienteData.nome || clienteData.razao_social || '').trim();
-        const cpfCnpj = String(clienteData.cpf_cnpj || clienteData.cnpj || clienteData.cpf || '').replace(/\D/g, '');
-        const cep = String(clienteData.cep || '').replace(/\D/g, '');
-        const logradouro = (clienteData.logradouro || clienteData.endereco || '').trim();
-        const numero = (clienteData.numero || '').trim();
-        const bairro = (clienteData.bairro || '').trim();
-        const cidade = (clienteData.cidade || clienteData.municipio || '').trim();
-        const uf = (clienteData.uf || clienteData.estado || '').trim();
-
-        if (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14)) {
-            pendencias.push('CPF/CNPJ não informado ou com formato inválido (exige 11 ou 14 dígitos)');
-        }
-
-        if (!nome || ['CONSUMIDOR', 'CONSUMIDOR FINAL', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', ''].includes(nome.toUpperCase())) {
-            pendencias.push('Razão Social / Nome Completo do cliente (Emissão de NF-e 55 exige destinatário identificado)');
-        }
-
-        if (!cep || cep.length !== 8) {
-            pendencias.push('CEP do endereço (8 dígitos)');
-        }
-
-        if (!logradouro) {
-            pendencias.push('Endereço / Logradouro');
-        }
-
-        if (!numero) {
-            pendencias.push('Número do endereço (Informe S/N se não houver)');
-        }
-
-        if (!bairro) {
-            pendencias.push('Bairro');
-        }
-
-        if (!cidade) {
-            pendencias.push('Cidade / Município');
-        }
-
-        if (!uf || uf.length !== 2) {
-            pendencias.push('UF / Estado (2 letras, ex: MG, SP)');
-        }
-
-        return pendencias;
-    };
-
-    const solicitarEmissaoNFeInteligente = async (vendaId, contingencia = false) => {
-        if (processingId) return;
-
-        const venda = vendas.find(v => (v.id_venda || v.id) === vendaId);
-        const idCliente = venda?.id_cliente || venda?.cliente_id;
-
-        let clienteData = null;
-        if (idCliente) {
-            try {
-                const respCli = await axiosInstance.get(`/clientes/${idCliente}/`);
-                clienteData = respCli.data;
-            } catch (err) {
-                console.warn('⚠️ Não foi possível buscar cliente completo para validação:', err);
-            }
-        }
-
-        const pendencias = validarClienteParaNFe(clienteData);
-
-        if (pendencias.length > 0) {
-            setClienteIncompletoDialog({
-                open: true,
-                vendaId: vendaId,
-                contingencia: contingencia,
-                cliente: clienteData,
-                pendencias: pendencias
-            });
-            return;
-        }
-
-        if (contingencia) {
-            handleEmitirNFeContingencia(vendaId);
-        } else {
-            handleEmitirNFe(vendaId);
-        }
-    };
-
-    const abrirEdicaoClienteIncompleto = () => {
-        setClienteParaEditarNFe(clienteIncompletoDialog.cliente);
-        setClienteIncompletoDialog(prev => ({ ...prev, open: false }));
-        setOpenModalEditarCliente(true);
-    };
-
-    const handleClienteSalvoNFe = async (clienteSalvo) => {
-        setOpenModalEditarCliente(false);
-        showToast(`Cadastro de ${clienteSalvo.nome_razao_social || 'cliente'} atualizado com sucesso!`, 'success');
-        fetchVendas();
-
-        const vendaId = clienteIncompletoDialog.vendaId;
-        const isContingencia = clienteIncompletoDialog.contingencia;
-
-        if (vendaId) {
-            const pendencias = validarClienteParaNFe(clienteSalvo);
-            if (pendencias.length === 0) {
-                showToast('Dados do cliente validados! Transmitindo NF-e...', 'info');
-                if (isContingencia) {
-                    handleEmitirNFeContingencia(vendaId);
-                } else {
-                    handleEmitirNFe(vendaId);
-                }
-            } else {
-                showToast('Alguns campos ainda precisam ser ajustados para a emissão.', 'warning');
-            }
-        }
-    };
-
     // Função de emissão
     const handleEmitirNFe = async (vendaId) => {
         if (processingId) return;
@@ -363,34 +233,6 @@ const NFePage = () => {
             console.error("❌ Erro na emissão:", err);
             const errorMsg = err.response?.data?.details || err.response?.data?.error || err.response?.data?.message || 'Erro desconhecido ao emitir';
             showToast(`Erro na emissão: ${errorMsg}`, 'error');
-            fetchVendas();
-        } finally {
-            setProcessingId(null);
-        }
-    };
-
-    const handleEmitirNFeContingencia = async (vendaId) => {
-        if (processingId) return;
-
-        setProcessingId(vendaId);
-        showToast('Solicitando emissão de NF-e em Contingência SVC-AN...', 'info');
-
-        try {
-            const response = await axiosInstance.post(`/vendas/${vendaId}/emitir_nfe/`, {
-                contingencia_svcan: true
-            });
-
-            console.log("⚡ Emissão em Contingência concluída:", response.data);
-
-            const msg = response.data.message || 'NF-e Emitida em Contingência SVC-AN com Sucesso!';
-            showToast(msg, 'success');
-
-            fetchVendas();
-
-        } catch (err) {
-            console.error("⚡ Erro na emissão em contingência:", err);
-            const errorMsg = err.response?.data?.details || err.response?.data?.error || err.response?.data?.message || 'Erro desconhecido ao emitir em contingência';
-            showToast(`Erro na emissão em contingência: ${errorMsg}`, 'error');
             fetchVendas();
         } finally {
             setProcessingId(null);
@@ -902,7 +744,6 @@ const NFePage = () => {
                                 <TableCell sx={{ width: 40 }} />
                                 <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>Nº Nota</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>Data Emissão</TableCell>
-                                <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>Operação</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>Destinatário</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>Valor Total</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', color: '#455a64' }}>Chave de Acesso</TableCell>
@@ -913,7 +754,7 @@ const NFePage = () => {
                         <TableBody>
                             {filteredVendas.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={9} align="center" sx={{ py: 6 }}>
+                                    <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                                         <Typography variant="h6" color="text.disabled">
                                             {searchTerm ? 'Nenhuma NF-e encontrada para a busca.' : 'Nenhuma NF-e encontrada.'}
                                         </Typography>
@@ -939,7 +780,7 @@ const NFePage = () => {
                                                     NF-e {venda.numero_nfe}
                                                 </Typography>
                                             ) : (
-                                                <Typography variant="body2" color="text.secondary">Pendente</Typography>
+                                                <Typography variant="body2" color="text.secondary">Thinking...</Typography>
                                             )}
                                              <Typography variant="caption" display="block" color="text.secondary">ID: {venda.id}</Typography>
                                         </TableCell>
@@ -947,15 +788,6 @@ const NFePage = () => {
                                             {venda.data_emissao 
                                                 ? new Date(venda.data_emissao).toLocaleString('pt-BR') 
                                                 : (venda.data_venda ? new Date(venda.data_venda).toLocaleString('pt-BR') : '-')}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Chip
-                                                label={venda.nome_operacao || venda.operacao_nome || (typeof venda.operacao === 'object' ? (venda.operacao?.nome_operacao || venda.operacao?.nome) : venda.operacao) || 'Venda (Mod.55)'}
-                                                size="small"
-                                                variant="outlined"
-                                                color="primary"
-                                                sx={{ fontSize: '0.75rem', fontWeight: 600, bgcolor: '#e3f2fd' }}
-                                            />
                                         </TableCell>
                                         <TableCell>
                                             {venda.cliente || venda.nome_cliente || 'Destinatário Desconhecido'}
@@ -983,29 +815,6 @@ const NFePage = () => {
                                                 flexWrap: 'nowrap',
                                                 minWidth: 'fit-content'
                                             }}>
-                                                {/* Botão de Editar Nota (só se não emitida/cancelada/inutilizada) */}
-                                                {venda.status_nfe !== 'EMITIDA' && venda.status_nfe !== 'CANCELADA' && venda.status_nfe !== 'INUTILIZADA' && (
-                                                     <Tooltip title="Editar Nota/Venda">
-                                                         <span>
-                                                             <IconButton
-                                                                 color="warning"
-                                                                 size="small"
-                                                                 onClick={() => {
-                                                                     navigate('/vendas', { 
-                                                                         state: { 
-                                                                             modo: 'editar', 
-                                                                             vendaId: venda.id_venda || venda.id 
-                                                                         } 
-                                                                     });
-                                                                 }}
-                                                                 disabled={!!processingId}
-                                                             >
-                                                                 <EditIcon fontSize="small" />
-                                                             </IconButton>
-                                                         </span>
-                                                     </Tooltip>
-                                                 )}
-
                                                 {/* Botão de Transmitir NF-e (só aparece quando NÃO emitida) */}
                                                 {venda.status_nfe !== 'EMITIDA' && venda.status_nfe !== 'CANCELADA' && venda.status_nfe !== 'INUTILIZADA' && (
                                                     <Tooltip title="Transmitir NF-e">
@@ -1013,7 +822,7 @@ const NFePage = () => {
                                                             <IconButton
                                                                 color="primary"
                                                                 size="small"
-                                                                onClick={() => solicitarEmissaoNFeInteligente(venda.id, false)}
+                                                                onClick={() => handleEmitirNFe(venda.id)}
                                                                 disabled={!!processingId}
                                                             >
                                                                 {processingId === venda.id ? (
@@ -1044,27 +853,6 @@ const NFePage = () => {
                                                     />
                                                 )}
 
-                                                 {/* Botão de Visualizar Nota (disponível para todas as notas) */}
-                                                 <Tooltip title="Visualizar Nota/Venda">
-                                                     <span>
-                                                         <IconButton
-                                                             color="info"
-                                                             size="small"
-                                                             onClick={() => {
-                                                                 navigate('/vendas', { 
-                                                                     state: { 
-                                                                         modo: 'visualizar', 
-                                                                         vendaId: venda.id_venda || venda.id 
-                                                                     } 
-                                                                 });
-                                                             }}
-                                                             disabled={!!processingId}
-                                                         >
-                                                             <VisibilityIcon fontSize="small" />
-                                                         </IconButton>
-                                                     </span>
-                                                 </Tooltip>
-
                                                 {/* Menu de opções */}
                                                 <Tooltip title="Mais opções">
                                                     <IconButton 
@@ -1079,7 +867,7 @@ const NFePage = () => {
                                         </TableCell>
                                     </TableRow>
                                     <TableRow>
-                                        <TableCell colSpan={9} sx={{ p: 0, borderBottom: expandedRows.has(venda.id) ? undefined : 'none' }}>
+                                        <TableCell colSpan={8} sx={{ p: 0, borderBottom: expandedRows.has(venda.id) ? undefined : 'none' }}>
                                             <Collapse in={expandedRows.has(venda.id)} unmountOnExit>
                                                 <Box sx={{ p: 2, bgcolor: 'grey.50' }}>
                                                     <Typography variant="subtitle2" gutterBottom fontWeight="bold">
@@ -1150,25 +938,6 @@ const NFePage = () => {
                         Enviar por E-mail
                     </MenuItem>
                 )}
-
-                {menuVenda && (
-                    <MenuItem 
-                        onClick={() => {
-                            const targetId = menuVenda.id_venda || menuVenda.id;
-                            navigate('/devolucoes/nova', { 
-                                state: { 
-                                    documentoId: String(targetId),
-                                    tipoDevolucao: 'venda'
-                                } 
-                            });
-                            handleMenuClose();
-                        }}
-                        sx={{ fontWeight: 600, color: '#1976d2' }}
-                    >
-                        <ListItemIcon><AutorenewIcon fontSize="small" color="primary" /></ListItemIcon>
-                        Gerar Devolução desta Nota
-                    </MenuItem>
-                )}
                 
                 <Divider />
                 
@@ -1185,53 +954,6 @@ const NFePage = () => {
                     </MenuItem>
                 )}
                 
-                {menuVenda && menuVenda.status_nfe !== 'EMITIDA' && menuVenda.status_nfe !== 'CANCELADA' && menuVenda.status_nfe !== 'INUTILIZADA' && (
-                     <MenuItem 
-                        onClick={() => {
-                            navigate('/vendas', { 
-                                state: { 
-                                    modo: 'editar', 
-                                    vendaId: menuVenda.id_venda || menuVenda.id 
-                                } 
-                            });
-                            handleMenuClose();
-                        }}
-                     >
-                        <ListItemIcon><EditIcon fontSize="small" color="warning" /></ListItemIcon>
-                        Editar Nota/Venda
-                    </MenuItem>
-                )}
-
-                 {menuVenda && (
-                      <MenuItem 
-                         onClick={() => {
-                             navigate('/vendas', { 
-                                 state: { 
-                                     modo: 'visualizar', 
-                                     vendaId: menuVenda.id_venda || menuVenda.id 
-                                 } 
-                             });
-                             handleMenuClose();
-                         }}
-                      >
-                         <ListItemIcon><VisibilityIcon fontSize="small" color="info" /></ListItemIcon>
-                         Visualizar Nota/Venda
-                     </MenuItem>
-                 )}
-
-                {menuVenda && menuVenda.status_nfe !== 'EMITIDA' && menuVenda.status_nfe !== 'CANCELADA' && menuVenda.status_nfe !== 'INUTILIZADA' && (
-                     <MenuItem 
-                        onClick={() => {
-                            solicitarEmissaoNFeInteligente(menuVenda.id_venda || menuVenda.id, true);
-                            handleMenuClose();
-                        }}
-                        sx={{ color: 'warning.main' }}
-                     >
-                        <ListItemIcon><WarningIcon fontSize="small" color="warning" /></ListItemIcon>
-                        Transmitir em Contingência SVC-AN
-                    </MenuItem>
-                )}
-
                 {menuVenda?.status_nfe !== 'EMITIDA' && menuVenda?.status_nfe !== 'CANCELADA' && (
                      <MenuItem onClick={handleOpenInutilizar}>
                         <ListItemIcon><BlockIcon fontSize="small" /></ListItemIcon>
@@ -1402,59 +1124,6 @@ const NFePage = () => {
                 temPdf={!!emailDialog.venda?.chave_nfe}
                 onSuccess={(msg) => showToast(msg, 'success')}
                 onError={(msg) => showToast(msg, 'error')}
-            />
-
-            {/* Dialog Alerta Inteligente: Cliente Incompleto para NF-e 55 */}
-            <Dialog
-                open={clienteIncompletoDialog.open}
-                onClose={() => setClienteIncompletoDialog(prev => ({ ...prev, open: false }))}
-                maxWidth="sm"
-                fullWidth
-            >
-                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'warning.main', fontWeight: 'bold' }}>
-                    <WarningIcon color="warning" />
-                    Cliente com dados incompletos
-                </DialogTitle>
-                <DialogContent>
-                    <Typography variant="body1" sx={{ mb: 1.5, fontWeight: 500 }}>
-                        Para prosseguir com a emissão da NF-e (Modelo 55), atualize o cadastro do cliente:
-                        <strong style={{ color: '#1565c0', marginLeft: '6px' }}>
-                            {clienteIncompletoDialog.cliente?.nome_razao_social || clienteIncompletoDialog.cliente?.nome || 'Cliente'}
-                        </strong>
-                    </Typography>
-
-                    <Box sx={{ bgcolor: '#fff8e1', border: '1px solid #ffe082', borderRadius: 2, p: 2, mb: 1 }}>
-                        <Typography variant="subtitle2" sx={{ color: '#b45309', fontWeight: 'bold', mb: 1 }}>
-                            📋 Campos obrigatórios pendentes para a NF-e:
-                        </Typography>
-                        {clienteIncompletoDialog.pendencias.map((p, idx) => (
-                            <Typography key={idx} variant="body2" sx={{ color: '#c2410c', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                                • {p}
-                            </Typography>
-                        ))}
-                    </Box>
-                </DialogContent>
-                <DialogActions sx={{ p: 2, pt: 0 }}>
-                    <Button onClick={() => setClienteIncompletoDialog(prev => ({ ...prev, open: false }))} color="inherit">
-                        Cancelar
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        startIcon={<EditIcon />}
-                        onClick={abrirEdicaoClienteIncompleto}
-                    >
-                        Editar e Salvar Cadastro do Cliente
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Modal de Cadastro Completo de Cliente */}
-            <ClienteFormModal
-                open={openModalEditarCliente}
-                onClose={() => setOpenModalEditarCliente(false)}
-                clienteToEdit={clienteParaEditarNFe}
-                onSaved={handleClienteSalvoNFe}
             />
         </Box>
     );

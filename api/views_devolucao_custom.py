@@ -379,40 +379,21 @@ def buscar_venda_view(request, id_venda):
                     v.chave_nfe
                 FROM vendas v
                 LEFT JOIN clientes c ON v.id_cliente = c.id_cliente
-                WHERE CAST(v.id_venda AS CHAR) = %s OR CAST(v.numero_documento AS CHAR) = %s OR CAST(v.numero_nfe AS CHAR) = %s
-            """, [str(id_venda), str(id_venda), str(id_venda)])
+                WHERE v.id_venda = %s
+            """, [id_venda])
 
             venda = cursor.fetchone()
 
             if not venda:
-                # Tentar buscar em compras caso a ID pertença a uma compra/entrada
-                cursor.execute("""
-                    SELECT
-                        c.id_compra,
-                        c.numero_nota,
-                        c.data_movimento_entrada,
-                        c.id_fornecedor,
-                        f.nome_razao_social as nome_fornecedor,
-                        COALESCE(c.valor_total_nota, 0) as valor_total,
-                        'FINALIZADA' as status_venda,
-                        c.chave_nfe
-                    FROM compras c
-                    LEFT JOIN fornecedores f ON c.id_fornecedor = f.id_fornecedor
-                    WHERE CAST(c.id_compra AS CHAR) = %s OR CAST(c.numero_nota AS CHAR) = %s
-                """, [str(id_venda), str(id_venda)])
-                compra_fallback = cursor.fetchone()
-                if compra_fallback:
-                    return buscar_compra_view(request._request, id_venda)
-
                 return Response(
-                    {'error': f'Venda/Nota ID "{id_venda}" não encontrada.'},
+                    {'error': 'Venda nao encontrada'},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-            real_id_venda = venda[0]
             chave_nfe_original = venda[7]
 
             # Buscar itens da venda com saldo residual calculado via vendas de devolução
+            # O saldo usa chave_nfe_referenciada das devoluções (vendas com transacao=Devolucao)
             if chave_nfe_original:
                 cursor.execute("""
                     SELECT
@@ -438,8 +419,9 @@ def buscar_venda_view(request, id_venda):
                     FROM venda_itens vi
                     JOIN produtos p ON vi.id_produto = p.id_produto
                     WHERE vi.id_venda = %s
-                """, [chave_nfe_original, real_id_venda])
+                """, [chave_nfe_original, id_venda])
             else:
+                # Sem chave NF-e: não há como rastrear devoluções, exibe tudo disponível
                 cursor.execute("""
                     SELECT
                         vi.id_venda_item,
@@ -454,10 +436,11 @@ def buscar_venda_view(request, id_venda):
                     FROM venda_itens vi
                     JOIN produtos p ON vi.id_produto = p.id_produto
                     WHERE vi.id_venda = %s
-                """, [real_id_venda])
+                """, [id_venda])
 
             itens_raw = cursor.fetchall()
 
+            # Formatar itens — apenas itens com saldo disponível aparecem
             itens = []
             for item in itens_raw:
                 quantidade_disponivel = float(item[4]) - float(item[8])
@@ -477,15 +460,12 @@ def buscar_venda_view(request, id_venda):
 
             venda_data = {
                 'id_venda'      : venda[0],
-                'id_compra'     : venda[0],
                 'numero_documento': venda[1],
                 'data_venda'    : venda[2],
                 'id_cliente'    : venda[3],
                 'nome_cliente'  : venda[4],
                 'valor_total'   : float(venda[5]),
                 'status_venda'  : venda[6],
-                'chave_nfe_origem': venda[7] or '',
-                'chave_nfe'     : venda[7] or '',
                 'itens'         : itens,
             }
 
@@ -497,129 +477,39 @@ def buscar_venda_view(request, id_venda):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def buscar_compra_view(request, id_compra):
-    """Buscar dados de uma compra para devolucao (aceita ID, Numero da Nota ou Chave NFe 44 digitos)"""
-    import re as _re
+    """Buscar dados de uma compra para devolucao"""
     try:
-        clean_key = _re.sub(r'\D', '', str(id_compra)) or str(id_compra)
-        raw_val = str(id_compra).strip()
-
         with connection.cursor() as cursor:
-            # 0. Se for um ID de devolução, buscar a compra/venda de origem correspondente
-            cursor.execute("""
-                SELECT id_compra, id_venda, id_fornecedor, chave_nfe_referenciada
-                FROM devolucoes
-                WHERE CAST(id_devolucao AS CHAR) = %s
-            """, [raw_val])
-            row_dev = cursor.fetchone()
-            if row_dev:
-                if row_dev[0]:
-                    raw_val = str(row_dev[0])
-                    clean_key = raw_val
-                elif row_dev[1]:
-                    raw_val = str(row_dev[1])
-                    clean_key = raw_val
-
-            # 1. Tentar buscar em compras primeiro por ID, numero_nota ou chave_nfe
+            # Buscar dados da compra
             cursor.execute("""
                 SELECT
                     c.id_compra,
                     c.numero_nota,
                     c.data_movimento_entrada,
                     c.id_fornecedor,
-                    COALESCE(f.nome_razao_social, 'Fornecedor Desconhecido') as nome_fornecedor,
+                    f.nome_razao_social as nome_fornecedor,
                     COALESCE(c.valor_total_nota, 0) as valor_total,
-                    c.chave_nfe,
-                    COALESCE(f.cpf_cnpj, '') as doc_fornecedor
+                    c.chave_nfe
                 FROM compras c
                 LEFT JOIN fornecedores f ON c.id_fornecedor = f.id_fornecedor
-                WHERE CAST(c.id_compra AS CHAR) = %s 
-                   OR CAST(c.numero_nota AS CHAR) = %s 
-                   OR c.chave_nfe = %s 
-                   OR c.chave_nfe = %s
-            """, [raw_val, raw_val, raw_val, clean_key])
+                WHERE c.id_compra = %s
+            """, [id_compra])
 
             compra = cursor.fetchone()
 
-            # 2. Se não encontrou em compras, buscar em vendas/NFe
             if not compra:
-                cursor.execute("""
-                    SELECT
-                        v.id_venda,
-                        v.numero_documento,
-                        v.data_venda,
-                        v.id_cliente,
-                        COALESCE(c.nome_razao_social, 'Cliente') as nome_cliente,
-                        COALESCE((SELECT SUM(vi.valor_total) FROM venda_itens vi WHERE vi.id_venda = v.id_venda), 0) as valor_total,
-                        v.chave_nfe,
-                        COALESCE(c.cpf_cnpj, '') as doc_cliente
-                    FROM vendas v
-                    LEFT JOIN clientes c ON v.id_cliente = c.id_cliente
-                    WHERE CAST(v.id_venda AS CHAR) = %s 
-                       OR CAST(v.numero_documento AS CHAR) = %s 
-                       OR CAST(v.numero_nfe AS CHAR) = %s
-                       OR v.chave_nfe = %s
-                """, [raw_val, raw_val, raw_val, clean_key])
-                venda_as_compra = cursor.fetchone()
-
-                if venda_as_compra:
-                    real_id_venda = venda_as_compra[0]
-                    chave_nfe_venda = venda_as_compra[6]
-
-                    cursor.execute("""
-                        SELECT
-                            vi.id_venda_item,
-                            vi.id_produto,
-                            p.nome_produto,
-                            p.codigo_produto,
-                            vi.quantidade,
-                            vi.valor_unitario,
-                            vi.valor_total
-                        FROM venda_itens vi
-                        JOIN produtos p ON vi.id_produto = p.id_produto
-                        WHERE vi.id_venda = %s
-                    """, [real_id_venda])
-                    itens_raw = cursor.fetchall()
-                    itens = []
-                    for item in itens_raw:
-                        itens.append({
-                            'id_compra_item'      : item[0],
-                            'id_produto'          : item[1],
-                            'nome_produto'        : item[2],
-                            'codigo_produto'      : item[3],
-                            'quantidade_original' : float(item[4]),
-                            'quantidade_devolvida': 0,
-                            'quantidade_disponivel': float(item[4]),
-                            'valor_unitario'      : float(item[5]),
-                            'valor_total'         : float(item[6]),
-                        })
-
-                    compra_data = {
-                        'id_compra': venda_as_compra[0],
-                        'id_venda': venda_as_compra[0],
-                        'numero_documento': venda_as_compra[1],
-                        'data_compra': venda_as_compra[2].strftime('%Y-%m-%d') if venda_as_compra[2] else None,
-                        'id_fornecedor': venda_as_compra[3],
-                        'nome_fornecedor': venda_as_compra[4],
-                        'doc_fornecedor': venda_as_compra[7],
-                        'valor_total': float(venda_as_compra[5]),
-                        'chave_nfe_origem': venda_as_compra[6] or '',
-                        'chave_nfe': venda_as_compra[6] or '',
-                        'itens': itens
-                    }
-                    return Response(compra_data)
-
                 return Response(
-                    {'error': f'Compra/Nota com chave ou ID "{id_compra}" não encontrada.'},
+                    {'error': 'Compra nao encontrada'},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-            real_id_compra = compra[0]
-            chave_nfe_compra = compra[6]
+            chave_nfe_compra = compra[6]  # c.chave_nfe
 
-            # Buscar itens da compra com impostos do XML/entrada
+            # Buscar itens da compra com saldo residual calculado via vendas de devolução
             if chave_nfe_compra:
                 cursor.execute("""
                     SELECT
@@ -640,17 +530,13 @@ def buscar_compra_view(request, id_compra):
                               AND UPPER(dop.nome_operacao) LIKE '%%COMPRA%%'
                               AND dv.status_nfe != 'CANCELADA'
                               AND dvi.id_produto = ci.id_produto
-                        ), 0) as quantidade_devolvida,
-                        COALESCE(ci.cfop, '') as cfop,
-                        COALESCE(ci.vpis, 0) as vpis,
-                        COALESCE(ci.vcofins, 0) as vcofins,
-                        COALESCE(ci.vibs, 0) as vibs,
-                        COALESCE(ci.vcbs, 0) as vcbs
+                        ), 0) as quantidade_devolvida
                     FROM compra_itens ci
                     JOIN produtos p ON ci.id_produto = p.id_produto
                     WHERE ci.id_compra = %s
-                """, [chave_nfe_compra, real_id_compra])
+                """, [chave_nfe_compra, id_compra])
             else:
+                # Sem chave NF-e: não há como rastrear devoluções, exibe tudo disponível
                 cursor.execute("""
                     SELECT
                         ci.id_compra_item,
@@ -660,19 +546,15 @@ def buscar_compra_view(request, id_compra):
                         ci.quantidade,
                         ci.valor_unitario,
                         ci.valor_total,
-                        0 as quantidade_devolvida,
-                        COALESCE(ci.cfop, '') as cfop,
-                        COALESCE(ci.vpis, 0) as vpis,
-                        COALESCE(ci.vcofins, 0) as vcofins,
-                        COALESCE(ci.vibs, 0) as vibs,
-                        COALESCE(ci.vcbs, 0) as vcbs
+                        0 as quantidade_devolvida
                     FROM compra_itens ci
                     JOIN produtos p ON ci.id_produto = p.id_produto
                     WHERE ci.id_compra = %s
-                """, [real_id_compra])
+                """, [id_compra])
 
             itens_raw = cursor.fetchall()
 
+            # Formatar itens — apenas itens com saldo disponível aparecem
             itens = []
             for item in itens_raw:
                 quantidade_disponivel = float(item[4]) - float(item[7])
@@ -687,24 +569,16 @@ def buscar_compra_view(request, id_compra):
                         'quantidade_disponivel': quantidade_disponivel,
                         'valor_unitario'      : float(item[5]),
                         'valor_total'         : float(item[6]),
-                        'cfop'                : item[8] or '',
-                        'vpis'                : float(item[9] or 0),
-                        'vcofins'             : float(item[10] or 0),
-                        'vibs'                : float(item[11] or 0),
-                        'vcbs'                : float(item[12] or 0),
                     })
 
             compra_data = {
                 'id_compra': compra[0],
-                'id_venda': compra[0],
                 'numero_documento': compra[1],
                 'data_compra': compra[2].strftime('%Y-%m-%d') if compra[2] else None,
                 'id_fornecedor': compra[3],
                 'nome_fornecedor': compra[4],
-                'doc_fornecedor': compra[7] or '',
                 'valor_total': float(compra[5]),
-                'chave_nfe_origem': compra[6] or '',
-                'chave_nfe': compra[6] or '',
+                'chave_nfe': compra[6],
                 'itens': itens
             }
 

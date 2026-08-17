@@ -13,8 +13,6 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework import status
-from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
-from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 
 from .models import Venda, VendaItem, Operacao, Produto, Estoque, Deposito, FinanceiroConta, Cashback, EmpresaConfig, VendaEntregaLog
 from . import finance_policies
@@ -416,142 +414,15 @@ class LimparNFeErroView(APIView):
         
         venda.save()
         
-        return Response({"sucesso": True, "mensagem": "Status de erro da NF-e limpo com sucesso. Venda agora PENDENTE."})
-
-
-def resolver_venda_para_operacao(id_target):
-    """
-    Busca Venda por pk. Se não encontrar, busca em Devolucao ou Compra e recupera/gera a Venda correspondente.
-    Evita erro 404 quando o frontend envia ID de devolução ou ID de compra ao imprimir DANFE ou transmitir NF-e.
-    """
-    from .models import Venda, Fornecedor, Cliente, Operacao
-    from .models_devolucao import Devolucao
-    from django.utils import timezone
-    from django.http import Http404
-
-    # 1. Tentar Venda direta por PK
-    venda = Venda.objects.filter(pk=id_target).first()
-    if venda:
-        return venda
-
-    # 2. Tentar via Devolucao por ID de devolução ou ID de compra
-    clean_id = str(id_target).replace('DEV-', '').replace('NFE-', '')
-    devolucao = Devolucao.objects.filter(pk=clean_id).first() or Devolucao.objects.filter(id_compra=clean_id).first()
-    if devolucao:
-        if devolucao.id_venda:
-            venda = Venda.objects.filter(pk=devolucao.id_venda).first()
-            if venda:
-                # 1. Garantir que numero_nfe não seja nulo ou zero
-                if not venda.numero_nfe or venda.numero_nfe == 0:
-                    from django.db.models import Max
-                    max_num = Venda.objects.filter(numero_nfe__gt=0).aggregate(Max('numero_nfe'))['numero_nfe__max'] or 0
-                    venda.numero_nfe = max_num + 1
-                    venda.numero_documento = max_num + 1
-                    venda.save(update_fields=['numero_nfe', 'numero_documento'])
-
-                # 2. Garantir que os itens da devolução estejam em venda_itens para impressão do DANFE
-                if venda.itens.count() == 0 and devolucao.itens.exists():
-                    from django.db import connection
-                    with connection.cursor() as cursor:
-                        for dev_item in devolucao.itens.all():
-                            cfop_item = dev_item.cfop if (dev_item.cfop and dev_item.cfop != '5102' and dev_item.cfop != '6102') else '5202'
-                            cursor.execute("""
-                                INSERT INTO venda_itens (id_venda, id_produto, quantidade, valor_unitario, valor_total, cfop)
-                                VALUES (%s, %s, %s, %s, %s, %s)
-                            """, [
-                                venda.id_venda,
-                                dev_item.id_produto,
-                                dev_item.quantidade_devolvida,
-                                dev_item.valor_unitario,
-                                dev_item.valor_total,
-                                cfop_item
-                            ])
-                # 3. Garantir que cliente.inscricao_estadual sincronize com fornecedor.inscricao_estadual
-                if venda.id_cliente and devolucao.id_fornecedor:
-                    forn = Fornecedor.objects.filter(pk=devolucao.id_fornecedor).first()
-                    if forn and forn.inscricao_estadual and forn.inscricao_estadual.strip() not in ['', 'ISENTO']:
-                        cli = venda.id_cliente
-                        if not cli.inscricao_estadual or cli.inscricao_estadual.strip() in ['', 'ISENTO']:
-                            cli.inscricao_estadual = forn.inscricao_estadual.strip()
-                            cli.save(update_fields=['inscricao_estadual'])
-
-                return venda
-
-        # Auto-criar Venda se a devolução não possui id_venda vinculado ainda
-        try:
-            id_op = devolucao.id_operacao
-            if not id_op:
-                op = Operacao.objects.filter(transacao='Devolucao').first() or Operacao.objects.filter(nome_operacao__icontains='Devolucao').first()
-                id_op = op.id_operacao if op else 22
-            
-            forn = Fornecedor.objects.filter(pk=devolucao.id_fornecedor).first() if devolucao.id_fornecedor else None
-            cli = Cliente.objects.filter(cpf_cnpj=forn.cpf_cnpj).first() if (forn and forn.cpf_cnpj) else None
-            id_cli = cli.id_cliente if cli else (devolucao.id_fornecedor or 1)
-
-            from django.db.models import Max
-            op_obj = Operacao.objects.filter(pk=id_op).first()
-            if op_obj and getattr(op_obj, 'proximo_numero_nf', None):
-                proximo_numero = op_obj.proximo_numero_nf
-                op_obj.proximo_numero_nf += 1
-                op_obj.save(update_fields=['proximo_numero_nf'])
-            else:
-                max_num = Venda.objects.filter(numero_nfe__gt=0, numero_nfe__lt=500).aggregate(Max('numero_nfe'))['numero_nfe__max'] or 17
-                proximo_numero = max_num + 1
-
-            venda = Venda.objects.create(
-                id_cliente_id=id_cli,
-                id_operacao_id=id_op,
-                data_documento=devolucao.data_devolucao or timezone.now(),
-                valor_total=devolucao.valor_total_devolucao or 0,
-                numero_nfe=proximo_numero,
-                numero_documento=proximo_numero,
-                serie_nfe='1',
-                observacao_contribuinte=devolucao.observacoes or f'Devolução referente à compra #{devolucao.id_compra}',
-                chave_nfe_referenciada=devolucao.chave_nfe_referenciada or '',
-                status_nfe='PENDENTE',
-                tipo_frete='9',
-                peso_bruto=0,
-                peso_liquido=0,
-                quantidade_volumes=0
-            )
-            devolucao.id_venda = venda.id_venda
-            devolucao.save(update_fields=['id_venda'])
-
-            # Criar itens em venda_itens para a NF-e com CFOP 5202
-            from django.db import connection
-            with connection.cursor() as cursor:
-                for dev_item in devolucao.itens.all():
-                    cfop_item = dev_item.cfop if (dev_item.cfop and dev_item.cfop != '5102' and dev_item.cfop != '6102') else '5202'
-                    cursor.execute("""
-                        INSERT INTO venda_itens (id_venda, id_produto, quantidade, valor_unitario, valor_total, cfop)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """, [
-                        venda.id_venda,
-                        dev_item.id_produto,
-                        dev_item.quantidade_devolvida,
-                        dev_item.valor_unitario,
-                        dev_item.valor_total,
-                        cfop_item
-                    ])
-            return venda
-        except Exception as e_venda:
-            logger.error(f"Erro ao resolver Venda para Devolução #{clean_id}: {e_venda}")
-
-    raise Http404(f"Venda ou Devolução com ID {id_target} não encontrada.")
-
+        return Response({"sucesso": True, "mensagem": "Status de erro da NF-e limpo com sucesso. Venda agora � PENDENTE."})
 
 class NFeView(APIView):
     """
-    Endpoint para emissão de NFe (Modelo 55) via ACBrMonitor.
+    Endpoint para emiss�o de NFe (Modelo 55) via ACBrMonitor.
     URL: /api/vendas/<id>/emitir_nfe/
     """
     def post(self, request, id_venda):
-        venda = resolver_venda_para_operacao(id_venda)
-
-        # Tratar parâmetro de contingência SVC-AN
-        if request.data.get('contingencia_svcan') or request.query_params.get('contingencia_svcan') == 'true':
-            venda.status_nfe = 'CONTINGENCIA_SVCAN'
-            venda.save(update_fields=['status_nfe'])
+        venda = get_object_or_404(Venda, pk=id_venda)
         
         service = NFeService()
         
@@ -575,7 +446,7 @@ class CancelarNFeView(APIView):
     URL: /api/vendas/<id>/cancelar_nfe/
     """
     def post(self, request, id_venda):
-        venda = resolver_venda_para_operacao(id_venda)
+        venda = get_object_or_404(Venda, pk=id_venda)
         justificativa = request.data.get('justificativa', '').strip()
         
         if len(justificativa) < 15:
@@ -591,11 +462,11 @@ class CancelarNFeView(APIView):
 
 class InutilizarNFeView(APIView):
     """
-    Endpoint para inutilizar numeração de NFe (Modelo 55).
+    Endpoint para inutilizar numera��o de NFe (Modelo 55).
     URL: /api/vendas/<id>/inutilizar_nfe/
     """
     def post(self, request, id_venda):
-        venda = resolver_venda_para_operacao(id_venda)
+        venda = get_object_or_404(Venda, pk=id_venda)
         justificativa = request.data.get('justificativa', '').strip()
         
         if len(justificativa) < 15:
@@ -614,53 +485,28 @@ class ImprimirDanfeNFeView(APIView):
     Endpoint para gerar PDF do DANFE (NFe Modelo 55).
     URL: /api/vendas/<id>/imprimir_danfe/
     """
-    permission_classes = [AllowAny]
-    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
-    parser_classes = [JSONParser, FormParser, MultiPartParser]
+    permission_classes = [AllowAny] # Pode ajustar conforme necessidade
     
     def get(self, request, id_venda):
-        from django.http import HttpResponse, Http404
-        try:
-            venda = resolver_venda_para_operacao(id_venda)
-        except Exception:
-            return HttpResponse(
-                "<div style='font-family:sans-serif; padding:40px; text-align:center;'>"
-                "<h2>⚠️ Registro de Devolução ou Venda não encontrado</h2>"
-                "<p>Verifique o número da nota ou recarregue a página de compras.</p>"
-                "</div>",
-                content_type='text/html; charset=utf-8',
-                status=404
-            )
+        venda = get_object_or_404(Venda, pk=id_venda)
         
-        # Se for solicitação de prévia ou se a nota ainda não possuir chave transmitida
-        is_solicitacao_previa = (
-            request.query_params.get('previa') == 'true' or
-            request.query_params.get('modo') == 'previa' or
-            not venda.chave_nfe
-        )
-        if is_solicitacao_previa:
-            venda.is_previa = True
+        # Validar se tem NFe emitida
+        if not venda.chave_nfe:
+            return Response({"erro": "Venda n�o possui Chave NFe (n�o emitida ou erro)."}, status=400)
             
         try:
             generator = DanfeGenerator(venda)
             pdf_buffer = generator.gerar_pdf()
             
+            from django.http import HttpResponse
             response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
-            prefix = "PREVIA_DANFE" if is_solicitacao_previa else "DANFE"
-            filename = f"{prefix}_{venda.numero_nfe or venda.pk}.pdf"
+            filename = f"DANFE_{venda.numero_nfe or venda.pk}.pdf"
             response['Content-Disposition'] = f'inline; filename="{filename}"'
             return response
             
         except Exception as e:
             logger.error(f"Erro ao gerar DANFE PDF: {e}")
-            return HttpResponse(
-                f"<div style='font-family:sans-serif; padding:40px; text-align:center; color:#c62828;'>"
-                f"<h2>❌ Erro ao Gerar PDF da DANFE</h2>"
-                f"<p>{str(e)}</p>"
-                f"</div>",
-                content_type='text/html; charset=utf-8',
-                status=500
-            )
+            return Response({"erro": f"Erro ao gerar PDF: {str(e)}"}, status=500)
 
 
 class ImprimirDanfceNFCeView(APIView):
@@ -1347,19 +1193,6 @@ class ListarVendasPDVNFCeView(APIView):
                         'mensagem_nfe': getattr(venda, 'mensagem_nfe', '') or '',
                         'tem_xml': True if venda.xml_nfe else False,
                         'pode_editar': pode_editar,
-                        # Transporte / Frete
-                        'tipo_frete': venda.tipo_frete,
-                        'id_transportadora': venda.transportadora.pk if venda.transportadora else None,
-                        'placa_veiculo': venda.placa_veiculo or '',
-                        'uf_veiculo': venda.uf_veiculo or '',
-                        'rntrc': venda.rntrc or '',
-                        'quantidade_volumes': venda.quantidade_volumes,
-                        'especie_volumes': venda.especie_volumes or '',
-                        'marca_volumes': venda.marca_volumes or '',
-                        'peso_liquido': float(venda.peso_liquido) if venda.peso_liquido else 0.0,
-                        'peso_bruto': float(venda.peso_bruto) if venda.peso_bruto else 0.0,
-                        'observacao_fisco': venda.observacao_fisco or '',
-                        'observacao_contribuinte': venda.observacao_contribuinte or '',
                         'itens': itens_data
                     }
                     
@@ -2017,20 +1850,6 @@ class VendaView(APIView):
 
         operacao = get_object_or_404(Operacao, pk=id_operacao)
 
-        # Validar Chave de Acesso Referenciada para Complementar (2) ou Devolução (4)
-        is_complementar = operacao.finalidade_emissao == '2' or 'COMPLEM' in (operacao.nome_operacao or '').upper()
-        is_devolucao = operacao.finalidade_emissao == '4' or 'DEVOLU' in (operacao.nome_operacao or '').upper()
-        if is_complementar or is_devolucao:
-            chave_ref = (payload.get('chave_nfe_referenciada') or '').strip().replace(' ', '')
-            import re as std_re
-            chave_ref_clean = std_re.sub(r'\D', '', chave_ref)
-            if len(chave_ref_clean) != 44:
-                desc = 'Complementar' if is_complementar else 'de Devolução'
-                return Response(
-                    {'detail': f'Para emissão de nota {desc}, informe a chave de acesso referenciada válida (44 dígitos).'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
         sale_date = parse_date_flexible(data_in) or timezone.now().date()
         
         # Capturar numero_documento do payload (vem do frontend)
@@ -2091,43 +1910,28 @@ class VendaView(APIView):
             total = Decimal('0.00')
             for it in itens:
                 produto = None
-                codigo_ajuste = str(it.get('codigo_produto') or it.get('codigo') or '').strip()
-                if codigo_ajuste in ['991', '992', '993', '994', '995', '996', '997', '998', '999']:
-                    nome_ajuste = it.get('produto_nome') or it.get('nome_produto') or f"REGISTRO {codigo_ajuste}"
-                    produto, _ = Produto.objects.get_or_create(
-                        codigo_produto=codigo_ajuste,
-                        defaults={
-                            'nome_produto': nome_ajuste,
-                            'unidade_medida': 'UN',
-                            'origem': '0',
-                            'ncm_codigo': '00000000',
-                            'tipo': 'Outro',
-                        }
-                    )
-                else:
-                    id_produto = it.get('id_produto')
-                    if id_produto:
-                        try:
-                            produto = Produto.objects.get(pk=id_produto)
-                        except Produto.DoesNotExist:
-                            return Response({
-                                'detail': f'Produto com ID {id_produto} no encontrado',
-                                'id_produto': id_produto
-                            }, status=status.HTTP_400_BAD_REQUEST)
+                id_produto = it.get('id_produto')
+                if id_produto:
+                    try:
+                        produto = Produto.objects.get(pk=id_produto)
+                    except Produto.DoesNotExist:
+                        return Response({
+                            'detail': f'Produto com ID {id_produto} n�o encontrado',
+                            'id_produto': id_produto
+                        }, status=status.HTTP_400_BAD_REQUEST)
 
-                is_servico = bool(
-                    produto and
-                    getattr(produto, 'classificacao', None) and
-                    str(produto.classificacao).strip().upper() in ['SERVICO', 'SERVIÇO', 'SERVICOS', 'SERVIÇOS']
-                )
+                q = parse_decimal_flexible(it.get('quantidade', '0')) or Decimal('0')
+                vu = parse_decimal_flexible(it.get('valor_unitario', '0')) or Decimal('0')
+                desconto_valor = parse_decimal_flexible(it.get('desconto_valor') or '0') or Decimal('0')
+                valor_total_item = (q * vu) - desconto_valor
 
-                # estoque - validar considerando acao_estoque da operação (NÃO valida estoque se for Serviço)
-                if produto and not is_servico and getattr(operacao, 'tipo_estoque_baixa', None) and operacao.tipo_estoque_baixa != 'Nenhum':
+                # estoque - validar considerando acao_estoque da opera��o
+                if produto and getattr(operacao, 'tipo_estoque_baixa', None) and operacao.tipo_estoque_baixa != 'Nenhum':
                     # Verificar se deve validar estoque
                     validar_estoque = getattr(operacao, 'validar_estoque', False)
                     acao_estoque = getattr(operacao, 'acao_estoque', 'nao_validar')
                     
-                    # Buscar o depósito configurado na operação (id_deposito_baixa) ou usar LOJA (id=1) como padrão
+                    # Buscar o dep�sito configurado na opera��o (id_deposito_baixa) ou usar LOJA (id=1) como padr�o
                     deposito_id = getattr(operacao, 'id_deposito_baixa', None) or 1
                     
                     # Log para debug (comentado para evitar UnicodeEncodeError no Windows)
@@ -2145,11 +1949,11 @@ class VendaView(APIView):
                         nome_deposito = 'Deposito nao configurado'
                         print(f'[ESTOQUE] Nao ha estoque registrado para este produto')
                     
-                    # S BLOQUEIA se validar_estoque=True E acao_estoque='bloquear'
+                    # S� BLOQUEIA se validar_estoque=True E acao_estoque='bloquear'
                     if validar_estoque and acao_estoque == 'bloquear' and (quantidade_disponivel - q) < 0:
                         print(f'[ESTOQUE] BLOQUEANDO venda por estoque insuficiente (acao=bloquear)')
                         return Response({
-                            'detail': f'Produto {prod_ident} sem estoque suficiente no depsito {nome_deposito}',
+                            'detail': f'Produto {prod_ident} sem estoque suficiente no dep�sito {nome_deposito}',
                             'produto': prod_ident,
                             'deposito': nome_deposito,
                             'deposito_id': deposito_id,
@@ -2159,15 +1963,10 @@ class VendaView(APIView):
                         }, status=status.HTTP_400_BAD_REQUEST)
                     elif validar_estoque and acao_estoque in ['alertar', 'solicitar_senha'] and (quantidade_disponivel - q) < 0:
                         print(f'[ESTOQUE] Estoque insuficiente mas permitindo prosseguir (acao={acao_estoque})')
-                        # Frontend j alertou/solicitou senha, backend permite continuar
+                        # Frontend j� alertou/solicitou senha, backend permite continuar
                         pass
                     else:
-                        pass  # Estoque suficiente ou validao desabilitada, prosseguir com a venda
-
-                q = parse_decimal_flexible(it.get('quantidade', '0')) or Decimal('0')
-                vu = parse_decimal_flexible(it.get('valor_unitario', '0')) or Decimal('0')
-                desconto_valor = parse_decimal_flexible(it.get('desconto_valor') or '0') or Decimal('0')
-                valor_total_item = (q * vu) - desconto_valor
+                        pass  # Estoque suficiente ou valida��o desabilitada, prosseguir com a venda
 
                 _vi = VendaItem(
                     id_venda=venda,
@@ -2177,26 +1976,7 @@ class VendaView(APIView):
                     valor_total=valor_total_item,
                     desconto_valor=desconto_valor,
                 )
-                
-                # Copiar campos fiscais enviados diretamente
-                if 'ncm_codigo' in it: _vi.ncm_codigo = it['ncm_codigo']
-                if 'cest_codigo' in it: _vi.cest_codigo = it['cest_codigo']
-                if 'cfop' in it: _vi.cfop = it['cfop']
-                if 'icms_cst_csosn' in it: _vi.icms_cst_csosn = it['icms_cst_csosn']
-                if 'icms_bc' in it: _vi.icms_bc = parse_decimal_flexible(it['icms_bc'])
-                if 'icms_aliq' in it: _vi.icms_aliq = parse_decimal_flexible(it['icms_aliq'])
-                if 'valor_icms' in it: _vi.valor_icms = parse_decimal_flexible(it['valor_icms'])
-                if 'pis_cst' in it: _vi.pis_cst = it['pis_cst']
-                if 'pis_aliq' in it: _vi.pis_aliq = parse_decimal_flexible(it['pis_aliq'])
-                if 'pis_bc' in it: _vi.pis_bc = parse_decimal_flexible(it['pis_bc'])
-                if 'valor_pis' in it: _vi.valor_pis = parse_decimal_flexible(it['valor_pis'])
-                if 'cofins_cst' in it: _vi.cofins_cst = it['cofins_cst']
-                if 'cofins_aliq' in it: _vi.cofins_aliq = parse_decimal_flexible(it['cofins_aliq'])
-                if 'cofins_bc' in it: _vi.cofins_bc = parse_decimal_flexible(it['cofins_bc'])
-                if 'valor_cofins' in it: _vi.valor_cofins = parse_decimal_flexible(it['valor_cofins'])
-
-                # Apenas roda tributação se não for um item de ajuste e se não enviou campos tributários explicitamente
-                if produto and not any(k in it for k in ['cfop', 'icms_cst_csosn', 'icms_aliq']):
+                if produto:
                     try:
                         _resultado_fiscal = _tributar_item(
                             produto_id=produto.pk,
@@ -2213,10 +1993,10 @@ class VendaView(APIView):
                         print(f'[FISCAL] Erro tributando item {produto.pk}: {_ef}')
                 _vi.save()
 
-                # Atualizar estoque na tabela Estoque (no mais no produto)
-                if produto and not is_servico:
+                # Atualizar estoque na tabela Estoque (n�o mais no produto)
+                if produto:
                     if getattr(operacao, 'tipo_estoque_baixa', None) and operacao.tipo_estoque_baixa != 'Nenhum':
-                        # Dar baixa no estoque do depsito configurado
+                        # Dar baixa no estoque do dep�sito configurado
                         deposito_baixa_id = getattr(operacao, 'id_deposito_baixa', None) or 1
                         try:
                             estoque_obj = Estoque.objects.get(id_produto=produto, id_deposito_id=deposito_baixa_id)
@@ -2229,7 +2009,7 @@ class VendaView(APIView):
                             pass
                     
                     if getattr(operacao, 'tipo_estoque_incremento', None) and operacao.tipo_estoque_incremento != 'Nenhum':
-                        # Incrementar estoque no depsito configurado
+                        # Incrementar estoque no dep�sito configurado
                         deposito_incremento_id = getattr(operacao, 'id_deposito_incremento', None) or 1
                         try:
                             estoque_obj = Estoque.objects.get(id_produto=produto, id_deposito_id=deposito_incremento_id)
@@ -2238,7 +2018,7 @@ class VendaView(APIView):
                             estoque_obj.save()
                             print(f'[ESTOQUE] Incremento no deposito: Produto {prod_ident}, Qtd Antes: {quantidade_antes}, Qtd Apos: {estoque_obj.quantidade}')
                         except Estoque.DoesNotExist:
-                            # Se no existir, criar registro de estoque
+                            # Se n�o existir, criar registro de estoque
                             estoque_obj = Estoque.objects.create(
                                 id_produto=produto,
                                 id_deposito_id=deposito_incremento_id,
@@ -2457,56 +2237,27 @@ class VendaView(APIView):
                 with transaction.atomic():
                     # Remover itens existentes
                     venda.itens.all().delete()
-
-                    # -- Contexto fiscal para tributação automática no patch ---------------
-                    _empresa_id = None
-                    try:
-                        from .models import EmpresaConfig
-                        _ecfg = EmpresaConfig.objects.filter(ativo=True).first()
-                        if _ecfg:
-                            _empresa_id = _ecfg.pk
-                    except Exception:
-                        pass
-                    _cliente_obj = None
-                    if venda.id_cliente:
-                        _cliente_obj = venda.id_cliente
-                    _ctx = _get_contexto_fiscal(venda.id_operacao or operacao, _cliente_obj, _empresa_id)
-                    # ----------------------------------------------------------------------
-
+                    
                     # Adicionar novos itens
                     total = Decimal('0.00')
                     for it in payload['itens']:
                         produto = None
-                        codigo_ajuste = str(it.get('codigo_produto') or it.get('codigo') or '').strip()
-                        if codigo_ajuste in ['991', '992', '993', '994', '995', '996', '997', '998', '999']:
-                            nome_ajuste = it.get('produto_nome') or it.get('nome_produto') or f"REGISTRO {codigo_ajuste}"
-                            produto, _ = Produto.objects.get_or_create(
-                                codigo_produto=codigo_ajuste,
-                                defaults={
-                                    'nome_produto': nome_ajuste,
-                                    'unidade_medida': 'UN',
-                                    'origem': '0',
-                                    'ncm_codigo': '00000000',
-                                    'tipo': 'Outro',
-                                }
-                            )
-                        else:
-                            id_produto = it.get('id_produto')
-                            if id_produto:
-                                try:
-                                    produto = Produto.objects.get(pk=id_produto)
-                                except Produto.DoesNotExist:
-                                    return Response({
-                                        'detail': f'Produto com ID {id_produto} no encontrado',
-                                        'id_produto': id_produto
-                                    }, status=status.HTTP_400_BAD_REQUEST)
+                        id_produto = it.get('id_produto')
+                        if id_produto:
+                            try:
+                                produto = Produto.objects.get(pk=id_produto)
+                            except Produto.DoesNotExist:
+                                return Response({
+                                    'detail': f'Produto com ID {id_produto} n�o encontrado',
+                                    'id_produto': id_produto
+                                }, status=status.HTTP_400_BAD_REQUEST)
                         
                         q = parse_decimal_flexible(it.get('quantidade', '0')) or Decimal('0')
                         vu = parse_decimal_flexible(it.get('valor_unitario', '0')) or Decimal('0')
                         desconto_valor = parse_decimal_flexible(it.get('desconto_valor', '0')) or Decimal('0')
                         valor_total_item = (q * vu) - desconto_valor
                         
-                        _vi = VendaItem(
+                        VendaItem.objects.create(
                             id_venda=venda,
                             id_produto=produto,
                             quantidade=q,
@@ -2514,41 +2265,6 @@ class VendaView(APIView):
                             valor_total=valor_total_item,
                             desconto_valor=desconto_valor,
                         )
-
-                        # Copiar campos fiscais enviados diretamente
-                        if 'ncm_codigo' in it: _vi.ncm_codigo = it['ncm_codigo']
-                        if 'cest_codigo' in it: _vi.cest_codigo = it['cest_codigo']
-                        if 'cfop' in it: _vi.cfop = it['cfop']
-                        if 'icms_cst_csosn' in it: _vi.icms_cst_csosn = it['icms_cst_csosn']
-                        if 'icms_bc' in it: _vi.icms_bc = parse_decimal_flexible(it['icms_bc'])
-                        if 'icms_aliq' in it: _vi.icms_aliq = parse_decimal_flexible(it['icms_aliq'])
-                        if 'valor_icms' in it: _vi.valor_icms = parse_decimal_flexible(it['valor_icms'])
-                        if 'pis_cst' in it: _vi.pis_cst = it['pis_cst']
-                        if 'pis_aliq' in it: _vi.pis_aliq = parse_decimal_flexible(it['pis_aliq'])
-                        if 'pis_bc' in it: _vi.pis_bc = parse_decimal_flexible(it['pis_bc'])
-                        if 'valor_pis' in it: _vi.valor_pis = parse_decimal_flexible(it['valor_pis'])
-                        if 'cofins_cst' in it: _vi.cofins_cst = it['cofins_cst']
-                        if 'cofins_aliq' in it: _vi.cofins_aliq = parse_decimal_flexible(it['cofins_aliq'])
-                        if 'cofins_bc' in it: _vi.cofins_bc = parse_decimal_flexible(it['cofins_bc'])
-                        if 'valor_cofins' in it: _vi.valor_cofins = parse_decimal_flexible(it['valor_cofins'])
-
-                        # Apenas roda tributação se não for um item de ajuste e se não enviou campos tributários explicitamente
-                        if produto and not any(k in it for k in ['cfop', 'icms_cst_csosn', 'icms_aliq']):
-                            try:
-                                _resultado_fiscal = _tributar_item(
-                                    produto_id=produto.pk,
-                                    empresa_id=_empresa_id,
-                                    uf_destino=_ctx.get('uf_destino'),
-                                    tipo_operacao=_ctx.get('tipo_operacao', 'INTERNA'),
-                                    tipo_cliente=_ctx.get('tipo_cliente', 'TODOS'),
-                                    uf_origem=_ctx.get('uf_origem'),
-                                    valor_unitario=float(vu),
-                                    quantidade=float(q),
-                                )
-                                _aplicar_fiscal_em_item(_vi, _resultado_fiscal)
-                            except Exception as _ef:
-                                print(f'[FISCAL] Erro tributando item {produto.pk}: {_ef}')
-                        _vi.save()
                         total += valor_total_item
                     
                     venda.valor_total = total
@@ -2557,22 +2273,6 @@ class VendaView(APIView):
             if 'valor_total' in payload and 'itens' not in payload:
                 venda.valor_total = Decimal(str(payload['valor_total']))
             
-            # Validar Chave de Acesso Referenciada para Complementar (2) ou Devolução (4)
-            operacao = venda.id_operacao
-            if operacao:
-                is_complementar = operacao.finalidade_emissao == '2' or 'COMPLEM' in (operacao.nome_operacao or '').upper()
-                is_devolucao = operacao.finalidade_emissao == '4' or 'DEVOLU' in (operacao.nome_operacao or '').upper()
-                if is_complementar or is_devolucao:
-                    chave_ref = (venda.chave_nfe_referenciada or '').strip().replace(' ', '')
-                    import re as std_re
-                    chave_ref_clean = std_re.sub(r'\D', '', chave_ref)
-                    if len(chave_ref_clean) != 44:
-                        desc = 'Complementar' if is_complementar else 'de Devolução'
-                        return Response(
-                            {'detail': f'Para emissão de nota {desc}, informe a chave de acesso referenciada válida (44 dígitos).'},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-
             venda.save()
             logging.info(f'[PATCH VENDA] Venda {venda_id} atualizada com sucesso')
             
@@ -2668,12 +2368,6 @@ class VendaView(APIView):
                 
                 for item in itens_venda:
                     if item.id_produto:
-                        is_servico = bool(
-                            getattr(item.id_produto, 'classificacao', None) and
-                            str(item.id_produto.classificacao).strip().upper() in ['SERVICO', 'SERVIÇO', 'SERVICOS', 'SERVIÇOS']
-                        )
-                        if is_servico:
-                            continue
                         try:
                             # Buscar registro de estoque
                             estoque_obj = Estoque.objects.get(

@@ -1,4 +1,4 @@
-// Em: src/components/ClientDialog.jsx
+﻿// Em: src/components/ClientDialog.jsx
 
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
@@ -41,9 +41,6 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
   useEffect(() => {
     setClientTabValue(0);
     if (clientToEdit) {
-      const initialIbge = clientToEdit.codigo_municipio_ibge || '';
-      const cepClean = (clientToEdit.cep || '').replace(/\D/g, '');
-
       setClientFormData({
         nome_razao_social: clientToEdit.nome_razao_social || '',
         nome_fantasia: clientToEdit.nome_fantasia || '',
@@ -55,7 +52,6 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
         cidade: clientToEdit.cidade || '',
         estado: clientToEdit.estado || '',
         cep: clientToEdit.cep || '',
-        codigo_municipio_ibge: initialIbge,
         telefone: clientToEdit.telefone || '',
         email: clientToEdit.email || '',
         limite_credito: clientToEdit.limite_credito || 0,
@@ -67,24 +63,11 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
         priorizar_desconto_cliente: clientToEdit.priorizar_desconto_cliente || false,
         grupos_excecao: clientToEdit.grupos_excecao ? clientToEdit.grupos_excecao.map(g => g.id_grupo || g.id || g) : [],
       });
-
-      if (!initialIbge && cepClean.length === 8) {
-        axios.get(`https://viacep.com.br/ws/${cepClean}/json/`)
-          .then(res => {
-            if (res.data && !res.data.erro && res.data.ibge) {
-              setClientFormData(prev => ({
-                ...prev,
-                codigo_municipio_ibge: res.data.ibge.toString().trim()
-              }));
-            }
-          })
-          .catch(() => {});
-      }
     } else {
       // Limpa o form para "Adicionar Novo"
       setClientFormData({
         nome_razao_social: '', nome_fantasia: '', cpf_cnpj: '', inscricao_estadual: '',
-        endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '', codigo_municipio_ibge: '',
+        endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '',
         telefone: '', email: '', limite_credito: 0, logo_url: '', sexo: '',
         tipo_desconto: 'PERCENTUAL', valor_desconto: 0, percentual_arredondamento: 0,
         priorizar_desconto_cliente: false, grupos_excecao: [],
@@ -121,28 +104,16 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
     setLoadingCNPJ(true);
     try { 
       const dados = await buscarCNPJ(cnpj); 
-      let codIbge = dados.ibge || dados.codigo_municipio_ibge || dados.codigo_ibge || '';
-      const cepLimpo = (dados.cep || '').replace(/\D/g, '');
-      if (!codIbge && cepLimpo.length === 8) {
-        try {
-          const resCep = await axios.get(`https://viacep.com.br/ws/${cepLimpo}/json/`);
-          if (resCep.data && resCep.data.ibge) {
-            codIbge = resCep.data.ibge.toString().trim();
-          }
-        } catch (err) {}
-      }
-
       setClientFormData(p => ({ 
         ...p, 
         nome_razao_social: dados.razao_social || '', 
         nome_fantasia: dados.nome_fantasia || '', 
-        endereco: dados.endereco || '',
+        endereco: dados.endereco || '',  // Agora vem do backend
         numero: dados.numero || '', 
         bairro: dados.bairro || '', 
         cidade: dados.cidade || '', 
         estado: dados.estado || '', 
-        cep: cepLimpo, 
-        codigo_municipio_ibge: codIbge || p.codigo_municipio_ibge || '',
+        cep: (dados.cep || '').replace(/\D/g, ''), 
         telefone: dados.telefone || p.telefone || '', 
         email: dados.email || p.email || '', 
       })); 
@@ -163,20 +134,12 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
       const d = res.data; 
       if (d.erro) { alert('CEP não encontrado.'); } 
       else { 
-        const codIbge = d.ibge ? d.ibge.toString().trim() : '';
-        setClientFormData(p => ({
-          ...p,
-          endereco: d.logradouro || '',
-          bairro: d.bairro || '',
-          cidade: d.localidade || '',
-          estado: d.uf || '',
-          codigo_municipio_ibge: codIbge || p.codigo_municipio_ibge || '',
-        })); 
-        alert('Endereço e Código IBGE carregados!'); 
+        setClientFormData(p => ({ ...p, endereco: d.logradouro || '', bairro: d.bairro || '', cidade: d.localidade || '', estado: d.uf || '', })); 
+        alert('Endereço carregado!'); 
         document.getElementsByName("numero")[0]?.focus(); 
       } 
     } catch (e) { 
-      alert('Não foi possível buscar os dados do CEP.'); 
+      alert('não foi possível buscar os dados do CEP.'); 
     } finally { 
       setLoadingCEP(false); 
     }
@@ -185,15 +148,7 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
   const handleSaveClient = async (e) => {
     e.preventDefault(); 
     setSavingClient(true); 
-    const data = {
-      ...clientFormData,
-      limite_credito: parseFloat(clientFormData.limite_credito) || 0,
-      cpf_cnpj: clientFormData.cpf_cnpj.replace(/\D/g, ''),
-      cep: clientFormData.cep.replace(/\D/g, ''),
-      codigo_municipio_ibge: clientFormData.codigo_municipio_ibge ? clientFormData.codigo_municipio_ibge.replace(/\D/g, '') : null,
-      telefone: clientFormData.telefone.replace(/\D/g, ''),
-      logo_url: clientFormData.logo_url || null
-    };
+    const data = { ...clientFormData, limite_credito: parseFloat(clientFormData.limite_credito) || 0, cpf_cnpj: clientFormData.cpf_cnpj.replace(/\D/g, ''), cep: clientFormData.cep.replace(/\D/g, ''), telefone: clientFormData.telefone.replace(/\D/g, ''), logo_url: clientFormData.logo_url || null };
     try { 
       if (clientToEdit) { 
         await axiosInstance.put(`/clientes/${clientToEdit.id_cliente}/`, data); 
@@ -263,10 +218,9 @@ function ClientDialog({ open, onClose, onSaveSuccess, clientToEdit }) {
                     <Grid item xs={12} sm={4}><TextField name="cep" label="CEP" value={clientFormData.cep} onChange={handleClientFormChange} disabled={savingClient || loadingCEP} fullWidth InputProps={{ endAdornment: ( <InputAdornment position="end"> <span> <IconButton aria-label="buscar cep" onClick={handleBuscaCEP} disabled={loadingCEP || Boolean(clientFormData.cep && clientFormData.cep.replace(/\D/g, '').length !== 8)} edge="end"> {loadingCEP ? <CircularProgress size={20} /> : <SearchIcon />} </IconButton> </span> </InputAdornment> ), }}/></Grid>
                     <Grid item xs={12} sm={6}><TextField name="endereco" label="Endereço (Logradouro)" value={clientFormData.endereco} onChange={handleClientFormChange} disabled={savingClient} fullWidth /></Grid>
                     <Grid item xs={12} sm={2}><TextField name="numero" label="Número" value={clientFormData.numero} onChange={handleClientFormChange} disabled={savingClient} fullWidth /></Grid>
-                    <Grid item xs={12} sm={4}><TextField name="bairro" label="Bairro" value={clientFormData.bairro} onChange={handleClientFormChange} disabled={savingClient} fullWidth /></Grid>
-                    <Grid item xs={12} sm={4}><TextField name="cidade" label="Cidade" value={clientFormData.cidade} onChange={handleClientFormChange} disabled={savingClient} fullWidth /></Grid>
-                    <Grid item xs={12} sm={1}><TextField name="estado" label="UF" value={clientFormData.estado} onChange={handleClientFormChange} disabled={savingClient} fullWidth inputProps={{ maxLength: 2 }}/></Grid>
-                    <Grid item xs={12} sm={3}><TextField name="codigo_municipio_ibge" label="Cód. IBGE Município" value={clientFormData.codigo_municipio_ibge} onChange={handleClientFormChange} disabled={savingClient} fullWidth helperText="Preenchido via Busca CEP" inputProps={{ maxLength: 7 }}/></Grid>
+                    <Grid item xs={12} sm={5}><TextField name="bairro" label="Bairro" value={clientFormData.bairro} onChange={handleClientFormChange} disabled={savingClient} fullWidth /></Grid>
+                    <Grid item xs={12} sm={5}><TextField name="cidade" label="Cidade" value={clientFormData.cidade} onChange={handleClientFormChange} disabled={savingClient} fullWidth /></Grid>
+                    <Grid item xs={12} sm={2}><TextField name="estado" label="UF" value={clientFormData.estado} onChange={handleClientFormChange} disabled={savingClient} fullWidth inputProps={{ maxLength: 2 }}/></Grid>
                   </Grid>
                 </TabPanel>
 

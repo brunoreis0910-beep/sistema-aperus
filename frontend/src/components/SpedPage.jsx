@@ -45,7 +45,6 @@ const SpedPage = () => {
   const [gerarRelatorio, setGerarRelatorio] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [lastGeneratedFile, setLastGeneratedFile] = useState(null);
 
   const [openEmailDialog, setOpenEmailDialog] = useState(false);
   const [contadorEmail, setContadorEmail] = useState('');
@@ -181,43 +180,14 @@ const SpedPage = () => {
     }));
   };
 
-  const triggerBrowserDownload = (base64Data, filename) => {
-    try {
-      if (!base64Data) {
-        console.warn('Sem dados base64 para download');
-        return false;
-      }
-
-      const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '').trim();
-      const byteCharacters = atob(cleanBase64);
-      const byteNumbers = new Uint8Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const blob = new Blob([byteNumbers], { type: 'application/zip' });
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.style.display = 'none';
-      link.href = blobUrl;
-      const finalFilename = filename.endsWith('.zip') ? filename : `${filename}.zip`;
-      link.setAttribute('download', finalFilename);
-      document.body.appendChild(link);
-      link.click();
-      setTimeout(() => {
-        if (link.parentNode) link.parentNode.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
-      }, 15000);
-      return true;
-    } catch (e) {
-      console.error('Erro no download via Blob:', e);
-      return false;
-    }
-  };
-
   const gerarSped = async () => {
     setError('');
     setSuccess('');
     
+    if (!diretorio || diretorio.trim() === '') {
+      setError('⚠️ Informe o diretório onde o arquivo será salvo');
+      return;
+    }
     if (!dataInicio || !dataFim) {
       setError('Preencha as datas de início e fim');
       return;
@@ -243,48 +213,40 @@ const SpedPage = () => {
         blocos: blocosSelecionados,
         data_inicio: dataInicio,
         data_fim: dataFim,
-        diretorio: diretorio || 'C:\\SPED\\',
+        diretorio,
         exportar_xml: exportarXml,
         gerar_relatorio: gerarRelatorio
       });
-
       if (response.data && response.data.success) {
-        const d = response.data;
-        const filename = d.filename || `SPED_PACOTE_${dataInicio.replace(/-/g, '')}_${dataFim.replace(/-/g, '')}.zip`;
-        const downloadUrl = d.download_url || `/api/sped/download/${encodeURIComponent(filename)}/`;
-
-        setLastGeneratedFile({
-          base64: d.file_b64,
-          filename: filename,
-          downloadUrl: downloadUrl
-        });
-
-        triggerBrowserDownload(d.file_b64, filename, downloadUrl);
-
-        let msg = `✅ Pacote SPED (${filename}) pronto e disponível para download!`;
-        if (d.xml_export) {
-          const x = d.xml_export;
-          msg += `\n📦 XMLs incluídos no pacote: Total ${x.total}${x.nfe > 0 ? ` | NFe ${x.nfe}` : ''}${x.nfce > 0 ? ` | NFCe ${x.nfce}` : ''}${x.cte > 0 ? ` | CTe ${x.cte}` : ''}`;
+        let msg = `✅ ${response.data.message}\n📁 Salvo em: ${response.data.filepath}`;
+        if (response.data.xml_export) {
+          const x = response.data.xml_export;
+          msg += `\n\n📦 XMLs: Total ${x.total}${x.nfe > 0 ? ` | NFe ${x.nfe}` : ''}${x.nfce > 0 ? ` | NFCe ${x.nfce}` : ''}${x.cte > 0 ? ` | CTe ${x.cte}` : ''}`;
         }
-        if (d.relatorio?.success) msg += `\n📊 Relatório Fiscal em PDF incluído!`;
+        if (response.data.relatorio?.success) msg += `\n📊 Relatório: ${response.data.relatorio.filepath}`;
         setSuccess(msg);
-        setSpedFilepath(filename);
+        const filepath = response.data.filepath || '';
+        setSpedFilepath(filepath);
         setSpedPeriodo(`${dataInicio} a ${dataFim}`);
         await salvarConfig(conjuntosParaUsar);
         if (contadorEmail) {
           setOpenEmailDialog(true);
         }
       } else {
-        setError(response.data?.error || 'Erro ao gerar arquivo SPED');
+        setSuccess('Arquivo SPED gerado com sucesso!');
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Erro ao gerar arquivo SPED');
+      setError(err.response?.data?.error || 'Erro ao gerar arquivo SPED');
     } finally {
       setLoading(false);
     }
   };
 
   const salvarConfig = async (conjuntosOverride) => {
+    if (!diretorio || diretorio.trim() === '') {
+      setError('Informe o diretório de saída.');
+      return;
+    }
     setLoading(true);
     setError('');
     setSuccess('');
@@ -292,21 +254,16 @@ const SpedPage = () => {
       const blocosSelecionados = Object.keys(blocos).filter(k => blocos[k]);
       const conjuntosParaSalvar = conjuntosOverride || conjuntosSelecionados;
       await axiosInstance.post('/sped/salvar-config/', {
-        conjuntos: conjuntosParaSalvar.join(','),
-        diretorio: diretorio || 'C:\\SPED\\',
-        bloco_c: blocosSelecionados.includes('C'),
-        bloco_d: blocosSelecionados.includes('D'),
-        bloco_e: blocosSelecionados.includes('E'),
-        bloco_g: blocosSelecionados.includes('G'),
-        bloco_h: blocosSelecionados.includes('H'),
-        bloco_k: blocosSelecionados.includes('K'),
-        bloco_1: blocosSelecionados.includes('1'),
+        conjuntos: conjuntosParaSalvar,
+        diretorio: diretorio,
+        blocos: blocosSelecionados,
         exportar_xml: exportarXml,
         gerar_relatorio: gerarRelatorio,
-        contador_email: contadorEmail
+        versao: versao,
       });
+      setSuccess('Configurações salvas com sucesso!');
     } catch (err) {
-      console.warn('Erro salvando config:', err);
+      setError('Erro ao salvar configurações.');
     } finally {
       setLoading(false);
     }
@@ -317,8 +274,6 @@ const SpedPage = () => {
     try {
       const resp = await axiosInstance.post('/sped/enviar-email/', {
         filepath: spedFilepath,
-        filename: lastGeneratedFile?.filename || spedFilepath,
-        file_b64: lastGeneratedFile?.base64 || '',
         email: contadorEmail,
         periodo: spedPeriodo,
         contador_nome: contadorNome,
@@ -357,76 +312,8 @@ const SpedPage = () => {
       )}
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
+      {success && <Alert severity="success" sx={{ mb: 2, whiteSpace: 'pre-line' }} onClose={() => setSuccess('')}>{success}</Alert>}
       
-      {lastGeneratedFile && (
-        <Paper
-          elevation={3}
-          sx={{
-            p: 2.5,
-            mb: 2.5,
-            bgcolor: '#e8f5e9',
-            border: '2px solid #2e7d32',
-            borderRadius: 2,
-            display: 'flex',
-            flexDirection: { xs: 'column', sm: 'row' },
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 2
-          }}
-        >
-          <Box>
-            <Typography variant="h6" color="#1b5e20" fontWeight="bold">
-              ✅ Pacote SPED Gerado com Sucesso!
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Arquivo: <strong>{lastGeneratedFile.filename}</strong> (Contém TXT do SPED, XMLs e Relatório PDF)
-            </Typography>
-          </Box>
-          <Button
-            variant="contained"
-            color="success"
-            size="large"
-            startIcon={<DownloadIcon fontSize="large" />}
-            onClick={() => triggerBrowserDownload(lastGeneratedFile.base64, lastGeneratedFile.filename)}
-            sx={{ fontWeight: 'bold', fontSize: '1.05rem', px: 3, py: 1.5, boxShadow: 2, whiteSpace: 'nowrap' }}
-          >
-            📥 Salvar no meu Computador
-          </Button>
-        </Paper>
-      )}
-
-      {success && !lastGeneratedFile && (
-        <Alert severity="success" sx={{ mb: 2, whiteSpace: 'pre-line' }} onClose={() => setSuccess('')}>
-          {success}
-        </Alert>
-      )}
-      
-      {/* 🧠 Motor Fiscal Inteligente Ativo */}
-      <Paper 
-        variant="outlined" 
-        sx={{ 
-          p: 2, 
-          mb: 3, 
-          background: 'linear-gradient(135deg, rgba(21, 101, 192, 0.05) 0%, rgba(0, 150, 136, 0.08) 100%)', 
-          border: '1px solid #b2dfdb',
-          borderRadius: 2
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box sx={{ fontSize: '1.8rem' }}>🧠</Box>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#00695c' }}>
-              Motor de Higienização e Autocorreção Fiscal Ativo (Regime Normal / CRT 3)
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, lineHeight: 1.4 }}>
-              • <strong>Autocorreção CSOSN $\rightarrow$ CST:</strong> Converte automaticamente qualquer resíduo do Simples Nacional em CST de 3 dígitos válido (102 $\rightarrow$ 041, 500 $\rightarrow$ 060, etc.)<br/>
-              • <strong>Blindagem C100 / C170 / C190:</strong> Garante 100% de harmonia entre bases de cálculo, alíquotas e totais de ICMS do documento mestre e registros analíticos.<br/>
-              • <strong>Receita Estadual & PIS/COFINS/IPI:</strong> Ajusta códigos de receita da UF (MG: 3131) e converte CSTs de saída em CSTs de entrada nas compras.
-            </Typography>
-          </Box>
-        </Box>
-      </Paper>
-
       <Paper sx={{ p: 3 }}>
         <Grid container spacing={3}>
           {/* Período */}
@@ -469,15 +356,16 @@ const SpedPage = () => {
             </FormControl>
           </Grid>
           
-          {/* Diretório de Backup no Servidor */}
-          <Grid item xs={12} md={6}>
+          {/* Diretório */}
+          <Grid item xs={12}>
             <TextField
               fullWidth
-              label="📁 Diretório de Cópia no Servidor (Opcional)"
+              label="📁 Diretório de Saída (arquivo será salvo aqui)"
               value={diretorio}
               onChange={(e) => setDiretorio(e.target.value)}
               placeholder="Ex: C:\SPED\"
-              helperText="O arquivo ZIP é baixado no seu navegador. Opcionalmente, uma cópia de backup é salva no servidor."
+              helperText="O arquivo SPED será salvo neste diretório no servidor"
+              required
             />
           </Grid>
           

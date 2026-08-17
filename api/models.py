@@ -1009,7 +1009,7 @@ class ContaServico(models.Model):
     cnpj_fornecedor = models.CharField(max_length=18, blank=True, null=True)
     numero_documento = models.CharField(max_length=50, blank=True)
     serie = models.CharField(max_length=5, blank=True)
-    chave_acesso = models.CharField(max_length=100, blank=True, null=True)
+    chave_acesso = models.CharField(max_length=44, blank=True, null=True)
     data_emissao = models.DateField()
     data_vencimento = models.DateField(blank=True, null=True)
     data_pagamento = models.DateField(blank=True, null=True)
@@ -2441,13 +2441,6 @@ class Compra(models.Model):
     
     gerou_financeiro = models.IntegerField(blank=True, null=True, default=0, db_column='gerou_financeiro')
 
-    # Suporte a Notas de Débito (finNFe = 6) e Ajustes de Custo (Reforma Tributária / RTC)
-    finalidade = models.CharField(max_length=2, default='1', db_column='finalidade')
-    tipo_debito = models.CharField(max_length=2, blank=True, null=True, db_column='tipo_debito')
-    chave_referenciada = models.CharField(max_length=44, blank=True, null=True, db_column='chave_referenciada')
-    movimenta_estoque_fisico = models.BooleanField(default=True, db_column='movimenta_estoque_fisico')
-    ajuste_custo = models.BooleanField(default=False, db_column='ajuste_custo')
-
     class Meta:
         db_table = 'compras'
         managed = False
@@ -2477,10 +2470,6 @@ class CompraItem(models.Model):
     valor_icms = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_icms')
     valor_pis = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_pis')
     valor_cofins = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_cofins')
-
-    # Vínculo com item de origem (DFeReferenciado)
-    chave_origem = models.CharField(max_length=44, blank=True, null=True, db_column='chave_origem')
-    n_item_origem = models.IntegerField(blank=True, null=True, db_column='n_item_origem')
 
     class Meta:
         db_table = 'compra_itens'
@@ -5441,7 +5430,6 @@ class ConfiguracaoImpressao(models.Model):
     TIPO_IMPRESSORA_CHOICES = [
         ('termica', 'Térmica (Cupom)'),
         ('a4', 'A4 (Folha)'),
-        ('a4_fotos', 'A4 com Fotos e Assinatura'),
         ('personalizado', 'Gabarito Customizado'),
     ]
     LARGURA_TERMICA_CHOICES = [
@@ -5457,9 +5445,10 @@ class ConfiguracaoImpressao(models.Model):
         help_text='Módulo do sistema ao qual esta configuração se aplica',
     )
     tipo_impressora = models.CharField(
-        max_length=50,
+        max_length=20,
+        choices=TIPO_IMPRESSORA_CHOICES,
         default='termica',
-        help_text='Tipo de impressora a utilizar (termica, a4, a4_fotos, personalizado)',
+        help_text='Tipo de impressora a utilizar',
     )
     gabarito_customizado_nome = models.CharField(
         max_length=100,
@@ -6412,42 +6401,6 @@ class ContratoResponsabilidade(models.Model):
         db_table = 'contrato_responsabilidade'
         managed = True
         ordering = ['-criado_em']
-
-
-class CodigoMunicipio(models.Model):
-    codigo_ibge = models.CharField(max_length=7, primary_key=True, help_text="Código IBGE do Município (7 dígitos)")
-    nome_municipio = models.CharField(max_length=100, help_text="Nome do Município")
-    uf = models.CharField(max_length=2, help_text="Unidade da Federação (UF)")
-    data_atualizacao = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'codigo_municipio'
-        managed = True
-        ordering = ['uf', 'nome_municipio']
-        verbose_name = 'Código de Município IBGE'
-        verbose_name_plural = 'Códigos de Municípios IBGE'
-
-    def __str__(self):
-        return f"{self.codigo_ibge} - {self.nome_municipio}/{self.uf}"
-
-
-class CodigoReceitaSPED(models.Model):
-    codigo_receita = models.CharField(max_length=20, primary_key=True, help_text="Código de Receita (ex: 000, 046-2, 100080)")
-    descricao = models.CharField(max_length=200, help_text="Descrição da Obrigação de ICMS/Tributo")
-    uf = models.CharField(max_length=2, blank=True, null=True, help_text="UF de aplicação (opcional)")
-    data_atualizacao = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'codigo_receita_sped'
-        managed = True
-        ordering = ['codigo_receita']
-        verbose_name = 'Código de Receita SPED'
-        verbose_name_plural = 'Códigos de Receitas SPED'
-
-    def __str__(self):
-        return f"{self.codigo_receita} - {self.descricao}"
-
-
 
 
 

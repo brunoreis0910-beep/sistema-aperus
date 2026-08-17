@@ -97,15 +97,10 @@ class SpedEFDGenerator:
             logger.info(f"SPED RESULTADO: {self.ctes.count()} CTes encontrados no período")
         except ImportError:
             logger.warning("Modelo ConhecimentoTransporte não disponível")
-        # Buscar Compras (Notas Fiscais de Entrada / Débito / Complementares)
-        try:
-            from api.models import Compra
-            query_compras = Q(data_entrada__gte=dt_ini_datetime.date()) & Q(data_entrada__lte=dt_fim_datetime.date())
-            self.compras = Compra.objects.filter(query_compras).order_by('data_entrada', 'numero_documento')
-            logger.info(f"SPED RESULTADO: {self.compras.count()} compras/entradas encontradas no período")
-        except Exception as e_comp:
-            logger.warning(f"Erro ao buscar compras para SPED: {e_comp}")
-            self.compras = []
+            self.ctes = []
+        except Exception as e:
+            logger.error(f"Erro ao buscar CTes: {str(e)}")
+            self.ctes = []
         
         
     def format_date(self, dt):
@@ -127,19 +122,6 @@ class SpedEFDGenerator:
         if length:
             return s[:length]
         return s
-
-    def format_cst_icms(self, cst):
-        from api.services.tax_converter import formatar_cst_icms_sped
-        return formatar_cst_icms_sped(cst, padrao="000")
-
-    def format_cfop(self, cfop_input, default="1949"):
-        import re
-        if not cfop_input:
-            return default
-        cfop_str = re.sub(r'[^\d]', '', str(cfop_input).strip())
-        if len(cfop_str) == 4:
-            return cfop_str
-        return default
 
     def add_line(self, reg, *args):
         line_data = [reg] + list(args) + [''] # Ends with |
@@ -253,99 +235,83 @@ class SpedEFDGenerator:
 
         self.add_line("0005", fantasia, cep, endereco, numero, complemento, bairro, telefone, fax, email)
 
-        # 0100: Dados do Contabilista (OBRIGATÓRIO no SPED - sempre gerar)
-        cpf_cont = re.sub(r'[^\d]', '', getattr(self.empresa, 'contador_cpf', '') or getattr(self.empresa, 'cpf_cnpj', '') or "00000000000")
-        cnpj_cont = re.sub(r'[^\d]', '', getattr(self.empresa, 'contador_cnpj', '') or "")
-        cep_cont = re.sub(r'[^\d]', '', getattr(self.empresa, 'contador_cep', '') or getattr(self.empresa, 'cep', '') or "00000000")
-        fone_cont = re.sub(r'[^\d]', '', getattr(self.empresa, 'contador_fone', '') or getattr(self.empresa, 'telefone_1', '') or getattr(self.empresa, 'telefone', '') or "")
-        fax_cont = ""
-        cod_mun_cont = getattr(self.empresa, 'contador_cod_mun', '') or getattr(self.empresa, 'codigo_municipio_ibge', '') or "3550308"
-        cod_mun_cont = re.sub(r'[^\d]', '', str(cod_mun_cont)).zfill(7)[:7]
+        # 0100: Dados do Contabilista
+        if self.empresa.contador_nome and self.empresa.contador_cpf:
+            cpf_cont = re.sub(r'[^\d]', '', self.empresa.contador_cpf or "")
+            cnpj_cont = re.sub(r'[^\d]', '', self.empresa.contador_cnpj or "")
+            cep_cont = re.sub(r'[^\d]', '', self.empresa.contador_cep or "")
+            fone_cont = re.sub(r'[^\d]', '', self.empresa.contador_fone or "")
+            fax_cont = re.sub(r'[^\d]', '', self.empresa.contador_fax or "")
+            
+            # 0100|NOME|CPF|CRC|CNPJ|CEP|END|NUM|COMPL|BAIRRO|FONE|FAX|EMAIL|COD_MUN|
+            self.add_line("0100", 
+                          self.format_str(self.empresa.contador_nome, 60),
+                          cpf_cont,
+                          self.format_str(self.empresa.contador_crc, 15),
+                          cnpj_cont,
+                          cep_cont,
+                          self.format_str(self.empresa.contador_endereco, 60),
+                          self.format_str(self.empresa.contador_numero, 10),
+                          self.format_str(self.empresa.contador_complemento, 60),
+                          self.format_str(self.empresa.contador_bairro, 60),
+                          fone_cont,
+                          fax_cont,
+                          self.format_str(self.empresa.contador_email, 60),
+                          self.format_str(self.empresa.contador_cod_mun, 7)
+                         )
 
-        nome_cont = self.format_str(getattr(self.empresa, 'contador_nome', '') or "CONTABILIDADE FISCAL", 60)
-        crc_cont = self.format_str(getattr(self.empresa, 'contador_crc', '') or "CRC/000000", 15)
-        end_cont = self.format_str(getattr(self.empresa, 'contador_endereco', '') or self.empresa.endereco or "Rua Principal", 60)
-        num_cont = self.format_str(getattr(self.empresa, 'contador_numero', '') or self.empresa.numero or "100", 10)
-        bairro_cont = self.format_str(getattr(self.empresa, 'contador_bairro', '') or self.empresa.bairro or "Centro", 60)
-        email_cont = self.format_str(getattr(self.empresa, 'contador_email', '') or self.empresa.email or "contato@empresa.com", 60)
-
-        # 0100|NOME|CPF|CRC|CNPJ|CEP|END|NUM|COMPL|BAIRRO|FONE|FAX|EMAIL|COD_MUN|
-        self.add_line("0100", 
-                      nome_cont, 
-                      cpf_cont, 
-                      crc_cont, 
-                      cnpj_cont, 
-                      cep_cont, 
-                      end_cont, 
-                      num_cont, 
-                      "", 
-                      bairro_cont, 
-                      fone_cont, 
-                      fax_cont, 
-                      email_cont, 
-                      cod_mun_cont
-                     )
-
-        # Participantes estritamente USADOS nos registros C100, C113, D100
-        participantes_clientes = set()
-        participantes_fornecedores = set()
+        # Participantes référenciados
+        participantes = set()
         
-        # Iterar sobre as vendas para coletar clientes USADOS em C100 (modelo != 65)
+        # Iterar sobre as vendas para coletar participantes USADOS
         for v in self.vendas:
+            # Para NFC-e (65), não usar participante no C100, logo não deve aparecer no 0150 se só tiver NFC-e
             modelo = "55"
             op = v.id_operacao
             if op and op.modelo_documento:
-                modelo = str(op.modelo_documento)
+                modelo = op.modelo_documento
             elif v.chave_nfe and len(v.chave_nfe) == 44:
                 modelo = v.chave_nfe[20:22]
             
-            # Se for NFC-e (65), participante não vai no C100, logo não deve constar no 0150
+            # Se for NFC-e (65), participante não vai no C100
             if modelo == "65":
                 continue
 
             if v.id_cliente:
-                participantes_clientes.add(v.id_cliente.id_cliente)
+                participantes.add(v.id_cliente.id_cliente)
         
-        # Coletar participantes dos CTes (somente o tomador efetivamente referenciado no D100)
-        if 'D' in self.blocos_gerar:
-            for cte in self.ctes:
-                tomador_id = None
-                if cte.tomador_servico == 0 and cte.remetente:
-                    tomador_id = cte.remetente.id_cliente
-                elif cte.tomador_servico == 1 and cte.expedidor:
-                    tomador_id = cte.expedidor.id_cliente
-                elif cte.tomador_servico == 2 and cte.recebedor:
-                    tomador_id = cte.recebedor.id_cliente
-                elif cte.tomador_servico == 3 and cte.destinatario:
-                    tomador_id = cte.destinatario.id_cliente
-                elif cte.tomador_servico == 4 and cte.tomador_outros:
-                    tomador_id = cte.tomador_outros.id_cliente
-                elif cte.destinatario:
-                    tomador_id = cte.destinatario.id_cliente
+        # Coletar participantes dos CTes (remetente, destinatário, tomador)
+        for cte in self.ctes:
+            if cte.remetente:
+                participantes.add(cte.remetente.id_cliente)
+            if cte.destinatario:
+                participantes.add(cte.destinatario.id_cliente)
+            if cte.tomador_outros:
+                participantes.add(cte.tomador_outros.id_cliente)
+            if cte.expedidor:
+                participantes.add(cte.expedidor.id_cliente)
+            if cte.recebedor:
+                participantes.add(cte.recebedor.id_cliente)
                 
-                if tomador_id:
-                    participantes_clientes.add(tomador_id)
-
-        # Coletar fornecedores das compras para C100/C113
-        for comp in getattr(self, 'compras', []):
-            if comp.id_fornecedor:
-                participantes_fornecedores.add(comp.id_fornecedor)
-
-        cod_mun_empresa_padrao = re.sub(r'[^\d]', '', str(getattr(self.empresa, 'codigo_municipio_ibge', '') or "3550308")).zfill(7)[:7]
-
-        # Iterar clientes unicos referenciados
-        for cid in participantes_clientes:
+        # Iterar clientes unicos
+        for cid in participantes:
             if not cid: continue
             cli = Cliente.objects.filter(id_cliente=cid).first()
             if not cli: continue
             
+            # 0150|COD_PART|NOME|COD_PAIS|CNPJ|CPF|IE|COD_MUN|SUFRAMA|END|NUM|COMP|BAIRRO|
+            
+            # Limpa nome do cliente (remove CPF/CNPJ do início)
             nome_cli = re.sub(r'^[\d\.\-/\s]+', '', cli.nome_razao_social).strip()
+            
+            # Remove formatação do CPF/CNPJ
             cpf_cnpj = re.sub(r'[^\d]', '', cli.cpf_cnpj or '')
             
-            cod_mun_cli = re.sub(r'[^\d]', '', str(getattr(cli, 'codigo_municipio_ibge', '') or getattr(cli, 'codigo_municipio_limpo', '') or '')).strip()
-            if len(cod_mun_cli) < 7:
-                cod_mun_cli = cod_mun_empresa_padrao
-
+            # Código do município do cliente (deixar vazio se não tiver)
+            cod_mun_cli = ""
+            if hasattr(cli, 'codigo_municipio_limpo'):
+                cod_mun_cli = cli.codigo_municipio_limpo
+            
             self.add_line("0150", 
                           f"C{cli.id_cliente}", 
                           nome_cli, 
@@ -353,42 +319,20 @@ class SpedEFDGenerator:
                           cpf_cnpj if len(cpf_cnpj) == 14 else "",  # CNPJ
                           cpf_cnpj if len(cpf_cnpj) == 11 else "",  # CPF
                           cli.inscricao_estadual or "",
-                          cod_mun_cli,  # Código IBGE do município (NUNCA VAZIO)
+                          cod_mun_cli,  # Código IBGE do município
                           "", 
                           cli.endereco or "", 
                           cli.numero or "", 
                           "", 
                           cli.bairro or "")
 
-        # Iterar Fornecedores das compras para Registro 0150
-        for forn in participantes_fornecedores:
-            nome_forn = re.sub(r'^[\d\.\-/\s]+', '', forn.nome_razao_social).strip()
-            cpf_cnpj_f = re.sub(r'[^\d]', '', forn.cpf_cnpj or '')
-            
-            cod_mun_f = re.sub(r'[^\d]', '', str(getattr(forn, 'codigo_municipio_ibge', '') or getattr(forn, 'codigo_municipio_limpo', '') or '')).strip()
-            if len(cod_mun_f) < 7:
-                cod_mun_f = cod_mun_empresa_padrao
-
-            self.add_line("0150",
-                          f"F{forn.id_fornecedor}",
-                          nome_forn,
-                          "1058",
-                          cpf_cnpj_f if len(cpf_cnpj_f) == 14 else "",
-                          cpf_cnpj_f if len(cpf_cnpj_f) == 11 else "",
-                          forn.inscricao_estadual or "",
-                          cod_mun_f, # Código IBGE do município (NUNCA VAZIO)
-                          "",
-                          forn.endereco or "",
-                          forn.numero or "",
-                          "",
-                          forn.bairro or "")
-
         # 0190: Unidades de Medida (gerar apenas uma vez por unidade)
         # 0200: Tabela de Identificação do Item (Produto)
-        # Para todos os produtos referenciados em itens de entrada (C170) ou saída (C170)
-        produtos_usados_ids = set()
+        # Apenas para produtos que aparecem em registros que referenciam itens (C170, C800, D100, etc.)
+        # Para NF-e/NFC-e (55/65) que só têm C190, NÃO gerar 0190/0200
         
-        # Produtos das vendas com C170
+        # Filtrar apenas vendas com modelos que exigem C170
+        vendas_com_c170 = []
         for v in self.vendas:
             modelo = "55"
             if v.id_operacao and v.id_operacao.modelo_documento:
@@ -396,34 +340,33 @@ class SpedEFDGenerator:
             elif v.chave_nfe and len(v.chave_nfe) == 44:
                 modelo = v.chave_nfe[20:22]
             
-            if modelo not in ['55', '65']:
-                p_ids = VendaItem.objects.filter(id_venda=v.id_venda).values_list('id_produto', flat=True)
-                produtos_usados_ids.update([p for p in p_ids if p])
-
-        # Produtos das compras (que geram C170)
-        for comp in getattr(self, 'compras', []):
-            for it in comp.itens.all():
-                if it.id_produto_id:
-                    produtos_usados_ids.add(it.id_produto_id)
-
-        if produtos_usados_ids:
+            if modelo not in ['55', '65']:  # Apenas modelos que geram C170
+                vendas_com_c170.append(v.id_venda)
+        
+        # Se há vendas com C170, gerar 0190/0200
+        if vendas_com_c170:
+            produtos_ids = VendaItem.objects.filter(id_venda__in=vendas_com_c170).values_list('id_produto', flat=True).distinct()
+            
+            # Coleta unidades únicas
             unidades_usadas = set()
             produtos_list = []
-            for pid in produtos_usados_ids:
+            for pid in produtos_ids:
                 prod = Produto.objects.filter(id_produto=pid).first()
                 if prod:
                     unidade = prod.unidade_medida or "UN"
                     unidades_usadas.add(unidade)
                     produtos_list.append((prod, unidade))
-
+            
             # Gera 0190 apenas uma vez por unidade
-            for unidade in sorted(unidades_usadas):
+            for unidade in unidades_usadas:
                 self.add_line("0190", unidade, unidade)
-
+            
             # Gera 0200 para cada produto
             for prod, unidade in produtos_list:
+                # 0200|COD_ITEM|DESCR_ITEM|COD_BARRA|COD_ANT_ITEM|UNID_INV|TIPO_ITEM|COD_NCM|EX_IPI|COD_GEN|COD_LST|ALIQ_ICMS|CEST|
+                # Tentar achar aliquota padrao
                 aliq = "0"
-                if hasattr(prod, 'tributacao_detalhada') and prod.tributacao_detalhada:
+                if hasattr(prod, 'tributacao_detalhada'):
                     aliq = prod.tributacao_detalhada.icms_aliquota
                 
                 self.add_line("0200", 
@@ -440,7 +383,7 @@ class SpedEFDGenerator:
                               self.format_decimal(aliq), # ALIQ_ICMS
                               "" # CEST
                              )
-
+                             
         self.add_line("0990", self.count_reg_block("0"))
 
     def generate_block_b(self):
@@ -488,28 +431,21 @@ class SpedEFDGenerator:
             vl_bc_icms_total = Decimal(0)
             vl_icms_total = Decimal(0)
             
-            from api.services.tax_converter import sanitizar_item_fiscal_sped
-
             if cod_sit == "00":  # Somente se documento regular
                 for item in itens_venda:
                     prod = item.id_produto
                     if not prod: continue
                     
                     trib = getattr(prod, 'tributacao_detalhada', None)
-                    cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None)
-                    csosn_raw = getattr(trib, 'csosn', None)
-                    aliq_raw = trib.icms_aliquota if trib else Decimal(0)
+                    cst_icms = trib.cst_icms if trib else "000"
+                    cst_icms = cst_icms[-3:] if cst_icms else "000"
                     
-                    dados_fiscais = sanitizar_item_fiscal_sped(
-                        cst_raw=cst_raw,
-                        csosn_raw=csosn_raw,
-                        cfop_raw=None,
-                        aliq_raw=aliq_raw,
-                        valor_item=item.valor_total
-                    )
+                    aliq_icms = trib.icms_aliquota if trib else Decimal(0)
+                    vl_bc_icms = item.valor_total if cst_icms in ['000', '020', '090'] else Decimal(0)
+                    vl_icms = vl_bc_icms * (aliq_icms / 100) if vl_bc_icms > 0 else Decimal(0)
                     
-                    vl_bc_icms_total += dados_fiscais['vl_bc_icms']
-                    vl_icms_total += dados_fiscais['vl_icms']
+                    vl_bc_icms_total += vl_bc_icms
+                    vl_icms_total += vl_icms
             
             # Se a venda tiver IPI/ST somado no total, precisaria descontar para achar vl_merc real. 
             # Simplificação assumindo Total = Merc - Desc
@@ -578,25 +514,17 @@ class SpedEFDGenerator:
                      prod = item.id_produto
                      if not prod: continue
                      
-                     # Buscar dados fiscais com higienização inteligente
+                     # Buscar dados fiscais
                      trib = getattr(prod, 'tributacao_detalhada', None)
-                     cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None)
-                     csosn_raw = getattr(trib, 'csosn', None)
-                     aliq_raw = trib.icms_aliquota if trib else Decimal(0)
+                     cst_icms = trib.cst_icms if trib else "000"
+                     cst_icms = cst_icms[-3:] if cst_icms else "000"
                      
-                     dados_fiscais = sanitizar_item_fiscal_sped(
-                         cst_raw=cst_raw,
-                         csosn_raw=csosn_raw,
-                         cfop_raw=None,
-                         aliq_raw=aliq_raw,
-                         valor_item=item.valor_total
-                     )
+                     cfop = "5102" 
+                     if cst_icms in ['060', '500']: cfop = "5405"
                      
-                     cst_icms = dados_fiscais['cst_icms']
-                     cfop = dados_fiscais['cfop']
-                     aliq_icms = dados_fiscais['aliq_icms']
-                     vl_bc_icms = dados_fiscais['vl_bc_icms']
-                     vl_icms = dados_fiscais['vl_icms']
+                     aliq_icms = trib.icms_aliquota if trib else Decimal(0)
+                     vl_bc_icms = item.valor_total if cst_icms in ['000', '020', '090'] else Decimal(0)
+                     vl_icms = vl_bc_icms * (aliq_icms / 100) if vl_bc_icms > 0 else Decimal(0)
                      
                      # Somente gera C170 para modelos que não sejam NF-e/NFC-e
                      if gerar_c170:
@@ -659,191 +587,19 @@ class SpedEFDGenerator:
                     self.total_vl_icms += vals['vl_icms']
                     
                     self.add_line("C190", 
-                                  cst,                                   # 02 CST_ICMS
-                                  cfop,                                  # 03 CFOP
-                                  self.format_decimal(aliq),            # 04 ALIQ_ICMS
-                                  self.format_decimal(vals['vl_opr']),  # 05 VL_OPR
-                                  self.format_decimal(vals['vl_bc']),   # 06 VL_BC_ICMS
-                                  self.format_decimal(vals['vl_icms']), # 07 VL_ICMS
-                                  "0,00",                                # 08 VL_BC_ICMS_ST
-                                  "0,00",                                # 09 VL_ICMS_ST
-                                  "0,00",                                # 10 VL_RED_BC
-                                  "0,00",                                # 11 VL_IPI
-                                  ""                                     # 12 COD_OBS
+                                  cst,                                   # CST_ICMS
+                                  cfop,                                  # CFOP
+                                  self.format_decimal(aliq),            # ALIQ_ICMS
+                                  self.format_decimal(vals['vl_opr']),  # VL_OPR
+                                  self.format_decimal(vals['vl_bc']),   # VL_BC_ICMS
+                                  self.format_decimal(vals['vl_icms']), # VL_ICMS
+                                  "0,00",                                # VL_BC_ICMS_ST
+                                  "0,00",                                # ALIQ_ST
+                                  "0,00",                                # VL_ICMS_ST
+                                  "0,00",                                # VL_RED_BC
+                                  ""                                     # COD_OBS
                                  )
 
-        # Processar Compras (Notas Fiscais de Entrada / Débito / Complementares)
-        for compra in getattr(self, 'compras', []):
-            op = compra.id_operacao
-            forn = compra.id_fornecedor
-            if not forn:
-                continue
-
-            modelo = "55"
-            if compra.dados_entrada and len(compra.dados_entrada) == 44:
-                modelo = compra.dados_entrada[20:22]
-
-            cod_part = f"F{forn.id_fornecedor}"
-            cod_sit = "00"
-
-            vl_doc = compra.valor_total
-            vl_merc = compra.valor_total
-            vl_desc = Decimal('0.00')
-
-            itens_compra = compra.itens.all()
-            vl_bc_icms_total = Decimal(0)
-            vl_icms_total = Decimal(0)
-
-            for item in itens_compra:
-                prod = item.id_produto
-                if not prod: continue
-                trib = getattr(prod, 'tributacao_detalhada', None)
-                cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None)
-                csosn_raw = getattr(trib, 'csosn', None)
-                aliq_raw = trib.icms_aliquota if trib else Decimal(0)
-                raw_cfop = getattr(item, 'cfop', None) or (op.cfop if op and getattr(op, 'cfop', None) else None)
-                cfop_entrada = self.format_cfop(raw_cfop, "1949")
-
-                dados_fiscais = sanitizar_item_fiscal_sped(
-                    cst_raw=cst_raw,
-                    csosn_raw=csosn_raw,
-                    cfop_raw=cfop_entrada,
-                    aliq_raw=aliq_raw,
-                    valor_item=item.valor_total
-                )
-                vl_bc_icms_total += dados_fiscais['vl_bc_icms']
-                vl_icms_total += dados_fiscais['vl_icms']
-
-            dt_doc = getattr(compra, 'data_emissao_nfe', None) or compra.data_entrada
-            dt_es = compra.data_entrada
-
-            # C100 de Entrada (IND_OPER = '0' Entrada, IND_EMIT = '1' Terceiros)
-            self.add_line("C100",
-                          "0",  # 0 = Entrada
-                          "1",  # 1 = Terceiros (emitido pelo fornecedor)
-                          cod_part,
-                          modelo,
-                          cod_sit,
-                          getattr(compra, 'serie_nota', None) or "1",
-                          compra.numero_documento or "",
-                          compra.dados_entrada or "",  # Chave NFe
-                          self.format_date(dt_doc),
-                          self.format_date(dt_es),
-                          self.format_decimal(vl_doc),
-                          "0" if getattr(compra, 'vista', True) else "1",
-                          self.format_decimal(vl_desc),
-                          "0,00",
-                          self.format_decimal(vl_merc),
-                          "9", # Sem frete
-                          "0,00", "0,00", "0,00",
-                          self.format_decimal(vl_bc_icms_total),
-                          self.format_decimal(vl_icms_total),
-                          "0,00", "0,00", "0,00", "0,00", "0,00", "0,00", "0,00"
-                          )
-
-            # --- REGISTRO C113: Documento Fiscal Referenciado (SE FOR NOTA DE DÉBITO / COMPLEMENTAR finNFe=6) ---
-            fin_val = str(getattr(compra, 'finalidade', '1'))
-            e_nota_debito = fin_val in ['2', '3', '6'] or bool(getattr(compra, 'chave_referenciada', None) or getattr(compra, 'id_compra_origem', None))
-
-            chave_ref = getattr(compra, 'chave_referenciada', '') or (compra.id_compra_origem.dados_entrada if getattr(compra, 'id_compra_origem', None) and compra.id_compra_origem.dados_entrada else '')
-            if e_nota_debito and chave_ref and len(chave_ref) == 44:
-                ser_origem = chave_ref[22:25].lstrip('0') or "1"
-                num_origem = chave_ref[25:34].lstrip('0') or "1"
-                
-                # C113|IND_OPER|IND_EMIT|COD_PART|COD_MOD|SER|SUB|NUM_DOC|DT_DOC|CHV_NFE|
-                self.add_line("C113",
-                              "0",        # IND_OPER: 0=Entrada
-                              "1",        # IND_EMIT: 1=Terceiros
-                              cod_part,   # COD_PART
-                              "55",       # COD_MOD: 55 NFe
-                              ser_origem, # SER
-                              "",         # SUB
-                              num_origem, # NUM_DOC
-                              self.format_date(dt_doc), # DT_DOC
-                              chave_ref   # CHV_NFE (44 dígitos da nota de origem)
-                              )
-
-            # C170 e C190 para compra
-            c190_agg_compra = {}
-            for item in itens_compra:
-                prod = item.id_produto
-                if not prod: continue
-                trib = getattr(prod, 'tributacao_detalhada', None)
-                cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None)
-                csosn_raw = getattr(trib, 'csosn', None)
-                aliq_raw = trib.icms_aliquota if trib else Decimal(0)
-                raw_cfop = getattr(item, 'cfop', None) or (op.cfop if op and getattr(op, 'cfop', None) else None)
-                cfop_entrada = self.format_cfop(raw_cfop, "1949")
-
-                dados_fiscais = sanitizar_item_fiscal_sped(
-                    cst_raw=cst_raw,
-                    csosn_raw=csosn_raw,
-                    cfop_raw=cfop_entrada,
-                    aliq_raw=aliq_raw,
-                    valor_item=item.valor_total
-                )
-
-                cst_icms = dados_fiscais['cst_icms']
-                cfop = dados_fiscais['cfop']
-                aliq_icms = dados_fiscais['aliq_icms']
-                vl_bc_icms = dados_fiscais['vl_bc_icms']
-                vl_icms = dados_fiscais['vl_icms']
-
-                # CSTs de Entrada para IPI, PIS e COFINS
-                from api.services.tax_converter import (
-                    converter_cst_pis_cofins_entrada,
-                    converter_cst_ipi_entrada
-                )
-                cst_ipi_raw = getattr(trib, 'cst_ipi', None) or "49"
-                cst_ipi = converter_cst_ipi_entrada(cst_ipi_raw, padrao_se_vazio="49")
-                
-                cst_pis_raw = getattr(trib, 'cst_pis_cofins', None) or getattr(trib, 'cst_pis', None) or "70"
-                cst_pis = converter_cst_pis_cofins_entrada(cst_pis_raw, padrao_se_vazio="70")
-                
-                cst_cofins_raw = getattr(trib, 'cst_pis_cofins', None) or getattr(trib, 'cst_cofins', None) or "70"
-                cst_cofins = converter_cst_pis_cofins_entrada(cst_cofins_raw, padrao_se_vazio="70")
-
-                # Gerar C170 para a compra
-                self.add_line("C170",
-                              str(item.id_item),
-                              prod.codigo_produto,
-                              "Ajuste Complementar (Debito)" if e_nota_debito else "",
-                              self.format_decimal(item.quantidade, 3),
-                              prod.unidade_medida or "UN",
-                              self.format_decimal(item.valor_total),
-                              "0,00",
-                              "0",
-                              cst_icms,
-                              cfop,
-                              "",
-                              self.format_decimal(vl_bc_icms),
-                              self.format_decimal(aliq_icms),
-                              self.format_decimal(vl_icms),
-                              "0,00", "0,00", "0,00", "0", cst_ipi, "",
-                              "0,00", "0,00", "0,00", cst_pis, "0,00", "0,00", "0,00", "0,00", "0,00", cst_cofins, "0,00", "0,00", "0,00", "0,00", "0,00", "", "0,00"
-                              )
-
-                key = (cst_icms, cfop, aliq_icms)
-                if key not in c190_agg_compra:
-                    c190_agg_compra[key] = {'vl_opr': Decimal(0), 'vl_bc': Decimal(0), 'vl_icms': Decimal(0)}
-                c190_agg_compra[key]['vl_opr'] += item.valor_total
-                c190_agg_compra[key]['vl_bc'] += vl_bc_icms
-                c190_agg_compra[key]['vl_icms'] += vl_icms
-
-            for (cst_icms, cfop, aliq_icms), vals in c190_agg_compra.items():
-                self.add_line("C190",
-                              cst_icms,                             # 02 CST_ICMS
-                              cfop,                                 # 03 CFOP
-                              self.format_decimal(aliq_icms),       # 04 ALIQ_ICMS
-                              self.format_decimal(vals['vl_opr']),  # 05 VL_OPR
-                              self.format_decimal(vals['vl_bc']),   # 06 VL_BC_ICMS
-                              self.format_decimal(vals['vl_icms']), # 07 VL_ICMS
-                              "0,00",                               # 08 VL_BC_ICMS_ST
-                              "0,00",                               # 09 VL_ICMS_ST
-                              "0,00",                               # 10 VL_RED_BC
-                              "0,00",                               # 11 VL_IPI
-                              ""                                    # 12 COD_OBS
-                              )
 
         self.add_line("C990", self.count_reg_block("C"))
 
@@ -964,9 +720,8 @@ class SpedEFDGenerator:
             if cte.tomador_servico == 0: ind_frt = "0"
             elif cte.tomador_servico == 3: ind_frt = "1"
             
-            # Padronizar CST para 3 dígitos válidos
-            from api.services.tax_converter import formatar_cst_icms_sped
-            cst_icms = formatar_cst_icms_sped(cte.cst_icms, padrao="000")
+            # Padronizar CST para 3 dígitos: 00 -> 000
+            cst_icms = str(cte.cst_icms or "00").zfill(3)
             
             self.add_line("D100",
                           ind_oper,              # 02 IND_OPER
@@ -1045,15 +800,15 @@ class SpedEFDGenerator:
                       "0,00", "0,00"                   # Saldo final e débito especial
                      )
         
-        # E116: Obrigações do ICMS Recolhido ou a Recolher - Operações Próprias (OBRIGATÓRIO quando E110 > 0)
-        if self.total_vl_icms > 0:
-            uf_emp = (getattr(self.empresa, 'estado', '') or 'MG').upper().strip()
-            padrao_uf = "3131" if uf_emp == "MG" else ("0462" if uf_emp == "SP" else "100080")
-            cod_receita = getattr(self.empresa, 'codigo_receita_icms', None) or padrao_uf
-            cod_receita = str(cod_receita).replace('-', '').replace('.', '').strip()
-            if not cod_receita or cod_receita in ['000', 'None']:
-                cod_receita = padrao_uf
-
+        # E116: Obrigações do ICMS Recolhido ou a Recolher - Operações Próprias
+        # Obrigatório se houver valor a recolher (VL_ICMS_RECOLHER do E110 > 0)
+        # E se houver código de receita configurado válido
+        cod_receita = getattr(self.empresa, 'codigo_receita_icms', None) or ""
+        cod_receita = cod_receita.strip()
+        
+        # Só gera E116 se tiver ICMS a recolher E código de receita válido (não vazio e diferente de "000")
+        if self.total_vl_icms > 0 and cod_receita and cod_receita != "000":
+            # Vencimento padrão: dia 20 do mês seguinte is a reasonable default approximation
             month = self.data_inicio.month
             year = self.data_inicio.year
             if month == 12:
@@ -1062,14 +817,14 @@ class SpedEFDGenerator:
             else:
                 next_month = month + 1
                 next_year = year
-
+            
             dt_vcto = f"20{next_month:02d}{next_year}"
 
             self.add_line("E116", 
                           "000",          # COD_OR: Obrigação a recolher - ICMS Próprio
                           vl_recolher,    # VL_OR: Valor da obrigação total (igual ao E110)
-                          dt_vcto,        # DT_VCTO: Data de vencimento (DDMMAAAA)
-                          cod_receita,    # COD_REC: Código de receita da UF
+                          dt_vcto,        # DT_VCTO: Data de vencimento
+                          cod_receita,    # COD_REC
                           "",             # NUM_PROC: Processo
                           "",             # IND_PROC: Indicador de origem
                           "",             # PROC: Descrição do processo

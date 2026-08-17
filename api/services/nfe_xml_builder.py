@@ -203,12 +203,8 @@ class NfeXmlBuilder:
         numero = str(numero_val).zfill(9)
         
         tpEmis = "1"
-        if getattr(self.venda, 'tpEmis', None):
-            tpEmis = str(self.venda.tpEmis)
-        elif self.venda.status_nfe == 'CONTINGENCIA':
+        if getattr(self.venda, 'tpEmis', None) == '9' or self.venda.status_nfe == 'CONTINGENCIA':
             tpEmis = "9"
-        elif self.venda.status_nfe == 'CONTINGENCIA_SVCAN':
-            tpEmis = "6"
         
         # === cNF Preservation Logic ===
         # If the sale already has a key, try to reuse the cNF to avoid changing the key (duplication handling)
@@ -355,7 +351,7 @@ class NfeXmlBuilder:
         ET.SubElement(ide, f"{{{self.ns}}}procEmi").text = "0"
         ET.SubElement(ide, f"{{{self.ns}}}verProc").text = "1.0.2.0"
         
-        if tpEmis != "1":
+        if tpEmis == "9":
             dh_cont = getattr(self.venda, 'dh_cont', None)
             if not dh_cont:
                 dh_cont = datetime.now().strftime('%Y-%m-%dT%H:%M:%S-03:00')
@@ -524,29 +520,18 @@ class NfeXmlBuilder:
                            ET.SubElement(enderDest, f"{{{self.ns}}}fone").text = fone_clean[:14] # Limit NFe pattern
 
                  # --- indIEDest e IE ---
-                 raw_ie = str(c.inscricao_estadual or '').upper().strip()
-                 ie_digits = ''.join(filter(str.isdigit, raw_ie))
-                 uf_dest = self._limpar_texto(c.estado, 2) or "MG"
-                 
-                 if len(doc_cli) > 11: # CNPJ (Pessoa Jurídica)
-                     if len(ie_digits) >= 2:
-                         ind_ie_dest = "1"
-                     elif "ISENTO" in raw_ie and uf_dest != "MG":
+                 ind_ie_dest = "9"
+                 ie_limpa = ''.join(filter(str.isdigit, c.inscricao_estadual or ''))
+                 if len(doc_cli) > 11 and ie_limpa:
+                     ie_upper = ie_limpa.upper().strip()
+                     if "ISENTO" in ie_upper:
                          ind_ie_dest = "2"
-                     else:
-                         ind_ie_dest = "9"
-                 else: # CPF (Pessoa Física)
-                     if len(ie_digits) >= 2:
+                     elif len(ie_limpa) > 4:
                          ind_ie_dest = "1"
-                     elif "ISENTO" in raw_ie and uf_dest != "MG":
-                         ind_ie_dest = "2"
-                     else:
-                         ind_ie_dest = "9"
-
-                 # XSD Schema 4.00: indIEDest DEVE VIR ANTES da tag IE
+                         ET.SubElement(dest, f"{{{self.ns}}}IE").text = ie_limpa
+                 else:
+                     ind_ie_dest = "9"
                  ET.SubElement(dest, f"{{{self.ns}}}indIEDest").text = ind_ie_dest
-                 if ind_ie_dest == "1" and ie_digits:
-                     ET.SubElement(dest, f"{{{self.ns}}}IE").text = ie_digits
 
         # --- Totais Accumulators ---
         total_vbc = 0.0
@@ -1258,8 +1243,8 @@ class NfeXmlBuilder:
             # print(f"DEBUG: CRT={crt_raw} Regime={getattr(self.empresa, 'regime_tributario', 'N/A')} is_normal={is_regime_normal}")
             
             # REFORMA TRIBUTÁRIA: IBSCBS desativado para o Schema NFe 4.00 oficial (produção)
-            # A SEFAZ 4.00 rejeita o XML com Rejeição 225 se contiver tags de reforma não ativadas no WebService
-            should_generate_reform = False
+            # A SEFAZ 4.00 rejeita o XML com Rejeição 215 se contiver tags de reforma não ativadas no WebService
+            should_generate_reform = True
             
             has_reform_fields = True
             
@@ -1476,104 +1461,28 @@ class NfeXmlBuilder:
 
         # --- transp ---
         transp = ET.SubElement(infNFe, f"{{{self.ns}}}transp")
-        
-        # modFrete
-        mod_frete = str(getattr(self.venda, 'tipo_frete', 9) if getattr(self.venda, 'tipo_frete', 9) is not None else 9)
-        ET.SubElement(transp, f"{{{self.ns}}}modFrete").text = mod_frete
-        
-        # transporta (Carrier/Transportadora)
-        transportadora = getattr(self.venda, 'transportadora', None)
-        if transportadora:
-            transporta = ET.SubElement(transp, f"{{{self.ns}}}transporta")
-            # CNPJ or CPF
-            cnpj_cpf = (transportadora.cpf_cnpj or '').replace('.', '').replace('-', '').replace('/', '').replace(' ', '')
-            if len(cnpj_cpf) == 14:
-                ET.SubElement(transporta, f"{{{self.ns}}}CNPJ").text = cnpj_cpf
-            elif len(cnpj_cpf) == 11:
-                ET.SubElement(transporta, f"{{{self.ns}}}CPF").text = cnpj_cpf
-            
-            if transportadora.nome_razao_social:
-                ET.SubElement(transporta, f"{{{self.ns}}}xNome").text = self._limpar_texto(transportadora.nome_razao_social, 60)
-            
-            if transportadora.inscricao_estadual:
-                ie_clean = (transportadora.inscricao_estadual or '').replace('.', '').replace('-', '').replace(' ', '')
-                if ie_clean.upper() in ['ISENTO', '']:
-                    ET.SubElement(transporta, f"{{{self.ns}}}IE").text = "ISENTO"
-                else:
-                    ET.SubElement(transporta, f"{{{self.ns}}}IE").text = ie_clean
-            
-            if transportadora.endereco:
-                end_text = f"{transportadora.endereco}, {transportadora.numero or ''}".strip(', ')
-                ET.SubElement(transporta, f"{{{self.ns}}}xEnder").text = self._limpar_texto(end_text, 60)
-            
-            if transportadora.cidade:
-                ET.SubElement(transporta, f"{{{self.ns}}}xMun").text = self._limpar_texto(transportadora.cidade, 60)
-            
-            if transportadora.estado:
-                ET.SubElement(transporta, f"{{{self.ns}}}UF").text = transportadora.estado.upper()
-        
-        # veicTransp (Vehicle)
-        placa = getattr(self.venda, 'placa_veiculo', None)
-        if placa:
-            veicTransp = ET.SubElement(transp, f"{{{self.ns}}}veicTransp")
-            placa_limpa = placa.replace('-', '').replace(' ', '').upper()
-            ET.SubElement(veicTransp, f"{{{self.ns}}}placa").text = placa_limpa
-            
-            uf_veic = getattr(self.venda, 'uf_veiculo', None)
-            if uf_veic:
-                ET.SubElement(veicTransp, f"{{{self.ns}}}UF").text = uf_veic.upper()
-            else:
-                ET.SubElement(veicTransp, f"{{{self.ns}}}UF").text = (self.empresa.estado or 'MG').upper()
-            
-            rntrc_val = getattr(self.venda, 'rntrc', None)
-            if rntrc_val:
-                ET.SubElement(veicTransp, f"{{{self.ns}}}RNTRC").text = self._limpar_texto(rntrc_val, 20)
-        
-        # vol (Volumes)
-        q_vol = getattr(self.venda, 'quantidade_volumes', 0)
-        peso_b = getattr(self.venda, 'peso_bruto', 0.0)
-        peso_l = getattr(self.venda, 'peso_liquido', 0.0)
-        
-        esp_vol = getattr(self.venda, 'especie_volumes', None)
-        marca_vol = getattr(self.venda, 'marca_volumes', None)
-        
-        if q_vol or peso_b or peso_l or esp_vol or marca_vol:
-            vol = ET.SubElement(transp, f"{{{self.ns}}}vol")
-            if q_vol:
-                ET.SubElement(vol, f"{{{self.ns}}}qVol").text = str(int(q_vol))
-            if esp_vol:
-                ET.SubElement(vol, f"{{{self.ns}}}esp").text = self._limpar_texto(esp_vol, 60)
-            if marca_vol:
-                ET.SubElement(vol, f"{{{self.ns}}}marca").text = self._limpar_texto(marca_vol, 60)
-            if peso_l:
-                ET.SubElement(vol, f"{{{self.ns}}}pesoL").text = "{:.3f}".format(float(peso_l))
-            if peso_b:
-                ET.SubElement(vol, f"{{{self.ns}}}pesoB").text = "{:.3f}".format(float(peso_b))
+        ET.SubElement(transp, f"{{{self.ns}}}modFrete").text = "9" # Sem frete
 
         # --- pag ---
         pag = ET.SubElement(infNFe, f"{{{self.ns}}}pag")
         detPag = ET.SubElement(pag, f"{{{self.ns}}}detPag")
         
-        # Verificar se é nota de Devolução (finNFe = 4)
-        fin_nfe = '1'
-        if self.venda.id_operacao:
-            op_fin = str(getattr(self.venda.id_operacao, 'finalidade_emissao', '') or '').strip()
-            nome_op = (self.venda.id_operacao.nome_operacao or '').upper()
-            if op_fin == '4' or 'DEVOLU' in nome_op:
-                fin_nfe = '4'
+        # Validar tPag e xPag
+        t_pag = self.tipo_pagamento
+        # Fallback se t_pag (DB) for inválido para 'simples'
+        if t_pag not in ['01','02','03','04','05','10','11','12','13','15','90','99']:
+            t_pag = "01" # Dinheiro default
+          
+        # FORÇAR PAGAMENTO IGUAL AO XML DE SUCESSO DO USUARIO (05 - Credito Loja ou 01 - Dinheiro)
+        # O XML de sucesso usou tPag=05 e indPag=0.
+        # Vamos manter o que vem do banco se possivel, mas REINSERIR indPag.
+        
+        # NOTE: A NT 2020.006 tornou indPag facultativo, mas alguns servidores validam.
+        # O XML de sucesso tem <indPag>0</indPag>
+        ET.SubElement(detPag, f"{{{self.ns}}}indPag").text = "0" 
 
-        if fin_nfe == '4':
-            # SEFAZ NT 2020.006 (Rejeição 871): Emissão de NF-e de Devolução (finalidade 4) exige tPag = '90' (Sem Pagamento)
-            t_pag = "90"
-            ET.SubElement(detPag, f"{{{self.ns}}}tPag").text = "90"
-            ET.SubElement(detPag, f"{{{self.ns}}}vPag").text = "0.00"
-        else:
-            t_pag = self.tipo_pagamento
-            if t_pag not in ['01','02','03','04','05','10','11','12','13','15','90','99']:
-                t_pag = "01"
-            ET.SubElement(detPag, f"{{{self.ns}}}indPag").text = "0" 
-            ET.SubElement(detPag, f"{{{self.ns}}}tPag").text = t_pag
-            ET.SubElement(detPag, f"{{{self.ns}}}vPag").text = "{:.2f}".format(total_fiscal)
+        ET.SubElement(detPag, f"{{{self.ns}}}tPag").text = t_pag
+        ET.SubElement(detPag, f"{{{self.ns}}}vPag").text = "{:.2f}".format(total_fiscal)
         
         # Pagamento cartao exige tag card no subgrupo se integrado, mas se nao integrado (POS)
         # a tag card é opcional/recomendada. Vamos manter simples.
@@ -1596,16 +1505,6 @@ class NfeXmlBuilder:
         # REGRA SEFAZ: Em homologação, adicionar aviso no infAdic
         if str(self.empresa.ambiente_nfce or "2") == "2":
             info_text = "NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL - " + info_text
-
-        # Adicionar observações do contribuinte configuradas na venda
-        obs_contrib = getattr(self.venda, 'observacao_contribuinte', None)
-        if obs_contrib:
-            info_text = info_text + " - " + obs_contrib
-
-        # Adicionar informações ao fisco
-        obs_fisco = getattr(self.venda, 'observacao_fisco', None)
-        if obs_fisco:
-            ET.SubElement(infAdic, f"{{{self.ns}}}infAdFisco").text = self._limpar_texto(obs_fisco, 2000)
 
         # --- APROVEITAMENTO ICMS (NF-e Modelo 55) ---
         # Verifica se o recurso está ativo e se algum item da venda possui CSOSN configurado

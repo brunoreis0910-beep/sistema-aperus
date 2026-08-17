@@ -31,9 +31,7 @@ import {
   DialogActions,
   Autocomplete,
   Tooltip,
-  Snackbar,
-  Tabs,
-  Tab
+  Snackbar
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -51,13 +49,9 @@ import {
   Check as CheckIcon,
   CheckCircle as CheckCircleIcon,
   AddShoppingCart as AddShoppingCartIcon,
-  Close as CloseIcon,
-  LocalShipping as LocalShippingIcon,
-  Description as DescriptionIcon,
-  Note as NoteIcon,
-  Warning as WarningIcon
+  Close as CloseIcon
 } from '@mui/icons-material';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import mockAPI from '../services/mockAPI';
 import useImpressaoVenda from '../hooks/useImpressaoVenda';
@@ -86,7 +80,6 @@ import WifiOffIcon from '@mui/icons-material/WifiOff';
 import promocaoService from '../services/promocaoService';
 import WhatsAppQuickSend, { useWhatsAppTemplates } from './WhatsAppQuickSend';
 import { CalculadoraRevestimento, CalculadoraTinta, BotoesCalculadora } from './CalculadorasConstrucao';
-import ClienteFormModal from './ClienteFormModal';
 
 console.log('📦 [Vendas.jsx] INÍCIO DO CARREGAMENTO DO MÓDULO');
 console.log('📦 [Vendas.jsx] Versão: v3.0 - Com logs de depuração detalhados');
@@ -169,7 +162,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   console.log('🚀 [Vendas.jsx] COMPONENTE INICIANDO - Props:', { embedded, initialMode, initialModel });
   
   const location = useLocation();
-  const navigate = useNavigate();
   console.log('📍 [Vendas.jsx] Location:', location.pathname);
   
   // Hook de autenticação (DEVE VIR PRIMEIRO!)
@@ -197,8 +189,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [veioDeNFe, setVeioDeNFe] = useState(false);
-  const [isOnlyViewing, setIsOnlyViewing] = useState(false);
 
   // Modo atual: 'lista' ou 'nova'
   const [modo, setModo] = useState((initialMode || location.state?.modo) === 'nova' ? 'nova' : 'lista');
@@ -206,7 +196,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   // Estado para controlar modal de nova venda
   const [openModalNovaVenda, setOpenModalNovaVenda] = useState(initialMode === 'nova');
   const [showLucratividade, setShowLucratividade] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState(0); // 0 = Principal, 1 = Frete, 2 = Outros
 
   // Dados para formulário (declarados antes dos useEffects para evitar TDZ)
   const [venda, setVenda] = useState({
@@ -222,21 +211,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     taxa_entrega: 0,
     valor_total: 0,
     itens: [],
-    venda_futura_origem: null, // ID da venda de origem quando for entrega
-    chave_nfe_referenciada: '', // Chave da nota complementar/devolução
-    // Campos de Frete e Transporte
-    tipo_frete: 9,
-    id_transportadora: '',
-    placa_veiculo: '',
-    uf_veiculo: '',
-    rntrc: '',
-    quantidade_volumes: 0,
-    especie_volumes: '',
-    marca_volumes: '',
-    peso_liquido: 0,
-    peso_bruto: 0,
-    observacao_fisco: '',
-    observacao_contribuinte: ''
+    venda_futura_origem: null // ID da venda de origem quando for entrega
   });
 
   // Item sendo adicionado (declarado antes dos useEffects para evitar TDZ)
@@ -263,7 +238,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     const restaurarEstadoSalvo = async () => {
       try {
         const estadoSalvo = await carregarEstadoVendas();
-        if (estadoSalvo && modo === 'nova' && !veioDeNFe && !location.state?.modo) {
+        if (estadoSalvo && modo === 'nova') {
           console.log('✅ Restaurando estado salvo de Vendas');
           
           // Restaurar dados da venda
@@ -280,12 +255,12 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     };
     
     restaurarEstadoSalvo();
-  }, [modo, veioDeNFe, location.state]); // Executa quando o modo ou rota muda
+  }, [modo]); // Executa quando o modo muda
 
   // 🔹 AUTO-SAVE: Salva automaticamente o estado quando houver mudanças
   useEffect(() => {
-    // Não salvar se não estiver no modo 'nova', se for edição/visualização, ou se não houver dados
-    if (modo !== 'nova' || !venda.id_operacao || venda.id || isOnlyViewing) return;
+    // Não salvar se não estiver no modo 'nova' ou se não houver dados
+    if (modo !== 'nova' || !venda.id_operacao) return;
     
     // Debounce: aguarda 1 segundo após a última mudança para salvar
     const timeoutId = setTimeout(async () => {
@@ -303,7 +278,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     }, 1000); // Aguarda 1 segundo de "silêncio" antes de salvar
 
     return () => clearTimeout(timeoutId);
-  }, [venda, novoItem, modo, isOnlyViewing]);
+  }, [venda, novoItem, modo]);
 
   // Dados das listas
   const [operacoes, setOperacoes] = useState([]);
@@ -314,11 +289,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   const [vendasFuturasPendentes, setVendasFuturasPendentes] = useState([]);
   // Regime tributário da empresa: 'simples_nacional' | 'lucro_presumido' | 'lucro_real'
   const [regimeTributario, setRegimeTributario] = useState('lucro_presumido');
-
-  // Estados para Modal de Seleção de Produtos e Quantidades da Devolução
-  const [modalImportarItensOpen, setModalImportarItensOpen] = useState(false);
-  const [dadosNotaOrigemImportar, setDadosNotaOrigemImportar] = useState(null);
-  const [itensSelecaoImportar, setItensSelecaoImportar] = useState([]);
 
   // Efeito para selecionar operação baseada no modelo inicial
   useEffect(() => {
@@ -354,74 +324,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   const [showCreditoModal, setShowCreditoModal] = useState(false);
   const [usarCredito, setUsarCredito] = useState(false);
   const [decisaoCreditoTomada, setDecisaoCreditoTomada] = useState(false);
-
-  // Estado para Alerta Inteligente de Cliente Incompleto em Vendas
-  const [clienteIncompletoNFeDialog, setClienteIncompletoNFeDialog] = useState({
-    open: false,
-    cliente: null,
-    pendencias: []
-  });
-  const [openClienteFormModalVendas, setOpenClienteFormModalVendas] = useState(false);
-  const [clienteParaEditarVendas, setClienteParaEditarVendas] = useState(null);
-
-  const validarClienteParaNFe = (clienteData) => {
-    const pendencias = [];
-    if (!clienteData) {
-      return ['Cliente não cadastrado ou não informado na venda'];
-    }
-
-    const nome = (clienteData.nome_razao_social || clienteData.nome || clienteData.razao_social || '').trim();
-    const cpfCnpj = String(clienteData.cpf_cnpj || clienteData.cnpj || clienteData.cpf || '').replace(/\D/g, '');
-    const cep = String(clienteData.cep || '').replace(/\D/g, '');
-    const logradouro = (clienteData.logradouro || clienteData.endereco || '').trim();
-    const numero = (clienteData.numero || '').trim();
-    const bairro = (clienteData.bairro || '').trim();
-    const cidade = (clienteData.cidade || clienteData.municipio || '').trim();
-    const uf = (clienteData.uf || clienteData.estado || '').trim();
-
-    if (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14)) {
-      pendencias.push('CPF/CNPJ (exige 11 ou 14 dígitos)');
-    }
-
-    if (!nome || ['CONSUMIDOR', 'CONSUMIDOR FINAL', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', ''].includes(nome.toUpperCase())) {
-      pendencias.push('Razão Social / Nome Completo');
-    }
-
-    if (!cep || cep.length !== 8) {
-      pendencias.push('CEP (8 dígitos)');
-    }
-
-    if (!logradouro) {
-      pendencias.push('Endereço / Logradouro');
-    }
-
-    if (!numero) {
-      pendencias.push('Número (Informe S/N se não houver)');
-    }
-
-    if (!bairro) {
-      pendencias.push('Bairro');
-    }
-
-    if (!cidade) {
-      pendencias.push('Cidade / Município');
-    }
-
-    if (!uf || uf.length !== 2) {
-      pendencias.push('UF / Estado (2 letras, ex: MG, SP)');
-    }
-
-    return pendencias;
-  };
-
-  const handleClienteSalvoEmVendas = async (clienteSalvo) => {
-    setOpenClienteFormModalVendas(false);
-    setSuccess(`Cadastro de ${clienteSalvo.nome_razao_social || 'cliente'} atualizado com sucesso!`);
-    await carregarClientes();
-    if (clienteSalvo?.id_cliente || clienteSalvo?.id) {
-      setVenda(prev => ({ ...prev, id_cliente: String(clienteSalvo.id_cliente || clienteSalvo.id) }));
-    }
-  };
   const [origemModalCredito, setOrigemModalCredito] = useState('selecao');
 
   // Estados para cashback do cliente
@@ -675,10 +577,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     cond_veic: '1', c_mod: '', c_cor_denatran: '01', lota: '', tp_rest: '0'
   };
   const [veiculoDadosForm, setVeiculoDadosForm] = useState({ ...veiculoDadosVazios });
-
-  // Busca e importação de nota referenciada
-  const [numOrigemBusca, setNumOrigemBusca] = useState('');
-  const [buscandoOrigem, setBuscandoOrigem] = useState(false);
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -2321,230 +2219,12 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
     });
   };
 
-  // Confirmar seleção de itens e quantidades da devolução no modal
-  const confirmarImportacaoItensDevolucao = () => {
-    if (!dadosNotaOrigemImportar) return;
-
-    const itensSelecionados = itensSelecaoImportar
-      .filter(i => i.selecionado && i.quantidade_devolver > 0)
-      .map(i => ({
-        id_produto: i.id_produto,
-        produto_id: i.id_produto,
-        produto_nome: i.nome_produto,
-        nome_produto: i.nome_produto,
-        codigo_produto: i.codigo_produto,
-        quantidade: i.quantidade_devolver,
-        valor_unitario: i.valor_unitario,
-        subtotal: i.quantidade_devolver * i.valor_unitario,
-        cfop: i.cfop || '',
-      }));
-
-    if (itensSelecionados.length === 0) {
-      setError('❌ Selecione pelo menos um produto com quantidade maior que zero para a devolução.');
-      return;
+  // Recalcular quando itens, desconto ou taxa_entrega mudarem
+  useEffect(() => {
+    if (venda.itens && venda.itens.length > 0) {
+      calcularTotais();
     }
-
-    setVenda(prev => {
-      const targetClienteId = dadosNotaOrigemImportar.id_cliente_resolvido || prev.id_cliente || (clientes.length > 0 ? String(clientes[0].id_cliente || clientes[0].id) : '');
-      if (targetClienteId) {
-        buscarLimiteCliente(targetClienteId);
-      }
-      return {
-        ...prev,
-        id_cliente: String(targetClienteId),
-        chave_nfe_referenciada: dadosNotaOrigemImportar.chave_nfe_referenciada || '',
-        itens: itensSelecionados
-      };
-    });
-
-    setModalImportarItensOpen(false);
-    setSuccess(`✅ Importados ${itensSelecionados.length} produto(s) e a chave de origem para a Devolução com sucesso!`);
-  };
-
-  // Importar Nota de Origem para Nota Complementar ou Devolução (Vendas e Compras)
-  const handleImportarNotaOrigem = async () => {
-    if (!numOrigemBusca.trim()) {
-      setError('❌ Informe a Chave de Acesso (44 dígitos), ID ou número do documento de origem.');
-      return;
-    }
-    setBuscandoOrigem(true);
-    setError('');
-    setSuccess('');
-    const targetQuery = numOrigemBusca.trim();
-
-    try {
-      console.log(`[Importar Origem] Buscando origem com termo: ${targetQuery}`);
-
-      let compraData = null;
-      let vendaOrigemObj = null;
-
-      // 1. Tentar buscar direto via endpoint de busca inteligente (suporta Compras e Vendas por ID, Nº ou Chave NFe)
-      try {
-        const resDev = await axiosInstance.get(`/devolucoes/buscar_compra/${encodeURIComponent(targetQuery)}/`);
-        if (resDev.data && (resDev.data.id_compra || resDev.data.id_venda)) {
-          compraData = resDev.data;
-        }
-      } catch (eDev) {}
-
-      if (!compraData) {
-        try {
-          const resDevVenda = await axiosInstance.get(`/devolucoes/buscar_venda/${encodeURIComponent(targetQuery)}/`);
-          if (resDevVenda.data && (resDevVenda.data.id_compra || resDevVenda.data.id_venda)) {
-            compraData = resDevVenda.data;
-          }
-        } catch (eDev2) {}
-      }
-
-      // Se encontrou dados estruturados (Compra ou Venda)
-      if (compraData) {
-        // Resolução inteligente do Fornecedor / Cliente
-        let clienteResolvidoId = '';
-        const docFornecedor = (compraData?.doc_fornecedor || compraData?.cpf_cnpj_cliente || '').replace(/\D/g, '');
-        const nomeFornecedor = (compraData?.nome_fornecedor || compraData?.nome_cliente || '').trim();
-
-        if (docFornecedor || nomeFornecedor) {
-          let cli = clientes.find(c => {
-            const cDoc = (c.cpf_cnpj || c.cnpj || c.cpf || '').replace(/\D/g, '');
-            return (docFornecedor && cDoc === docFornecedor) ||
-                   (nomeFornecedor && (c.nome_razao_social || '').toLowerCase() === nomeFornecedor.toLowerCase());
-          });
-
-          // Se o Fornecedor não estiver cadastrado como cliente ainda, auto-cadastra com dados completos para o faturamento de devolução!
-          if (!cli && nomeFornecedor) {
-            try {
-              const resCli = await axiosInstance.post('/clientes/', {
-                nome_razao_social: nomeFornecedor,
-                cpf_cnpj: compraData?.doc_fornecedor || '',
-                tipo_pessoa: docFornecedor.length > 11 ? 'J' : 'F',
-                inscricao_estadual: 'ISENTO',
-                cep: '14800-000',
-                endereco: 'Rua Principal',
-                numero: '100',
-                bairro: 'Centro',
-                cidade: 'Araraquara',
-                estado: 'SP',
-                status: 'ATIVO'
-              });
-              cli = resCli.data;
-              if (cli && (cli.id_cliente || cli.id)) {
-                setClientes(prev => [...prev, cli]);
-              }
-            } catch (errSync) {
-              console.warn('Não foi possível auto-cadastrar fornecedor na lista de clientes:', errSync);
-            }
-          }
-
-          if (cli) {
-            clienteResolvidoId = String(cli.id_cliente || cli.id);
-          } else if (clientes.length > 0) {
-            clienteResolvidoId = String(clientes[0].id_cliente || clientes[0].id);
-          }
-        }
-
-        const chaveRef = compraData.chave_nfe_origem || compraData.chave_nfe || '';
-
-        const itensPre = (compraData.itens || []).map(item => {
-          const qMax = parseFloat(item.quantidade_disponivel || item.quantidade_original || item.quantidade || 0);
-          return {
-            id_produto: item.id_produto,
-            produto_id: item.id_produto,
-            produto_nome: item.nome_produto || item.produto_nome || '',
-            nome_produto: item.nome_produto || item.produto_nome || '',
-            codigo_produto: item.codigo_produto || '',
-            quantidade_maxima: qMax,
-            quantidade_devolver: qMax,
-            selecionado: true,
-            valor_unitario: parseFloat(item.valor_unitario || 0),
-            subtotal: parseFloat(item.valor_total || (qMax * item.valor_unitario) || 0),
-            cfop: item.cfop || '',
-          };
-        });
-
-        setDadosNotaOrigemImportar({
-          id_cliente_resolvido: clienteResolvidoId,
-          chave_nfe_referenciada: chaveRef,
-          nome_entidade: nomeFornecedor,
-          doc_entidade: compraData?.doc_fornecedor || '',
-          numero_documento: compraData?.numero_documento || compraData?.id_compra
-        });
-
-        setItensSelecaoImportar(itensPre);
-        setModalImportarItensOpen(true);
-        setBuscandoOrigem(false);
-        return;
-      }
-
-      // 2. Fallback padrão em /vendas/
-      const res = await axiosInstance.get(`/vendas/?numero_documento=${encodeURIComponent(targetQuery)}`);
-      if (res.data && res.data.results && res.data.results.length > 0) {
-        vendaOrigemObj = res.data.results.find(v => v.status_nfe === 'EMITIDA') || res.data.results[0];
-      } else if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-        vendaOrigemObj = res.data.find(v => v.status_nfe === 'EMITIDA') || res.data[0];
-      }
-
-      if (!vendaOrigemObj) {
-        const resSearch = await axiosInstance.get(`/vendas/?search=${encodeURIComponent(targetQuery)}`);
-        if (resSearch.data && resSearch.data.results && resSearch.data.results.length > 0) {
-          vendaOrigemObj = resSearch.data.results.find(v => v.status_nfe === 'EMITIDA') || resSearch.data.results[0];
-        } else if (resSearch.data && Array.isArray(resSearch.data) && resSearch.data.length > 0) {
-          vendaOrigemObj = resSearch.data.find(v => v.status_nfe === 'EMITIDA') || resSearch.data[0];
-        }
-      }
-
-      if (!vendaOrigemObj) {
-        setError(`❌ Nenhuma venda, compra ou NF-e encontrada com o número/documento/chave "${targetQuery}".`);
-        setBuscandoOrigem(false);
-        return;
-      }
-
-      const idVendaOrigem = vendaOrigemObj.id_venda || vendaOrigemObj.id;
-      const resDetalhes = await axiosInstance.get(`/vendas/${idVendaOrigem}/`);
-      const vendaDetalhada = resDetalhes.data;
-
-      if (!vendaDetalhada) {
-        setError('❌ Falha ao carregar detalhes da nota de origem.');
-        setBuscandoOrigem(false);
-        return;
-      }
-
-      const novoClienteId = vendaDetalhada.id_cliente?.id_cliente || vendaDetalhada.id_cliente?.id || vendaDetalhada.id_cliente || '';
-      const chaveRefVenda = vendaDetalhada.chave_nfe || '';
-
-      const itensPreVenda = (vendaDetalhada.itens || []).map(item => {
-        const qMax = parseFloat(item.quantidade || 0);
-        const unitVal = parseFloat(item.valor_unitario || 0);
-        return {
-          id_produto: item.id_produto || item.produto_id,
-          produto_id: item.id_produto || item.produto_id,
-          produto_nome: item.produto_nome || item.produto || item.nome_produto || '',
-          nome_produto: item.produto_nome || item.produto || item.nome_produto || '',
-          codigo_produto: item.codigo_produto || item.codigo || '',
-          quantidade_maxima: qMax,
-          quantidade_devolver: qMax,
-          selecionado: true,
-          valor_unitario: unitVal,
-          subtotal: parseFloat(item.valor_total || item.subtotal || (qMax * unitVal) || 0),
-          cfop: item.cfop || '',
-        };
-      });
-
-      setDadosNotaOrigemImportar({
-        id_cliente_resolvido: String(novoClienteId),
-        chave_nfe_referenciada: chaveRefVenda,
-        nome_entidade: vendaDetalhada.nome_cliente || 'Cliente',
-        doc_entidade: vendaDetalhada.cpf_cnpj_cliente || '',
-        numero_documento: vendaDetalhada.numero_documento || idVendaOrigem
-      });
-
-      setItensSelecaoImportar(itensPreVenda);
-      setModalImportarItensOpen(true);
-    } catch (err) {
-      console.error('[Importar Origem] Erro:', err);
-      setError('❌ Erro ao comunicar com o servidor ou ao processar dados da nota.');
-    } finally {
-      setBuscandoOrigem(false);
-    }
-  };
+  }, [venda.itens.length, venda.desconto, venda.taxa_entrega]);
 
   // Salvar venda
   const salvarVenda = async () => {
@@ -2558,43 +2238,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         setError('Preencha todos os campos obrigatórios');
         setLoading(false);
         return;
-      }
-
-      // Validação Inteligente do Cliente para NF-e (Modelo 55)
-      const operacaoSel = operacoes.find(op => String(op.id_operacao) === String(venda.id_operacao));
-      const ehModelo55 = (operacaoSel && String(operacaoSel.modelo_documento) === '55') || String(initialModel) === '55' || String(venda.modelo_nf) === '55';
-
-      if (ehModelo55 && venda.id_cliente) {
-        const cliObj = clientes.find(c => String(c.id_cliente || c.id) === String(venda.id_cliente));
-        const pends = validarClienteParaNFe(cliObj);
-        if (pends.length > 0) {
-          setLoading(false);
-          setClienteParaEditarVendas(cliObj);
-          setClienteIncompletoNFeDialog({
-            open: true,
-            cliente: cliObj,
-            pendencias: pends
-          });
-          return;
-        }
-      }
-
-      // Validar Chave de Acesso Referenciada se a finalidade da operação for Complementar (2) ou Devolução (4)
-      const operacaoSelecionada = operacoes.find(op => String(op.id_operacao) === String(venda.id_operacao));
-      if (operacaoSelecionada) {
-        const finalidade = operacaoSelecionada.finalidade_emissao || '';
-        const nomeOp = (operacaoSelecionada.nome_operacao || '').toUpperCase();
-        const isComplementar = finalidade === '2' || nomeOp.includes('COMPLEM');
-        const isDevolucao = finalidade === '4' || nomeOp.includes('DEVOLU');
-        if (isComplementar || isDevolucao) {
-          const chave = (venda.chave_nfe_referenciada || '').replace(/\D/g, '');
-          if (chave.length !== 44) {
-            const desc = isComplementar ? 'Complementar' : 'de Devolução';
-            setError(`❌ Para emissão de nota ${desc}, informe a chave de acesso referenciada válida (44 dígitos).`);
-            setLoading(false);
-            return;
-          }
-        }
       }
 
       // Filtrar itens com quantidade > 0 (para entrega futura, permite deixar itens zerados)
@@ -2622,7 +2265,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       }
 
       // ===== VERIFICAÇÃO DE LIMITE DE CRÉDITO =====
-      // Verificar configuração da operação (já carregada em operacaoSelecionada acima)
+      // Verificar configuração da operação
+      const operacaoSelecionada = operacoes.find(op => op.id_operacao === venda.id_operacao);
 
       // ===== VERIFICAÇÃO DE LIMITE DE DESCONTO =====
       const limiteDesconto = parseFloat(operacaoSelecionada?.limite_desconto_percentual) || 0;
@@ -3752,8 +3396,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
         desconto: parseFloat(vendaCompleta.desconto) || 0,
         taxa_entrega: parseFloat(vendaCompleta.taxa_entrega) || 0,
         valor_total: parseFloat(vendaCompleta.valor_total) || 0,
-        itens: vendaCompleta.itens || [],
-        chave_nfe_referenciada: vendaCompleta.chave_nfe_referenciada || ''
+        itens: vendaCompleta.itens || []
       });
 
       console.log('🔄 Operação atualizada para conversão:', operacaoVendaPadrao);
@@ -4353,8 +3996,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       _desconto_item_geral: 0,
       taxa_entrega: 0,
       valor_total: 0,
-      itens: [],
-      chave_nfe_referenciada: ''
+      itens: []
     });
     setNovoItem({
       id_produto: '',
@@ -4429,44 +4071,37 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
   };
 
   // Editar venda
-  const editarVenda = async (vendaParaEditar, forceReadOnly = false) => {
-    console.log('✏️ Editando/Visualizando venda:', vendaParaEditar, 'forceReadOnly:', forceReadOnly);
+  const editarVenda = async (vendaParaEditar) => {
+    console.log('✏️ Editando venda:', vendaParaEditar);
     const idVenda = vendaParaEditar.id || vendaParaEditar.id_venda;
     if (!idVenda) return;
 
     try {
       setLoading(true);
-      setIsOnlyViewing(forceReadOnly);
       // Buscar venda completa com itens detalhados do backend
       const res = await axiosInstance.get(`/vendas/${idVenda}/`);
       const vendaCompleta = res.data;
-      console.log('✅ Venda completa carregada para edição/visualização:', vendaCompleta);
+      console.log('✅ Venda completa carregada para edição:', vendaCompleta);
 
-      if (forceReadOnly) {
+      // Verificar se a venda já foi paga (financeiro baixado)
+      const status = statusFinanceiro[idVenda];
+
+      if (status && status.temFinanceiro && status.valorPago > 0) {
         setVendaBloqueadaParaEdicao(true);
+        console.log('🔒 Venda bloqueada para edição - possui pagamentos:', {
+          valorPago: status.valorPago,
+          valorTotal: status.valorTotal,
+          status: status.status
+        });
       } else {
-        // Verificar se a venda já foi paga (financeiro baixado)
-        const status = statusFinanceiro[idVenda];
-
-        if (status && status.temFinanceiro && status.valorPago > 0) {
-          setVendaBloqueadaParaEdicao(true);
-          console.log('🔒 Venda bloqueada para edição - possui pagamentos:', {
-            valorPago: status.valorPago,
-            valorTotal: status.valorTotal,
-            status: status.status
-          });
-        } else {
-          setVendaBloqueadaParaEdicao(false);
-        }
+        setVendaBloqueadaParaEdicao(false);
       }
 
       setVenda({
-        id: vendaCompleta.id_venda || vendaCompleta.id,
+        id: vendaCompleta.id,
         id_operacao: vendaCompleta.id_operacao,
         id_cliente: vendaCompleta.id_cliente,
         id_vendedor: vendaCompleta.id_vendedor || '',
-        numero_documento: vendaCompleta.numero_venda || vendaCompleta.numero_documento || '',
-        data_venda: (vendaCompleta.data_emissao || vendaCompleta.data_documento || '').split('T')[0],
         observacoes: vendaCompleta.observacoes || '',
         desconto: parseFloat(vendaCompleta.desconto) || 0,
         taxa_entrega: parseFloat(vendaCompleta.taxa_entrega) || 0,
@@ -4477,23 +4112,8 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
           quantidade: parseFloat(item.quantidade) || 0,
           valor_unitario: parseFloat(item.valor_unitario) || 0,
           desconto: parseFloat(item.desconto || item.desconto_valor || 0)
-        })),
-        chave_nfe_referenciada: vendaCompleta.chave_nfe_referenciada || '',
-        // Campos de Frete e Transporte
-        tipo_frete: vendaCompleta.tipo_frete !== undefined ? vendaCompleta.tipo_frete : 9,
-        id_transportadora: vendaCompleta.id_transportadora || '',
-        placa_veiculo: vendaCompleta.placa_veiculo || '',
-        uf_veiculo: vendaCompleta.uf_veiculo || '',
-        rntrc: vendaCompleta.rntrc || '',
-        quantidade_volumes: vendaCompleta.quantidade_volumes !== undefined ? vendaCompleta.quantidade_volumes : 0,
-        especie_volumes: vendaCompleta.especie_volumes || '',
-        marca_volumes: vendaCompleta.marca_volumes || '',
-        peso_liquido: parseFloat(vendaCompleta.peso_liquido || 0),
-        peso_bruto: parseFloat(vendaCompleta.peso_bruto || 0),
-        observacao_fisco: vendaCompleta.observacao_fisco || '',
-        observacao_contribuinte: vendaCompleta.observacao_contribuinte || ''
+        }))
       });
-      setAbaAtiva(0);
       setModo('nova');
       setOpenModalNovaVenda(true);
     } catch (err) {
@@ -4503,35 +4123,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (location.state?.modo === 'editar' && location.state?.vendaId) {
-      setVeioDeNFe(true);
-      const targetVendaId = location.state.vendaId;
-      // Limpar o state para evitar loops ou reaberturas no recarregamento/outra navegação
-      navigate(location.pathname, { replace: true, state: {} });
-      // Iniciar edição
-      editarVenda({ id: targetVendaId }, false);
-    } else if (location.state?.modo === 'visualizar' && location.state?.vendaId) {
-      setVeioDeNFe(true);
-      const targetVendaId = location.state.vendaId;
-      // Limpar o state para evitar loops ou reaberturas no recarregamento/outra navegação
-      navigate(location.pathname, { replace: true, state: {} });
-      // Iniciar visualização
-      editarVenda({ id: targetVendaId }, true);
-    }
-  }, [location, navigate]);
-
-  const prevOpenModal = useRef(false);
-
-  useEffect(() => {
-    if (prevOpenModal.current && !openModalNovaVenda && veioDeNFe) {
-      setVeioDeNFe(false);
-      setIsOnlyViewing(false);
-      navigate('/nfe');
-    }
-    prevOpenModal.current = openModalNovaVenda;
-  }, [openModalNovaVenda, veioDeNFe, navigate]);
 
   // Excluir venda
   const excluirVenda = async (venda) => {
@@ -5385,7 +4976,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
           px: 3 
         }}>
           <Typography variant="h6" component="span" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
-            {isOnlyViewing ? '👁️ Visualizar Nota Fiscal/Venda' : venda.id ? '✏️ Editar Venda' : '📝 Nova Venda'}
+            📝 Nova Venda
           </Typography>
           <IconButton 
             size="small"
@@ -5419,61 +5010,26 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
           {vendaBloqueadaParaEdicao && (
             <Grid item xs={12}>
               <Alert severity="warning" sx={{ mb: 2 }}>
-                {isOnlyViewing ? (
-                  <>
-                    <strong>👁️ Modo de Visualização</strong>
-                    <br />
-                    Esta Nota Fiscal/Venda está em modo somente leitura e não pode ser alterada.
-                  </>
-                ) : (
-                  <>
-                    <strong>⚠️ Venda com pagamentos realizados</strong>
-                    <br />
-                    Esta venda já possui pagamentos no financeiro e não pode ser editada.
-                  </>
-                )}
+                <strong>⚠️ Venda com pagamentos realizados</strong>
+                <br />
+                Esta venda já possui pagamentos no financeiro e não pode ser editada.
               </Alert>
             </Grid>
           )}
 
-          {/* Sistema de Abas */}
+          {/* Dados da venda - Compacto */}
           <Grid item xs={12}>
-            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-              <Tabs
-                value={abaAtiva}
-                onChange={(e, newValue) => setAbaAtiva(newValue)}
-                variant="fullWidth"
-                sx={{
-                  '& .MuiTab-root': {
-                    minHeight: 48,
-                    textTransform: 'none',
-                    fontWeight: 'bold',
-                    fontSize: '0.9rem'
-                  }
-                }}
-              >
-                <Tab icon={<DescriptionIcon />} iconPosition="start" label="Principal" />
-                <Tab icon={<LocalShippingIcon />} iconPosition="start" label="Frete / Transporte" />
-                <Tab icon={<NoteIcon />} iconPosition="start" label="Observações / Outros" />
-              </Tabs>
-            </Box>
-          </Grid>
-
-          {abaAtiva === 0 && (
-            <>
-              {/* Dados da venda - Compacto */}
-              <Grid item xs={12}>
-                <Box sx={{ 
-                  p: 2.5, 
-                  bgcolor: 'background.paper', 
-                  borderRadius: '16px',
-                  border: '1px solid #e2e8f0',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
-                }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 2, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.75rem' }}>
-                    📋 Informações Gerais
-                  </Typography>
-                  <Grid container spacing={2}>
+            <Box sx={{ 
+              p: 2.5, 
+              bgcolor: 'background.paper', 
+              borderRadius: '16px',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+            }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 2, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.75rem' }}>
+                📋 Informações Gerais
+              </Typography>
+              <Grid container spacing={2}>
                   <Grid item xs={6} md={2}>
                     <TextField
                       fullWidth
@@ -5527,24 +5083,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                           } catch (err) {
                             console.error('❌ Erro ao buscar próximo número:', err);
                           }
-
-                          // 🚨 Validação Inteligente Proativa para NF-e (Modelo 55) ao mudar Operação
-                          if (operacaoSelecionada && (String(operacaoSelecionada.modelo_documento) === '55' || String(initialModel) === '55')) {
-                            if (venda.id_cliente) {
-                              const cliObj = clientes.find(c => String(c.id_cliente || c.id) === String(venda.id_cliente));
-                              if (cliObj) {
-                                const pendencias = validarClienteParaNFe(cliObj);
-                                if (pendencias.length > 0) {
-                                  setClienteParaEditarVendas(cliObj);
-                                  setClienteIncompletoNFeDialog({
-                                    open: true,
-                                    cliente: cliObj,
-                                    pendencias: pendencias
-                                  });
-                                }
-                              }
-                            }
-                          }
                         }}
                         error={!venda.id_operacao}
                       >
@@ -5553,19 +5091,13 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                         </MenuItem>
                         {operacoes.length > 0 ? operacoes
                           .filter(op => {
-                            const transacao = op.transacao || op.tipo_transacao || op.tipo_operacao || op.tipo || '';
-                            const isSaida = transacao === '' || transacao.toLowerCase().includes('saida') || transacao.toLowerCase().includes('saída') || transacao.toUpperCase() === 'S';
-
-                            // Se initialModel foi fornecido (ex: NF-e = '55'), mostrar SÓ operações de Modelo 55 E de Saída!
-                            if (initialModel) {
-                              const ehModelo55 = String(op.modelo_documento) === String(initialModel) || String(op.modelo_nf) === String(initialModel);
-                              return ehModelo55 && isSaida;
-                            }
-
+                            // Se initialModel foi fornecido (ex: NF-e = '55'), mostrar só operações desse modelo
+                            if (initialModel) return String(op.modelo_documento) === String(initialModel);
                             // Sem initialModel: ignorar modelo 55 (NF-e usa tela própria)
-                            if (String(op.modelo_documento) === '55' || String(op.modelo_nf) === '55') return false;
-
+                            if (String(op.modelo_documento) === '55') return false;
                             // Filtrar apenas operações de Saída quando não há initialModel específico
+                            const transacao = op.transacao || op.tipo_transacao || '';
+                            const isSaida = transacao === '' || transacao.toLowerCase() === 'saída' || transacao.toLowerCase() === 'saida';
                             return isSaida;
                           })
                           .map(op => {
@@ -5646,60 +5178,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                     </Grid>
                   )}
 
-                  {(() => {
-                    const operacaoSelecionada = operacoes.find(op => String(op.id_operacao) === String(venda.id_operacao));
-                    const finalidade = operacaoSelecionada?.finalidade_emissao || '';
-                    const nomeOp = (operacaoSelecionada?.nome_operacao || '').toUpperCase();
-                    const isComplementarOuDevolucao = finalidade === '2' || finalidade === '4' || nomeOp.includes('DEVOLU') || nomeOp.includes('COMPLEM');
-                    return isComplementarOuDevolucao;
-                  })() && (
-                    <>
-                      <Grid item xs={12} md={6}>
-                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                          <TextField
-                            fullWidth
-                            size="small"
-                            label="Importar Nota de Origem (Nº Doc/Nº Venda)"
-                            placeholder="Ex: 12345"
-                            value={numOrigemBusca}
-                            disabled={vendaBloqueadaParaEdicao || buscandoOrigem}
-                            onChange={(e) => setNumOrigemBusca(e.target.value)}
-                            helperText="Busque pelo número do documento ou ID para carregar itens e chave"
-                          />
-                          <Button
-                            variant="contained"
-                            color="secondary"
-                            onClick={handleImportarNotaOrigem}
-                            disabled={vendaBloqueadaParaEdicao || buscandoOrigem}
-                            sx={{ height: 40, minWidth: 100 }}
-                          >
-                            {buscandoOrigem ? <CircularProgress size={20} color="inherit" /> : 'Importar'}
-                          </Button>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label="Chave de Acesso Referenciada *"
-                          placeholder="Chave de 44 dígitos da nota original..."
-                          value={venda.chave_nfe_referenciada || ''}
-                          disabled={vendaBloqueadaParaEdicao}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, '').substring(0, 44);
-                            setVenda(prev => ({ ...prev, chave_nfe_referenciada: val }));
-                          }}
-                          error={!venda.chave_nfe_referenciada || venda.chave_nfe_referenciada.length !== 44}
-                          helperText={
-                            (!venda.chave_nfe_referenciada || venda.chave_nfe_referenciada.length !== 44)
-                              ? "Informe a chave de acesso de 44 dígitos numéricos."
-                              : ""
-                          }
-                        />
-                      </Grid>
-                    </>
-                  )}
-
                   <Grid item xs={12} md={4}>
                     <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'flex-start' }}>
                       <FormControl fullWidth size="small">
@@ -5726,22 +5204,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                                 String(cli.id || cli.pk || cli.ID || cli.id_cliente) === String(clienteId)
                               );
                               if (clienteSelecionado) {
-                                // 🚨 Validação Inteligente Proativa para NF-e (Modelo 55)
-                                const operacaoSel = operacoes.find(op => String(op.id_operacao) === String(venda.id_operacao));
-                                const ehModelo55 = (operacaoSel && String(operacaoSel.modelo_documento) === '55') || String(initialModel) === '55' || String(venda.modelo_nf) === '55';
-
-                                if (ehModelo55) {
-                                  const pendencias = validarClienteParaNFe(clienteSelecionado);
-                                  if (pendencias.length > 0) {
-                                    setClienteParaEditarVendas(clienteSelecionado);
-                                    setClienteIncompletoNFeDialog({
-                                      open: true,
-                                      cliente: clienteSelecionado,
-                                      pendencias: pendencias
-                                    });
-                                  }
-                                }
-
                                 const temDesconto = parseFloat(clienteSelecionado.valor_desconto || 0) > 0;
                                 if (temDesconto) {
                                   const valorFormatado = clienteSelecionado.tipo_desconto === 'PERCENTUAL' 
@@ -5809,9 +5271,21 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                     </FormControl>
                   </Grid>
 
-                 </Grid>
-               </Box>
-           </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Observações"
+                      multiline
+                      rows={1}
+                      value={venda.observacoes}
+                      onChange={(e) => setVenda(prev => ({ ...prev, observacoes: e.target.value }))}
+                      disabled={vendaBloqueadaParaEdicao}
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+          </Grid>
 
           {/* Card de Limite do Cliente - Compacto */}
           {showLimiteInfo && limiteCliente && (
@@ -6429,7 +5903,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {venda.itens.filter(item => !['991', '992', '993', '994', '995', '996', '997', '998', '999'].includes(String(item.codigo_produto || item.codigo || '').trim())).length === 0 ? (
+                      {venda.itens.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={venda.venda_futura_origem ? 11 : 9} align="center">
                             <Typography color="textSecondary">
@@ -6439,10 +5913,6 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                         </TableRow>
                       ) : (
                         venda.itens.map((item, index) => {
-                          const code = String(item.codigo_produto || item.codigo || '').trim();
-                          if (['991', '992', '993', '994', '995', '996', '997', '998', '999'].includes(code)) {
-                            return null;
-                          }
                           const imagemUrl = item.imagem_url || localStorage.getItem(`produto_imagem_${item.codigo_produto}`);
 
                           return (
@@ -6975,498 +6445,7 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
                 </Grid>
               </Box>
             </Grid>
-            </>
-          )}
-
-          {/* Tab 1 - Frete / Transporte */}
-          {abaAtiva === 1 && (
-            <Grid item xs={12}>
-              <Box sx={{ 
-                p: 2.5, 
-                bgcolor: 'background.paper', 
-                borderRadius: '16px',
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
-              }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 3, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 1 }}>
-                  🚚 Dados de Frete e Transporte
-                </Typography>
-                
-                <Grid container spacing={2}>
-                  {/* Modalidade do Frete */}
-                  <Grid item xs={12} md={4}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Modalidade Frete</InputLabel>
-                      <Select
-                        value={venda.tipo_frete !== undefined ? venda.tipo_frete : 9}
-                        onChange={(e) => setVenda(prev => ({ ...prev, tipo_frete: parseInt(e.target.value) }))}
-                        label="Modalidade Frete"
-                        disabled={vendaBloqueadaParaEdicao}
-                      >
-                        <MenuItem value={0}>0 - Emitente (CIF)</MenuItem>
-                        <MenuItem value={1}>1 - Destinatário (FOB)</MenuItem>
-                        <MenuItem value={2}>2 - Terceiros</MenuItem>
-                        <MenuItem value={3}>3 - Transp. Próprio Remetente</MenuItem>
-                        <MenuItem value={4}>4 - Transp. Próprio Destinatário</MenuItem>
-                        <MenuItem value={9}>9 - Sem Ocorrência de Transporte</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  {/* Transportadora */}
-                  <Grid item xs={12} md={8}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Transportadora</InputLabel>
-                      <Select
-                        value={venda.id_transportadora || ''}
-                        onChange={(e) => setVenda(prev => ({ ...prev, id_transportadora: e.target.value }))}
-                        label="Transportadora"
-                        disabled={vendaBloqueadaParaEdicao}
-                      >
-                        <MenuItem value="">Nenhuma Transportadora</MenuItem>
-                        {clientes.map(cli => (
-                          <MenuItem key={`transp-${cli.id_cliente}`} value={cli.id_cliente}>
-                            {cli.nome_razao_social} {cli.cpf_cnpj ? `(${cli.cpf_cnpj})` : ''}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  {/* Veículo - Placa, UF, RNTRC */}
-                  <Grid item xs={6} md={3}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="Placa Veículo"
-                      value={venda.placa_veiculo || ''}
-                      onChange={(e) => setVenda(prev => ({ ...prev, placa_veiculo: e.target.value.toUpperCase().slice(0, 8) }))}
-                      disabled={vendaBloqueadaParaEdicao}
-                    />
-                  </Grid>
-
-                  <Grid item xs={6} md={2}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="UF Veículo"
-                      value={venda.uf_veiculo || ''}
-                      onChange={(e) => setVenda(prev => ({ ...prev, uf_veiculo: e.target.value.toUpperCase().slice(0, 2) }))}
-                      disabled={vendaBloqueadaParaEdicao}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} md={7}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="RNTRC (Registro Transportador)"
-                      value={venda.rntrc || ''}
-                      onChange={(e) => setVenda(prev => ({ ...prev, rntrc: e.target.value }))}
-                      disabled={vendaBloqueadaParaEdicao}
-                    />
-                  </Grid>
-
-                  {/* Volumes e Pesos */}
-                  <Grid item xs={6} md={3}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      type="number"
-                      label="Qtd. Volumes"
-                      value={venda.quantidade_volumes || 0}
-                      onChange={(e) => setVenda(prev => ({ ...prev, quantidade_volumes: parseInt(e.target.value) || 0 }))}
-                      disabled={vendaBloqueadaParaEdicao}
-                    />
-                  </Grid>
-
-                  <Grid item xs={6} md={3}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="Espécie Volumes"
-                      placeholder="Ex: CAIXAS, PALETES"
-                      value={venda.especie_volumes || ''}
-                      onChange={(e) => setVenda(prev => ({ ...prev, especie_volumes: e.target.value }))}
-                      disabled={vendaBloqueadaParaEdicao}
-                    />
-                  </Grid>
-
-                  <Grid item xs={6} md={3}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="Marca Volumes"
-                      value={venda.marca_volumes || ''}
-                      onChange={(e) => setVenda(prev => ({ ...prev, marca_volumes: e.target.value }))}
-                      disabled={vendaBloqueadaParaEdicao}
-                    />
-                  </Grid>
-
-                  <Grid item xs={6} md={3}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      type="number"
-                      label="Peso Líquido (kg)"
-                      value={venda.peso_liquido || ''}
-                      onChange={(e) => setVenda(prev => ({ ...prev, peso_liquido: parseFloat(e.target.value) || 0 }))}
-                      disabled={vendaBloqueadaParaEdicao}
-                      inputProps={{ step: 0.001 }}
-                    />
-                  </Grid>
-
-                  <Grid item xs={6} md={3}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      type="number"
-                      label="Peso Bruto (kg)"
-                      value={venda.peso_bruto || ''}
-                      onChange={(e) => setVenda(prev => ({ ...prev, peso_bruto: parseFloat(e.target.value) || 0 }))}
-                      disabled={vendaBloqueadaParaEdicao}
-                      inputProps={{ step: 0.001 }}
-                    />
-                  </Grid>
-                </Grid>
-               </Box>
-             </Grid>
-           )}
-
-           {/* Tab 2 - Outros / Observações */}
-           {abaAtiva === 2 && (
-             <Grid item xs={12}>
-               <Box sx={{ 
-                 p: 2.5, 
-                 bgcolor: 'background.paper', 
-                 borderRadius: '16px',
-                 border: '1px solid #e2e8f0',
-                 boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
-               }}>
-                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 3, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 1 }}>
-                   📝 Observações e Dados Fiscais
-                 </Typography>
-                 
-                 <Grid container spacing={2.5}>
-                   {/* Chave de Acesso Referenciada */}
-                   <Grid item xs={12}>
-                     <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1, fontSize: '0.8rem' }}>
-                       🔗 Documento Fiscal Referenciado
-                     </Typography>
-                     <TextField
-                       fullWidth
-                       size="small"
-                       label="Chave de Acesso Referenciada"
-                       placeholder="Chave de 44 dígitos da NF-e referenciada"
-                       value={venda.chave_nfe_referenciada || ''}
-                       onChange={(e) => setVenda(prev => ({ ...prev, chave_nfe_referenciada: e.target.value.replace(/\D/g, '').slice(0, 44) }))}
-                       inputProps={{ maxLength: 44 }}
-                       helperText="Obrigatório para NF-e de Devolução, Estorno ou Complementar"
-                       disabled={vendaBloqueadaParaEdicao}
-                     />
-                   </Grid>
-
-                   <Grid item xs={12}>
-                     <Divider sx={{ my: 1 }} />
-                     <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1.5, fontSize: '0.8rem' }}>
-                       💬 Mensagens e Observações
-                     </Typography>
-                   </Grid>
-
-                   {/* Observações da Venda */}
-                   <Grid item xs={12}>
-                     <TextField
-                       fullWidth
-                       size="small"
-                       label="Observações Internas (Venda)"
-                       multiline
-                       rows={3}
-                       value={venda.observacoes || ''}
-                       onChange={(e) => setVenda(prev => ({ ...prev, observacoes: e.target.value }))}
-                       disabled={vendaBloqueadaParaEdicao}
-                     />
-                   </Grid>
-
-                   {/* Observações do Contribuinte */}
-                   <Grid item xs={12}>
-                     <TextField
-                       fullWidth
-                       size="small"
-                       label="Informações Complementares ao Contribuinte (Sai na DANFE)"
-                       multiline
-                       rows={3}
-                       value={venda.observacao_contribuinte || ''}
-                       onChange={(e) => setVenda(prev => ({ ...prev, observacao_contribuinte: e.target.value }))}
-                       disabled={vendaBloqueadaParaEdicao}
-                     />
-                   </Grid>
-
-                   {/* Observações ao Fisco */}
-                   <Grid item xs={12}>
-                     <TextField
-                       fullWidth
-                       size="small"
-                       label="Informações ao Fisco (Uso exclusivo SEFAZ)"
-                       multiline
-                       rows={3}
-                       value={venda.observacao_fisco || ''}
-                       onChange={(e) => setVenda(prev => ({ ...prev, observacao_fisco: e.target.value }))}
-                       disabled={vendaBloqueadaParaEdicao}
-                     />
-                   </Grid>
-
-                    {/* Tabela de Ajustes Fiscais (SPED/CAT) */}
-                    <Grid item xs={12}>
-                      <Divider sx={{ my: 2 }} />
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'primary.main', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 1 }}>
-                          📊 Registros de Ajuste Fiscal (SPED / CAT)
-                        </Typography>
-                        <Button
-                          variant="outlined"
-                          color="primary"
-                          size="small"
-                          startIcon={<AddIcon />}
-                          onClick={() => {
-                            const novoItem = {
-                              id: `ajuste-${Date.now()}`,
-                              codigo_produto: '996',
-                              nome_produto: 'TRANSFERÊNCIA DE CRÉDITO',
-                              quantidade: 1,
-                              valor_unitario: 0,
-                              desconto_valor: 0,
-                              valor_total: 0,
-                              cfop: '',
-                              icms_cst_csosn: '90',
-                              icms_bc: 0,
-                              icms_aliq: 0,
-                              valor_icms: 0,
-                            };
-                            setVenda(prev => ({
-                              ...prev,
-                              itens: [...(prev.itens || []), novoItem]
-                            }));
-                          }}
-                          disabled={vendaBloqueadaParaEdicao}
-                        >
-                          Adicionar Ajuste
-                        </Button>
-                      </Box>
-
-                      {venda.itens.filter(item => ['991', '992', '993', '994', '995', '996', '997', '998', '999'].includes(String(item.codigo_produto || item.codigo || '').trim())).length === 0 ? (
-                        <Box sx={{ p: 2, bgcolor: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', textAlign: 'center' }}>
-                          <Typography variant="body2" color="text.secondary">
-                            Nenhum registro de ajuste fiscal adicionado nesta nota.
-                          </Typography>
-                        </Box>
-                      ) : (
-                        <TableContainer sx={{ border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-                          <Table size="small">
-                            <TableHead sx={{ bgcolor: '#f8fafc' }}>
-                              <TableRow>
-                                <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>Registro</TableCell>
-                                <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="right">Valor</TableCell>
-                                <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="center">CFOP</TableCell>
-                                <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="right">Alíq. ICMS (%)</TableCell>
-                                <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="right">Valor ICMS</TableCell>
-                                <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }} align="center">Ações</TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
-                              {venda.itens.map((item, index) => {
-                                const code = String(item.codigo_produto || item.codigo || '').trim();
-                                if (!['991', '992', '993', '994', '995', '996', '997', '998', '999'].includes(code)) {
-                                  return null;
-                                }
-
-                                const OPCOES_REGISTRO_FISCAL = [
-                                  { value: '991', label: '991 - REGISTRO DO FRETE' },
-                                  { value: '992', label: '992 - REGISTRO DE SEGURO' },
-                                  { value: '993', label: '993 - PIS/COFINS' },
-                                  { value: '994', label: '994 - APROPRIAÇÃO DE CRÉDITO DE ATIVO IMOBILIZADO' },
-                                  { value: '995', label: '995 - RESSARCIMENTO DE SUBSTITUIÇÃO TRIBUTÁRIA' },
-                                  { value: '996', label: '996 - TRANSFERÊNCIA DE CRÉDITO' },
-                                  { value: '997', label: '997 - COMPLEMENTO DE VALOR DE NOTA FISCAL E/OU ICMS' },
-                                  { value: '998', label: '998 - SERVIÇOS NÃO TRIBUTADOS' },
-                                  { value: '999', label: '999 - OUTRAS DESPESAS ACESSÓRIAS' }
-                                ];
-
-                                return (
-                                  <TableRow key={item.id || `ajuste-row-${index}`}>
-                                    {/* Registro Dropdown */}
-                                    <TableCell sx={{ minWidth: 280 }}>
-                                      <FormControl fullWidth size="small">
-                                        <Select
-                                          value={code}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            const label = OPCOES_REGISTRO_FISCAL.find(op => op.value === val)?.label || '';
-                                            setVenda(prev => {
-                                              const novosItens = prev.itens.map((it, idx) => {
-                                                if (idx === index) {
-                                                  return {
-                                                    ...it,
-                                                    codigo_produto: val,
-                                                    nome_produto: label.substring(6)
-                                                  };
-                                                }
-                                                return it;
-                                              });
-                                              return { ...prev, itens: novosItens };
-                                            });
-                                          }}
-                                          disabled={vendaBloqueadaParaEdicao}
-                                        >
-                                          {OPCOES_REGISTRO_FISCAL.map(op => (
-                                            <MenuItem key={op.value} value={op.value}>
-                                              {op.label}
-                                            </MenuItem>
-                                          ))}
-                                        </Select>
-                                      </FormControl>
-                                    </TableCell>
-
-                                    {/* Valor Input */}
-                                    <TableCell align="right" sx={{ maxWidth: 120 }}>
-                                      <TextField
-                                        size="small"
-                                        type="number"
-                                        value={item.valor_unitario || ''}
-                                        onChange={(e) => {
-                                          const val = parseFloat(e.target.value) || 0;
-                                          setVenda(prev => {
-                                            const novosItens = prev.itens.map((it, idx) => {
-                                              if (idx === index) {
-                                                const aliq = parseFloat(it.icms_aliq) || 0;
-                                                return {
-                                                  ...it,
-                                                  valor_unitario: val,
-                                                  valor_total: val,
-                                                  icms_bc: val,
-                                                  valor_icms: Number((val * (aliq / 100)).toFixed(2))
-                                                };
-                                              }
-                                              return it;
-                                            });
-                                            const novoTotal = novosItens.reduce((acc, it) => acc + parseFloat(it.valor_total || 0), 0) + (parseFloat(prev.taxa_entrega) || 0);
-                                            return { ...prev, itens: novosItens, valor_total: novoTotal };
-                                          });
-                                        }}
-                                        InputProps={{
-                                          startAdornment: <InputAdornment position="start">R$</InputAdornment>,
-                                        }}
-                                        disabled={vendaBloqueadaParaEdicao}
-                                      />
-                                    </TableCell>
-
-                                    {/* CFOP Input */}
-                                    <TableCell align="center" sx={{ maxWidth: 100 }}>
-                                      <TextField
-                                        size="small"
-                                        placeholder="CFOP"
-                                        value={item.cfop || ''}
-                                        onChange={(e) => {
-                                          const val = e.target.value;
-                                          setVenda(prev => {
-                                            const novosItens = prev.itens.map((it, idx) => {
-                                              if (idx === index) {
-                                                return { ...it, cfop: val };
-                                              }
-                                              return it;
-                                            });
-                                            return { ...prev, itens: novosItens };
-                                          });
-                                        }}
-                                        inputProps={{ maxLength: 4 }}
-                                        disabled={vendaBloqueadaParaEdicao}
-                                      />
-                                    </TableCell>
-
-                                    {/* Alíquota ICMS Input */}
-                                    <TableCell align="right" sx={{ maxWidth: 110 }}>
-                                      <TextField
-                                        size="small"
-                                        type="number"
-                                        value={item.icms_aliq || ''}
-                                        onChange={(e) => {
-                                          const val = parseFloat(e.target.value) || 0;
-                                          setVenda(prev => {
-                                            const novosItens = prev.itens.map((it, idx) => {
-                                              if (idx === index) {
-                                                const vUnit = parseFloat(it.valor_unitario) || 0;
-                                                return {
-                                                  ...it,
-                                                  icms_aliq: val,
-                                                  valor_icms: Number((vUnit * (val / 100)).toFixed(2))
-                                                };
-                                              }
-                                              return it;
-                                            });
-                                            return { ...prev, itens: novosItens };
-                                          });
-                                        }}
-                                        InputProps={{
-                                          endAdornment: <InputAdornment position="end">%</InputAdornment>,
-                                        }}
-                                        disabled={vendaBloqueadaParaEdicao}
-                                      />
-                                    </TableCell>
-
-                                    {/* Valor ICMS Input */}
-                                    <TableCell align="right" sx={{ maxWidth: 120 }}>
-                                      <TextField
-                                        size="small"
-                                        type="number"
-                                        value={item.valor_icms || ''}
-                                        onChange={(e) => {
-                                          const val = parseFloat(e.target.value) || 0;
-                                          setVenda(prev => {
-                                            const novosItens = prev.itens.map((it, idx) => {
-                                              if (idx === index) {
-                                                return { ...it, valor_icms: val };
-                                              }
-                                              return it;
-                                            });
-                                            return { ...prev, itens: novosItens };
-                                          });
-                                        }}
-                                        InputProps={{
-                                          startAdornment: <InputAdornment position="start">R$</InputAdornment>,
-                                        }}
-                                        disabled={vendaBloqueadaParaEdicao}
-                                      />
-                                    </TableCell>
-
-                                    {/* Ação (Delete) */}
-                                    <TableCell align="center">
-                                      <IconButton
-                                        color="error"
-                                        size="small"
-                                        onClick={() => {
-                                          setVenda(prev => {
-                                            const novosItens = prev.itens.filter((_, idx) => idx !== index);
-                                            const novoTotal = novosItens.reduce((acc, it) => acc + parseFloat(it.valor_total || 0), 0) + (parseFloat(prev.taxa_entrega) || 0);
-                                            return { ...prev, itens: novosItens, valor_total: novoTotal };
-                                          });
-                                        }}
-                                        disabled={vendaBloqueadaParaEdicao}
-                                      >
-                                        <DeleteIcon fontSize="small" />
-                                      </IconButton>
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
-                        </TableContainer>
-                      )}
-                    </Grid>
-                 </Grid>
-               </Box>
-             </Grid>
-           )}
-         </Grid>
+          </Grid>
         </DialogContent>
         <DialogActions sx={{ p: 1.5, bgcolor: 'grey.50', gap: 1 }}>
           {!!user?.parametros?.mostrar_lucratividade && (venda.itens || []).length > 0 && (
@@ -9800,196 +8779,10 @@ const Vendas = ({ embedded = false, initialMode, initialModel, onClose, onSaveSu
             startIcon={<CheckIcon />}
             disabled={Object.values(produtosSelecionados).filter(Boolean).length === 0}
           >
+            Adicionar Selecionados ({Object.values(produtosSelecionados).filter(Boolean).length})
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Dialog Alerta Inteligente: Cliente Incompleto em Vendas */}
-      <Dialog
-        open={clienteIncompletoNFeDialog.open}
-        onClose={() => setClienteIncompletoNFeDialog(prev => ({ ...prev, open: false }))}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'warning.main', fontWeight: 'bold' }}>
-          <WarningIcon color="warning" />
-          Cliente com dados incompletos
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" sx={{ mb: 1.5, fontWeight: 500 }}>
-            Para prosseguir com a emissão da NF-e (Modelo 55), atualize o cadastro do cliente:
-            <strong style={{ color: '#1565c0', marginLeft: '6px' }}>
-              {clienteIncompletoNFeDialog.cliente?.nome_razao_social || clienteIncompletoNFeDialog.cliente?.nome || 'Cliente'}
-            </strong>
-          </Typography>
-
-          <Box sx={{ bgcolor: '#fff8e1', border: '1px solid #ffe082', borderRadius: 2, p: 2, mb: 1 }}>
-            <Typography variant="subtitle2" sx={{ color: '#b45309', fontWeight: 'bold', mb: 1 }}>
-              📋 Campos obrigatórios pendentes para a NF-e:
-            </Typography>
-            {clienteIncompletoNFeDialog.pendencias.map((p, idx) => (
-              <Typography key={idx} variant="body2" sx={{ color: '#c2410c', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                • {p}
-              </Typography>
-            ))}
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0 }}>
-          <Button onClick={() => setClienteIncompletoNFeDialog(prev => ({ ...prev, open: false }))} color="inherit">
-            Cancelar
-          </Button>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<EditIcon />}
-            onClick={() => {
-              setClienteIncompletoNFeDialog(prev => ({ ...prev, open: false }));
-              setClienteParaEditarVendas(clienteIncompletoNFeDialog.cliente);
-              setOpenClienteFormModalVendas(true);
-            }}
-          >
-            Editar e Salvar Cadastro do Cliente
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Dialog para Selecionar Produtos e Quantidades da Origem para Devolução */}
-      <Dialog
-        open={modalImportarItensOpen}
-        onClose={() => setModalImportarItensOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle sx={{ bgcolor: '#1976d2', color: '#ffffff', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>📦 Selecionar Produtos e Quantidades para Devolução</span>
-          <IconButton onClick={() => setModalImportarItensOpen(false)} sx={{ color: '#ffffff' }}>
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent sx={{ pt: 3 }}>
-          {dadosNotaOrigemImportar && (
-            <Card sx={{ mb: 2, mt: 1, bgcolor: '#f4f6f9', borderLeft: '4px solid #1976d2' }}>
-              <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
-                    <Typography variant="body2">
-                      <strong>Destinatário / Fornecedor:</strong> {dadosNotaOrigemImportar.nome_entidade} {dadosNotaOrigemImportar.doc_entidade ? `(${dadosNotaOrigemImportar.doc_entidade})` : ''}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <Typography variant="body2" sx={{ wordBreak: 'break-all', fontFamily: 'monospace' }}>
-                      <strong>Chave SEFAZ Referenciada:</strong> {dadosNotaOrigemImportar.chave_nfe_referenciada || 'Sem chave'}
-                    </Typography>
-                  </Grid>
-                </Grid>
-              </CardContent>
-            </Card>
-          )}
-
-          <Typography variant="subtitle2" gutterBottom fontWeight="bold" color="text.secondary">
-            Marque os produtos que deseja devolver e informe a quantidade exata:
-          </Typography>
-
-          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 350 }}>
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow sx={{ bgcolor: '#e3f2fd' }}>
-                  <TableCell padding="checkbox" sx={{ bgcolor: '#e3f2fd' }}>
-                    <Checkbox
-                      checked={itensSelecaoImportar.length > 0 && itensSelecaoImportar.every(i => i.selecionado)}
-                      indeterminate={itensSelecaoImportar.some(i => i.selecionado) && !itensSelecaoImportar.every(i => i.selecionado)}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setItensSelecaoImportar(prev => prev.map(i => ({ ...i, selecionado: checked })));
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Código / Produto</TableCell>
-                  <TableCell align="center" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Qtd Disponível</TableCell>
-                  <TableCell align="center" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold', minWidth: 120 }}>Qtd a Devolver</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Preço Unit.</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: '#e3f2fd', fontWeight: 'bold' }}>Subtotal</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {itensSelecaoImportar.map((item, index) => (
-                  <TableRow key={index} hover selected={item.selecionado}>
-                    <TableCell padding="checkbox">
-                      <Checkbox
-                        checked={item.selecionado}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setItensSelecaoImportar(prev => {
-                            const copy = [...prev];
-                            copy[index].selecionado = checked;
-                            return copy;
-                          });
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight="bold">
-                        {item.codigo_produto ? `[${item.codigo_produto}] ` : ''}{item.nome_produto}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="center">
-                      <Chip label={item.quantidade_maxima} size="small" variant="outlined" />
-                    </TableCell>
-                    <TableCell align="center">
-                      <TextField
-                        type="number"
-                        size="small"
-                        disabled={!item.selecionado}
-                        value={item.quantidade_devolver}
-                        onChange={(e) => {
-                          const val = Math.max(0, Math.min(item.quantidade_maxima, parseFloat(e.target.value) || 0));
-                          setItensSelecaoImportar(prev => {
-                            const copy = [...prev];
-                            copy[index].quantidade_devolver = val;
-                            if (val > 0 && !copy[index].selecionado) {
-                              copy[index].selecionado = true;
-                            }
-                            return copy;
-                          });
-                        }}
-                        inputProps={{ min: 0.01, max: item.quantidade_maxima, step: 'any' }}
-                        sx={{ width: 100 }}
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      R$ {item.valor_unitario.toFixed(2)}
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                      R$ {(item.quantidade_devolver * item.valor_unitario).toFixed(2)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setModalImportarItensOpen(false)} color="inherit">
-            Cancelar
-          </Button>
-          <Button
-            variant="contained"
-            color="success"
-            disabled={!itensSelecaoImportar.some(i => i.selecionado && i.quantidade_devolver > 0)}
-            onClick={confirmarImportacaoItensDevolucao}
-          >
-            Confirmar e Importar Produtos
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Modal de Cadastro Completo de Cliente em Vendas */}
-      <ClienteFormModal
-        open={openClienteFormModalVendas}
-        onClose={() => setOpenClienteFormModalVendas(false)}
-        clienteToEdit={clienteParaEditarVendas}
-        onSaved={handleClienteSalvoEmVendas}
-      />
 
     </Box>
   );

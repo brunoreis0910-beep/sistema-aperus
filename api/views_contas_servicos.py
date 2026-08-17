@@ -13,22 +13,10 @@ from .models import ContaServico
 class ContaServicoSerializer(serializers.ModelSerializer):
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    data_vencimento = serializers.DateField(required=False, allow_null=True)
-    data_pagamento = serializers.DateField(required=False, allow_null=True)
-    chave_acesso = serializers.CharField(required=False, allow_null=True, allow_blank=True)
-    cnpj_fornecedor = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     class Meta:
         model = ContaServico
         fields = '__all__'
-
-    def to_internal_value(self, data):
-        if isinstance(data, dict):
-            data = data.copy()
-            for f in ['data_vencimento', 'data_pagamento', 'chave_acesso', 'cnpj_fornecedor']:
-                if f in data and data[f] == '':
-                    data[f] = None
-        return super().to_internal_value(data)
 
 
 class ContaServicoViewSet(viewsets.ModelViewSet):
@@ -43,41 +31,6 @@ class ContaServicoViewSet(viewsets.ModelViewSet):
     search_fields = ['fornecedor_nome', 'numero_documento', 'cnpj_fornecedor', 'descricao']
     ordering_fields = ['data_emissao', 'data_vencimento', 'valor_total', 'criado_em']
     ordering = ['-data_emissao']
-
-    def perform_create(self, serializer):
-        conta = serializer.save()
-        gerar_fin = self.request.data.get('gerar_financeiro', False)
-        if gerar_fin:
-            self._criar_financeiro(conta)
-
-    def _criar_financeiro(self, conta):
-        from .models import FinanceiroConta
-        import logging
-        try:
-            venc = conta.data_vencimento or conta.data_emissao
-            status_map = {
-                'pago': 'Pago',
-                'pendente': 'Pendente',
-                'vencido': 'Vencido',
-                'cancelado': 'Cancelado',
-            }
-            status_conta = status_map.get(conta.status, 'Pendente')
-
-            desc = f"[{conta.get_tipo_display()}] {conta.fornecedor_nome}"
-            if conta.numero_documento:
-                desc += f" - NF: {conta.numero_documento}"
-
-            FinanceiroConta.objects.create(
-                tipo_conta='Pagar',
-                descricao=desc[:255],
-                valor_parcela=conta.valor_total,
-                data_vencimento=venc,
-                data_pagamento=conta.data_pagamento if conta.status == 'pago' else None,
-                status_conta=status_conta,
-                documento_numero=str(conta.numero_documento or '')[:50],
-            )
-        except Exception as e:
-            logging.getLogger(__name__).error("Erro ao gerar financeiro para ContaServico: %s", e)
 
     def get_queryset(self):
         qs = ContaServico.objects.all()

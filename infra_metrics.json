@@ -1,0 +1,1767 @@
+{
+    "system": {
+        "cpu_percent": 5.1,
+        "ram_total_gb": 15.76,
+        "ram_used_gb": 8.18,
+        "ram_percent": 51.9,
+        "disk_total_gb": 220.67,
+        "disk_free_gb": 116.94,
+        "disk_percent": 47.0
+    },
+    "databases": {
+        "aperus_central": 29.84,
+        "sistema_gerencial": 33.64
+    },
+    "tenants": [
+        {
+            "id_saas_cliente": 1,
+            "nome_fantasia": "BRUNO DOS REIS NASCIMENTO",
+            "schema_name": "bruno",
+            "cnpj": "48010363000134",
+            "status_licenca": "ATIVO",
+            "db_name": null,
+            "db_size_mb": 0.0,
+            "folder_size_mb": 0.0
+        },
+        {
+            "id_saas_cliente": 4,
+            "nome_fantasia": "AMERPUS INFORMATICA",
+            "schema_name": "amerpusinformatica",
+            "cnpj": "16501387000108",
+            "status_licenca": "ATIVO",
+            "db_name": "aperus_amerpusinformatica",
+            "db_size_mb": 12.64,
+            "folder_size_mb": 36.42
+        }
+    ],
+    "historico": [
+        {
+            "datahora": "2026-08-16T12:10:58.567200+00:00",
+            "cpu_percent": 2.7,
+            "ram_percent": 50.2,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T12:16:00.312638+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 50.0,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T12:21:02.035302+00:00",
+            "cpu_percent": 1.4,
+            "ram_percent": 50.0,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T12:26:03.742267+00:00",
+            "cpu_percent": 1.9,
+            "ram_percent": 50.1,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T12:31:05.445835+00:00",
+            "cpu_percent": 4.5,
+            "ram_percent": 50.1,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T12:36:07.156722+00:00",
+            "cpu_percent": 5.6,
+            "ram_percent": 50.1,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T12:41:08.857657+00:00",
+            "cpu_percent": 2.2,
+            "ram_percent": 50.1,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T12:46:10.708474+00:00",
+            "cpu_percent": 5.2,
+            "ram_percent": 50.1,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T12:51:12.394152+00:00",
+            "cpu_percent": 2.3,
+            "ram_percent": 50.0,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T12:56:14.105784+00:00",
+            "cpu_percent": 2.0,
+            "ram_percent": 50.4,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T13:01:15.825181+00:00",
+            "cpu_percent": 5.7,
+            "ram_percent": 50.3,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T13:06:17.517751+00:00",
+            "cpu_percent": 1.2,
+            "ram_percent": 50.2,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T13:11:19.207289+00:00",
+            "cpu_percent": 3.1,
+            "ram_percent": 50.3,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T13:16:20.947298+00:00",
+            "cpu_percent": 2.5,
+            "ram_percent": 50.2,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T13:21:22.641688+00:00",
+            "cpu_percent": 5.3,
+            "ram_percent": 50.2,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T13:26:24.350050+00:00",
+            "cpu_percent": 5.7,
+            "ram_percent": 50.3,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T13:31:26.050044+00:00",
+            "cpu_percent": 7.0,
+            "ram_percent": 50.1,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T13:36:27.744964+00:00",
+            "cpu_percent": 2.9,
+            "ram_percent": 50.0,
+            "disk_percent": 47.2
+        },
+        {
+            "datahora": "2026-08-16T13:41:29.440730+00:00",
+            "cpu_percent": 5.4,
+            "ram_percent": 50.8,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T13:46:31.300580+00:00",
+            "cpu_percent": 1.7,
+            "ram_percent": 50.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T13:51:33.005058+00:00",
+            "cpu_percent": 1.0,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T13:56:34.713116+00:00",
+            "cpu_percent": 7.1,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T14:01:36.423092+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 50.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T14:06:38.114159+00:00",
+            "cpu_percent": 2.9,
+            "ram_percent": 50.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T14:11:39.818186+00:00",
+            "cpu_percent": 2.4,
+            "ram_percent": 50.3,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T14:16:41.603830+00:00",
+            "cpu_percent": 6.1,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T14:21:43.314798+00:00",
+            "cpu_percent": 4.3,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T14:26:45.042463+00:00",
+            "cpu_percent": 6.3,
+            "ram_percent": 50.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T14:31:46.740753+00:00",
+            "cpu_percent": 2.1,
+            "ram_percent": 50.0,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T14:36:48.437434+00:00",
+            "cpu_percent": 1.0,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T14:41:50.131619+00:00",
+            "cpu_percent": 1.4,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T14:46:52.007919+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T14:51:53.708355+00:00",
+            "cpu_percent": 8.6,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T14:56:55.397771+00:00",
+            "cpu_percent": 3.1,
+            "ram_percent": 51.0,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T15:01:57.101828+00:00",
+            "cpu_percent": 0.6,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T15:06:58.796833+00:00",
+            "cpu_percent": 5.0,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T15:12:00.495642+00:00",
+            "cpu_percent": 2.4,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T15:17:02.281531+00:00",
+            "cpu_percent": 4.1,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T15:22:04.003913+00:00",
+            "cpu_percent": 4.5,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T15:27:05.692237+00:00",
+            "cpu_percent": 1.9,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T15:32:07.386476+00:00",
+            "cpu_percent": 1.8,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T15:37:09.071930+00:00",
+            "cpu_percent": 2.7,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T15:42:10.758594+00:00",
+            "cpu_percent": 2.6,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T15:47:12.581275+00:00",
+            "cpu_percent": 6.5,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T15:52:14.276072+00:00",
+            "cpu_percent": 2.2,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T15:57:15.973885+00:00",
+            "cpu_percent": 1.8,
+            "ram_percent": 50.3,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T16:02:17.669456+00:00",
+            "cpu_percent": 4.1,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T16:07:19.373658+00:00",
+            "cpu_percent": 0.8,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T16:12:21.087183+00:00",
+            "cpu_percent": 5.0,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T16:17:22.855367+00:00",
+            "cpu_percent": 4.3,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T16:22:24.566907+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T16:27:26.273064+00:00",
+            "cpu_percent": 4.3,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T16:32:27.977609+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T16:37:29.671417+00:00",
+            "cpu_percent": 1.4,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T16:42:31.387648+00:00",
+            "cpu_percent": 5.3,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T16:47:33.192964+00:00",
+            "cpu_percent": 3.9,
+            "ram_percent": 50.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T16:52:34.903600+00:00",
+            "cpu_percent": 2.9,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T16:57:36.597955+00:00",
+            "cpu_percent": 5.1,
+            "ram_percent": 50.8,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T17:02:38.290181+00:00",
+            "cpu_percent": 2.7,
+            "ram_percent": 50.0,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T17:07:39.993366+00:00",
+            "cpu_percent": 2.5,
+            "ram_percent": 50.1,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T17:12:41.768205+00:00",
+            "cpu_percent": 4.7,
+            "ram_percent": 50.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T17:17:43.657512+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 50.5,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T17:22:45.354088+00:00",
+            "cpu_percent": 1.5,
+            "ram_percent": 50.2,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T17:27:47.047339+00:00",
+            "cpu_percent": 2.1,
+            "ram_percent": 50.3,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T17:32:48.753651+00:00",
+            "cpu_percent": 2.9,
+            "ram_percent": 50.3,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T17:37:51.229228+00:00",
+            "cpu_percent": 6.8,
+            "ram_percent": 50.3,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T17:42:52.971185+00:00",
+            "cpu_percent": 4.8,
+            "ram_percent": 50.0,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T17:47:54.751768+00:00",
+            "cpu_percent": 2.5,
+            "ram_percent": 50.0,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T17:52:56.432365+00:00",
+            "cpu_percent": 3.3,
+            "ram_percent": 50.0,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T17:57:58.140603+00:00",
+            "cpu_percent": 3.9,
+            "ram_percent": 50.3,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T18:02:59.851834+00:00",
+            "cpu_percent": 6.1,
+            "ram_percent": 49.5,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T18:08:01.552248+00:00",
+            "cpu_percent": 6.8,
+            "ram_percent": 49.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T18:13:03.243059+00:00",
+            "cpu_percent": 2.3,
+            "ram_percent": 49.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T18:18:05.094272+00:00",
+            "cpu_percent": 2.7,
+            "ram_percent": 49.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T18:23:06.800936+00:00",
+            "cpu_percent": 5.0,
+            "ram_percent": 49.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T18:28:08.493351+00:00",
+            "cpu_percent": 2.0,
+            "ram_percent": 49.5,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T18:33:10.217435+00:00",
+            "cpu_percent": 7.0,
+            "ram_percent": 49.5,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T18:38:11.931908+00:00",
+            "cpu_percent": 6.0,
+            "ram_percent": 49.5,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T18:43:13.631793+00:00",
+            "cpu_percent": 1.6,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T18:48:15.380227+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T18:53:17.083367+00:00",
+            "cpu_percent": 5.6,
+            "ram_percent": 50.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T18:58:18.764444+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 50.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T19:03:20.489063+00:00",
+            "cpu_percent": 6.4,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T19:08:22.199464+00:00",
+            "cpu_percent": 1.8,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T19:13:23.891891+00:00",
+            "cpu_percent": 3.1,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T19:18:25.704261+00:00",
+            "cpu_percent": 1.8,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T19:23:27.400228+00:00",
+            "cpu_percent": 3.9,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T19:28:29.089204+00:00",
+            "cpu_percent": 1.6,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T19:33:30.795503+00:00",
+            "cpu_percent": 7.4,
+            "ram_percent": 49.5,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T19:38:32.476091+00:00",
+            "cpu_percent": 4.8,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T19:43:34.154486+00:00",
+            "cpu_percent": 6.0,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T19:48:35.918487+00:00",
+            "cpu_percent": 6.2,
+            "ram_percent": 49.5,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T19:53:37.609161+00:00",
+            "cpu_percent": 1.6,
+            "ram_percent": 50.3,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T19:58:39.309343+00:00",
+            "cpu_percent": 7.0,
+            "ram_percent": 50.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T20:03:40.994883+00:00",
+            "cpu_percent": 4.1,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T20:08:42.712491+00:00",
+            "cpu_percent": 1.6,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T20:13:44.400010+00:00",
+            "cpu_percent": 1.7,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T20:18:46.174112+00:00",
+            "cpu_percent": 3.9,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T20:23:47.896443+00:00",
+            "cpu_percent": 2.7,
+            "ram_percent": 50.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T20:28:49.597070+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T20:33:51.280072+00:00",
+            "cpu_percent": 1.7,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T20:38:52.985877+00:00",
+            "cpu_percent": 2.9,
+            "ram_percent": 49.8,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T20:43:54.677407+00:00",
+            "cpu_percent": 2.3,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T20:48:56.656369+00:00",
+            "cpu_percent": 1.8,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T20:53:58.407328+00:00",
+            "cpu_percent": 5.4,
+            "ram_percent": 50.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T20:59:00.103827+00:00",
+            "cpu_percent": 3.1,
+            "ram_percent": 49.8,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T21:04:01.799456+00:00",
+            "cpu_percent": 5.0,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T21:09:03.499256+00:00",
+            "cpu_percent": 6.7,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T21:14:05.200232+00:00",
+            "cpu_percent": 4.0,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T21:19:07.089315+00:00",
+            "cpu_percent": 6.8,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T21:24:08.807167+00:00",
+            "cpu_percent": 3.3,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T21:29:10.498730+00:00",
+            "cpu_percent": 3.6,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T21:34:12.180425+00:00",
+            "cpu_percent": 3.3,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T21:39:13.877747+00:00",
+            "cpu_percent": 4.2,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T21:44:15.569610+00:00",
+            "cpu_percent": 7.5,
+            "ram_percent": 49.7,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T21:49:17.433309+00:00",
+            "cpu_percent": 5.3,
+            "ram_percent": 49.6,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T21:54:19.193131+00:00",
+            "cpu_percent": 5.8,
+            "ram_percent": 50.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T21:59:20.879163+00:00",
+            "cpu_percent": 2.3,
+            "ram_percent": 50.4,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T22:04:22.883592+00:00",
+            "cpu_percent": 14.0,
+            "ram_percent": 51.0,
+            "disk_percent": 47.1
+        },
+        {
+            "datahora": "2026-08-16T22:09:24.599395+00:00",
+            "cpu_percent": 4.7,
+            "ram_percent": 50.1,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T22:14:26.335004+00:00",
+            "cpu_percent": 5.3,
+            "ram_percent": 50.1,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T22:19:28.205201+00:00",
+            "cpu_percent": 6.1,
+            "ram_percent": 50.1,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T22:24:29.918180+00:00",
+            "cpu_percent": 3.3,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T22:29:31.619611+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T22:34:33.310441+00:00",
+            "cpu_percent": 1.6,
+            "ram_percent": 50.0,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T22:39:35.011412+00:00",
+            "cpu_percent": 6.9,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T22:44:36.716615+00:00",
+            "cpu_percent": 8.4,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T22:49:38.459159+00:00",
+            "cpu_percent": 2.4,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T22:54:40.153111+00:00",
+            "cpu_percent": 2.2,
+            "ram_percent": 50.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T22:59:41.848402+00:00",
+            "cpu_percent": 2.9,
+            "ram_percent": 50.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T23:04:43.628683+00:00",
+            "cpu_percent": 6.4,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T23:09:45.316481+00:00",
+            "cpu_percent": 3.3,
+            "ram_percent": 50.0,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T23:14:47.011707+00:00",
+            "cpu_percent": 2.7,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T23:19:48.882741+00:00",
+            "cpu_percent": 2.7,
+            "ram_percent": 50.1,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T23:24:50.570501+00:00",
+            "cpu_percent": 2.0,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T23:29:52.273041+00:00",
+            "cpu_percent": 5.1,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T23:34:53.978668+00:00",
+            "cpu_percent": 3.3,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T23:39:55.680348+00:00",
+            "cpu_percent": 2.5,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T23:44:57.375018+00:00",
+            "cpu_percent": 6.2,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T23:49:59.139153+00:00",
+            "cpu_percent": 5.6,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-16T23:55:00.853172+00:00",
+            "cpu_percent": 3.3,
+            "ram_percent": 50.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T00:00:02.536512+00:00",
+            "cpu_percent": 2.7,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T00:05:04.235440+00:00",
+            "cpu_percent": 4.3,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T00:10:05.932716+00:00",
+            "cpu_percent": 5.3,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T00:15:07.634759+00:00",
+            "cpu_percent": 1.6,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T00:20:09.466098+00:00",
+            "cpu_percent": 6.1,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T00:25:11.174759+00:00",
+            "cpu_percent": 6.2,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T00:30:12.866263+00:00",
+            "cpu_percent": 1.6,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T00:35:14.560496+00:00",
+            "cpu_percent": 2.9,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T00:40:16.251280+00:00",
+            "cpu_percent": 4.7,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T00:45:17.936714+00:00",
+            "cpu_percent": 3.8,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T00:50:19.717200+00:00",
+            "cpu_percent": 1.0,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T00:55:21.402523+00:00",
+            "cpu_percent": 2.9,
+            "ram_percent": 50.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T01:00:23.095120+00:00",
+            "cpu_percent": 4.1,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T01:05:24.792262+00:00",
+            "cpu_percent": 5.5,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T01:10:26.490260+00:00",
+            "cpu_percent": 2.1,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T01:15:28.186066+00:00",
+            "cpu_percent": 2.9,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T01:20:30.034458+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T01:25:31.733112+00:00",
+            "cpu_percent": 3.8,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T01:30:33.425177+00:00",
+            "cpu_percent": 2.1,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T01:35:35.110053+00:00",
+            "cpu_percent": 1.8,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T01:40:36.803286+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T01:45:38.492888+00:00",
+            "cpu_percent": 2.0,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T01:50:40.276199+00:00",
+            "cpu_percent": 4.1,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T01:55:41.960059+00:00",
+            "cpu_percent": 3.6,
+            "ram_percent": 50.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T02:00:43.662621+00:00",
+            "cpu_percent": 2.5,
+            "ram_percent": 50.1,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T02:05:45.355089+00:00",
+            "cpu_percent": 3.1,
+            "ram_percent": 50.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T02:10:47.055787+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 50.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T02:15:48.754791+00:00",
+            "cpu_percent": 3.9,
+            "ram_percent": 51.2,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T02:20:50.497467+00:00",
+            "cpu_percent": 1.6,
+            "ram_percent": 50.2,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T02:25:52.178501+00:00",
+            "cpu_percent": 1.8,
+            "ram_percent": 50.3,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T02:30:53.876611+00:00",
+            "cpu_percent": 1.9,
+            "ram_percent": 50.3,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T02:35:55.585167+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T02:40:57.274999+00:00",
+            "cpu_percent": 4.9,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T02:45:59.129265+00:00",
+            "cpu_percent": 0.6,
+            "ram_percent": 50.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T02:51:00.827676+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 50.3,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T02:56:02.511360+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 51.3,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T03:01:04.210079+00:00",
+            "cpu_percent": 2.4,
+            "ram_percent": 51.3,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T03:06:05.911455+00:00",
+            "cpu_percent": 6.0,
+            "ram_percent": 50.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T03:11:07.601266+00:00",
+            "cpu_percent": 1.2,
+            "ram_percent": 50.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T03:16:09.297638+00:00",
+            "cpu_percent": 1.0,
+            "ram_percent": 50.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T03:21:12.371023+00:00",
+            "cpu_percent": 1.7,
+            "ram_percent": 50.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T03:26:14.108980+00:00",
+            "cpu_percent": 4.2,
+            "ram_percent": 50.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T03:31:15.792118+00:00",
+            "cpu_percent": 1.2,
+            "ram_percent": 50.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T03:36:17.500201+00:00",
+            "cpu_percent": 2.9,
+            "ram_percent": 50.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T03:41:19.249862+00:00",
+            "cpu_percent": 2.5,
+            "ram_percent": 50.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T03:46:20.963360+00:00",
+            "cpu_percent": 4.7,
+            "ram_percent": 48.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T03:51:22.656155+00:00",
+            "cpu_percent": 2.4,
+            "ram_percent": 49.1,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T03:56:24.344524+00:00",
+            "cpu_percent": 1.4,
+            "ram_percent": 50.1,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T04:01:26.037835+00:00",
+            "cpu_percent": 2.1,
+            "ram_percent": 49.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T04:06:27.735621+00:00",
+            "cpu_percent": 5.4,
+            "ram_percent": 49.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T04:11:29.465700+00:00",
+            "cpu_percent": 6.0,
+            "ram_percent": 49.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T04:16:31.154457+00:00",
+            "cpu_percent": 2.2,
+            "ram_percent": 49.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T04:21:33.020124+00:00",
+            "cpu_percent": 1.2,
+            "ram_percent": 49.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T04:26:34.716662+00:00",
+            "cpu_percent": 2.5,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T04:31:36.436387+00:00",
+            "cpu_percent": 5.2,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T04:36:38.127462+00:00",
+            "cpu_percent": 1.6,
+            "ram_percent": 49.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T04:41:39.865411+00:00",
+            "cpu_percent": 7.0,
+            "ram_percent": 49.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T04:46:41.576936+00:00",
+            "cpu_percent": 2.0,
+            "ram_percent": 49.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T04:51:43.272567+00:00",
+            "cpu_percent": 1.9,
+            "ram_percent": 49.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T04:56:44.973971+00:00",
+            "cpu_percent": 5.3,
+            "ram_percent": 50.3,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T05:01:46.673202+00:00",
+            "cpu_percent": 1.0,
+            "ram_percent": 49.3,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T05:06:48.364082+00:00",
+            "cpu_percent": 1.8,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T05:11:50.062232+00:00",
+            "cpu_percent": 2.3,
+            "ram_percent": 49.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T05:16:51.766137+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T05:21:53.608759+00:00",
+            "cpu_percent": 7.3,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T05:26:55.290595+00:00",
+            "cpu_percent": 1.7,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T05:31:56.974962+00:00",
+            "cpu_percent": 1.8,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T05:36:58.663207+00:00",
+            "cpu_percent": 1.6,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T05:42:00.484530+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T05:47:02.168832+00:00",
+            "cpu_percent": 2.6,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T05:52:03.856746+00:00",
+            "cpu_percent": 1.9,
+            "ram_percent": 49.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T05:57:05.549232+00:00",
+            "cpu_percent": 2.5,
+            "ram_percent": 50.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T06:02:07.237764+00:00",
+            "cpu_percent": 2.9,
+            "ram_percent": 50.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T06:07:08.975676+00:00",
+            "cpu_percent": 5.1,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T06:12:10.670581+00:00",
+            "cpu_percent": 3.1,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T06:17:12.357744+00:00",
+            "cpu_percent": 1.5,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T06:22:14.153911+00:00",
+            "cpu_percent": 2.0,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T06:27:15.837457+00:00",
+            "cpu_percent": 2.7,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T06:32:17.581548+00:00",
+            "cpu_percent": 5.1,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T06:37:19.286519+00:00",
+            "cpu_percent": 3.3,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T06:42:21.025968+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 50.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T06:47:22.727277+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 50.1,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T06:52:24.453703+00:00",
+            "cpu_percent": 5.5,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T06:57:26.164310+00:00",
+            "cpu_percent": 3.3,
+            "ram_percent": 50.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T07:02:27.869653+00:00",
+            "cpu_percent": 5.1,
+            "ram_percent": 49.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T07:07:29.557590+00:00",
+            "cpu_percent": 2.5,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T07:12:31.266482+00:00",
+            "cpu_percent": 4.5,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T07:17:32.963363+00:00",
+            "cpu_percent": 0.4,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T07:22:34.739414+00:00",
+            "cpu_percent": 1.4,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T07:27:36.427085+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T07:32:38.135277+00:00",
+            "cpu_percent": 3.1,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T07:37:39.835836+00:00",
+            "cpu_percent": 5.6,
+            "ram_percent": 49.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T07:42:41.766569+00:00",
+            "cpu_percent": 3.9,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T07:47:43.463220+00:00",
+            "cpu_percent": 3.6,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T07:52:45.163200+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T07:57:46.867424+00:00",
+            "cpu_percent": 5.8,
+            "ram_percent": 50.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T08:02:48.577832+00:00",
+            "cpu_percent": 5.0,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T08:07:50.264189+00:00",
+            "cpu_percent": 1.4,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T08:12:51.960548+00:00",
+            "cpu_percent": 2.7,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T08:17:53.648477+00:00",
+            "cpu_percent": 5.7,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T08:22:55.407871+00:00",
+            "cpu_percent": 4.5,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T08:27:57.109777+00:00",
+            "cpu_percent": 6.6,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T08:32:58.811678+00:00",
+            "cpu_percent": 2.5,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T08:38:00.521672+00:00",
+            "cpu_percent": 4.3,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T08:43:02.442172+00:00",
+            "cpu_percent": 2.7,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T08:48:04.137475+00:00",
+            "cpu_percent": 3.3,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T08:53:05.840214+00:00",
+            "cpu_percent": 5.5,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T08:58:07.529057+00:00",
+            "cpu_percent": 2.4,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T09:03:09.229799+00:00",
+            "cpu_percent": 2.1,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T09:08:10.931184+00:00",
+            "cpu_percent": 1.0,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T09:13:12.630679+00:00",
+            "cpu_percent": 5.4,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T09:18:14.340713+00:00",
+            "cpu_percent": 1.2,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T09:23:16.106117+00:00",
+            "cpu_percent": 2.5,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T09:28:17.790259+00:00",
+            "cpu_percent": 4.5,
+            "ram_percent": 50.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T09:33:19.481042+00:00",
+            "cpu_percent": 4.3,
+            "ram_percent": 49.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T09:38:21.176569+00:00",
+            "cpu_percent": 8.2,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T09:43:22.999838+00:00",
+            "cpu_percent": 2.0,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T09:48:24.687478+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T09:53:26.385332+00:00",
+            "cpu_percent": 2.5,
+            "ram_percent": 49.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T09:58:28.129447+00:00",
+            "cpu_percent": 5.9,
+            "ram_percent": 50.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T10:03:29.826195+00:00",
+            "cpu_percent": 5.2,
+            "ram_percent": 50.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T10:08:31.534368+00:00",
+            "cpu_percent": 1.6,
+            "ram_percent": 49.3,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T10:13:33.235220+00:00",
+            "cpu_percent": 5.4,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T10:18:34.928545+00:00",
+            "cpu_percent": 2.1,
+            "ram_percent": 50.0,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T10:23:36.781767+00:00",
+            "cpu_percent": 4.3,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T10:28:38.504578+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T10:33:40.198522+00:00",
+            "cpu_percent": 2.3,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T10:38:41.880987+00:00",
+            "cpu_percent": 3.1,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T10:43:43.629095+00:00",
+            "cpu_percent": 5.0,
+            "ram_percent": 49.8,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T10:48:45.335402+00:00",
+            "cpu_percent": 6.6,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T10:53:47.026601+00:00",
+            "cpu_percent": 1.4,
+            "ram_percent": 49.7,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T10:58:48.735122+00:00",
+            "cpu_percent": 3.5,
+            "ram_percent": 51.6,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T11:03:50.622672+00:00",
+            "cpu_percent": 6.7,
+            "ram_percent": 56.3,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T11:08:52.398780+00:00",
+            "cpu_percent": 10.3,
+            "ram_percent": 50.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T11:13:54.368243+00:00",
+            "cpu_percent": 8.5,
+            "ram_percent": 50.9,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T11:18:57.864890+00:00",
+            "cpu_percent": 69.5,
+            "ram_percent": 61.1,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T11:24:00.101631+00:00",
+            "cpu_percent": 9.3,
+            "ram_percent": 57.3,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T11:29:03.150227+00:00",
+            "cpu_percent": 30.4,
+            "ram_percent": 57.3,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T11:34:18.636320+00:00",
+            "cpu_percent": 10.8,
+            "ram_percent": 56.1,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T11:39:20.437582+00:00",
+            "cpu_percent": 7.4,
+            "ram_percent": 55.5,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T11:44:22.388196+00:00",
+            "cpu_percent": 3.7,
+            "ram_percent": 51.2,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T12:27:41.575986+00:00",
+            "cpu_percent": 16.3,
+            "ram_percent": 53.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T12:32:43.469650+00:00",
+            "cpu_percent": 9.5,
+            "ram_percent": 54.1,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T12:34:37.066086+00:00",
+            "cpu_percent": 7.6,
+            "ram_percent": 52.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T12:39:38.764838+00:00",
+            "cpu_percent": 3.1,
+            "ram_percent": 49.2,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T12:44:40.878501+00:00",
+            "cpu_percent": 12.5,
+            "ram_percent": 55.4,
+            "disk_percent": 47.0
+        },
+        {
+            "datahora": "2026-08-17T12:49:27.401022+00:00",
+            "cpu_percent": 5.1,
+            "ram_percent": 51.9,
+            "disk_percent": 47.0
+        }
+    ]
+}

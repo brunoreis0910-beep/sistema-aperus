@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, TextField, Box, Typography, Chip, Alert,
@@ -84,7 +84,7 @@ export default function WhatsAppQuickSend({
         id_relacionado: idRelacionado
       });
 
-      alert('Mensagem adicionada Ã  fila de envio! ✅');
+      alert('Mensagem adicionada Ã  fila de envio! âœ…');
       handleClose();
       
       // Limpar formulÃ¡rio
@@ -104,92 +104,79 @@ export default function WhatsAppQuickSend({
     }
   };
 
-  const abrirWhatsAppDireto = () => {
-    // Abrir WhatsApp diretamente após confirmação no modal
+  const abrirWhatsAppDireto = async () => {
+    // Abrir WhatsApp diretamente apÃ³s confirmaÃ§Ã£o no modal
     if (!formData.telefone) {
-      alert('Telefone não informado!');
+      alert('Telefone nÃ£o informado!');
       return;
     }
 
-    const apiBase = axiosInstance.defaults.baseURL || '';
-
-    // Fazer download dos arquivos se marcados (de forma assíncrona para não acionar o bloqueador de popups)
+    // Fazer download dos arquivos se marcados
     if (incluirPDF && linkPDF) {
-      (async () => {
-        try {
-          // Construir URL absoluta se necessário
-          const pdfUrl = linkPDF.startsWith('http') ? linkPDF : `${window.location.origin}${linkPDF}`;
-          console.log('Baixando PDF de:', pdfUrl);
-          
-          // Evitar duplicação de prefixo de API se linkPDF já contém o baseURL
-          let cleanLinkPDF = linkPDF;
-          if (apiBase && cleanLinkPDF.startsWith(apiBase)) {
-            cleanLinkPDF = cleanLinkPDF.substring(apiBase.length);
-          }
-          
-          // Buscar o arquivo
-          const response = await axiosInstance.get(cleanLinkPDF, {
-            responseType: 'blob'
-          });
-          
-          // Criar blob e fazer download
-          const blob = new Blob([response.data], { type: 'application/pdf' });
-          const url = window.URL.createObjectURL(blob);
-          const linkElement = document.createElement('a');
-          linkElement.href = url;
-          linkElement.download = `DANFE_${Date.now()}.pdf`;
-          document.body.appendChild(linkElement);
-          linkElement.click();
-          document.body.removeChild(linkElement);
-          window.URL.revokeObjectURL(url);
-          
-          console.log('PDF baixado com sucesso!');
-        } catch (error) {
-          console.error('Erro ao baixar PDF:', error);
-        }
-      })();
+      try {
+        // Construir URL absoluta se necessÃ¡rio
+        const pdfUrl = linkPDF.startsWith('http') ? linkPDF : `${window.location.origin}${linkPDF}`;
+        console.log('Baixando PDF de:', pdfUrl);
+        
+        // Buscar o arquivo
+        const response = await axiosInstance.get(linkPDF, {
+          responseType: 'blob'
+        });
+        
+        // Criar blob e fazer download
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        const linkElement = document.createElement('a');
+        linkElement.href = url;
+        linkElement.download = `DANFE_${Date.now()}.pdf`;
+        document.body.appendChild(linkElement);
+        linkElement.click();
+        document.body.removeChild(linkElement);
+        window.URL.revokeObjectURL(url);
+        
+        console.log('PDF baixado com sucesso!');
+      } catch (error) {
+        console.error('Erro ao baixar PDF:', error);
+        alert('Erro ao baixar PDF. Verifique o console.');
+      }
     }
     
     if (incluirXML && linkXML) {
-      (async () => {
-        try {
-          // Construir URL absoluta se necessário
-          const xmlUrl = linkXML.startsWith('http') ? linkXML : `${window.location.origin}${linkXML}`;
-          console.log('Baixando XML de:', xmlUrl);
-          
-          // Evitar duplicação de prefixo de API se linkXML já contém o baseURL
-          let cleanLinkXML = linkXML;
-          if (apiBase && cleanLinkXML.startsWith(apiBase)) {
-            cleanLinkXML = cleanLinkXML.substring(apiBase.length);
-          }
-          
-          // Buscar o arquivo
-          const response = await axiosInstance.get(cleanLinkXML, {
-            responseType: 'blob'
-          });
-          
-          // Criar blob e fazer download
-          const blob = new Blob([response.data], { type: 'application/xml' });
-          const url = window.URL.createObjectURL(blob);
-          const linkElement = document.createElement('a');
-          linkElement.href = url;
-          linkElement.download = `NFe_${Date.now()}.xml`;
-          document.body.appendChild(linkElement);
-          linkElement.click();
-          document.body.removeChild(linkElement);
-          window.URL.revokeObjectURL(url);
-          
-          console.log('XML baixado com sucesso!');
-        } catch (error) {
-          console.error('Erro ao baixar XML:', error);
-        }
-      })();
+      try {
+        // Pequeno delay para nÃ£o travar o navegador
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Construir URL absoluta se necessÃ¡rio
+        const xmlUrl = linkXML.startsWith('http') ? linkXML : `${window.location.origin}${linkXML}`;
+        console.log('Baixando XML de:', xmlUrl);
+        
+        // Buscar o arquivo
+        const response = await axiosInstance.get(linkXML, {
+          responseType: 'blob'
+        });
+        
+        // Criar blob e fazer download
+        const blob = new Blob([response.data], { type: 'application/xml' });
+        const url = window.URL.createObjectURL(blob);
+        const linkElement = document.createElement('a');
+        linkElement.href = url;
+        linkElement.download = `NFe_${Date.now()}.xml`;
+        document.body.appendChild(linkElement);
+        linkElement.click();
+        document.body.removeChild(linkElement);
+        window.URL.revokeObjectURL(url);
+        
+        console.log('XML baixado com sucesso!');
+      } catch (error) {
+        console.error('Erro ao baixar XML:', error);
+        alert('Erro ao baixar XML. Verifique o console.');
+      }
     }
 
     // Limpar telefone (remover caracteres especiais)
     let telefoneFormatado = formData.telefone.replace(/\D/g, '');
     
-    // Adicionar código do Brasil se necessário
+    // Adicionar cÃ³digo do Brasil se necessÃ¡rio
     if (telefoneFormatado.length === 11 || telefoneFormatado.length === 10) {
       telefoneFormatado = '55' + telefoneFormatado;
     }
@@ -197,19 +184,19 @@ export default function WhatsAppQuickSend({
     // Construir mensagem informando sobre os arquivos
     let mensagemCompleta = formData.mensagem || '';
     
-    // Adicionar informação sobre os arquivos baixados e seus links
+    // Adicionar informaÃ§Ã£o sobre os arquivos baixados
     if ((incluirPDF && linkPDF) || (incluirXML && linkXML)) {
-      mensagemCompleta += '\n\n📎 *Arquivos da Nota Fiscal:*';
+      mensagemCompleta += '\n\nðŸ“Ž *Arquivos foram baixados:*';
       
       if (incluirPDF && linkPDF) {
-        const absolutePdfUrl = linkPDF.startsWith('http') ? linkPDF : `${window.location.origin}${linkPDF}`;
-        mensagemCompleta += `\n• Baixar PDF (DANFE): ${absolutePdfUrl}`;
+        mensagemCompleta += '\nâ€¢ PDF (DANFE)';
       }
       
       if (incluirXML && linkXML) {
-        const absoluteXmlUrl = linkXML.startsWith('http') ? linkXML : `${window.location.origin}${linkXML}`;
-        mensagemCompleta += `\n• Baixar XML: ${absoluteXmlUrl}`;
+        mensagemCompleta += '\nâ€¢ XML da NF-e';
       }
+      
+      mensagemCompleta += '\n\nðŸ’¡ *PrÃ³ximo passo:* Clique no ðŸ“Ž (clip) e selecione os arquivos baixados para anexar.';
     }
 
     // Preparar mensagem para URL
@@ -217,15 +204,18 @@ export default function WhatsAppQuickSend({
       ? `?text=${encodeURIComponent(mensagemCompleta)}`
       : '';
 
-    // Abrir WhatsApp usando wa.me (síncrono para evitar bloqueio de popup)
+    // Pequeno delay antes de abrir o WhatsApp para garantir que os downloads iniciaram
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    // Abrir WhatsApp usando wa.me (funciona em qualquer dispositivo)
     const url = `https://wa.me/${telefoneFormatado}${mensagemUrl}`;
     window.open(url, '_blank');
     
-    // Fechar modal após abrir
+    // Fechar modal apÃ³s abrir
     handleClose();
   };
 
-    return (
+  return (
     <>
       {/* BotÃ£o para abrir modal de confirmaÃ§Ã£o */}
       <IconButton
@@ -268,15 +258,15 @@ export default function WhatsAppQuickSend({
               border: '1px solid #e0e0e0'
             }}>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                📱 Dados do Cliente
+                ðŸ“± Dados do Cliente
               </Typography>
               
               <TextField
                 fullWidth
-                label="Nome do Destinatário"
+                label="Nome do DestinatÃ¡rio"
                 value={formData.nome_destinatario}
                 onChange={(e) => setFormData({ ...formData, nome_destinatario: e.target.value })}
-                placeholder="João Silva"
+                placeholder="JoÃ£o Silva"
                 size="small"
                 sx={{ mt: 1 }}
               />
@@ -288,7 +278,7 @@ export default function WhatsAppQuickSend({
                 value={formData.telefone}
                 onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
                 placeholder="11999999999"
-                helperText="Apenas números, com DDD"
+                helperText="Apenas nÃºmeros, com DDD"
                 size="small"
                 sx={{ mt: 2 }}
               />
@@ -302,7 +292,7 @@ export default function WhatsAppQuickSend({
               border: '1px solid #c8e6c9'
             }}>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                💬 Mensagem que será enviada
+                ðŸ’¬ Mensagem que serÃ¡ enviada
               </Typography>
               
               <TextField
@@ -313,7 +303,7 @@ export default function WhatsAppQuickSend({
                 label="Mensagem"
                 value={formData.mensagem}
                 onChange={(e) => setFormData({ ...formData, mensagem: e.target.value })}
-                placeholder="Digite a mensagem que será enviada..."
+                placeholder="Digite a mensagem que serÃ¡ enviada..."
                 helperText={`${formData.mensagem.length} caracteres`}
                 size="small"
                 sx={{ mt: 1 }}
@@ -329,7 +319,7 @@ export default function WhatsAppQuickSend({
                 border: '1px solid #ffe0b2'
               }}>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  📎 Anexos Disponíveis
+                  ðŸ“Ž Anexos DisponÃ­veis
                 </Typography>
                 
                 <Box sx={{ mt: 1 }}>
@@ -346,7 +336,7 @@ export default function WhatsAppQuickSend({
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <PdfIcon color="error" />
                           <Typography variant="body2">
-                            Incluir impressão/DANFE (PDF)
+                            Incluir impressÃ£o/DANFE (PDF)
                           </Typography>
                         </Box>
                       }
@@ -375,7 +365,7 @@ export default function WhatsAppQuickSend({
                 </Box>
 
                 <Alert severity="info" sx={{ mt: 2, fontSize: '0.75rem' }}>
-                  ⚡ Os arquivos serão baixados automaticamente quando você clicar em "Abrir WhatsApp". Depois basta anexá-los na conversa!
+                  âš¡ Os arquivos serÃ£o baixados automaticamente quando vocÃª clicar em "Abrir WhatsApp". Depois basta anexÃ¡-los na conversa!
                 </Alert>
               </Box>
             )}
@@ -407,74 +397,74 @@ export default function WhatsAppQuickSend({
 export const useWhatsAppTemplates = () => {
   const templates = {
     venda_concluida: (cliente, numeroVenda, valor) => 
-      `Olá ${cliente}! ✅\n\n` +
+      `OlÃ¡ ${cliente}! âœ…\n\n` +
       `Sua compra #${numeroVenda} foi finalizada com sucesso!\n\n` +
-      `💰 Valor: R$ ${valor}\n\n` +
-      `Obrigado pela preferência!\n\n` +
+      `ðŸ’° Valor: R$ ${valor}\n\n` +
+      `Obrigado pela preferÃªncia!\n\n` +
       `Atenciosamente,\nAPERUS`,
 
     nfce_emitida: (cliente, numeroNota, valor, chave) =>
-      `Olá ${cliente}! 📄\n\n` +
+      `OlÃ¡ ${cliente}! ðŸ“„\n\n` +
       `Sua NFC-e foi emitida com sucesso!\n\n` +
-      `📋 Número: ${numeroNota}\n` +
-      `💰 Valor: R$ ${valor}\n` +
-      `🔑 Chave: ${chave.substring(0, 20)}...\n\n` +
+      `ðŸ“‹ NÃºmero: ${numeroNota}\n` +
+      `ðŸ’° Valor: R$ ${valor}\n` +
+      `ðŸ”‘ Chave: ${chave.substring(0, 20)}...\n\n` +
       `Obrigado pela compra!`,
 
     nfe_emitida: (cliente, numeroNota, valor) =>
-      `Olá ${cliente}! 📄\n\n` +
+      `OlÃ¡ ${cliente}! ðŸ“„\n\n` +
       `Sua NF-e #${numeroNota} foi emitida!\n\n` +
-      `💰 Valor: R$ ${valor}\n\n` +
+      `ðŸ’° Valor: R$ ${valor}\n\n` +
       `O XML e DANFE foram enviados para seu e-mail.\n\n` +
       `Atenciosamente,\nAPERUS`,
 
     cte_emitido: (cliente, numeroCte, destino) =>
-      `Olá ${cliente}! 🚚\n\n` +
+      `OlÃ¡ ${cliente}! ðŸšš\n\n` +
       `Seu CT-e #${numeroCte} foi emitido!\n\n` +
       `ðŸ“ Destino: ${destino}\n\n` +
       `Acompanhe o transporte pelo nosso sistema.\n\n` +
       `Atenciosamente,\nAPERUS`,
 
     boleto_vencendo: (cliente, valor, vencimento) =>
-      `Olá ${cliente}! 💰\n\n` +
-      `Lembrete: Você possui um boleto a vencer.\n\n` +
-      `💵 Valor: R$ ${valor}\n` +
-      `📅 Vencimento: ${vencimento}\n\n` +
-      `Evite multa e juros! Pague até a data de vencimento.\n\n` +
+      `OlÃ¡ ${cliente}! ðŸ’°\n\n` +
+      `Lembrete: VocÃª possui um boleto a vencer.\n\n` +
+      `ðŸ’µ Valor: R$ ${valor}\n` +
+      `ðŸ“… Vencimento: ${vencimento}\n\n` +
+      `Evite multa e juros! Pague atÃ© a data de vencimento.\n\n` +
       `Atenciosamente,\nAPERUS`,
 
     ordem_servico_pronta: (cliente, numeroOS) =>
-      `Olá ${cliente}! ✅\n\n` +
-      `Sua Ordem de Serviço #${numeroOS} está pronta!\n\n` +
-      `Você pode retirar a qualquer momento em nosso estabelecimento.\n\n` +
+      `OlÃ¡ ${cliente}! âœ…\n\n` +
+      `Sua Ordem de ServiÃ§o #${numeroOS} estÃ¡ pronta!\n\n` +
+      `VocÃª pode retirar a qualquer momento em nosso estabelecimento.\n\n` +
       `Atenciosamente,\nAPERUS`,
 
     comanda_fechada: (cliente, numeroComanda, valor) =>
-      `Olá ${cliente}! ðŸ½ï¸\n\n` +
+      `OlÃ¡ ${cliente}! ðŸ½ï¸\n\n` +
       `Sua comanda #${numeroComanda} foi fechada.\n\n` +
-      `💰 Total: R$ ${valor}\n\n` +
-      `Obrigado pela preferência!\n\n` +
+      `ðŸ’° Total: R$ ${valor}\n\n` +
+      `Obrigado pela preferÃªncia!\n\n` +
       `Volte sempre!`,
 
     relatorio_enviado: (cliente, tipoRelatorio) =>
-      `Olá ${cliente}! 📊\n\n` +
-      `Seu relatório de ${tipoRelatorio} foi gerado com sucesso e está disponível no sistema.\n\n` +
+      `OlÃ¡ ${cliente}! ðŸ“Š\n\n` +
+      `Seu relatÃ³rio de ${tipoRelatorio} foi gerado com sucesso e estÃ¡ disponÃ­vel no sistema.\n\n` +
       `Acesse com suas credenciais para visualizar.\n\n` +
       `Atenciosamente,\nAPERUS`,
 
     produto_disponivel: (cliente, produto, preco) =>
-      `Olá ${cliente}! 📦\n\n` +
-      `O produto *${produto}* que você procurava está disponível!\n\n` +
-      `💰 Preço: R$ ${preco}\n\n` +
+      `OlÃ¡ ${cliente}! ðŸ“¦\n\n` +
+      `O produto *${produto}* que vocÃª procurava estÃ¡ disponÃ­vel!\n\n` +
+      `ðŸ’° PreÃ§o: R$ ${preco}\n\n` +
       `Entre em contato para garantir o seu!\n\n` +
       `Atenciosamente,\nAPERUS`,
 
     promocao: (cliente, produto, precoAntigo, precoNovo) =>
-      `Olá ${cliente}! 🎉\n\n` +
-      `Promoção especial para você!\n\n` +
-      `📦 ${produto}\n` +
-      `💰 De: ~~R$ ${precoAntigo}~~ por *R$ ${precoNovo}*\n\n` +
-      `Aproveite! Válido por tempo limitado.\n\n` +
+      `OlÃ¡ ${cliente}! ðŸŽ‰\n\n` +
+      `PromoÃ§Ã£o especial para vocÃª!\n\n` +
+      `ðŸ“¦ ${produto}\n` +
+      `ðŸ’° De: ~~R$ ${precoAntigo}~~ por *R$ ${precoNovo}*\n\n` +
+      `Aproveite! VÃ¡lido por tempo limitado.\n\n` +
       `Atenciosamente,\nAPERUS`
   };
 

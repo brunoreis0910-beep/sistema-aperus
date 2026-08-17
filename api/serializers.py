@@ -260,56 +260,9 @@ class ClienteSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['id_cliente', 'data_cadastro']
 
-    def _sync_ibge(self, validated_data, instance=None):
-        import re
-        import unicodedata
-        ibge = validated_data.get('codigo_municipio_ibge')
-        if ibge:
-            clean = re.sub(r'\D', '', str(ibge)).strip()
-            if clean:
-                validated_data['codigo_municipio_ibge'] = clean
-                return
-
-        cep = validated_data.get('cep') or (instance.cep if instance else None)
-        cidade = validated_data.get('cidade') or (instance.cidade if instance else None)
-        estado = validated_data.get('estado') or (instance.estado if instance else None)
-
-        cep_limpo = re.sub(r'\D', '', str(cep or '')).strip()
-        if len(cep_limpo) == 8:
-            try:
-                import urllib.request
-                import json
-                req = urllib.request.Request(
-                    f"https://viacep.com.br/ws/{cep_limpo}/json/",
-                    headers={'User-Agent': 'Mozilla/5.0'}
-                )
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    d = json.loads(resp.read().decode('utf-8'))
-                    if not d.get('erro') and d.get('ibge'):
-                        validated_data['codigo_municipio_ibge'] = str(d['ibge']).strip()
-                        return
-            except Exception:
-                pass
-
-        if cidade and estado:
-            try:
-                from .models import CodigoMunicipio
-                def norm(s):
-                    return unicodedata.normalize('NFKD', str(s or '')).encode('ASCII', 'ignore').decode('ASCII').strip().upper()
-                cidade_norm = norm(cidade)
-                uf_norm = str(estado).strip().upper()
-                mun = CodigoMunicipio.objects.filter(uf=uf_norm).all()
-                for m in mun:
-                    if norm(m.nome_municipio) == cidade_norm:
-                        validated_data['codigo_municipio_ibge'] = str(m.codigo_ibge).strip()
-                        return
-            except Exception:
-                pass
-
     def create(self, validated_data):
         from .models import ClienteGrupoExcecao
         grupos_data = validated_data.pop('grupos_excecao', None)
-        self._sync_ibge(validated_data)
         
         cliente = super().create(validated_data)
         
@@ -322,7 +275,6 @@ class ClienteSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         from .models import ClienteGrupoExcecao
         grupos_data = validated_data.pop('grupos_excecao', None)
-        self._sync_ibge(validated_data, instance=instance)
         
         cliente = super().update(instance, validated_data)
         
@@ -375,12 +327,10 @@ class ProdutoSerializer(serializers.ModelSerializer):
     # Campo para mostrar nome do grupo (somente leitura)
     grupo_nome = serializers.CharField(source='id_grupo.nome_grupo', read_only=True, allow_null=True)
     
-    # Campos para mostrar estoque por depósito (somente leitura)
+    # Campos para mostrar estoque por dep�sito (somente leitura)
     estoque_por_deposito = serializers.SerializerMethodField()
     estoque_total = serializers.SerializerMethodField()
-    valor_venda = serializers.SerializerMethodField()  # NOVO: Valor de venda (primeiro depósito)
-    preco_custo = serializers.SerializerMethodField()  # Custo médio / Preço de Custo (do estoque)
-    custo_medio = serializers.SerializerMethodField()
+    valor_venda = serializers.SerializerMethodField()  # NOVO: Valor de venda (primeiro dep�sito)
     
     # Tributacao detalhada (nested, somente leitura)
     tributacao_detalhada = TributacaoProdutoSerializer(read_only=True, allow_null=True)
@@ -401,11 +351,9 @@ class ProdutoSerializer(serializers.ModelSerializer):
             'gtin',
             'categoria',
             'tributacao_detalhada',  # CST/CFOP do produto
-            'estoque_por_deposito', # NOVO: Estoque por depósito
+            'estoque_por_deposito', # NOVO: Estoque por dep�sito
             'estoque_total',        # NOVO: Total consolidado
             'valor_venda',          # NOVO: Valor de venda
-            'preco_custo',          # Preço de custo (custo médio do estoque)
-            'custo_medio',
             'observacoes',
             'imagem_url',
             # Campos de materiais de construção
@@ -421,7 +369,7 @@ class ProdutoSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id_produto', 'grupo_nome', 
-            'estoque_por_deposito', 'estoque_total', 'valor_venda', 'preco_custo', 'custo_medio',
+            'estoque_por_deposito', 'estoque_total', 'valor_venda',
             'tributacao_detalhada'  # somente leitura
         ]
 
@@ -442,44 +390,30 @@ class ProdutoSerializer(serializers.ModelSerializer):
         return clean_ncm
 
     def get_estoque_por_deposito(self, obj):
-        """Retorna estoque atual por deposito para todos os depósitos cadastrados"""
+        """Retorna estoque atual por deposito"""
         try:
             from .models import Estoque, Deposito
-            depositos = Deposito.objects.all().order_by('id_deposito')
-            result = []
-            for dep in depositos:
-                estoque, created = Estoque.objects.get_or_create(
-                    id_produto=obj,
-                    id_deposito=dep,
-                    defaults={
-                        'quantidade': 0,
-                        'custo_medio': 0,
-                        'valor_ultima_compra': 0,
-                        'valor_venda': 0,
-                        'quantidade_minima': 0
-                    }
-                )
-                custo_val = float(estoque.custo_medio or estoque.valor_ultima_compra or 0.0)
-                result.append({
-                    'id_estoque': estoque.id_estoque,
-                    'id_deposito': dep.id_deposito,
-                    'nome_deposito': dep.nome_deposito,
-                    'quantidade_atual': float(estoque.quantidade or 0.0),
-                    'quantidade': float(estoque.quantidade or 0.0),
-                    'quantidade_minima': float(estoque.quantidade_minima or 0.0),
-                    'quantidade_maxima': float(estoque.quantidade_maxima or 0.0),
-                    'valor_venda': float(estoque.valor_venda or 0.0),
-                    'valor_custo': custo_val,
-                    'custo_medio': custo_val,
-                    'valor_ultima_compra': float(estoque.valor_ultima_compra or 0.0)
-                })
+            estoques = Estoque.objects.filter(id_produto=obj).select_related('id_deposito')
+            result = [
+                {
+                    'id_estoque': estoque.id_estoque,  # IMPORTANTE: ID para fazer PATCH
+                    'id_deposito': estoque.id_deposito.id_deposito,
+                    'nome_deposito': estoque.id_deposito.nome_deposito,
+                    'quantidade_atual': float(estoque.quantidade) if estoque.quantidade else 0.0,  # Frontend espera quantidade_atual
+                    'quantidade': float(estoque.quantidade) if estoque.quantidade else 0.0,  # Manter compatibilidade
+                    'quantidade_minima': float(estoque.quantidade_minima) if estoque.quantidade_minima else 0.0,
+                    'quantidade_maxima': float(estoque.quantidade_maxima) if estoque.quantidade_maxima else 0.0,
+                    'valor_venda': float(estoque.valor_venda) if estoque.valor_venda else 0.0,
+                    'valor_ultima_compra': float(estoque.valor_ultima_compra) if estoque.valor_ultima_compra else 0.0
+                }
+                for estoque in estoques
+            ]
             return result
         except Exception as e:
             return []
 
     def get_estoque_total(self, obj):
         """Retorna o estoque total consolidado de todos os dep�sitos"""
-        """Retorna o estoque total consolidado de todos os depsitos"""
         try:
             from .models import Estoque
             total = Estoque.objects.filter(id_produto=obj).aggregate(
@@ -490,7 +424,7 @@ class ProdutoSerializer(serializers.ModelSerializer):
             return 0.0
 
     def get_valor_venda(self, obj):
-        """Retorna o valor de venda do produto (primeiro depósito encontrado)"""
+        """Retorna o valor de venda do produto (primeiro dep�sito encontrado)"""
         try:
             from .models import Estoque
             estoque = Estoque.objects.filter(id_produto=obj).first()
@@ -500,22 +434,8 @@ class ProdutoSerializer(serializers.ModelSerializer):
         except Exception:
             return 0.0
 
-    def get_preco_custo(self, obj):
-        """Retorna o custo médio / preço de custo do produto (primeiro depósito encontrado)"""
-        try:
-            from .models import Estoque
-            estoque = Estoque.objects.filter(id_produto=obj).first()
-            if estoque and (estoque.custo_medio or estoque.valor_ultima_compra):
-                return float(estoque.custo_medio or estoque.valor_ultima_compra)
-            return 0.0
-        except Exception:
-            return 0.0
-
-    def get_custo_medio(self, obj):
-        return self.get_preco_custo(obj)
-
     def create(self, validated_data):
-        """Sobrescrever create para criar automaticamente registros de estoque nos depsitos"""
+        """Sobrescrever create para criar automaticamente registros de estoque nos dep�sitos"""
         from .models import Deposito, Estoque
         from decimal import Decimal
         
@@ -2360,17 +2280,7 @@ class UserAtalhoSerializer(serializers.ModelSerializer):
 
 class ConfiguracaoImpressaoSerializer(serializers.ModelSerializer):
     modulo_display = serializers.CharField(source='get_modulo_display', read_only=True)
-    tipo_impressora = serializers.CharField(required=False, allow_blank=True)
-    tipo_impressora_display = serializers.SerializerMethodField()
-
-    def get_tipo_impressora_display(self, obj):
-        displays = {
-            'termica': 'Térmica (Cupom)',
-            'a4': 'A4 (Folha)',
-            'a4_fotos': 'A4 com Fotos e Assinatura',
-            'personalizado': 'Gabarito Customizado',
-        }
-        return displays.get(obj.tipo_impressora, obj.tipo_impressora)
+    tipo_impressora_display = serializers.CharField(source='get_tipo_impressora_display', read_only=True)
 
     class Meta:
         from .models import ConfiguracaoImpressao

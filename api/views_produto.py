@@ -678,30 +678,9 @@ class ProdutoComDepositosSerializer(serializers.ModelSerializer):
     estoque_total = serializers.SerializerMethodField()
     estoque_por_deposito = serializers.SerializerMethodField()
     valor_venda = serializers.SerializerMethodField()  # NOVO: Valor de venda principal
-    preco_custo = serializers.SerializerMethodField()
-    custo_medio = serializers.SerializerMethodField()
     tributacao_detalhada = serializers.SerializerMethodField()  # Dados do produto tributário
     tributacao_info = serializers.SerializerMethodField()  # Formato esperado pelo frontend
     grupo_nome = serializers.CharField(source='id_grupo.nome_grupo', read_only=True, allow_null=True)
-
-    def get_preco_custo(self, obj):
-        """Retorna o custo médio / valor de última compra do produto no estoque."""
-        with connection.cursor() as cur:
-            cur.execute(
-                """
-                SELECT COALESCE(e.custo_medio, e.valor_ultima_compra, 0) AS preco_custo
-                FROM estoque e
-                WHERE e.id_produto = %s AND (e.custo_medio > 0 OR e.valor_ultima_compra > 0)
-                ORDER BY e.custo_medio DESC, e.valor_ultima_compra DESC
-                LIMIT 1
-                """,
-                [obj.id_produto],
-            )
-            row = cur.fetchone()
-            return float(row[0]) if row and row[0] else 0.0
-
-    def get_custo_medio(self, obj):
-        return self.get_preco_custo(obj)
 
     # Campos Calculadora Construção
     id_produto_pai = serializers.IntegerField(source='produto_pai_id', allow_null=True, required=False)
@@ -813,7 +792,7 @@ class ProdutoComDepositosSerializer(serializers.ModelSerializer):
         # incluir id_grupo para permitir salvar/alterar o grupo do produto
         fields = [
             'id_produto', 'codigo_produto', 'nome_produto', 'id_grupo', 'grupo_nome',
-            'depositos', 'estoque_total', 'estoque_por_deposito', 'valor_venda', 'preco_custo', 'custo_medio',
+            'depositos', 'estoque_total', 'estoque_por_deposito', 'valor_venda',
             'imagem_url', 'descricao', 'unidade_medida', 'marca', 'ncm', 'cest', 'gtin',
             'categoria', 'classificacao', 'observacoes', 'tributacao_detalhada', 'tributacao_info',
             'metragem_caixa', 'rendimento_m2', 'peso_unitario', 'id_produto_pai', 'variacao',
@@ -884,10 +863,7 @@ class ProdutoComDepositosSerializer(serializers.ModelSerializer):
                 SELECT d.id AS id_deposito, d.nome AS nome_deposito, 
                        COALESCE(e.quantidade, 0) AS quantidade_atual,
                        COALESCE(e.valor_venda, 0) AS valor_venda,
-                       COALESCE(e.quantidade_minima, 0) AS quantidade_minima,
-                       COALESCE(e.custo_medio, e.valor_ultima_compra, 0) AS custo_medio,
-                       COALESCE(e.valor_ultima_compra, e.custo_medio, 0) AS valor_ultima_compra,
-                       e.id_estoque AS id_estoque
+                       COALESCE(e.quantidade_minima, 0) AS quantidade_minima
                 FROM deposito d
                 LEFT JOIN estoque e ON e.id_deposito = d.id AND e.id_produto = %s
                 ORDER BY d.nome
@@ -898,18 +874,12 @@ class ProdutoComDepositosSerializer(serializers.ModelSerializer):
 
         out = []
         for r in rows:
-            custo_val = float(r[5]) if r[5] is not None else 0.0
             out.append({
                 'id_deposito': r[0],
                 'nome_deposito': r[1],
-                'quantidade_atual': float(r[2]) if r[2] is not None else 0.0,
-                'quantidade': float(r[2]) if r[2] is not None else 0.0,
-                'valor_venda': float(r[3]) if r[3] is not None else 0.0,
-                'quantidade_minima': float(r[4]) if r[4] is not None else 0.0,
-                'valor_custo': custo_val,
-                'custo_medio': custo_val,
-                'valor_ultima_compra': float(r[6]) if r[6] is not None else custo_val,
-                'id_estoque': r[7]
+                'quantidade_atual': float(r[2]) if r[2] is not None else 0,
+                'valor_venda': float(r[3]) if r[3] is not None else 0,
+                'quantidade_minima': float(r[4]) if r[4] is not None else 0,
             })
         return out
 
@@ -2297,6 +2267,15 @@ class ProdutoViewSetCustom(viewsets.ModelViewSet):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         
+        # DEBUG: Ver o que está chegando
+        imagem_recebida = request.data.get('imagem_url')
+        print(f"\n[BUSCA] DEBUG UPDATE - Produto ID {instance.id_produto}")
+        print(f"  - imagem_url recebida: {imagem_recebida[:100] if imagem_recebida else 'None'}...")
+        print(f"  - Tamanho: {len(imagem_recebida) if imagem_recebida else 0} caracteres")
+        print(f"  - categoria recebida: [{request.data.get('categoria')}]")
+        print(f"  - produtos_complementares recebidos: {request.data.get('produtos_complementares')}")
+        print(f"  - ALL request.data keys: {list(request.data.keys())}\n")
+        
         # Extrair campos que podem ser atualizados
         data = {
             'codigo_produto': request.data.get('codigo_produto', instance.codigo_produto),
@@ -2322,26 +2301,14 @@ class ProdutoViewSetCustom(viewsets.ModelViewSet):
             'controla_lote': request.data.get('controla_lote', instance.controla_lote),
         }
         
-        # Tratar id_grupo (pode vir como int, str, dict ou chave 'grupo')
-        id_grupo_raw = request.data.get('id_grupo')
-        if id_grupo_raw is None:
-            id_grupo_raw = request.data.get('grupo')
-
-        if id_grupo_raw is not None:
-            if isinstance(id_grupo_raw, dict):
-                gid = id_grupo_raw.get('id_grupo') or id_grupo_raw.get('id')
-            else:
-                gid = id_grupo_raw
-
-            if gid in ('', 0, '0', None):
-                instance.id_grupo = None
-            else:
-                try:
-                    gid_int = int(gid)
-                    grupo = GrupoProduto.objects.get(id_grupo=gid_int)
-                    instance.id_grupo = grupo
-                except Exception as egrp:
-                    pass
+        # Tratar id_grupo separadamente (precisa ser objeto GrupoProduto, não ID)
+        id_grupo_value = request.data.get('id_grupo')
+        if id_grupo_value is not None:
+            try:
+                grupo = GrupoProduto.objects.get(id_grupo=id_grupo_value)
+                instance.id_grupo = grupo
+            except GrupoProduto.DoesNotExist:
+                pass  # Mantém o grupo atual se não encontrar
         
         # Tratar produto_pai separadamente (ForeignKey para si mesmo)
         produto_pai_value = request.data.get('produto_pai')
@@ -2365,20 +2332,6 @@ class ProdutoViewSetCustom(viewsets.ModelViewSet):
                 setattr(instance, field, value)
         
         instance.save()
-        
-        # Se veio preco_custo, custo_medio ou valor_custo no request.data ao salvar o produto
-        preco_custo_req = request.data.get('preco_custo') or request.data.get('custo_medio') or request.data.get('valor_custo')
-        if preco_custo_req is not None:
-            try:
-                from decimal import Decimal
-                from .models import Estoque
-                custo_dec = Decimal(str(preco_custo_req))
-                for est in Estoque.objects.filter(id_produto=instance):
-                    est.custo_medio = custo_dec.quantize(Decimal('0.0001'))
-                    est.valor_ultima_compra = custo_dec.quantize(Decimal('0.0001'))
-                    est.save()
-            except Exception:
-                pass
         
         # Tratar produtos_complementares (M2M)
         complementares_value = request.data.get('produtos_complementares')

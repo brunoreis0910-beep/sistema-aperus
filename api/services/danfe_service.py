@@ -51,28 +51,14 @@ class DanfeGenerator:
         # 6. Dados Adicionais
         self._desenhar_rodape()
 
-        # 7. Marca D'água se Prévia ou Homologação
-        if not self.venda.chave_nfe or getattr(self.venda, 'is_previa', False):
-            self._desenhar_marca_dagua_previa()
-        elif is_homologacao:
+        # 7. Marca D'água se Homologação
+        if is_homologacao:
             self._desenhar_marca_dagua_homologacao()
         
         self.c.showPage()
         self.c.save()
         buffer.seek(0)
         return buffer
-
-    def _desenhar_marca_dagua_previa(self):
-        """Desenha 'PRÉVIA DA DANFE - SEM VALOR FISCAL' na diagonal"""
-        self.c.saveState()
-        self.c.translate(105*mm, 148*mm) # Centro da página
-        self.c.rotate(45)
-        self.c.setFillColorRGB(0.85, 0.25, 0.25, 0.35) # Vermelho transparente
-        self.c.setFont("Helvetica-Bold", 34)
-        self.c.drawCentredString(0, 20, "PRÉVIA DA DANFE - SEM VALOR FISCAL")
-        self.c.setFont("Helvetica-Bold", 20)
-        self.c.drawCentredString(0, -20, "DOCUMENTO PARA CONFERÊNCIA DO FORNECEDOR")
-        self.c.restoreState()
 
     def _desenhar_marca_dagua_homologacao(self):
         """Desenha 'SEM VALOR FISCAL' na diagonal"""
@@ -128,14 +114,10 @@ class DanfeGenerator:
         self._rect(55, top-18, 105, 8) # Assinatura
         self._text(56, top-17, "IDENTIFICAÇÃO E ASSINATURA DO RECEBEDOR", size=5)
         
-        num_nfe = getattr(self.venda, 'numero_nfe', None) or getattr(self.venda, 'numero_documento', None) or getattr(self.venda, 'pk', 1)
-        if not num_nfe or str(num_nfe) == '0':
-            num_nfe = getattr(self.venda, 'pk', 1)
-
         # NF-e Canhoto
         self._rect(185, top-18, 20, 15)
         self._text_bold(195, top-8, "NF-e", size=10, align="center")
-        self._text_bold(195, top-12, f"Nº {num_nfe}", size=8, align="center")
+        self._text_bold(195, top-12, f"Nº {self.venda.numero_nfe or '0'}", size=8, align="center")
         self._text_bold(195, top-15, f"SÉRIE {self.venda.serie_nfe or '1'}", size=6, align="center")
         
         # -- LOGO E DADOS EMITENTE --
@@ -233,7 +215,7 @@ class DanfeGenerator:
         self._rect(x_danfe+20, y_emit+7, 6, 6)
         self._text_bold(x_danfe+23, y_emit+8, tp_nf, size=9, align="center")
         
-        self._text_bold(x_danfe+w_danfe/2, y_emit+4, f"Nº {num_nfe}", size=8, align="center")
+        self._text_bold(x_danfe+w_danfe/2, y_emit+4, f"Nº {self.venda.numero_nfe}", size=8, align="center")
         self._text(x_danfe+w_danfe/2, y_emit+1, f"SÉRIE {self.venda.serie_nfe or '1'}", size=6, align="center")
 
         # Código de Barras e Chave
@@ -342,23 +324,9 @@ class DanfeGenerator:
             except Exception as e:
                 logger.error(f"Erro ao ler CFOP do XML: {e}")
 
-        # 2. Fallback: Se não tem XML processado (ex: Prévia), verificar Operação e CFOP dos itens
-        first_item = self.venda.itens.first() if hasattr(self.venda, 'itens') else None
-        item_cfop = getattr(first_item, 'cfop', '') if first_item else ''
-        
-        op_obj = getattr(self.venda, 'id_operacao', None)
-        op_nome = getattr(op_obj, 'nome_operacao', '') if op_obj else ''
-
-        if 'DEVOLU' in op_nome.upper() or item_cfop in ['5201', '5202', '6201', '6202', '5411', '6411']:
-            return "DEVOLUCAO DE COMPRA PARA COMERCIALIZACAO"
-        
-        if item_cfop and item_cfop in cfop_desc:
-            return cfop_desc[item_cfop]
-
-        if op_nome:
-            return op_nome.upper()
-
-        return "DEVOLUCAO DE COMPRA PARA COMERCIALIZACAO"
+        # 2. Fallback: Se não tem XML processado mas tem itens, podemos tentar adivinhar 
+        # (Mas sem Regra Fiscal complexa, vamos assumir o padrão 5102 que é usado no XML Builder por enquanto)
+        return cfop_desc.get('5102')
 
     def _desenhar_destinatario(self, is_homologacao=False):
         cli = self.venda.id_cliente
@@ -418,7 +386,7 @@ class DanfeGenerator:
         self._field_box(5+4*w+20, y_box, 15, h, "V. ICMS UF REM.", "0,00", "right")
         self._field_box(5+4*w+35, y_box, 15, h, "V. FCP UF DEST.", "0,00", "right")
         self._field_box(5+4*w+50, y_box, w+5, h, "VALOR PIS", "0,00", "right")
-        self._field_box(5+5*w+55, y_box, 28, h, "VALOR TOTAL PROD.", f"{(self.venda.valor_total or 0):.2f}", "right")
+        self._field_box(5+5*w+55, y_box, 28, h, "VALOR TOTAL PROD.", f"{self.venda.valor_total:.2f}", "right")
         
         y_box -= 9
         self._field_box(5, y_box, w, h, "VALOR DO FRETE", f"{self.venda.taxa_entrega or 0:.2f}", "right")
@@ -429,7 +397,7 @@ class DanfeGenerator:
         self._field_box(5+5*w, y_box, w, h, "VALOR DA COFINS", "0,00", "right")
         self._field_box(5+6*w, y_box, w+10, h, "VALOR PIS", "0,00", "right")
         
-        total_nota = (self.venda.valor_total or Decimal("0.00")) + (self.venda.taxa_entrega or Decimal("0.00"))
+        total_nota = self.venda.valor_total + (self.venda.taxa_entrega or Decimal("0.00"))
         self._field_box(5+7*w+10, y_box, 36, h, "VALOR TOTAL NOTA", f"{total_nota:.2f}", "right")
 
     def _desenhar_transportador(self):
@@ -459,8 +427,8 @@ class DanfeGenerator:
         self._field_box(28, y_box, 40, 8, "ESPÉCIE", self.venda.especie_volumes)
         self._field_box(71, y_box, 40, 8, "MARCA", self.venda.marca_volumes)
         self._field_box(114, y_box, 40, 8, "NUMERAÇÃO", "")
-        self._field_box(157, y_box, 24, 8, "PESO BRUTO", f"{(self.venda.peso_bruto or 0):.3f}")
-        self._field_box(184, y_box, 21, 8, "PESO LÍQUIDO", f"{(self.venda.peso_liquido or 0):.3f}")
+        self._field_box(157, y_box, 24, 8, "PESO BRUTO", f"{self.venda.peso_bruto:.3f}")
+        self._field_box(184, y_box, 21, 8, "PESO LÍQUIDO", f"{self.venda.peso_liquido:.3f}")
 
     def _desenhar_itens(self):
         y = 115
@@ -485,37 +453,30 @@ class DanfeGenerator:
         self._text(5, hd-1, "_"*145, size=5) # Linha
         
         y_item = hd - 4
-
-        itens_list = list(self.venda.itens.all())
-        row_height = 3.5
-        font_sz = 6
-        if len(itens_list) > 16:
-            row_height = max(1.8, (y_item - 52) / max(1, len(itens_list)))
-            font_sz = 5
         
-        # Listar Todos os Itens
-        for item in itens_list:
-            if y_item < 50: break # Limite seguro do quadro
+        # Listar Itens (Limitado visualmente, nao farei paginacao para manter simples)
+        for item in self.venda.itens.all():
+            if y_item < 55: break # End of box
             
             prod = item.id_produto
-            codigo = getattr(prod, 'codigo_produto', '') or getattr(item, 'codigo_produto', '') or "000"
-            nome = (getattr(prod, 'nome_produto', '') or getattr(item, 'nome_produto', '') or "ITEM")[:50]
-            ncm = getattr(prod, 'ncm', '') or getattr(item, 'ncm', '') or ""
-            cst = getattr(item, 'cst', '') or getattr(item, 'cst_csosn', '') or "000"
-            cfop = getattr(item, 'cfop', '') or "5202"
-            unid = getattr(prod, 'unidade_medida', '') or getattr(item, 'unidade_medida', '') or "UN"
+            codigo = prod.codigo_produto if prod else "000"
+            nome = prod.nome_produto[:50] if prod else "ITEM"
+            ncm = prod.ncm if prod else ""
+            cst = "000" # Placeholder
+            cfop = "5102" # Placeholder
+            unid = prod.unidade_medida if prod else "UN"
             
-            self._text(6, y_item, str(codigo), size=font_sz)
-            self._text(25, y_item, nome, size=font_sz)
-            self._text(90, y_item, str(ncm), size=font_sz)
-            self._text(105, y_item, str(cst), size=font_sz)
-            self._text(113, y_item, str(cfop), size=font_sz)
-            self._text(123, y_item, str(unid), size=font_sz)
-            self._text(140, y_item, f"{float(item.quantidade or 0):.2f}", size=font_sz, align="right")
-            self._text(155, y_item, f"{float(item.valor_unitario or 0):.2f}", size=font_sz, align="right")
-            self._text(170, y_item, f"{float(item.valor_total or 0):.2f}", size=font_sz, align="right")
+            self._text(6, y_item, codigo, size=6)
+            self._text(25, y_item, nome, size=6)
+            self._text(90, y_item, ncm, size=6)
+            self._text(105, y_item, cst, size=6)
+            self._text(113, y_item, cfop, size=6)
+            self._text(123, y_item, unid, size=6)
+            self._text(140, y_item, f"{item.quantidade:.2f}", size=6, align="right")
+            self._text(155, y_item, f"{item.valor_unitario:.2f}", size=6, align="right")
+            self._text(170, y_item, f"{item.valor_total:.2f}", size=6, align="right")
             
-            y_item -= row_height
+            y_item -= 3.5
 
     def _desenhar_rodape(self):
         y = 45
@@ -525,15 +486,7 @@ class DanfeGenerator:
         self._rect(5, y-h, 130, h)
         self._text(6, y-3, "INFORMAÇÕES COMPLEMENTARES", 5)
         
-        obs_parts = []
-        if getattr(self.venda, 'chave_nfe_referenciada', None):
-            obs_parts.append(f"NFe REFERENCIADA: {self.venda.chave_nfe_referenciada}")
-        if getattr(self.venda, 'observacao_contribuinte', None):
-            obs_parts.append(self.venda.observacao_contribuinte)
-        if getattr(self.venda, 'observacao_fisco', None):
-            obs_parts.append(self.venda.observacao_fisco)
-        obs = " - ".join(obs_parts)
-
+        obs = f"{self.venda.observacao_contribuinte or ''} {self.venda.observacao_fisco or ''}"
         # Wrap text simples
         import textwrap
         lines = textwrap.wrap(obs, 90)

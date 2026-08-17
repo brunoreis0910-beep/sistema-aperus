@@ -37,7 +37,6 @@ const SpedContribuicoesPage = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
-  const [lastGeneratedFile, setLastGeneratedFile] = useState(null);
   const [config, setConfig] = useState(null);
   
   // Blocos a gerar
@@ -141,39 +140,6 @@ const SpedContribuicoesPage = () => {
     }
   };
 
-  const triggerBrowserDownload = (base64Data, filename) => {
-    try {
-      if (!base64Data) {
-        console.warn('Sem dados base64 para download');
-        return false;
-      }
-
-      const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '').trim();
-      const byteCharacters = atob(cleanBase64);
-      const byteNumbers = new Uint8Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const blob = new Blob([byteNumbers], { type: 'application/zip' });
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.style.display = 'none';
-      link.href = blobUrl;
-      const finalFilename = filename.endsWith('.zip') ? filename : `${filename}.zip`;
-      link.setAttribute('download', finalFilename);
-      document.body.appendChild(link);
-      link.click();
-      setTimeout(() => {
-        if (link.parentNode) link.parentNode.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
-      }, 15000);
-      return true;
-    } catch (e) {
-      console.error('Erro no download via Blob:', e);
-      return false;
-    }
-  };
-
   const gerarSped = async () => {
     setLoading(true);
     setError('');
@@ -198,34 +164,21 @@ const SpedContribuicoesPage = () => {
         data_fim: dataFim,
         conjuntos: conjuntosSelecionados,
         versao,
-        diretorio: diretorio || 'C:\\SPED\\',
+        diretorio,
         blocos: blocosSelecionados,
         exportar_xml: exportarXml,
         gerar_relatorio: gerarRelatorio
       });
 
-      if (response.data && response.data.success) {
-        const d = response.data;
-        const filename = d.filename || d.arquivo || `EFD_CONTRIBUICOES_${dataInicio.replace(/-/g, '')}_${dataFim.replace(/-/g, '')}.zip`;
-        const downloadUrl = d.download_url || `/api/sped/download/${encodeURIComponent(filename)}/`;
-
-        setLastGeneratedFile({
-          base64: d.file_b64,
-          filename: filename,
-          downloadUrl: downloadUrl
-        });
-
-        triggerBrowserDownload(d.file_b64, filename, downloadUrl);
-
-        let msg = `✅ Pacote SPED Contribuições (${filename}) gerado e disponível para download!`;
-        setSuccess(msg);
-        if (d.estatisticas) setEstatisticas(d.estatisticas);
+      if (response.data.success) {
+        setSuccess(response.data.message);
+        if (response.data.estatisticas) setEstatisticas(response.data.estatisticas);
         await salvarConfig();
       } else {
-        setError(response.data?.error || 'Erro ao gerar arquivo SPED Contribuições');
+        setError(response.data.error || 'Erro desconhecido');
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Erro ao gerar arquivo SPED Contribuições');
+      setError(err.response?.data?.error || 'Erro ao gerar arquivo SPED Contribuições');
     } finally {
       setLoading(false);
     }
@@ -261,44 +214,7 @@ const SpedContribuicoesPage = () => {
           </Alert>
         )}
 
-        {lastGeneratedFile && (
-          <Paper
-            elevation={3}
-            sx={{
-              p: 2.5,
-              mb: 2.5,
-              bgcolor: '#e8f5e9',
-              border: '2px solid #2e7d32',
-              borderRadius: 2,
-              display: 'flex',
-              flexDirection: { xs: 'column', sm: 'row' },
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 2
-            }}
-          >
-            <Box>
-              <Typography variant="h6" color="#1b5e20" fontWeight="bold">
-                ✅ Pacote SPED Contribuições Gerado com Sucesso!
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Arquivo: <strong>{lastGeneratedFile.filename}</strong>
-              </Typography>
-            </Box>
-            <Button
-              variant="contained"
-              color="success"
-              size="large"
-              startIcon={<DownloadIcon fontSize="large" />}
-              onClick={() => triggerBrowserDownload(lastGeneratedFile.base64, lastGeneratedFile.filename)}
-              sx={{ fontWeight: 'bold', fontSize: '1.05rem', px: 3, py: 1.5, boxShadow: 2, whiteSpace: 'nowrap' }}
-            >
-              📥 Salvar no meu Computador
-            </Button>
-          </Paper>
-        )}
-
-        {success && !lastGeneratedFile && (
+        {success && (
           <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>
             {success}
           </Alert>

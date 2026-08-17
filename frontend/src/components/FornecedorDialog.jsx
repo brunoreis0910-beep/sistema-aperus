@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { buscarCNPJ } from '../utils/cnpjCepUtils';
 import {
@@ -21,7 +21,7 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
 
   const [formData, setFormData] = useState({
     nome_razao_social: '', nome_fantasia: '', cpf_cnpj: '', inscricao_estadual: '',
-    endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '', codigo_municipio_ibge: '',
+    endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '',
     telefone: '', email: '', limite_credito: 0, logo_url: ''
   });
 
@@ -33,9 +33,6 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
   useEffect(() => {
     setTabValue(0);
     if (fornecedorToEdit) {
-      const initialIbge = fornecedorToEdit.codigo_municipio_ibge || '';
-      const cepClean = (fornecedorToEdit.cep || '').replace(/\D/g, '');
-
       setFormData({
         nome_razao_social: fornecedorToEdit.nome_razao_social || '',
         nome_fantasia: fornecedorToEdit.nome_fantasia || '',
@@ -47,37 +44,13 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
         cidade: fornecedorToEdit.cidade || '',
         estado: fornecedorToEdit.estado || '',
         cep: fornecedorToEdit.cep || '',
-        codigo_municipio_ibge: initialIbge,
         telefone: fornecedorToEdit.telefone || '',
         email: fornecedorToEdit.email || '',
         limite_credito: fornecedorToEdit.limite_credito || 0,
         logo_url: fornecedorToEdit.logo_url || ''
       });
-
-      // Se não tiver código IBGE mas tiver CEP, busca automaticamente
-      if (!initialIbge && cepClean.length === 8) {
-        axios.get(`https://viacep.com.br/ws/${cepClean}/json/`)
-          .then(res => {
-            if (res.data && !res.data.erro && res.data.ibge) {
-              const cod = res.data.ibge.toString().trim();
-              setFormData(prev => ({
-                ...prev,
-                codigo_municipio_ibge: cod,
-                endereco: prev.endereco || res.data.logradouro || '',
-                bairro: prev.bairro || res.data.bairro || '',
-                cidade: prev.cidade || res.data.localidade || '',
-                estado: prev.estado || res.data.uf || ''
-              }));
-            }
-          })
-          .catch(() => {});
-      }
     } else {
-      setFormData({
-        nome_razao_social: '', nome_fantasia: '', cpf_cnpj: '', inscricao_estadual: '',
-        endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '',
-        codigo_municipio_ibge: '', telefone: '', email: '', limite_credito: 0, logo_url: ''
-      });
+      setFormData({ nome_razao_social: '', nome_fantasia: '', cpf_cnpj: '', inscricao_estadual: '', endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '', telefone: '', email: '', limite_credito: 0, logo_url: '' });
     }
   }, [fornecedorToEdit, open]);
 
@@ -94,17 +67,6 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
     setLoadingCNPJ(true);
     try {
       const dados = await buscarCNPJ(cnpj);
-      let codIbge = dados.ibge || dados.codigo_municipio_ibge || dados.codigo_ibge || '';
-      const cepLimpo = (dados.cep || '').replace(/\D/g, '');
-      if (!codIbge && cepLimpo.length === 8) {
-        try {
-          const resCep = await axios.get(`https://viacep.com.br/ws/${cepLimpo}/json/`);
-          if (resCep.data && resCep.data.ibge) {
-            codIbge = resCep.data.ibge.toString().trim();
-          }
-        } catch (err) {}
-      }
-
       setFormData(p => ({ 
         ...p, 
         nome_razao_social: dados.razao_social || '', 
@@ -114,8 +76,7 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
         bairro: dados.bairro || '', 
         cidade: dados.cidade || '', 
         estado: dados.estado || '', 
-        cep: cepLimpo, 
-        codigo_municipio_ibge: codIbge || p.codigo_municipio_ibge || '',
+        cep: (dados.cep || '').replace(/\D/g, ''), 
         telefone: dados.telefone || p.telefone || '', 
         email: dados.email || p.email || '', 
       }));
@@ -136,61 +97,28 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
       const d = res.data;
       if (d.erro) { alert('CEP não encontrado.'); }
       else {
-        const codIbge = d.ibge ? d.ibge.toString().trim() : '';
-        setFormData(p => ({
-          ...p,
-          endereco: d.logradouro || '',
-          bairro: d.bairro || '',
-          cidade: d.localidade || '',
-          estado: d.uf || '',
-          codigo_municipio_ibge: codIbge || p.codigo_municipio_ibge || '',
-        }));
-        alert('Endereço e Código IBGE carregados!');
+        setFormData(p => ({ ...p, endereco: d.logradouro || '', bairro: d.bairro || '', cidade: d.localidade || '', estado: d.uf || '', }));
+        alert('Endereço carregado!');
         document.getElementsByName("numero")[0]?.focus();
       }
     } catch (e) {
-      alert('Não foi possível buscar os dados do CEP.');
+      alert('não foi possível buscar os dados do CEP.');
     } finally {
       setLoadingCEP(false);
     }
   };
 
   const handleSave = async (e) => {
-    if (e && e.preventDefault) e.preventDefault();
+    e.preventDefault();
     setSaving(true);
-    
-    let codIbge = formData.codigo_municipio_ibge ? formData.codigo_municipio_ibge.replace(/\D/g, '').trim() : '';
-    const cepLimpo = (formData.cep || '').replace(/\D/g, '');
-
-    // Se o código IBGE estiver vazio mas o CEP tiver 8 dígitos, buscar rapidamente via ViaCEP
-    if (!codIbge && cepLimpo.length === 8) {
-      try {
-        const res = await axios.get(`https://viacep.com.br/ws/${cepLimpo}/json/`);
-        if (res.data && res.data.ibge) {
-          codIbge = res.data.ibge.toString().trim();
-        }
-      } catch (err) {
-        console.warn('Não foi possível obter IBGE pelo CEP antes de salvar:', err);
-      }
-    }
-
-    const data = {
-      ...formData,
-      limite_credito: parseFloat(formData.limite_credito) || 0,
-      cpf_cnpj: formData.cpf_cnpj.replace(/\D/g, ''),
-      cep: cepLimpo,
-      codigo_municipio_ibge: codIbge || null,
-      telefone: formData.telefone.replace(/\D/g, ''),
-      logo_url: formData.logo_url || null
-    };
-
+    const data = { ...formData, limite_credito: parseFloat(formData.limite_credito) || 0, cpf_cnpj: formData.cpf_cnpj.replace(/\D/g, ''), cep: formData.cep.replace(/\D/g, ''), telefone: formData.telefone.replace(/\D/g, ''), logo_url: formData.logo_url || null };
     try {
       if (fornecedorToEdit) {
         await axiosInstance.put(`/fornecedores/${fornecedorToEdit.id_fornecedor}/`, data);
-        alert('Fornecedor atualizado com sucesso!');
+        alert('Fornecedor atualizado!');
       } else {
         await axiosInstance.post('/fornecedores/', data);
-        alert('Fornecedor cadastrado com sucesso!');
+        alert('Fornecedor cadastrado!');
       }
       onSaveSuccess();
       onClose();
@@ -203,8 +131,6 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
           msg += `\n${key} - ${err[key][0]}`;
         } else if (err.detail) {
           msg = err.detail;
-        } else if (typeof err === 'string') {
-          msg = err;
         }
       }
       alert(msg);
@@ -229,10 +155,10 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
 
                 <TabPanel value={tabValue} index={0}>
                   <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}><TextField name="nome_razao_social" label="Nome / Razão Social" value={formData.nome_razao_social} onChange={handleChange} disabled={!!saving} required fullWidth /></Grid>
+                    <Grid item xs={12} sm={6}><TextField name="nome_razao_social" label="Nome / Razéo Social" value={formData.nome_razao_social} onChange={handleChange} disabled={!!saving} required fullWidth /></Grid>
                     <Grid item xs={12} sm={6}><TextField name="nome_fantasia" label="Nome Fantasia" value={formData.nome_fantasia} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
                     <Grid item xs={12} sm={6}><TextField name="cpf_cnpj" label="CPF / CNPJ" value={formData.cpf_cnpj} onChange={handleChange} disabled={!!(saving || loadingCNPJ)} required fullWidth InputProps={{ endAdornment: ( <InputAdornment position="end"> <span> <IconButton aria-label="buscar cnpj" onClick={handleBuscaCNPJ} disabled={!!(loadingCNPJ || (formData.cpf_cnpj && formData.cpf_cnpj.replace(/\D/g, '').length !== 14))} edge="end"> {loadingCNPJ ? <CircularProgress size={20} /> : <SearchIcon />} </IconButton> </span> </InputAdornment> ), }}/></Grid>
-                    <Grid item xs={12} sm={6}><TextField name="inscricao_estadual" label="Inscrição Estadual" value={formData.inscricao_estadual} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
+                    <Grid item xs={12} sm={6}><TextField name="inscricao_estadual" label="Inscriçéo Estadual" value={formData.inscricao_estadual} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
                     <Grid item xs={12} sm={6}><TextField name="telefone" label="Telefone" value={formData.telefone} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
                     <Grid item xs={12} sm={6}><TextField name="email" label="Email" type="email" value={formData.email} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
                     <Grid item xs={12} sm={6}><TextField name="limite_credito" label="Limite de Crédito" type="number" value={formData.limite_credito} onChange={handleChange} disabled={!!saving} fullWidth InputProps={{ inputProps: { min: 0, step: 0.01 } }}/></Grid>
@@ -241,13 +167,12 @@ function FornecedorDialog({ open, onClose, onSaveSuccess, fornecedorToEdit }) {
 
                 <TabPanel value={tabValue} index={1}>
                   <Grid container spacing={2}>
-                    <Grid item xs={12} sm={4}><TextField name="cep" label="CEP" value={formData.cep || ''} onChange={handleChange} disabled={!!(saving || loadingCEP)} fullWidth InputProps={{ endAdornment: ( <InputAdornment position="end"> <span> <IconButton aria-label="buscar cep" onClick={handleBuscaCEP} disabled={!!(loadingCEP || ((formData.cep || '').replace(/\D/g, '').length !== 8))} edge="end"> {loadingCEP ? <CircularProgress size={20} /> : <SearchIcon />} </IconButton> </span> </InputAdornment> ), }}/></Grid>
-                    <Grid item xs={12} sm={6}><TextField name="endereco" label="Endereço (Logradouro)" value={formData.endereco || ''} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
-                    <Grid item xs={12} sm={2}><TextField name="numero" label="Número" value={formData.numero || ''} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
-                    <Grid item xs={12} sm={4}><TextField name="bairro" label="Bairro" value={formData.bairro || ''} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
-                    <Grid item xs={12} sm={4}><TextField name="cidade" label="Cidade" value={formData.cidade || ''} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
-                    <Grid item xs={12} sm={1}><TextField name="estado" label="UF" value={formData.estado || ''} onChange={handleChange} disabled={!!saving} fullWidth inputProps={{ maxLength: 2 }}/></Grid>
-                    <Grid item xs={12} sm={3}><TextField name="codigo_municipio_ibge" label="Cód. IBGE Município" value={formData.codigo_municipio_ibge || ''} onChange={handleChange} disabled={!!saving} fullWidth helperText="Preenchido via Busca CEP" inputProps={{ maxLength: 7 }}/></Grid>
+                    <Grid item xs={12} sm={4}><TextField name="cep" label="CEP" value={formData.cep} onChange={handleChange} disabled={!!(saving || loadingCEP)} fullWidth InputProps={{ endAdornment: ( <InputAdornment position="end"> <span> <IconButton aria-label="buscar cep" onClick={handleBuscaCEP} disabled={!!(loadingCEP || (formData.cep && formData.cep.replace(/\D/g, '').length !== 8))} edge="end"> {loadingCEP ? <CircularProgress size={20} /> : <SearchIcon />} </IconButton> </span> </InputAdornment> ), }}/></Grid>
+                    <Grid item xs={12} sm={6}><TextField name="endereco" label="Endereço (Logradouro)" value={formData.endereco} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
+                    <Grid item xs={12} sm={2}><TextField name="numero" label="Número" value={formData.numero} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
+                    <Grid item xs={12} sm={5}><TextField name="bairro" label="Bairro" value={formData.bairro} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
+                    <Grid item xs={12} sm={5}><TextField name="cidade" label="Cidade" value={formData.cidade} onChange={handleChange} disabled={!!saving} fullWidth /></Grid>
+                    <Grid item xs={12} sm={2}><TextField name="estado" label="UF" value={formData.estado} onChange={handleChange} disabled={!!saving} fullWidth inputProps={{ maxLength: 2 }}/></Grid>
                   </Grid>
                 </TabPanel>
 

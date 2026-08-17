@@ -9,13 +9,11 @@ import {
 import {
   ArrowBack, Add, Remove, Search, CheckCircle, Cancel
 } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 const DevolucaoPage = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { axiosInstance } = useAuth();
   const [activeStep, setActiveStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -36,74 +34,14 @@ const DevolucaoPage = () => {
   
   useEffect(() => {
     carregarOperacoes();
-
-    // Auto-carregar documento caso fornecido via estado da navegação (ex: vindo da aba NFe)
-    if (location.state?.documentoId) {
-      const docIdStr = String(location.state.documentoId);
-      const tipoStr = location.state.tipoDevolucao || 'venda';
-      setDocumentoId(docIdStr);
-      setTipoDevolucao(tipoStr);
-      executarBuscaDireta(docIdStr, tipoStr);
-    }
-  }, [location.state]);
-
-  const executarBuscaDireta = async (targetId, targetTipo) => {
-    if (!targetId) return;
-    setLoading(true);
-    setError('');
-    
-    try {
-      const client = axiosInstance || axios;
-      const primaryEndpoint = targetTipo === 'venda' 
-        ? `/devolucoes/buscar_venda/${targetId}/`
-        : `/devolucoes/buscar_compra/${targetId}/`;
-      
-      const secondaryEndpoint = targetTipo === 'venda'
-        ? `/devolucoes/buscar_compra/${targetId}/`
-        : `/devolucoes/buscar_venda/${targetId}/`;
-
-      let response;
-      try {
-        response = await client.get(primaryEndpoint);
-      } catch (e1) {
-        try {
-          response = await client.get(secondaryEndpoint);
-          setTipoDevolucao(targetTipo === 'venda' ? 'compra' : 'venda');
-        } catch (e2) {
-          throw e1;
-        }
-      }
-
-      setDocumentoData(response.data);
-      const itensIniciais = (response.data.itens || []).map(item => ({
-        ...item,
-        quantidade_devolver: 0,
-        selecionado: false,
-        motivo_item: ''
-      }));
-      setItensSelecionados(itensIniciais);
-      
-      if (itensIniciais.length === 0) {
-        setError('Documento encontrado, mas não possui itens disponíveis para devolução.');
-      } else {
-        setActiveStep(1);
-      }
-    } catch (err) {
-      console.error('Erro na busca direta do documento:', err);
-      const msg = err.response?.data?.error || err.response?.data?.detail || `Nenhum documento encontrado com o ID "${targetId}".`;
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, []);
   
   const carregarOperacoes = async () => {
     try {
-      const response = await (axiosInstance || axios).get('/devolucoes/operacoes/', {
+      const response = await axios.get('/api/operacoes/', {
         params: { tipo: 'devolucao' }
-      }).catch(() => (axiosInstance || axios).get('/operacoes/', { params: { tipo: 'devolucao' } }));
-      
-      const _d = response?.data;
+      });
+      const _d = response.data;
       setOperacoes(Array.isArray(_d) ? _d : Array.isArray(_d?.results) ? _d.results : []);
     } catch (err) {
       console.error('Erro ao carregar operações:', err);
@@ -112,7 +50,7 @@ const DevolucaoPage = () => {
   
   const buscarDocumento = async () => {
     if (!documentoId) {
-      setError('Informe o número ou ID do documento');
+      setError('Informe o número do documento');
       return;
     }
     
@@ -120,31 +58,15 @@ const DevolucaoPage = () => {
     setError('');
     
     try {
-      const client = axiosInstance || axios;
-      const primaryEndpoint = tipoDevolucao === 'venda' 
-        ? `/devolucoes/buscar_venda/${documentoId}/`
-        : `/devolucoes/buscar_compra/${documentoId}/`;
+      const endpoint = tipoDevolucao === 'venda' 
+        ? `/api/devolucoes/buscar_venda/${documentoId}/`
+        : `/api/devolucoes/buscar_compra/${documentoId}/`;
       
-      const secondaryEndpoint = tipoDevolucao === 'venda'
-        ? `/devolucoes/buscar_compra/${documentoId}/`
-        : `/devolucoes/buscar_venda/${documentoId}/`;
-
-      let response;
-      try {
-        response = await client.get(primaryEndpoint);
-      } catch (e1) {
-        try {
-          response = await client.get(secondaryEndpoint);
-          setTipoDevolucao(tipoDevolucao === 'venda' ? 'compra' : 'venda');
-        } catch (e2) {
-          throw e1;
-        }
-      }
-
+      const response = await axios.get(endpoint);
       setDocumentoData(response.data);
       
       // Inicializar itens selecionados
-      const itensIniciais = (response.data.itens || []).map(item => ({
+      const itensIniciais = response.data.itens.map(item => ({
         ...item,
         quantidade_devolver: 0,
         selecionado: false,
@@ -152,15 +74,9 @@ const DevolucaoPage = () => {
       }));
       setItensSelecionados(itensIniciais);
       
-      if (itensIniciais.length === 0) {
-        setError('Documento encontrado, mas não possui itens disponíveis para devolução.');
-      } else {
-        setActiveStep(1);
-      }
+      setActiveStep(1);
     } catch (err) {
-      console.error('Erro ao buscar documento:', err);
-      const msg = err.response?.data?.error || err.response?.data?.detail || 'Nenhum documento encontrado com o número/ID informado.';
-      setError(msg);
+      setError(err.response?.data?.error || 'Erro ao buscar documento');
     } finally {
       setLoading(false);
     }
@@ -263,15 +179,9 @@ const DevolucaoPage = () => {
         itens: itensParaDevolver
       };
       
-      const client = axiosInstance || axios;
-      let response;
-      try {
-        response = await client.post('/devolucoes/', dados);
-      } catch (e1) {
-        response = await client.post('/api/devolucoes/', dados);
-      }
+      const response = await axios.post('/api/devolucoes/', dados);
       
-      setSuccess(`Devolução ${response.data.numero_devolucao || response.data.id} criada com sucesso!`);
+      setSuccess(`Devolução ${response.data.numero_devolucao} criada com sucesso!`);
       
       // Redirecionar após 2 segundos
       setTimeout(() => {
@@ -279,7 +189,7 @@ const DevolucaoPage = () => {
       }, 2000);
       
     } catch (err) {
-      setError(err.response?.data?.error || err.response?.data?.detail || 'Erro ao criar devolução');
+      setError(err.response?.data?.error || 'Erro ao criar devolução');
     } finally {
       setLoading(false);
     }
@@ -304,15 +214,13 @@ const DevolucaoPage = () => {
         <Grid item xs={12} md={6}>
           <TextField
             fullWidth
-            required
-            label={tipoDevolucao === 'venda' ? 'Chave de Acesso (44 dígitos), ID ou Nº da Nota' : 'Chave de Acesso da NF-e (44 dígitos), ID ou Nº da Compra'}
-            placeholder="Cole a Chave de Acesso (44 dígitos), ID ou Nº do Documento"
-            helperText="Cole a Chave de Acesso da NF-e de Origem (44 dígitos), a ID ou o Nº do Documento"
+            label={tipoDevolucao === 'venda' ? 'ID da Venda' : 'ID da Compra'}
             value={documentoId}
             onChange={(e) => setDocumentoId(e.target.value)}
+            type="number"
             InputProps={{
               endAdornment: (
-                <IconButton onClick={buscarDocumento} disabled={loading} color="primary">
+                <IconButton onClick={buscarDocumento} disabled={loading}>
                   <Search />
                 </IconButton>
               )
@@ -327,42 +235,26 @@ const DevolucaoPage = () => {
     <Box>
       {documentoData && (
         <>
-          <Card sx={{ mb: 3, bgcolor: '#f4f6f9', borderLeft: '4px solid #1976d2' }}>
+          <Card sx={{ mb: 3 }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom color="primary" fontWeight="bold">
-                {tipoDevolucao === 'venda' ? '📄 Dados da Venda / NF-e de Origem' : '📦 Dados da Compra / Fornecedor'}
+              <Typography variant="h6" gutterBottom>
+                {tipoDevolucao === 'venda' ? 'Dados da Venda' : 'Dados da Compra'}
               </Typography>
               <Grid container spacing={2}>
-                <Grid item xs={12} md={4}>
+                <Grid item xs={12} md={6}>
                   <Typography variant="body2" color="text.secondary">
-                    <strong>Nº Documento / Nota:</strong> {documentoData.numero_documento || documentoData.numero_nota || 'N/A'}
+                    Documento: {documentoData.numero_documento || documentoData.numero_nota}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    <strong>ID Interna:</strong> #{documentoData.id_compra || documentoData.id_venda}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    <strong>Data:</strong> {documentoData.data_compra || documentoData.data_venda ? new Date(documentoData.data_compra || documentoData.data_venda).toLocaleDateString('pt-BR') : '-'}
+                    Data: {new Date(documentoData.data_venda || documentoData.data_movimento_entrada).toLocaleDateString()}
                   </Typography>
                 </Grid>
-                <Grid item xs={12} md={4}>
+                <Grid item xs={12} md={6}>
                   <Typography variant="body2" color="text.secondary">
-                    <strong>{tipoDevolucao === 'venda' ? 'Cliente' : 'Fornecedor'}:</strong> {documentoData.nome_fornecedor || documentoData.nome_cliente || 'N/A'}
+                    {tipoDevolucao === 'venda' ? 'Cliente' : 'Fornecedor'}: {documentoData.nome_cliente || documentoData.nome_fornecedor}
                   </Typography>
-                  {(documentoData.doc_fornecedor || documentoData.cpf_cnpj_cliente) && (
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>CNPJ / CPF:</strong> {documentoData.doc_fornecedor || documentoData.cpf_cnpj_cliente}
-                    </Typography>
-                  )}
                   <Typography variant="body2" color="text.secondary">
-                    <strong>Valor Total:</strong> R$ {parseFloat(documentoData.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <Typography variant="body2" color="primary" fontWeight="bold">
-                    🔑 Chave de Acesso de Origem (SEFAZ):
-                  </Typography>
-                  <Typography variant="caption" sx={{ wordBreak: 'break-all', fontFamily: 'monospace', bgcolor: '#fff', p: 0.5, borderRadius: 1, border: '1px solid #e0e0e0', display: 'block', mt: 0.5 }}>
-                    {documentoData.chave_nfe_origem || documentoData.chave_nfe || 'Chave não informada / Nota interna'}
+                    Valor Total: R$ {(documentoData.valor_total || documentoData.valor_total_nota).toFixed(2)}
                   </Typography>
                 </Grid>
               </Grid>
@@ -468,52 +360,49 @@ const DevolucaoPage = () => {
           />
         </Grid>
         
-        <Grid item xs={12} md={6}>
-          <TextField
-            select
-            fullWidth
-            label="Operação Fiscal (Emissão de Nota Fiscal Modelo 55)"
-            value={operacaoId}
-            onChange={(e) => setOperacaoId(e.target.value)}
-            helperText="Selecione a Operação Modelo 55 para emitir NF-e Fiscal de Devolução"
-          >
-            <MenuItem value="">Nenhuma (Devolução Apenas Gerencial Interna)</MenuItem>
-            {operacoes
-              .filter(op => {
-                const trans = (op.transacao || op.tipo_transacao || op.tipo || '').toLowerCase();
-                const mod = String(op.modelo_documento || op.modelo_nf || '');
-                return mod === '55' || trans.includes('devoluc');
-              })
-              .map((op) => (
-                <MenuItem key={op.id_operacao} value={op.id_operacao}>
-                  {op.nome_operacao || op.nome} {op.modelo_documento ? `(NF-e Mod. ${op.modelo_documento})` : ''}
-                </MenuItem>
-              ))}
-          </TextField>
-        </Grid>
-        
         {tipoDevolucao === 'venda' && (
-          <Grid item xs={12} md={6}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, height: '100%' }}>
-              <Typography sx={{ fontWeight: 'bold' }}>Gerar Crédito para o Cliente?</Typography>
-              <Button
-                variant={gerarCredito ? 'contained' : 'outlined'}
-                color="success"
-                onClick={() => setGerarCredito(true)}
-                sx={{ minWidth: 80 }}
-              >
-                Sim
-              </Button>
-              <Button
-                variant={!gerarCredito ? 'contained' : 'outlined'}
-                color="error"
-                onClick={() => setGerarCredito(false)}
-                sx={{ minWidth: 80 }}
-              >
-                Não
-              </Button>
-            </Box>
-          </Grid>
+          <>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography sx={{ fontWeight: 'bold' }}>Gerar Crédito para o Cliente?</Typography>
+                <Button
+                  variant={gerarCredito ? 'contained' : 'outlined'}
+                  color="success"
+                  onClick={() => setGerarCredito(true)}
+                  sx={{ minWidth: 80 }}
+                >
+                  Sim
+                </Button>
+                <Button
+                  variant={!gerarCredito ? 'contained' : 'outlined'}
+                  color="error"
+                  onClick={() => setGerarCredito(false)}
+                  sx={{ minWidth: 80 }}
+                >
+                  Não
+                </Button>
+              </Box>
+            </Grid>
+            
+            {gerarCredito && (
+              <Grid item xs={12} md={6}>
+                <TextField
+                  select
+                  fullWidth
+                  required
+                  label="Operação de Devolução"
+                  value={operacaoId}
+                  onChange={(e) => setOperacaoId(e.target.value)}
+                >
+                  {operacoes.map((op) => (
+                    <MenuItem key={op.id_operacao} value={op.id_operacao}>
+                      {op.nome_operacao}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+            )}
+          </>
         )}
       </Grid>
     </Box>
@@ -609,28 +498,10 @@ const DevolucaoPage = () => {
             {activeStep === 2 && renderStep2()}
             {activeStep === 3 && renderStep3()}
             
-            {/* Barra de Ações Inferior Fixa e Destacada */}
-            <Box sx={{
-              position: 'sticky',
-              bottom: 0,
-              zIndex: 10,
-              mt: 4,
-              p: 2,
-              bgcolor: '#ffffff',
-              borderTop: '2px solid #1976d2',
-              boxShadow: '0 -4px 20px rgba(0,0,0,0.08)',
-              borderRadius: '0 0 8px 8px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
+            <Box sx={{ mt: 4, display: 'flex', justifyContent: 'space-between' }}>
               <Button
-                variant="outlined"
-                size="large"
-                startIcon={<ArrowBack />}
                 disabled={activeStep === 0 || loading}
                 onClick={voltarPasso}
-                sx={{ textTransform: 'none', minWidth: 130, fontWeight: 600 }}
               >
                 Voltar
               </Button>
@@ -639,22 +510,17 @@ const DevolucaoPage = () => {
                 {activeStep < steps.length - 1 ? (
                   <Button
                     variant="contained"
-                    size="large"
                     onClick={proximoPasso}
                     disabled={loading}
-                    sx={{ textTransform: 'none', minWidth: 140, fontWeight: 700, px: 3 }}
                   >
-                    Próximo Passo
+                    Próximo
                   </Button>
                 ) : (
                   <Button
                     variant="contained"
-                    color="success"
-                    size="large"
-                    startIcon={<CheckCircle />}
+                    color="primary"
                     onClick={finalizarDevolucao}
                     disabled={loading}
-                    sx={{ textTransform: 'none', minWidth: 180, fontWeight: 700, px: 3 }}
                   >
                     Confirmar Devolução
                   </Button>

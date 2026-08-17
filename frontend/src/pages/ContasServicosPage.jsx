@@ -30,8 +30,6 @@ import {
   Snackbar,
   AlertTitle,
   Badge,
-  Switch,
-  FormControlLabel,
 } from '@mui/material'
 import {
   Edit as EditIcon,
@@ -49,10 +47,6 @@ import {
   Warning as OverdueIcon,
   Schedule as PendingIcon,
   Add as AddIcon,
-  UploadFile as UploadFileIcon,
-  CheckCircleOutline as CheckCircleOutlineIcon,
-  AttachMoney as FinanceiroIcon,
-  AccountBalanceWallet as WalletIcon,
 } from '@mui/icons-material'
 import { useAuth } from '../context/AuthContext'
 
@@ -130,7 +124,6 @@ const FORM_INICIAL = {
   cst_icms: '',
   observacao: '',
   status: 'pendente',
-  gerar_financeiro: true,
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -174,80 +167,6 @@ export default function ContasServicosPage() {
   const [dialogSped, setDialogSped] = useState(false)
   const [spedLinhas, setSpedLinhas] = useState([])
   const [loadingSped, setLoadingSped] = useState(false)
-
-  // Diálogo Importar XML NFS-e
-  const [dialogXml, setDialogXml] = useState(false)
-  const [xmlArquivo, setXmlArquivo] = useState(null)
-  const [xmlProcessando, setXmlProcessando] = useState(false)
-  const [xmlErro, setXmlErro] = useState(null)
-  const [xmlPreview, setXmlPreview] = useState(null)
-
-  // Diálogo Gerar Financeiro (Contas a Pagar)
-  const [dialogGerarFin, setDialogGerarFin] = useState(false)
-  const [finForm, setFinForm] = useState({
-    descricao: '',
-    valor_parcela: '',
-    data_vencimento: '',
-    data_pagamento: '',
-    status_conta: 'Pendente',
-    forma_pagamento: 'Boleto',
-    documento_numero: '',
-    fornecedor_nome: '',
-  })
-  const [gerandoFin, setGerandoFin] = useState(false)
-
-  const abrirGerarFinanceiro = (dadosOuConta = {}) => {
-    const fornecedor = dadosOuConta.fornecedor_nome || form.fornecedor_nome || ''
-    const numDoc = dadosOuConta.numero_documento || form.numero_documento || ''
-    const valor = dadosOuConta.valor_total || form.valor_total || ''
-    const venc = dadosOuConta.data_vencimento || form.data_vencimento || dadosOuConta.data_emissao || form.data_emissao || new Date().toISOString().slice(0, 10)
-    const tipoVal = dadosOuConta.tipo || form.tipo
-    const tipoLabel = TIPO_META[tipoVal]?.label || 'Serviço'
-
-    setFinForm({
-      descricao: `[${tipoLabel}] ${fornecedor}${numDoc ? ' - NF: ' + numDoc : ''}`,
-      valor_parcela: valor,
-      data_vencimento: venc,
-      data_pagamento: dadosOuConta.status === 'pago' ? (dadosOuConta.data_pagamento || new Date().toISOString().slice(0, 10)) : '',
-      status_conta: dadosOuConta.status === 'pago' ? 'Pago' : 'Pendente',
-      forma_pagamento: 'Boleto',
-      documento_numero: numDoc,
-      fornecedor_nome: fornecedor,
-    })
-    setDialogGerarFin(true)
-  }
-
-  const handleConfirmarGerarFinanceiro = async () => {
-    if (!finForm.valor_parcela || isNaN(Number(finForm.valor_parcela))) {
-      setErro('Informe o valor da parcela.')
-      return
-    }
-    if (!finForm.data_vencimento) {
-      setErro('Informe a data de vencimento.')
-      return
-    }
-    setGerandoFin(true)
-    try {
-      const payload = {
-        tipo_conta: 'Pagar',
-        descricao: finForm.descricao,
-        valor_parcela: finForm.valor_parcela,
-        data_vencimento: finForm.data_vencimento,
-        data_pagamento: finForm.status_conta === 'Pago' ? (finForm.data_pagamento || finForm.data_vencimento) : null,
-        status_conta: finForm.status_conta,
-        forma_pagamento: finForm.forma_pagamento,
-        documento_numero: finForm.documento_numero || '',
-      }
-
-      await axiosInstance.post('/contas/', payload)
-      setSucesso(`Lançamento financeiro de ${fmt(finForm.valor_parcela)} gerado em Contas a Pagar com sucesso!`)
-      setDialogGerarFin(false)
-    } catch (e) {
-      setErro('Erro ao gerar lançamento financeiro: ' + (e.response?.data?.detail || e.message))
-    } finally {
-      setGerandoFin(false)
-    }
-  }
 
   // ── Requisições ────────────────────────────────────────────────────────────
   const carregarContas = useCallback(async () => {
@@ -334,18 +253,11 @@ export default function ContasServicosPage() {
     }
     setSalvando(true)
     setErroDialog(null)
-
-    const payload = { ...form }
-    if (!payload.data_vencimento) payload.data_vencimento = null
-    if (!payload.data_pagamento) payload.data_pagamento = null
-    if (!payload.cnpj_fornecedor) payload.cnpj_fornecedor = null
-    if (!payload.chave_acesso) payload.chave_acesso = null
-
     try {
       if (editando) {
-        await axiosInstance.put(`/contas-servicos/${editando}/`, payload)
+        await axiosInstance.put(`/contas-servicos/${editando}/`, form)
       } else {
-        await axiosInstance.post('/contas-servicos/', payload)
+        await axiosInstance.post('/contas-servicos/', form)
       }
       setSucesso(editando ? 'Conta atualizada com sucesso!' : 'Conta adicionada com sucesso!')
       setDialogAberto(false)
@@ -407,209 +319,6 @@ export default function ContasServicosPage() {
   // ── Campo form ─────────────────────────────────────────────────────────────
   const setF = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }))
 
-  // ── Importar XML NFS-e ─────────────────────────────────────────────────────
-  const abrirDialogXml = () => {
-    setXmlArquivo(null)
-    setXmlErro(null)
-    setXmlPreview(null)
-    setDialogXml(true)
-  }
-
-  /** Formata data de ISO ou DD/MM/AAAA para AAAA-MM-DD */
-  const normalizarData = (raw) => {
-    if (!raw) return ''
-    const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
-    if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`
-    const brMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
-    if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`
-    return ''
-  }
-
-  const processarXml = async () => {
-    if (!xmlArquivo) { setXmlErro('Selecione um arquivo XML.'); return }
-    setXmlProcessando(true)
-    setXmlErro(null)
-    setXmlPreview(null)
-    try {
-      const texto = await xmlArquivo.text()
-      const parser = new DOMParser()
-      const doc = parser.parseFromString(texto, 'text/xml')
-
-      const parserError = doc.querySelector('parsererror')
-      if (parserError) throw new Error('XML inválido ou corrompido. Verifique o arquivo.')
-
-      // ── Fallback via regex no texto bruto (resolve CDATA e namespaces exóticos) ──
-      const tagRegex = (nomes) => {
-        for (const nome of nomes) {
-          const re = new RegExp(
-            `<(?:[\\w-]+:)?${nome}(?:\\s[^>]*)?>[\\s]*(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?[\\s]*<\\/(?:[\\w-]+:)?${nome}>`,
-            'i'
-          )
-          const m = texto.match(re)
-          if (m?.[1]) {
-            const val = m[1].replace(/<[^>]+>/g, '').trim()
-            if (val) return val
-          }
-        }
-        return ''
-      }
-
-      // ── Helper principal: DOM wildcard-namespace + fallback regex ──
-      const tag = (...nomes) => {
-        for (const nome of nomes) {
-          const byNS  = Array.from(doc.getElementsByTagNameNS('*', nome))
-          const byTag = Array.from(doc.getElementsByTagName(nome))
-          const candidates = [...new Map([...byNS, ...byTag].map(el => [el, el])).values()]
-
-          // 1ª passagem: prefere elementos FOLHA (sem filhos elemento) para evitar
-          // retornar texto concatenado de elementos pai com vários filhos
-          for (const el of candidates) {
-            if (el.children.length === 0) {
-              const txt = el.textContent?.trim()
-              if (txt) return txt
-            }
-          }
-          // 2ª passagem: qualquer elemento com texto sem tags internas
-          for (const el of candidates) {
-            const txt = el.textContent?.trim()
-            if (txt && !txt.includes('<')) return txt
-          }
-        }
-        // Fallback: regex no texto bruto
-        return tagRegex(nomes)
-      }
-
-      // ── Número da NFS-e – prioriza tag nNFSe (SPED nacional), depois Numero fora de bloco RPS ──
-      const getNumeroNfse = () => {
-        // 1) Tenta via regex (mais confiável com namespace padrão)
-        const porRegex = tagRegex(['nNFSe', 'NumeroNfse', 'nNF', 'NrNota', 'NumNota'])
-        if (porRegex) return porRegex
-
-        // 2) Tenta DOM com wildcard – case-sensitive, usa localName para robustez
-        const RPS_PAIS = new Set(['rps', 'identificacaorps', 'rpssubstituido',
-                                   'loterps', 'listarps', 'infrps', 'infdeclaracaoprestacaoservico'])
-        // Busca qualquer elemento cujo localName seja nNFSe, NumeroNfse etc (case-insensitive via lower)
-        const allEls = Array.from(doc.getElementsByTagNameNS('*', '*'))
-        for (const el of allEls) {
-          const ln = (el.localName || '').toLowerCase()
-          if (['nnfse', 'numeronfse', 'nnf', 'nrnota', 'numnota'].includes(ln)) {
-            const txt = el.textContent?.trim()
-            if (txt) return txt
-          }
-        }
-
-        // 3) Busca <Numero> fora de contexto RPS
-        for (const el of allEls) {
-          const ln = (el.localName || '').toLowerCase()
-          if (ln === 'numero') {
-            let cursor = el.parentElement
-            let insideRps = false
-            while (cursor) {
-              const pl = (cursor.localName || '').toLowerCase()
-              if (RPS_PAIS.has(pl)) { insideRps = true; break }
-              cursor = cursor.parentElement
-            }
-            if (!insideRps) {
-              const txt = el.textContent?.trim()
-              if (txt) return txt
-            }
-          }
-        }
-        return ''
-      }
-
-      // ── Fornecedor (Prestador / Emit) – pega o primeiro xNome (= emit no formato SPED) ──
-      const razaoSocial   = tag('RazaoSocial', 'xNome', 'NomeEmpresarial', 'Nome')
-      const cnpjRaw       = tag('Cnpj', 'CNPJ', 'cnpj', 'CnpjPrestador')
-      const cnpjForn      = cnpjRaw.replace(/\D/g, '')
-        .replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')
-
-      // ── Número, Série e Chave ──
-      const numero        = getNumeroNfse()
-      const serie         = tag('Serie', 'SerieNfse', 'serie', 'SerieRps')
-      // Tenta tag de chave; fallback = atributo Id do elemento infNFSe
-      const chaveAcesso   = tag('CodigoVerificacao', 'NumeroVerificacao', 'CodigoAutenticidade',
-                                'ChaveNfse', 'HashNfse', 'chNFe', 'Chave', 'ChaveAcesso')
-      const chaveId       = chaveAcesso || (texto.match(/\bId\s*=\s*"([^"]{20,})"/i)?.[1] ?? '')
-
-      // ── Datas ──
-      const dataEmissao   = normalizarData(tag('DataEmissao', 'DataEmissaoNfse', 'dhEmi', 'DtEmissao', 'DataNfse'))
-      const dataVenc      = normalizarData(tag('DataVencimento', 'DataVencimentoPagamento', 'dvenc', 'DtVencimento'))
-
-      // ── Valores ──
-      const valorServicos = tag('ValorServicos', 'ValorTotalServicos', 'vServ', 'vLiq', 'vBC', 'ValorTotal', 'ValorLiquidoNfse')
-      const valorPis      = tag('ValorPis', 'ValorDeducaoPis', 'vPIS', 'ValorRetencaoPis')
-      const aliqPis       = tag('AliquotaPis', 'AliqPis', 'pPIS', 'AliquotaPIS')
-      const valorCofins   = tag('ValorCofins', 'vCOFINS', 'ValorRetencaoCofins')
-      const aliqCofins    = tag('AliquotaCofins', 'AliqCofins', 'pCOFINS', 'AliquotaCOFINS')
-      const valorIss      = tag('vISSQN', 'ValorIss', 'ValorISS', 'ValorRetencaoIss', 'ValorImposto', 'ValorIssRetido')
-
-      // ── Discriminação — usa regex (resolve CDATA) + tags do formato SPED ──
-      const descServico   = tagRegex(['xDescServ', 'xTribNac', 'Discriminacao', 'DiscriminacaoServico',
-                                      'Descricao', 'DescricaoServico', 'xDesc', 'Complemento'])
-                            || tag('xDescServ', 'xTribNac', 'Discriminacao', 'DiscriminacaoServico',
-                                   'Descricao', 'DescricaoServico', 'xDesc')
-
-
-      if (!razaoSocial && !cnpjForn) {
-        throw new Error(
-          'Não foi possível identificar dados do prestador. Verifique se é um XML de NFS-e válido.'
-        )
-      }
-
-      // Competência a partir da data de emissão
-      let mes = mesAtual, ano = anoAtual
-      if (dataEmissao) {
-        const parts = dataEmissao.split('-')
-        ano = parseInt(parts[0]) || anoAtual
-        mes = parseInt(parts[1]) || mesAtual
-      }
-
-      const dadosExtraidos = {
-        tipo:              'servico_terceiro',
-        fornecedor_nome:   razaoSocial || '',
-        cnpj_fornecedor:   cnpjForn || '',
-        numero_documento:  numero || '',
-        serie:             serie || '',
-        chave_acesso:      chaveId || '',
-        data_emissao:      dataEmissao || new Date().toISOString().slice(0, 10),
-        data_vencimento:   dataVenc || '',
-        data_pagamento:    '',
-        mes_competencia:   mes,
-        ano_competencia:   ano,
-        valor_total:       valorServicos || '',
-        valor_pis:         valorPis || '0.00',
-        aliq_pis:          aliqPis || '0.0000',
-        valor_cofins:      valorCofins || '0.00',
-        aliq_cofins:       aliqCofins || '0.0000',
-        valor_icms:        '0.00',
-        aliq_icms:         '0.0000',
-        cfop:              '1949',
-        cst_pis:           '50',
-        cst_cofins:        '50',
-        cst_icms:          '',
-        observacao:        descServico ? descServico.slice(0, 500) : '',
-        status:            'pendente',
-        gerar_financeiro:  true,
-      }
-
-      setXmlPreview({ dados: dadosExtraidos, valorIss })
-    } catch (e) {
-      setXmlErro(e.message || 'Erro ao processar XML.')
-    } finally {
-      setXmlProcessando(false)
-    }
-  }
-
-  const importarXmlParaFormulario = () => {
-    if (!xmlPreview) return
-    setEditando(null)
-    setForm({ ...FORM_INICIAL, ...xmlPreview.dados })
-    setErroDialog(null)
-    setDialogXml(false)
-    setDialogAberto(true)
-  }
-
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
     <Box sx={{ p: 3 }}>
@@ -636,15 +345,6 @@ export default function ContasServicosPage() {
             disabled={loadingSped}
           >
             Exportar SPED F100
-          </Button>
-          <Button
-            variant="outlined"
-            color="secondary"
-            startIcon={<UploadFileIcon />}
-            onClick={abrirDialogXml}
-            sx={{ borderColor: '#6a1b9a', color: '#6a1b9a', '&:hover': { borderColor: '#4a148c', backgroundColor: '#f3e5f5' } }}
-          >
-            Importar XML NFS-e
           </Button>
           <Button variant="contained" startIcon={<AddIcon />} onClick={abrirAdicionar}>
             Nova Conta
@@ -850,11 +550,6 @@ export default function ContasServicosPage() {
                       </TableCell>
                       <TableCell>
                         <Stack direction="row" spacing={0.5}>
-                          <Tooltip title="Gerar Financeiro (Contas a Pagar)">
-                            <IconButton size="small" color="success" onClick={() => abrirGerarFinanceiro(c)}>
-                              <FinanceiroIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
                           <Tooltip title="Editar">
                             <IconButton size="small" color="primary" onClick={() => abrirEditar(c)}>
                               <EditIcon fontSize="small" />
@@ -1104,40 +799,6 @@ export default function ContasServicosPage() {
             </Grid>
 
             <Grid item xs={12}>
-              <Paper
-                variant="outlined"
-                sx={{
-                  p: 1.5,
-                  backgroundColor: form.gerar_financeiro ? '#f3e5f5' : '#fafafa',
-                  borderColor: form.gerar_financeiro ? '#ab47bc' : '#e0e0e0',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={Boolean(form.gerar_financeiro)}
-                      onChange={(e) => setForm((prev) => ({ ...prev, gerar_financeiro: e.target.checked }))}
-                      color="secondary"
-                    />
-                  }
-                  label={
-                    <Box>
-                      <Typography variant="subtitle2" fontWeight={600} color={form.gerar_financeiro ? '#4a148c' : 'text.primary'}>
-                        Gerar lançamento no Financeiro (Contas a Pagar)?
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {form.gerar_financeiro
-                          ? 'Sim — Uma conta a pagar será gerada automaticamente no módulo Financeiro.'
-                          : 'Não — O lançamento ficará registrado apenas no módulo de Serviços.'}
-                      </Typography>
-                    </Box>
-                  }
-                />
-              </Paper>
-            </Grid>
-
-            <Grid item xs={12}>
               <TextField
                 fullWidth size="small" label="Observação"
                 multiline rows={2} value={form.observacao} onChange={setF('observacao')}
@@ -1148,15 +809,6 @@ export default function ContasServicosPage() {
         <DialogActions>
           <Button onClick={() => setDialogAberto(false)} disabled={salvando}>
             Cancelar
-          </Button>
-          <Button
-            variant="outlined"
-            color="success"
-            onClick={() => abrirGerarFinanceiro(form)}
-            disabled={salvando}
-            startIcon={<FinanceiroIcon />}
-          >
-            Abrir Telinha do Financeiro
           </Button>
           <Button
             variant="contained"
@@ -1234,299 +886,6 @@ export default function ContasServicosPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogSped(false)}>Fechar</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* ── Diálogo Importar XML NFS-e ───────────────────────────────────────── */}
-      <Dialog open={dialogXml} onClose={() => setDialogXml(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          <Stack direction="row" alignItems="center" spacing={1}>
-            <UploadFileIcon sx={{ color: '#6a1b9a' }} />
-            <Box>
-              <Typography fontWeight={700}>Importar XML de NFS-e</Typography>
-              <Typography variant="caption" color="text.secondary">
-                Nota de Serviço de Terceiro — padrão ABRASF / municipal
-              </Typography>
-            </Box>
-          </Stack>
-        </DialogTitle>
-        <DialogContent dividers>
-          {/* Upload */}
-          <Box
-            sx={{
-              border: '2px dashed',
-              borderColor: xmlArquivo ? '#6a1b9a' : '#bdbdbd',
-              borderRadius: 2,
-              p: 3,
-              textAlign: 'center',
-              cursor: 'pointer',
-              backgroundColor: xmlArquivo ? '#f3e5f5' : '#fafafa',
-              transition: 'all 0.2s',
-              mb: 2,
-            }}
-            onClick={() => document.getElementById('input-xml-nfse').click()}
-          >
-            <UploadFileIcon sx={{ fontSize: 40, color: xmlArquivo ? '#6a1b9a' : '#bdbdbd', mb: 1 }} />
-            <Typography variant="body2" color={xmlArquivo ? '#4a148c' : 'text.secondary'}>
-              {xmlArquivo
-                ? `📄 ${xmlArquivo.name} (${(xmlArquivo.size / 1024).toFixed(1)} KB)`
-                : 'Clique aqui ou arraste o arquivo XML da NFS-e'}
-            </Typography>
-            {!xmlArquivo && (
-              <Typography variant="caption" color="text.secondary">
-                Suporta NFS-e padrão ABRASF, São Paulo, Rio de Janeiro e outros municípios
-              </Typography>
-            )}
-            <input
-              id="input-xml-nfse"
-              type="file"
-              accept=".xml,text/xml,application/xml"
-              style={{ display: 'none' }}
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) {
-                  setXmlArquivo(f)
-                  setXmlErro(null)
-                  setXmlPreview(null)
-                }
-                e.target.value = ''
-              }}
-            />
-          </Box>
-
-          {/* Erro */}
-          {xmlErro && (
-            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setXmlErro(null)}>
-              {xmlErro}
-            </Alert>
-          )}
-
-          {/* Preview dos dados extraídos */}
-          {xmlPreview && (
-            <Paper
-              variant="outlined"
-              sx={{ p: 2, borderColor: '#6a1b9a', backgroundColor: '#fdf6ff' }}
-            >
-              <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
-                <CheckCircleOutlineIcon color="success" />
-                <Typography variant="subtitle2" fontWeight={700} color="success.dark">
-                  Dados extraídos com sucesso!
-                </Typography>
-              </Stack>
-              <Grid container spacing={1}>
-                {[
-                  { label: 'Fornecedor',     value: xmlPreview.dados.fornecedor_nome },
-                  { label: 'CNPJ',           value: xmlPreview.dados.cnpj_fornecedor || '-' },
-                  { label: 'Nº Documento',   value: xmlPreview.dados.numero_documento || '-' },
-                  { label: 'Série',          value: xmlPreview.dados.serie || '-' },
-                  { label: 'Data Emissão',   value: xmlPreview.dados.data_emissao ? fmtDate(xmlPreview.dados.data_emissao) : '-' },
-                  { label: 'Vencimento',     value: xmlPreview.dados.data_vencimento ? fmtDate(xmlPreview.dados.data_vencimento) : '-' },
-                  { label: 'Valor Total',    value: fmt(xmlPreview.dados.valor_total) },
-                  { label: 'ISS',            value: xmlPreview.valorIss ? fmt(xmlPreview.valorIss) : '-' },
-                  { label: 'PIS',            value: fmt(xmlPreview.dados.valor_pis) },
-                  { label: 'COFINS',         value: fmt(xmlPreview.dados.valor_cofins) },
-                  { label: 'Competência',    value: `${MESES.find(m => m.v === xmlPreview.dados.mes_competencia)?.l || ''} / ${xmlPreview.dados.ano_competencia}` },
-                ].map(({ label, value }) => (
-                  <Grid item xs={6} key={label}>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      {label}
-                    </Typography>
-                    <Typography variant="body2" fontWeight={500}>
-                      {value}
-                    </Typography>
-                  </Grid>
-                ))}
-                {xmlPreview.dados.observacao && (
-                  <Grid item xs={12}>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      Discriminação (início)
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        whiteSpace: 'pre-wrap',
-                        maxHeight: 80,
-                        overflowY: 'auto',
-                        fontSize: '0.72rem',
-                        color: 'text.secondary',
-                        backgroundColor: '#fff',
-                        p: 0.5,
-                        borderRadius: 1,
-                        border: '1px solid #e0e0e0',
-                      }}
-                    >
-                      {xmlPreview.dados.observacao}
-                    </Typography>
-                  </Grid>
-                )}
-                <Box sx={{ mt: 1.5, pt: 1, borderTop: '1px dashed #ce93d8' }}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={Boolean(xmlPreview.dados.gerar_financeiro)}
-                        onChange={(e) =>
-                          setXmlPreview((prev) => ({
-                            ...prev,
-                            dados: { ...prev.dados, gerar_financeiro: e.target.checked },
-                          }))
-                        }
-                        color="secondary"
-                        size="small"
-                      />
-                    }
-                    label={
-                      <Typography variant="body2" fontWeight={600} color="#4a148c">
-                        Gerar lançamento no Financeiro (Contas a Pagar)? {xmlPreview.dados.gerar_financeiro ? 'Sim' : 'Não'}
-                      </Typography>
-                    }
-                  />
-                </Box>
-              </Grid>
-              <Alert severity="info" sx={{ mt: 1.5, py: 0.5 }}>
-                Revise e complemente os dados no formulário antes de salvar.
-              </Alert>
-            </Paper>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogXml(false)}>Cancelar</Button>
-          {!xmlPreview ? (
-            <Button
-              variant="contained"
-              onClick={processarXml}
-              disabled={!xmlArquivo || xmlProcessando}
-              startIcon={xmlProcessando ? <CircularProgress size={16} /> : <UploadFileIcon />}
-              sx={{ backgroundColor: '#6a1b9a', '&:hover': { backgroundColor: '#4a148c' } }}
-            >
-              {xmlProcessando ? 'Processando...' : 'Processar XML'}
-            </Button>
-          ) : (
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="outlined"
-                color="success"
-                onClick={() => abrirGerarFinanceiro(xmlPreview.dados)}
-                startIcon={<FinanceiroIcon />}
-              >
-                Telinha de Gerar Financeiro
-              </Button>
-              <Button
-                variant="contained"
-                onClick={importarXmlParaFormulario}
-                startIcon={<CheckCircleOutlineIcon />}
-                sx={{ backgroundColor: '#2e7d32', '&:hover': { backgroundColor: '#1b5e20' } }}
-              >
-                Abrir Formulário Preenchido
-              </Button>
-            </Stack>
-          )}
-        </DialogActions>
-      </Dialog>
-
-      {/* ── DIÁLOGO: GERAR FINANCEIRO (CONTAS A PAGAR) ───────────────────────── */}
-      <Dialog open={dialogGerarFin} onClose={() => setDialogGerarFin(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ bgcolor: '#2e7d32', color: '#fff', py: 1.5 }}>
-          <Stack direction="row" alignItems="center" spacing={1}>
-            <FinanceiroIcon />
-            <Typography variant="h6" fontWeight={700}>
-              Gerar Lançamento Financeiro (Contas a Pagar)
-            </Typography>
-          </Stack>
-        </DialogTitle>
-        <DialogContent sx={{ pt: 2.5 }}>
-          <Alert severity="info" sx={{ mb: 2, mt: 1 }}>
-            Confirme os dados para criar a conta a pagar no módulo <strong>Financeiro</strong>.
-          </Alert>
-
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth size="small" label="Descrição da Conta / Histórico *"
-                value={finForm.descricao}
-                onChange={(e) => setFinForm((prev) => ({ ...prev, descricao: e.target.value }))}
-              />
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth size="small" label="Valor Total (R$) *"
-                type="number"
-                value={finForm.valor_parcela}
-                onChange={(e) => setFinForm((prev) => ({ ...prev, valor_parcela: e.target.value }))}
-                inputProps={{ step: '0.01', min: '0' }}
-              />
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth size="small" label="Data de Vencimento *"
-                type="date"
-                InputLabelProps={{ shrink: true }}
-                value={finForm.data_vencimento}
-                onChange={(e) => setFinForm((prev) => ({ ...prev, data_vencimento: e.target.value }))}
-              />
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                select fullWidth size="small" label="Status Inicial *"
-                value={finForm.status_conta}
-                onChange={(e) => setFinForm((prev) => ({ ...prev, status_conta: e.target.value }))}
-              >
-                <MenuItem value="Pendente">Pendente</MenuItem>
-                <MenuItem value="Pago">Pago (Liquidado)</MenuItem>
-              </TextField>
-            </Grid>
-
-            {finForm.status_conta === 'Pago' && (
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth size="small" label="Data do Pagamento"
-                  type="date"
-                  InputLabelProps={{ shrink: true }}
-                  value={finForm.data_pagamento}
-                  onChange={(e) => setFinForm((prev) => ({ ...prev, data_pagamento: e.target.value }))}
-                />
-              </Grid>
-            )}
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                select fullWidth size="small" label="Forma de Pagamento"
-                value={finForm.forma_pagamento}
-                onChange={(e) => setFinForm((prev) => ({ ...prev, forma_pagamento: e.target.value }))}
-              >
-                <MenuItem value="Boleto">Boleto Bancário</MenuItem>
-                <MenuItem value="Dinheiro">Dinheiro</MenuItem>
-                <MenuItem value="PIX">PIX / Transferência</MenuItem>
-                <MenuItem value="Cartão de Crédito">Cartão de Crédito</MenuItem>
-                <MenuItem value="Cartão de Débito">Cartão de Débito</MenuItem>
-                <MenuItem value="Cheque">Cheque</MenuItem>
-              </TextField>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth size="small" label="Nº Documento / Nota"
-                value={finForm.documento_numero}
-                onChange={(e) => setFinForm((prev) => ({ ...prev, documento_numero: e.target.value }))}
-              />
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDialogGerarFin(false)} disabled={gerandoFin}>
-            Cancelar
-          </Button>
-          <Button
-            variant="contained"
-            color="success"
-            onClick={handleConfirmarGerarFinanceiro}
-            disabled={gerandoFin}
-            startIcon={gerandoFin ? <CircularProgress size={16} color="inherit" /> : <FinanceiroIcon />}
-          >
-            {gerandoFin ? 'Gerando...' : 'Confirmar e Criar em Contas a Pagar'}
-          </Button>
         </DialogActions>
       </Dialog>
 

@@ -290,6 +290,94 @@ class FinanceiroContaViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
+    def partial_update(self, request, *args, **kwargs):
+        from decimal import Decimal
+        import decimal
+        from django.db import transaction
+        
+        instance = self.get_object()
+        status_conta = request.data.get('status_conta')
+        valor_liquidado_val = request.data.get('valor_liquidado')
+        
+        if status_conta == 'Paga' and valor_liquidado_val is not None:
+            try:
+                valor_liquidado = Decimal(str(valor_liquidado_val))
+            except (ValueError, TypeError, decimal.InvalidOperation):
+                valor_liquidado = instance.valor_parcela
+                
+            original_valor = instance.valor_parcela
+            
+            # Obtém juros, multa e desconto enviados
+            juros_val = request.data.get('valor_juros')
+            multa_val = request.data.get('valor_multa')
+            desconto_val = request.data.get('valor_desconto')
+            
+            try:
+                juros = Decimal(str(juros_val)) if juros_val is not None else Decimal('0.00')
+            except (ValueError, TypeError, decimal.InvalidOperation):
+                juros = Decimal('0.00')
+                
+            try:
+                multa = Decimal(str(multa_val)) if multa_val is not None else Decimal('0.00')
+            except (ValueError, TypeError, decimal.InvalidOperation):
+                multa = Decimal('0.00')
+                
+            try:
+                desconto = Decimal(str(desconto_val)) if desconto_val is not None else Decimal('0.00')
+            except (ValueError, TypeError, decimal.InvalidOperation):
+                desconto = Decimal('0.00')
+                
+            # Calcula o valor principal pago (deduz juros/multa e soma o desconto concedido)
+            valor_principal_pago = valor_liquidado - juros - multa + desconto
+            
+            # Se for baixa parcial (valor principal pago maior que 0 e menor que o valor total)
+            if Decimal('0.00') < valor_principal_pago < original_valor:
+                with transaction.atomic():
+                    diferenca = original_valor - valor_principal_pago
+                    
+                    # 1. Ajusta o valor_parcela para o valor principal pago na conta atual
+                    mutable_data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+                    mutable_data['valor_parcela'] = float(valor_principal_pago)
+                    
+                    serializer = self.get_serializer(instance, data=mutable_data, partial=True)
+                    serializer.is_valid(raise_exception=True)
+                    self.perform_update(serializer)
+                    
+                    # 2. Cria a nova conta para o saldo restante
+                    # Copia todos os campos relevantes
+                    FinanceiroConta.objects.create(
+                        tipo_conta=instance.tipo_conta,
+                        id_cliente_fornecedor=instance.id_cliente_fornecedor,
+                        descricao=f"SALDO RESTANTE - {instance.descricao}",
+                        valor_parcela=diferenca,
+                        valor_liquidado=Decimal('0.00'),
+                        valor_juros=Decimal('0.00'),
+                        valor_multa=Decimal('0.00'),
+                        valor_desconto=Decimal('0.00'),
+                        data_emissao=instance.data_emissao,
+                        data_vencimento=instance.data_vencimento,
+                        status_conta='Pendente',
+                        forma_pagamento=instance.forma_pagamento,
+                        id_venda_origem=instance.id_venda_origem,
+                        id_compra_origem=instance.id_compra_origem,
+                        id_os_origem=instance.id_os_origem,
+                        id_operacao=instance.id_operacao,
+                        id_departamento=instance.id_departamento,
+                        id_centro_custo=instance.id_centro_custo,
+                        id_conta_cobranca=instance.id_conta_cobranca,
+                        documento_numero=instance.documento_numero,
+                        parcela_numero=instance.parcela_numero,
+                        parcela_total=instance.parcela_total,
+                        id_aluguel_origem=instance.id_aluguel_origem,
+                        gerencial=instance.gerencial,
+                        id_safra=instance.id_safra,
+                        id_contrato_agricola=instance.id_contrato_agricola
+                    )
+                    
+                    return Response(serializer.data)
+                    
+        return super().partial_update(request, *args, **kwargs)
+
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 
@@ -4863,7 +4951,6 @@ class ComunicadoSaaSViewSet(viewsets.ModelViewSet):
             pass
         return models.ComunicadoSaaS.objects.none()
 
-
 @api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def saas_monitor_sefaz_status(request):
@@ -5148,7 +5235,6 @@ def central_gerar_voz(request):
         return response
     except Exception as e:
         return HttpResponse(f"Erro ao gerar voz: {str(e)}", status=500)
-
 
 # ─── Public API Endpoints for Client Instances ────────────────────────────────
 

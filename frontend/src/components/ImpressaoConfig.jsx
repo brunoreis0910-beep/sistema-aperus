@@ -114,8 +114,7 @@ const ModuloCard = ({ modulo, axiosInstance, gabaritos }) => {
       setSuccess('Configuração salva com sucesso!');
       setTimeout(() => setSuccess(''), 3500);
     } catch (err) {
-      const msg = err.response?.data ? (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data)) : (err.message || 'Tente novamente.');
-      setError(`Erro ao salvar: ${msg}`);
+      setError('Erro ao salvar. Tente novamente.');
     } finally {
       setSaving(false);
     }
@@ -153,9 +152,6 @@ const ModuloCard = ({ modulo, axiosInstance, gabaritos }) => {
                     <MenuItem value="a4">📄 A4 (Folha)</MenuItem>
                     {modulo.key === 'ordem_servico' && (
                       <MenuItem value="a4_fotos">📸 A4 com Fotos e Assinatura</MenuItem>
-                    )}
-                    {modulo.key === 'ordem_servico' && (
-                      <MenuItem value="meia_folha">📄 Meia Folha / A5 (Compacto com Condições de Pagamento)</MenuItem>
                     )}
                     <MenuItem value="personalizado">✨ Gabarito Customizado</MenuItem>
                   </Select>

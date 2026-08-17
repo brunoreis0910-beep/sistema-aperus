@@ -1,0 +1,325 @@
+{
+    "status_atual": "NORMAL",
+    "ultimo_erro": "",
+    "tempo_resposta": 0,
+    "ultima_atualizacao": "",
+    "comunicado_ativo_id": null,
+    "templates": {
+        "OSCILACAO": {
+            "titulo": "[ALERTA] SEFAZ-{uf} em Oscilação",
+            "mensagem": "Atenção: Identificamos instabilidade/oscilação na SEFAZ de {uf} para o documento {documento} às {hora_evento}.\n\nOrientação: Sugerimos aguardar ou realizar emissões no modo de contingência offline caso ocorram erros de conexão.",
+            "enviar_whatsapp": true,
+            "enviar_notificacao": true
+        },
+        "CONTINGENCIA": {
+            "titulo": "[AVISO] Contingência Ativada para SEFAZ-{uf}",
+            "mensagem": "Atenção: A contingência foi ativada oficialmente na SEFAZ de {uf} para o documento {documento} às {hora_evento}.\n\nOrientação: Suas emissões continuarão ocorrendo normalmente no modo Contingência Offline no sistema.",
+            "enviar_whatsapp": true,
+            "enviar_notificacao": true
+        },
+        "NORMAL": {
+            "titulo": "[INFO] SEFAZ-{uf} Normalizada",
+            "mensagem": "Prezados clientes, informamos que os serviços da SEFAZ de {uf} para o documento {documento} foram normalizados às {hora_evento}.",
+            "enviar_whatsapp": true,
+            "enviar_notificacao": true
+        }
+    },
+    "historico": [],
+    "documentos": {
+        "MG": {
+            "nfce": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 202,
+                "ultima_atualizacao": "2026-08-17T12:46:12.218368+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:43:49.106413+00:00",
+                        "tempo": 209,
+                        "status": "NORMAL"
+                    },
+                    {
+                        "datahora": "2026-08-17T12:46:12.218405+00:00",
+                        "tempo": 202,
+                        "status": "NORMAL"
+                    }
+                ]
+            },
+            "nfe": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 389,
+                "ultima_atualizacao": "2026-08-17T12:46:15.285730+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:43:50.706715+00:00",
+                        "tempo": 317,
+                        "status": "NORMAL"
+                    },
+                    {
+                        "datahora": "2026-08-17T12:46:15.285748+00:00",
+                        "tempo": 389,
+                        "status": "NORMAL"
+                    }
+                ]
+            },
+            "cte": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 471,
+                "ultima_atualizacao": "2026-08-17T12:46:19.308404+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:43:52.288941+00:00",
+                        "tempo": 471,
+                        "status": "NORMAL"
+                    },
+                    {
+                        "datahora": "2026-08-17T12:46:19.308425+00:00",
+                        "tempo": 471,
+                        "status": "NORMAL"
+                    }
+                ]
+            }
+        },
+        "ES": {
+            "nfce": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 121,
+                "ultima_atualizacao": "2026-08-17T12:45:49.288425+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:45:49.288441+00:00",
+                        "tempo": 121,
+                        "status": "NORMAL"
+                    }
+                ]
+            },
+            "nfe": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 246,
+                "ultima_atualizacao": "2026-08-17T12:45:51.339121+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:45:51.339136+00:00",
+                        "tempo": 246,
+                        "status": "NORMAL"
+                    }
+                ]
+            },
+            "cte": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 387,
+                "ultima_atualizacao": "2026-08-17T12:45:53.419735+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:45:53.419768+00:00",
+                        "tempo": 387,
+                        "status": "NORMAL"
+                    }
+                ]
+            }
+        },
+        "RJ": {
+            "nfce": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 143,
+                "ultima_atualizacao": "2026-08-17T12:45:55.438945+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:45:55.438959+00:00",
+                        "tempo": 143,
+                        "status": "NORMAL"
+                    }
+                ]
+            },
+            "nfe": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 278,
+                "ultima_atualizacao": "2026-08-17T12:45:57.432519+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:45:57.432551+00:00",
+                        "tempo": 278,
+                        "status": "NORMAL"
+                    }
+                ]
+            },
+            "cte": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 348,
+                "ultima_atualizacao": "2026-08-17T12:45:59.573198+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:45:59.573214+00:00",
+                        "tempo": 348,
+                        "status": "NORMAL"
+                    }
+                ]
+            }
+        },
+        "DF": {
+            "nfce": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 196,
+                "ultima_atualizacao": "2026-08-17T12:46:02.297361+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:46:02.297444+00:00",
+                        "tempo": 196,
+                        "status": "NORMAL"
+                    }
+                ]
+            },
+            "nfe": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 246,
+                "ultima_atualizacao": "2026-08-17T12:46:06.086546+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:46:06.086568+00:00",
+                        "tempo": 246,
+                        "status": "NORMAL"
+                    }
+                ]
+            },
+            "cte": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 307,
+                "ultima_atualizacao": "2026-08-17T12:46:08.480424+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:46:08.480440+00:00",
+                        "tempo": 307,
+                        "status": "NORMAL"
+                    }
+                ]
+            }
+        },
+        "PR": {
+            "nfce": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 153,
+                "ultima_atualizacao": "2026-08-17T12:46:21.849423+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:46:21.849450+00:00",
+                        "tempo": 153,
+                        "status": "NORMAL"
+                    }
+                ]
+            },
+            "nfe": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 649,
+                "ultima_atualizacao": "2026-08-17T12:46:24.264697+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:46:24.264720+00:00",
+                        "tempo": 649,
+                        "status": "NORMAL"
+                    }
+                ]
+            },
+            "cte": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 699,
+                "ultima_atualizacao": "2026-08-17T12:46:28.261873+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:46:28.261901+00:00",
+                        "tempo": 699,
+                        "status": "NORMAL"
+                    }
+                ]
+            }
+        },
+        "RS": {
+            "nfce": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 123,
+                "ultima_atualizacao": "2026-08-17T12:46:32.839258+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:46:32.839280+00:00",
+                        "tempo": 123,
+                        "status": "NORMAL"
+                    }
+                ]
+            },
+            "nfe": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 283,
+                "ultima_atualizacao": "2026-08-17T12:46:37.535712+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:46:37.535726+00:00",
+                        "tempo": 283,
+                        "status": "NORMAL"
+                    }
+                ]
+            },
+            "cte": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 383,
+                "ultima_atualizacao": "2026-08-17T12:46:40.445492+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:46:40.445515+00:00",
+                        "tempo": 383,
+                        "status": "NORMAL"
+                    }
+                ]
+            }
+        },
+        "BA": {
+            "nfce": {
+                "status_atual": "NORMAL",
+                "ultimo_erro": "",
+                "tempo_resposta": 126,
+                "ultima_atualizacao": "2026-08-17T12:49:41.228289+00:00",
+                "comunicado_ativo_id": null,
+                "tempos_resposta": [
+                    {
+                        "datahora": "2026-08-17T12:49:41.228301+00:00",
+                        "tempo": 126,
+                        "status": "NORMAL"
+                    }
+                ]
+            }
+        }
+    }
+}

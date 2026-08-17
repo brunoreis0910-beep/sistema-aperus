@@ -88,36 +88,6 @@ class NFeService:
                         "mensagem": f"Rejeição BA02-35: Uma NF-e de saída não pode referenciar chaves de acesso de {doc_type} (Chave: {chave})."
                     }
 
-        # --- VALIDATION FOR COMPLEMENTAR AND DEVOLUÇÃO (Requires refNFe) ---
-        fin_nfe = "1"
-        if venda_obj.id_operacao:
-            op_fin = str(getattr(venda_obj.id_operacao, 'finalidade_emissao', '') or '').strip()
-            nome_op = (venda_obj.id_operacao.nome_operacao or '').upper()
-            if op_fin in ('2', '3', '4', '5', '6', '7'):
-                fin_nfe = op_fin
-            elif 'DEVOLU' in nome_op:
-                fin_nfe = "4"
-            elif 'COMPLEM' in nome_op:
-                fin_nfe = "2"
-            elif 'AJUSTE' in nome_op:
-                fin_nfe = "3"
-            else:
-                fin_nfe = op_fin if op_fin == '1' else '1'
-
-        if fin_nfe in ('2', '4'):
-            has_ref = False
-            for chave in chaves_referenciadas:
-                chave_clean = re.sub(r'\D', '', chave)
-                if len(chave_clean) == 44:
-                    has_ref = True
-                    break
-            if not has_ref:
-                tipo_desc = "Complementar" if fin_nfe == "2" else "de Devolução"
-                return {
-                    "sucesso": False,
-                    "mensagem": f"Rejeição: Para emitir uma NF-e {tipo_desc} (finalidade {fin_nfe}), é obrigatório informar a chave de acesso da nota referenciada (44 dígitos)."
-                }
-
         # Ensure Sequential Numbering (Assign before generating INI)
         if not venda_obj.numero_nfe and venda_obj.id_operacao:
              try:
@@ -337,8 +307,27 @@ class NFeService:
                 raise ImportError(f"Dependência faltando: {e}. Executável: {sys.executable}")
 
             # 0. SMART RETRY: Se já existe XML assinado salvo (de tentativa anterior com erro),
-            # Sempre regerar o XML a partir dos dados atualizados do banco (IE do fornecedor, número da NF-e, etc.)
+            # reutilizar esse XML ao invés de gerar novo (evita mudança de dhEmi e DigestValue)
             xml_signed_reutilizado = None
+            
+            # Se a mensagem de erro anterior for "Assinatura difere" (297) ou "DigestValue mismatch",
+            # NÃO REUTILIZAR o XML, pois a assinatura está inválida.
+            erro_assinatura = False
+            msg_erro = str(getattr(venda, 'mensagem_nfe', '') or '')
+            if '297' in msg_erro or 'Assinatura difere' in msg_erro or 'DigestValue' in msg_erro:
+                erro_assinatura = True
+                logger.warning(f"[RETRY] Erro de assinatura detectado ({msg_erro}). Forçando regeneração do XML.")
+            
+            if venda.xml_nfe and venda.status_nfe in ['ERRO', 'PENDENTE'] and not erro_assinatura:
+                logger.info(f"[RETRY] Nota com XML já gerado. Verificando se pode reutilizar...")
+                
+                # Verifica se é um XML assinado válido (tem tag Signature)
+                if '<Signature' in venda.xml_nfe and '<infNFe' in venda.xml_nfe:
+                    logger.info("[RETRY] XML assinado encontrado! Reutilizando para evitar mudança de dhEmi...")
+                    xml_signed_reutilizado = venda.xml_nfe
+                    # Pula geração e assinatura, vai direto para transmissão
+                else:
+                    logger.warning("[RETRY] XML salvo não está assinado. Gerando novo...")
 
             # 1. Build XML (SOMENTE SE NÃO REUTILIZOU XML ANTERIOR)
             # REMOVED: Forced override of number 2 to 1.
@@ -383,10 +372,7 @@ class NFeService:
                     logger.info(f"Updated Venda Key/Number from XML: {venda.chave_nfe} / {venda.numero_nfe}")
                 
                 # Inicializa SefazService (necessário para consulta)
-                tp_emis_val = '1'
-                if getattr(venda, 'tpEmis', None) == '6' or venda.status_nfe == 'CONTINGENCIA_SVCAN':
-                    tp_emis_val = '6'
-                sefaz = SefazService(empresa, modelo='55', tpEmis=tp_emis_val)
+                sefaz = SefazService(empresa, modelo='55')
                 
                 # === SMART HANDLING: Consulta Prévia de Status (Evitar Duplicidade) ===
                 if new_key:
@@ -476,10 +462,7 @@ class NFeService:
                         raise e_java
             
             # Inicializa SefazService para envio (modelo 55 = NF-e)
-            tp_emis_val = '1'
-            if getattr(venda, 'tpEmis', None) == '6' or venda.status_nfe == 'CONTINGENCIA_SVCAN':
-                tp_emis_val = '6'
-            sefaz = SefazService(empresa, modelo='55', tpEmis=tp_emis_val)
+            sefaz = SefazService(empresa, modelo='55')
             
             # (CDATA já foi adicionado ANTES da assinatura no passo 1.1)
             

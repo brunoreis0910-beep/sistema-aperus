@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   Container, Paper, Typography, Box, Button, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, IconButton,
@@ -6,7 +6,7 @@ import {
   MenuItem, Grid, Alert
 } from '@mui/material';
 import {
-  Add, Visibility, CheckCircle, Cancel, FilterList, Autorenew as LoopIcon
+  Add, Visibility, CheckCircle, Cancel, FilterList
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -118,59 +118,17 @@ const DevolucoesListPage = () => {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 3, px: { xs: 2, sm: 3 } }}>
-      {/* Header com gradiente, destaque e botão de Nova Devolução totalmente visível */}
-      <Paper 
-        elevation={2} 
-        sx={{ 
-          p: { xs: 2, sm: 2.5 }, 
-          mb: 3, 
-          borderRadius: 3, 
-          background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)',
-          color: '#ffffff',
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 2
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box sx={{ bgcolor: 'rgba(255,255,255,0.15)', p: 1, borderRadius: 2, display: 'flex' }}>
-            <LoopIcon sx={{ fontSize: 28, color: '#fff' }} />
-          </Box>
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700, color: '#fff' }}>
-              Devoluções
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.8)' }}>
-              Gerenciamento de devoluções de vendas e compras
-            </Typography>
-          </Box>
-        </Box>
-        
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h4">Devoluções</Typography>
         <Button
           variant="contained"
-          size="large"
           startIcon={<Add />}
-          onClick={() => navigate('/devolucoes/nova')}
-          sx={{ 
-            bgcolor: '#22c55e', 
-            '&:hover': { bgcolor: '#16a34a' }, 
-            color: '#fff', 
-            fontWeight: 700, 
-            px: 3, 
-            py: 1.2,
-            borderRadius: 2,
-            boxShadow: '0 4px 12px rgba(34, 197, 94, 0.4)',
-            textTransform: 'none',
-            minWidth: 170,
-            flexShrink: 0
-          }}
+          onClick={() => navigate('/api/devolucoes/nova')}
         >
           Nova Devolução
         </Button>
-      </Paper>
+      </Box>
 
       <Paper sx={{ p: 2, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
