@@ -170,7 +170,6 @@ const SaaSAdminPage = () => {
   const [mensalidades, setMensalidades] = useState([]);
   const [planos, setPlanos] = useState([]);
   const [centralLogs, setCentralLogs] = useState([]);
-  
   // Monitoramento SEFAZ State
   const [sefazStatus, setSefazStatus] = useState(null);
   const [prevStatus, setPrevStatus] = useState(null);

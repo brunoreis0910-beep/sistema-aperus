@@ -750,9 +750,8 @@ function CompraPage() {
         ? operRes.data
         : (operRes.data?.results || [])
       const operacoesPermitidas = operacoesData.filter(op => {
-        if (!op) return false;
-        const trans = String(op.transacao || op.tipo_transacao || op.tipo || '').toLowerCase();
-        const nome = String(op.nome_operacao || op.nome || '').toLowerCase();
+        const trans = (op.transacao || op.tipo_transacao || op.tipo || '').toLowerCase();
+        const nome = (op.nome_operacao || op.nome || '').toLowerCase();
         return trans === 'entrada' || trans.includes('devoluc') || nome.includes('devolu');
       });
       setOperacoes(operacoesPermitidas);
@@ -2983,15 +2982,12 @@ function CompraPage() {
                                       value={produtos.find(p => String(p.id_produto) === String(item.id_produto)) || null}
                                       onChange={(_, newVal) => selecionarProduto(index, newVal ? newVal.id_produto : '')}
                                       filterOptions={(opts, { inputValue }) => {
-                                        const term = String(inputValue || '').toLowerCase().trim();
-                                        return (Array.isArray(opts) ? opts : []).filter(p => {
-                                          if (!p) return false;
-                                          return (
-                                            String(p.nome_produto || '').toLowerCase().includes(term) ||
-                                            String(p.codigo_produto || '').toLowerCase().includes(term) ||
-                                            String(p.gtin || '').includes(String(inputValue || ''))
-                                          );
-                                        });
+                                        const term = inputValue.toLowerCase();
+                                        return opts.filter(p =>
+                                          (p.nome_produto || '').toLowerCase().includes(term) ||
+                                          (p.codigo_produto || '').toLowerCase().includes(term) ||
+                                          (p.gtin || '').includes(inputValue)
+                                        );
                                       }}
                                       renderInput={(params) => (
                                         <TextField
@@ -6730,8 +6726,7 @@ function CompraPage() {
                       <MenuItem value="">Nenhuma (Devolução Apenas Gerencial Interna)</MenuItem>
                       {operacoes
                         .filter(op => {
-                          if (!op) return false;
-                          const trans = String(op.transacao || op.tipo_transacao || op.tipo || '').toLowerCase();
+                          const trans = (op.transacao || op.tipo_transacao || op.tipo || '').toLowerCase();
                           const mod = String(op.modelo_documento || op.modelo_nf || '');
                           return mod === '55' || trans.includes('devolu');
                         })

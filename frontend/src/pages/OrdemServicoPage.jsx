@@ -32,10 +32,7 @@ import {
   InputAdornment,
   Tooltip,
   CircularProgress,
-  Badge,
-  Stack,
-  FormControlLabel,
-  Checkbox
+  Badge
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -62,29 +59,12 @@ import {
   DeleteForever as DeleteForeverIcon,
   Gesture as GestureIcon,
   PersonPin as PersonPinIcon,
-  Analytics as AnalyticsIcon,
-  PersonAdd as PersonAddIcon,
-  Business as BusinessIcon,
-  LocationOn as LocationIcon,
-  Phone as PhoneIcon,
-  CreditCard as CreditCardIcon,
-  Send as SendIcon,
-  Cake as CakeIcon,
+  Analytics as AnalyticsIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { API_ENDPOINT } from '../config/api';
 import { getAPIAtiva } from '../config/apiVeiculos';
-import {
-  buscarCNPJ,
-  buscarCEP,
-  formatCNPJ,
-  formatCPF,
-  formatTelefone,
-  formatCEP,
-  ESTADOS_BRASIL
-} from '../utils/cnpjCepUtils';
-import ClienteFormModal from '../components/ClienteFormModal';
 import {
   salvarFotoOS, listarFotosOS, removerFotoOS,
   migrarFotosOS, salvarOSPendente, listarOSPendentes,
@@ -191,59 +171,6 @@ const OrdemServicoPage = () => {
   const [checklistVeiculo, setChecklistVeiculo] = useState(checklistVazio);
   const [observacoesEntrada, setObservacoesEntrada] = useState('');
 
-  // Checklist personalizado para Equipamentos
-  const CHAVE_MODELO_EQUIPAMENTO = 'aperus_checklist_equipamento_modelo';
-  const carregarModeloEquipamento = () => {
-    try {
-      const salvo = localStorage.getItem(CHAVE_MODELO_EQUIPAMENTO);
-      return salvo ? JSON.parse(salvo) : [
-        { key: 'ligar_equipamento', label: 'Liga o equipamento' },
-        { key: 'carregador', label: 'Carregador / Fonte' },
-        { key: 'acessorios', label: 'Acessórios incluídos' },
-        { key: 'danos_externos', label: 'Danos externos visíveis' },
-      ];
-    } catch { return []; }
-  };
-  const [checklistEquipamentoModelo, setChecklistEquipamentoModelo] = useState(carregarModeloEquipamento);
-  const checklistEquipamentoVazio = (modelo) => Object.fromEntries((modelo || checklistEquipamentoModelo).map(i => [i.key, 'NA']));
-  const [checklistEquipamento, setChecklistEquipamento] = useState(() => checklistEquipamentoVazio(carregarModeloEquipamento()));
-  const [novoItemChecklist, setNovoItemChecklist] = useState('');
-  const [observacoesEntradaEquipamento, setObservacoesEntradaEquipamento] = useState('');
-  const [modeloSalvoFeedback, setModeloSalvoFeedback] = useState(false);
-
-  const adicionarItemChecklistEquipamento = () => {
-    const label = novoItemChecklist.trim();
-    if (!label) return;
-    const key = 'item_' + Date.now();
-    const novoModelo = [...checklistEquipamentoModelo, { key, label }];
-    setChecklistEquipamentoModelo(novoModelo);
-    setChecklistEquipamento(prev => ({ ...prev, [key]: 'NA' }));
-    setNovoItemChecklist('');
-  };
-
-  const removerItemChecklistEquipamento = (key) => {
-    const novoModelo = checklistEquipamentoModelo.filter(i => i.key !== key);
-    setChecklistEquipamentoModelo(novoModelo);
-    setChecklistEquipamento(prev => {
-      const novo = { ...prev };
-      delete novo[key];
-      return novo;
-    });
-  };
-
-  const salvarModeloChecklistEquipamento = () => {
-    try {
-      localStorage.setItem(CHAVE_MODELO_EQUIPAMENTO, JSON.stringify(checklistEquipamentoModelo));
-      setModeloSalvoFeedback(true);
-      setTimeout(() => setModeloSalvoFeedback(false), 2500);
-    } catch (e) { console.error('Erro ao salvar modelo:', e); }
-  };
-
-  const resetarChecklistEquipamento = (modelo) => {
-    const base = modelo || checklistEquipamentoModelo;
-    setChecklistEquipamento(Object.fromEntries(base.map(i => [i.key, 'NA'])));
-  };
-
   // Itens (Produtos/Serviços)
   const [itens, setItens] = useState([]);
   const [itemAtual, setItemAtual] = useState({
@@ -317,71 +244,6 @@ const OrdemServicoPage = () => {
   const [openEstoqueModal, setOpenEstoqueModal] = useState(false);
   const [estoqueInfo, setEstoqueInfo] = useState(null);
   const [acaoEstoqueAtual, setAcaoEstoqueAtual] = useState('nao_validar');
-
-  // ── Modal de Novo Cliente (Usando o componente oficial ClienteFormModal) ────
-  const [openNovoClienteModal, setOpenNovoClienteModal] = useState(false);
-
-  const abrirModalNovoCliente = () => {
-    setOpenNovoClienteModal(true);
-  };
-
-  const handleClienteCriado = async (novoCliente) => {
-    try {
-      const resCli = await axiosInstance.get('/clientes/', { params: { page_size: 1000 } });
-      const listaAtualizada = Array.isArray(resCli.data) ? resCli.data : resCli.data.results || [];
-      setClientes(listaAtualizada);
-
-      const idNovo = novoCliente.id_cliente || novoCliente.id;
-      if (idNovo) {
-        handleClienteChange(idNovo);
-      }
-      setSuccess(`Cliente "${novoCliente.nome_razao_social || novoCliente.nome}" cadastrado e selecionado com sucesso!`);
-    } catch (err) {
-      console.error('Erro ao atualizar lista de clientes:', err);
-    }
-  };
-
-  // ── Modal de Pesquisa Avançada de Produtos e Serviços ─────────────────────
-  const [openPesquisaItemModal, setOpenPesquisaItemModal] = useState(false);
-  const [filtroTipoBusca, setFiltroTipoBusca] = useState('todos');
-  const [filtroNome, setFiltroNome] = useState('');
-  const [filtroGrupo, setFiltroGrupo] = useState('');
-  const [filtroRef, setFiltroRef] = useState('');
-  const [filtroLocalizacao, setFiltroLocalizacao] = useState('');
-
-  const abrirModalPesquisaItem = () => {
-    setFiltroTipoBusca(itemAtual.tipo_item || 'todos');
-    setFiltroNome('');
-    setFiltroGrupo('');
-    setFiltroRef('');
-    setFiltroLocalizacao('');
-    setOpenPesquisaItemModal(true);
-  };
-
-  const selecionarItemDaPesquisa = (prod) => {
-    const isServico = prod.classificacao?.toUpperCase() === 'SERVICO';
-    const tipo = isServico ? 'servico' : 'produto';
-    const desc = prod.descricao || prod.nome_produto || `Produto ${prod.codigo_produto}`;
-
-    let valorVenda = 0;
-    if (prod.estoque_por_deposito && prod.estoque_por_deposito.length > 0) {
-      const estoqueComValor = prod.estoque_por_deposito.find(e => e.valor_venda > 0);
-      valorVenda = estoqueComValor?.valor_venda || prod.estoque_por_deposito[0]?.valor_venda || 0;
-    } else if (prod.preco_venda || prod.valor_venda) {
-      valorVenda = prod.preco_venda || prod.valor_venda || 0;
-    }
-
-    setItemAtual(prev => ({
-      ...prev,
-      tipo_item: tipo,
-      id_produto: prod.id_produto || prod.id,
-      descricao: desc,
-      valorUnitario: parseFloat(valorVenda) || 0
-    }));
-
-    setOpenPesquisaItemModal(false);
-    setSuccess(`Item "${desc}" selecionado!`);
-  };
   const [itemPendenteEstoque, setItemPendenteEstoque] = useState(null);
   const [configImpressao, setConfigImpressao] = useState({ tipo_impressora: 'a4', largura_termica: '80mm', observacao_rodape: '', copias: 1 });
 
@@ -1950,20 +1812,6 @@ const OrdemServicoPage = () => {
           dadosOrdem.laudo_tecnico = laudoAtual ? `${laudoAtual}${fichaInspacao}` : fichaInspacao.trim();
         }
 
-        // Para equipamento, incluir o checklist personalizado no laudo técnico
-        if (tipoAtendimento === 'equipamento' && checklistEquipamentoModelo.length > 0) {
-          const itensOKEq = checklistEquipamentoModelo.filter(i => checklistEquipamento[i.key] === 'OK').map(i => i.label);
-          const itensNOKEq = checklistEquipamentoModelo.filter(i => checklistEquipamento[i.key] === 'NOK').map(i => i.label);
-          const itensNAEq = checklistEquipamentoModelo.filter(i => checklistEquipamento[i.key] === 'NA').map(i => i.label);
-          let fichaEq = '\n\n--- CHECKLIST DE INSPEÇÃO DO EQUIPAMENTO ---';
-          if (itensOKEq.length) fichaEq += `\n✅ OK: ${itensOKEq.join(', ')}`;
-          if (itensNOKEq.length) fichaEq += `\n❌ NOK: ${itensNOKEq.join(', ')}`;
-          if (itensNAEq.length) fichaEq += `\n➖ N/A: ${itensNAEq.join(', ')}`;
-          if (observacoesEntradaEquipamento) fichaEq += `\nObservações: ${observacoesEntradaEquipamento}`;
-          const laudoAtualEq = dadosOrdem.laudo_tecnico || '';
-          dadosOrdem.laudo_tecnico = laudoAtualEq ? `${laudoAtualEq}${fichaEq}` : fichaEq.trim();
-        }
-
         // Adicionar as informações do veículo/animal/equipamento na descrição do problema
         if (dadosOrdem.descricao_problema) {
           dadosOrdem.descricao_problema = `${info}\n\n${dadosOrdem.descricao_problema}`;
@@ -2103,17 +1951,9 @@ const OrdemServicoPage = () => {
       return;
     }
 
-    let valor = parseFloat(valorPagamentoTemp);
-    if (isNaN(valor) || valor <= 0) {
-      const restante = calcularValorRestante();
-      if (restante > 0) {
-        valor = restante;
-        setValorPagamentoTemp(restante.toFixed(2));
-      }
-    }
-
+    const valor = parseFloat(valorPagamentoTemp);
     if (!valor || valor <= 0) {
-      setError('Informe um valor válido para o pagamento');
+      setError('Informe um valor válido');
       return;
     }
 
@@ -2129,9 +1969,8 @@ const OrdemServicoPage = () => {
       return;
     }
 
-
     // Bloqueio de compra a prazo para Consumidor / CPF 000.000.000-00
-    const clienteOS = clientes.find(c => c.id_cliente === parseInt(cliente || ordemAtual?.id_cliente));
+    const clienteOS = clientes.find(c => c.id_cliente === parseInt(clienteTemp || cliente || ordemAtual?.id_cliente));
     const nomeNorm = (forma.nome_forma || forma.nome || forma.descricao || '').toUpperCase().replace(/[_]/g, ' ');
     const termosPrazo = ['BOLETO', 'A PRAZO', 'PRAZO', 'FATURAD', 'CREDIARI', 'CREDIÁRI', 'DUPLICATA', 'PROMISSORI', 'PROMISSÓRI', 'CARNE', 'CARNÊ', 'FIADO', 'CONVENIO', 'CONVÊNIO', 'FATURA'];
     const ehFormaPrazo = (forma.dias_vencimento && parseInt(forma.dias_vencimento) > 0) || termosPrazo.some(t => nomeNorm.includes(t));
@@ -2236,26 +2075,17 @@ const OrdemServicoPage = () => {
         }
       }
 
-      // Atualizar status da OS e marcar gera_financeiro = true
-      const statusSelecionado = statusList.find(s => s.id_status === status);
-      if (ordemAtual?.id_os) {
+      // Atualizar status da OS se estiver editando
+      if (modoEdicao && ordemAtual) {
         await atualizarStatusOS(ordemAtual.id_os, status);
-        await axiosInstance.patch(`/ordem-servico/${ordemAtual.id_os}/`, {
-          gera_financeiro: true,
-          status_os: statusSelecionado?.nome_status || 'Finalizado'
-        });
+
+        // Marcar que financeiro foi gerado
+        await axiosInstance.patch(`/ordem-servico/${ordemAtual.id_os}/`, { gera_financeiro: true });
       }
 
-      setSuccess('Financeiro gerado e Ordem de Serviço finalizada com sucesso!');
-      setTimeout(() => setSuccess(''), 3500);
-
-      // Fechar dialogs de financeiro e fechar modal de edição da OS
+      setSuccess('Financeiro gerado com sucesso!');
+      setTimeout(() => setSuccess(''), 3000);
       setOpenFinanceiroDialog(false);
-      setOpenPagamentoDialog(false);
-      setOpenDialog(false);
-      setModoEdicao(false);
-      
-      limparFormulario();
       await carregarOrdens();
 
     } catch (error) {
@@ -2401,70 +2231,10 @@ const OrdemServicoPage = () => {
     setOpenNFeDialog(true);
   };
 
-  const validarClienteParaNFe = (clienteData) => {
-    const pendencias = [];
-    if (!clienteData) {
-      return ['Cliente não cadastrado ou não informado na OS'];
-    }
-
-    const nome = (clienteData.nome_razao_social || clienteData.nome || clienteData.razao_social || '').trim();
-    const cpfCnpj = String(clienteData.cpf_cnpj || clienteData.cnpj || clienteData.cpf || '').replace(/\D/g, '');
-    const cep = String(clienteData.cep || '').replace(/\D/g, '');
-    const logradouro = (clienteData.logradouro || clienteData.endereco || '').trim();
-    const numero = (clienteData.numero || '').trim();
-    const bairro = (clienteData.bairro || '').trim();
-    const cidade = (clienteData.cidade || clienteData.municipio || '').trim();
-    const uf = (clienteData.uf || clienteData.estado || '').trim();
-
-    if (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14)) {
-      pendencias.push('CPF/CNPJ (exige 11 ou 14 dígitos)');
-    }
-
-    if (!nome || ['CONSUMIDOR', 'CONSUMIDOR FINAL', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', ''].includes(nome.toUpperCase())) {
-      pendencias.push('Razão Social / Nome Completo');
-    }
-
-    if (!cep || cep.length !== 8) {
-      pendencias.push('CEP (8 dígitos)');
-    }
-
-    if (!logradouro) {
-      pendencias.push('Endereço / Logradouro');
-    }
-
-    if (!numero) {
-      pendencias.push('Número (Informe S/N se não houver)');
-    }
-
-    if (!bairro) {
-      pendencias.push('Bairro');
-    }
-
-    if (!cidade) {
-      pendencias.push('Cidade / Município');
-    }
-
-    if (!uf || uf.length !== 2) {
-      pendencias.push('UF / Estado (2 letras, ex: MG, SP)');
-    }
-
-    return pendencias;
-  };
-
   const confirmarEmissaoNFe = async () => {
     if (!currentOrderForNFe || !selectedNFeOperation) {
         setError('Selecione uma operação para continuar.');
         return;
-    }
-
-    const clienteOS = clientes.find(c => String(c.id_cliente) === String(currentOrderForNFe.id_cliente));
-    const pends = validarClienteParaNFe(clienteOS);
-    if (pends.length > 0) {
-      setOpenNFeDialog(false);
-      setClienteParaEditar(clienteOS);
-      setOpenNovoClienteModal(true);
-      setError(`⚠️ Cliente com dados incompletos para a NF-e: ${pends.join(', ')}. Atualize o cadastro do cliente e tente novamente.`);
-      return;
     }
 
     try {
@@ -2637,17 +2407,17 @@ const OrdemServicoPage = () => {
     }
   };
 
-  const imprimirOrdem = async (ordem, modoForcado = null) => {
-    const tipoImpressao = modoForcado || configImpressao?.tipo_impressora || 'a4_fotos';
+  const imprimirOrdem = async (ordem) => {
+    const tipoImpressao = configImpressao.tipo_impressora;
     const usarTermica = tipoImpressao === 'termica';
-    const usarPersonalizado = tipoImpressao === 'personalizado' && Boolean(configImpressao?.gabarito_customizado_nome);
+    const usarFotosAssinatura = tipoImpressao === 'a4_fotos';
 
-    if (usarPersonalizado) {
+    if (tipoImpressao === 'personalizado') {
       try {
         const response = await axiosInstance.get(`/ordem-servico/${ordem.id_os}/`);
         const ordemCompleta = response.data;
         
-        const gNome = configImpressao.gabarito_customizado_nome;
+        const gNome = configImpressao.gabarito_customizado_nome || 'ordem_servico';
         let cnpj = (ordemCompleta.empresa_info?.cnpj || '').replace(/\D/g, '');
         
         if (!cnpj) {
@@ -2660,470 +2430,62 @@ const OrdemServicoPage = () => {
           }
         }
 
-        const url = `/api/saas/gabarito-gerar/?nome_relatorio=${gNome}&os=${ordem.id_os}${cnpj ? `&cnpj=${cnpj}` : ''}`;
-        const win = window.open(url, '_blank');
-        if (win) return;
+        const url = `/api/saas/gabarito-gerar/?nome_relatorio=${gNome}&os=${ordem.id_os}&cnpj=${cnpj}`;
+        window.open(url, '_blank');
+        return;
       } catch (err) {
-        console.error('Erro ao buscar dados para impressão personalizada, fallback para A4 com fotos:', err);
+        console.error('Erro ao buscar dados para impressão personalizada:', err);
+        const gNome = configImpressao.gabarito_customizado_nome || 'ordem_servico';
+        const url = `/api/saas/gabarito-gerar/?nome_relatorio=${gNome}&os=${ordem.id_os}`;
+        window.open(url, '_blank');
+        return;
       }
     }
 
     try {
       // Buscar dados completos da ordem incluindo financeiro
-      let ordemCompleta = ordem;
-      if (ordem?.id_os) {
-        try {
-          const response = await axiosInstance.get(`/ordem-servico/${ordem.id_os}/`);
-          ordemCompleta = response.data || ordem;
-        } catch (e) {
-          console.warn('Usando dados da OS da memória:', e);
-        }
-      }
+      const response = await axiosInstance.get(`/ordem-servico/${ordem.id_os}/`);
+      const ordemCompleta = response.data;
 
       let conteudo;
       if (usarTermica) {
         conteudo = gerarConteudoImpressaoTermica(ordemCompleta);
-      } else {
-        // Modo A4 (com Fotos e Assinatura)
+      } else if (usarFotosAssinatura) {
+        // Buscar fotos e assinatura do servidor
         let fotos = [];
         let assinatura = null;
-
-        // 1. Buscar fotos do servidor
-        if (ordemCompleta?.id_os) {
-          try {
-            const respFotos = await axiosInstance.get(`/os-fotos/?id_os=${ordemCompleta.id_os}`);
-            fotos = (respFotos.data?.results || respFotos.data || []).map(f => ({
-              base64: f.imagem_base64,
-              nomeArquivo: f.nome_arquivo,
-            }));
-          } catch (e) { console.warn('Fotos do servidor indisponíveis:', e); }
-        }
-
-        // Se servidor não retornou fotos, usar fotos do estado local
-        if (fotos.length === 0 && (fotosOS || []).length > 0) {
-          fotos = (fotosOS || []).map(f => ({
-            base64: f.base64,
-            nomeArquivo: f.nomeArquivo
+        try {
+          const respFotos = await axiosInstance.get(`/os-fotos/?id_os=${ordem.id_os}`);
+          fotos = (respFotos.data?.results || respFotos.data || []).map(f => ({
+            base64: f.imagem_base64,
+            nomeArquivo: f.nome_arquivo,
           }));
-        }
-
-        // 2. Buscar assinatura do servidor
-        if (ordemCompleta?.id_os) {
-          try {
-            const respAssin = await axiosInstance.get(`/os-assinaturas/?id_os=${ordemCompleta.id_os}`);
-            const lista = respAssin.data?.results || respAssin.data || [];
-            if (lista.length > 0) assinatura = lista[0].assinatura_base64;
-          } catch (e) { console.warn('Assinatura do servidor indisponível:', e); }
-        }
-
-        // Se servidor não retornou assinatura, usar assinatura do estado local
-        if (!assinatura && assinaturaBase64) {
-          assinatura = assinaturaBase64;
-        }
-
-        if (tipoImpressao === 'meia_folha' || tipoImpressao === 'a5') {
-          conteudo = gerarConteudoImpressaoMeiaFolha(ordemCompleta, fotos, assinatura);
-        } else if (tipoImpressao === 'a4_simples') {
-          conteudo = gerarConteudoImpressao(ordemCompleta);
-        } else {
-          conteudo = gerarConteudoImpressaoComFotos(ordemCompleta, fotos, assinatura);
-        }
+        } catch (e) { console.warn('Fotos indisponíveis para impressão:', e); }
+        try {
+          const respAssin = await axiosInstance.get(`/os-assinaturas/?id_os=${ordem.id_os}`);
+          const lista = respAssin.data?.results || respAssin.data || [];
+          if (lista.length > 0) assinatura = lista[0].assinatura_base64;
+        } catch (e) { console.warn('Assinatura indisponível para impressão:', e); }
+        conteudo = gerarConteudoImpressaoComFotos(ordemCompleta, fotos, assinatura);
+      } else {
+        conteudo = gerarConteudoImpressao(ordemCompleta);
       }
 
       const janelaImpressao = window.open('', '_blank', usarTermica ? 'width=300,height=600' : '');
-      if (janelaImpressao) {
-        janelaImpressao.document.write(conteudo);
-        janelaImpressao.document.close();
-        janelaImpressao.focus();
-        setTimeout(() => {
-          try {
-            janelaImpressao.print();
-          } catch (pe) {
-            console.warn('Autoprint popup bloqueado ou fechado:', pe);
-          }
-        }, 300);
-      } else {
-        alert('O navegador bloqueou a janela de impressão. Por favor, permita pop-ups para este site.');
-      }
+      janelaImpressao.document.write(conteudo);
+      janelaImpressao.document.close();
+      janelaImpressao.focus();
+      setTimeout(() => janelaImpressao.print(), 250);
     } catch (err) {
-      console.error('Erro ao preparar impressão:', err);
-      // Fallback supremo
-      const conteudo = gerarConteudoImpressaoComFotos(ordem, (fotosOS || []).map(f => ({ base64: f.base64, nomeArquivo: f.nomeArquivo })), assinaturaBase64);
-      const janelaImpressao = window.open('', '_blank');
-      if (janelaImpressao) {
-        janelaImpressao.document.write(conteudo);
-        janelaImpressao.document.close();
-        janelaImpressao.focus();
-        setTimeout(() => janelaImpressao.print(), 300);
-      }
+      console.error('Erro ao buscar dados para impressão:', err);
+      // Fallback: usar dados existentes (sem fotos/assinatura)
+      const conteudo = usarTermica ? gerarConteudoImpressaoTermica(ordem) : gerarConteudoImpressao(ordem);
+      const janelaImpressao = window.open('', '_blank', usarTermica ? 'width=300,height=600' : '');
+      janelaImpressao.document.write(conteudo);
+      janelaImpressao.document.close();
+      janelaImpressao.focus();
+      setTimeout(() => janelaImpressao.print(), 250);
     }
-  };
-
-  const gerarHtmlChecklistImpressao = (ordem, modoTermica = false) => {
-    let itensParaExibir = [];
-    let obsEntrada = '';
-    let tituloChecklist = '📋 CHECKLIST DE INSPEÇÃO / VISTORIA DE ENTRADA';
-
-    // 1. Tentar pegar do estado local (se estiver editando/criando OS)
-    if (tipoAtendimento === 'veiculo' && checklistVeiculo) {
-      itensParaExibir = checklistItens.map(i => ({
-        label: i.label,
-        status: checklistVeiculo[i.key] || 'NA'
-      }));
-      obsEntrada = observacoesEntrada || '';
-    } else if (tipoAtendimento === 'equipamento' && (checklistEquipamentoModelo || []).length > 0) {
-      tituloChecklist = '📋 CHECKLIST DE INSPEÇÃO DO EQUIPAMENTO';
-      itensParaExibir = (checklistEquipamentoModelo || []).map(i => ({
-        label: i.label,
-        status: checklistEquipamento[i.key] || 'NA'
-      }));
-      obsEntrada = observacoesEntradaEquipamento || '';
-    }
-
-    // 2. Fallback: se os itens do estado não foram selecionados ou se veio de ordem salva (listagem)
-    const laudo = (ordem?.laudo_tecnico || '') + '\n' + (ordem?.descricao_problema || '');
-    if (itensParaExibir.length === 0 || itensParaExibir.every(i => i.status === 'NA')) {
-      if (laudo.includes('CHECKLIST') || laudo.includes('INSPEÇÃO') || laudo.includes('FICHA DE INSPEÇÃO')) {
-        const extraidos = [];
-        const matchOK = laudo.match(/✅\s*OK:\s*([^\n]+)/);
-        if (matchOK && matchOK[1]) {
-          matchOK[1].split(',').forEach(item => {
-            if (item.trim()) extraidos.push({ label: item.trim(), status: 'OK' });
-          });
-        }
-        const matchNOK = laudo.match(/❌\s*NOK:\s*([^\n]+)/);
-        if (matchNOK && matchNOK[1]) {
-          matchNOK[1].split(',').forEach(item => {
-            if (item.trim()) extraidos.push({ label: item.trim(), status: 'NOK' });
-          });
-        }
-        const matchNA = laudo.match(/➖\s*N\/A:\s*([^\n]+)/);
-        if (matchNA && matchNA[1]) {
-          matchNA[1].split(',').forEach(item => {
-            if (item.trim()) extraidos.push({ label: item.trim(), status: 'NA' });
-          });
-        }
-        const matchObs = laudo.match(/(?:Avarias|Observações):\s*([^\n]+)/);
-        if (matchObs && matchObs[1]) {
-          obsEntrada = matchObs[1].trim();
-        }
-
-        if (extraidos.length > 0) {
-          itensParaExibir = extraidos;
-        }
-      }
-    }
-
-    const temItensMarcados = itensParaExibir.some(i => i.status === 'OK' || i.status === 'NOK');
-    if (!temItensMarcados && !obsEntrada && itensParaExibir.length === 0) {
-      return '';
-    }
-
-    if (modoTermica) {
-      const linhasTermica = itensParaExibir
-        .filter(i => i.status !== 'NA')
-        .map(i => `${i.status === 'OK' ? '[✓ OK]' : '[✗ NOK]'} ${i.label}`)
-        .join('<br>');
-      
-      if (!linhasTermica && !obsEntrada) return '';
-
-      return `
-        <div style="margin:10px 0;padding:6px;border:1px dashed #000;font-size:0.85em;">
-          <strong style="text-transform:uppercase;">--- CHECKLIST DE INSPEÇÃO ---</strong><br>
-          ${linhasTermica || 'Sem itens alterados'}<br>
-          ${obsEntrada ? `<div style="margin-top:4px;"><strong>Obs/Avarias:</strong> ${obsEntrada}</div>` : ''}
-        </div>
-      `;
-    }
-
-    // Modo A4: Grid elegante 2/3 colunas com badges coloridos
-    const gridCols = itensParaExibir.map(item => {
-      let badgeHtml = '';
-      if (item.status === 'OK') {
-        badgeHtml = `<span style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;padding:2px 8px;border-radius:4px;font-weight:bold;font-size:0.82em;white-space:nowrap;">✓ OK</span>`;
-      } else if (item.status === 'NOK') {
-        badgeHtml = `<span style="background:#ffebee;color:#c62828;border:1px solid #ef9a9a;padding:2px 8px;border-radius:4px;font-weight:bold;font-size:0.82em;white-space:nowrap;">✗ NOK</span>`;
-      } else {
-        badgeHtml = `<span style="background:#f5f5f5;color:#757575;border:1px solid #e0e0e0;padding:2px 8px;border-radius:4px;font-size:0.82em;white-space:nowrap;">- N/A</span>`;
-      }
-
-      return `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#ffffff;box-shadow:0 1px 2px rgba(0,0,0,0.02);">
-          <span style="font-weight:500;font-size:0.88em;color:#334155;">${item.label}</span>
-          ${badgeHtml}
-        </div>
-      `;
-    }).join('');
-
-    return `
-      <div style="margin:18px 0;padding:14px 16px;border:2px solid #2196f3;border-radius:8px;background:#f0f7ff;page-break-inside:avoid;">
-        <h3 style="color:#1565c0;margin:0 0 12px 0;font-size:1.05em;border-bottom:1px solid #bbdefb;padding-bottom:6px;">
-          ${tituloChecklist}
-        </h3>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(210px, 1fr));gap:8px;">
-          ${gridCols}
-        </div>
-        ${obsEntrada ? `
-          <div style="margin-top:12px;padding:9px 12px;background:#fff8e1;border:1px solid #ffe082;border-radius:6px;font-size:0.88em;color:#5d4037;">
-            <strong>⚠️ Observações / Avarias de Entrada:</strong> ${obsEntrada}
-          </div>
-        ` : ''}
-      </div>
-    `;
-  };
-
-  const gerarHtmlFinanceiroCondicoes = (ordem, modoCompacto = false) => {
-    let listaPagamentos = [];
-
-    if (ordem.financeiro && Array.isArray(ordem.financeiro) && ordem.financeiro.length > 0) {
-      listaPagamentos = ordem.financeiro.map((fin, idx) => ({
-        parcela: fin.numero_parcela || (idx + 1),
-        forma: fin.forma_pagamento_nome || fin.forma_pagamento || 'N/A',
-        vencimento: fin.data_vencimento ? new Date(fin.data_vencimento).toLocaleDateString('pt-BR') : 'À vista',
-        valor: parseFloat(fin.valor_parcela || fin.valor_original || 0),
-        status: fin.status_conta || 'Pendente'
-      }));
-    } else if ((formasPagamentoSelecionadas || []).length > 0) {
-      let idxParcela = 1;
-      const dataEmissao = new Date();
-      (formasPagamentoSelecionadas || []).forEach(fp => {
-        const qtdParcelas = parseInt(fp.parcelas) || 1;
-        const vlrParcela = parseFloat(fp.valor) / qtdParcelas;
-        for (let i = 0; i < qtdParcelas; i++) {
-          const venc = new Date(dataEmissao);
-          venc.setDate(venc.getDate() + (fp.dias_vencimento || 0) + (i * 30));
-          listaPagamentos.push({
-            parcela: idxParcela++,
-            forma: fp.nome_forma || 'N/A',
-            vencimento: venc.toLocaleDateString('pt-BR'),
-            valor: vlrParcela,
-            status: 'Pendente'
-          });
-        }
-      });
-    }
-
-    if (listaPagamentos.length === 0) {
-      const condicaoTexto = ordem.condicao_pagamento || ordem.forma_pagamento_nome || 'À Vista';
-      return `
-        <div style="margin: 14px 0; padding: 10px 14px; border: 1px dashed #1565c0; border-radius: 6px; background-color: #f0f7ff; font-size: 0.9em; page-break-inside: avoid;">
-          <strong style="color: #1565c0;">💳 Condições de Pagamento:</strong> ${condicaoTexto}
-        </div>
-      `;
-    }
-
-    if (modoCompacto) {
-      const parcelasRows = listaPagamentos.map(p => `
-        <tr>
-          <td style="padding: 4px; text-align: center; border: 1px solid #cbd5e1; font-weight: bold;">${p.parcela}ª</td>
-          <td style="padding: 4px; border: 1px solid #cbd5e1;">${p.forma}</td>
-          <td style="padding: 4px; text-align: center; border: 1px solid #cbd5e1;">${p.vencimento}</td>
-          <td style="padding: 4px; text-align: right; border: 1px solid #cbd5e1; font-weight: bold;">R$ ${p.valor.toFixed(2)}</td>
-        </tr>
-      `).join('');
-
-      return `
-        <div style="margin: 10px 0; page-break-inside: avoid;">
-          <div style="font-weight: bold; color: #1565c0; font-size: 0.85em; margin-bottom: 4px; border-bottom: 2px solid #1565c0; padding-bottom: 2px;">
-            💳 CONDIÇÕES DE PAGAMENTO / PARCELAS
-          </div>
-          <table style="width: 100%; border-collapse: collapse; font-size: 0.8em;">
-            <thead>
-              <tr style="background: #e3f2fd; color: #0d47a1;">
-                <th style="padding: 4px; text-align: center; border: 1px solid #cbd5e1; width: 12%;">Parc.</th>
-                <th style="padding: 4px; text-align: left; border: 1px solid #cbd5e1;">Forma</th>
-                <th style="padding: 4px; text-align: center; border: 1px solid #cbd5e1; width: 25%;">Vencimento</th>
-                <th style="padding: 4px; text-align: right; border: 1px solid #cbd5e1; width: 25%;">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${parcelasRows}
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
-
-    const parcelasCards = listaPagamentos.map(p => {
-      const isPaga = p.status === 'Paga';
-      const isParcial = p.status === 'Parcial';
-      const statusBadge = isPaga 
-        ? `<span style="background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; padding: 2px 7px; border-radius: 10px; font-size: 0.78em; font-weight: bold;">✓ Paga</span>`
-        : isParcial
-        ? `<span style="background: #fff3e0; color: #e65100; border: 1px solid #ffe082; padding: 2px 7px; border-radius: 10px; font-size: 0.78em; font-weight: bold;">⚡ Parcial</span>`
-        : `<span style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 2px 7px; border-radius: 10px; font-size: 0.78em; font-weight: bold;">⏳ Pendente</span>`;
-
-      return `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
-          <div>
-            <div style="font-weight: bold; font-size: 0.88em; color: #1e293b;">
-              Parcela ${p.parcela} — ${p.forma}
-            </div>
-            <div style="font-size: 0.8em; color: #64748b; margin-top: 2px;">
-              Vencimento: <strong>${p.vencimento}</strong>
-            </div>
-          </div>
-          <div style="text-align: right;">
-            <div style="font-weight: bold; font-size: 0.95em; color: #0f172a;">R$ ${p.valor.toFixed(2)}</div>
-            <div style="margin-top: 3px;">${statusBadge}</div>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    return `
-      <div style="margin: 20px 0; padding: 14px 16px; border: 2px solid #1976d2; border-radius: 8px; background: #f8fafc; page-break-inside: avoid;">
-        <h3 style="color: #1565c0; margin: 0 0 12px 0; font-size: 1.05em; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
-          <span>💳 CONDIÇÕES DE PAGAMENTO / PARCELAMENTO</span>
-          <span style="font-size: 0.85em; font-weight: normal; color: #475569;">Total: ${listaPagamentos.length} ${listaPagamentos.length === 1 ? 'parcela' : 'parcelas'}</span>
-        </h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px;">
-          ${parcelasCards}
-        </div>
-      </div>
-    `;
-  };
-
-  const gerarConteudoImpressaoMeiaFolha = (ordem, fotos, assinatura) => {
-    const rodapeTexto = configImpressao.observacao_rodape || '';
-    const nomeCliente = ordem.cliente_nome || ordem.nome_cliente || 'N/A';
-    const nomeTecnico = ordem.tecnico_nome || ordem.nome_tecnico || ordem.vendedor_nome || 'N/A';
-    const statusInfo = getStatusInfo(ordem);
-    const empresa = ordem.empresa_info || {};
-
-    const itensHtml = [];
-    let subtotalProd = 0;
-    let subtotalServ = 0;
-
-    (ordem.itens_produtos || []).forEach(item => {
-      const qty = parseFloat(item.quantidade || 0);
-      const vlr = parseFloat(item.valor_unitario || 0);
-      const desc = parseFloat(item.desconto || 0);
-      const total = qty * vlr - desc;
-      subtotalProd += total;
-      itensHtml.push(`
-        <tr>
-          <td style="padding: 3px 5px; text-align: center;"><span style="background:#4caf50;color:white;padding:1px 4px;border-radius:2px;font-size:0.7em;">PROD</span></td>
-          <td style="padding: 3px 5px;">${item.produto_nome || item.descricao || 'Produto'}</td>
-          <td style="padding: 3px 5px; text-align: center;">${qty.toFixed(2)}</td>
-          <td style="padding: 3px 5px; text-align: right;">R$ ${vlr.toFixed(2)}</td>
-          <td style="padding: 3px 5px; text-align: right;"><strong>R$ ${total.toFixed(2)}</strong></td>
-        </tr>`);
-    });
-
-    (ordem.itens_servicos || []).forEach(item => {
-      const qty = parseFloat(item.quantidade || 0);
-      const vlr = parseFloat(item.valor_unitario || 0);
-      const desc = parseFloat(item.desconto || 0);
-      const total = qty * vlr - desc;
-      subtotalServ += total;
-      const descServico = item.descricao_servico || item.servico_nome || 'Serviço';
-      itensHtml.push(`
-        <tr>
-          <td style="padding: 3px 5px; text-align: center;"><span style="background:#2196f3;color:white;padding:1px 4px;border-radius:2px;font-size:0.7em;">SERV</span></td>
-          <td style="padding: 3px 5px;">${descServico}</td>
-          <td style="padding: 3px 5px; text-align: center;">${qty.toFixed(2)}</td>
-          <td style="padding: 3px 5px; text-align: right;">R$ ${vlr.toFixed(2)}</td>
-          <td style="padding: 3px 5px; text-align: right;"><strong>R$ ${total.toFixed(2)}</strong></td>
-        </tr>`);
-    });
-
-    const totalGeral = parseFloat(ordem.valor_total_os || 0) || (subtotalProd + subtotalServ);
-
-    const checklistHtml = gerarHtmlChecklistImpressao(ordem, true);
-    const financeiroHtml = gerarHtmlFinanceiroCondicoes(ordem, true);
-
-    const assinaturaHtml = assinatura ? `
-      <div style="margin-top: 10px; text-align: center; page-break-inside: avoid;">
-        <img src="${assinatura}" alt="Assinatura" style="max-width: 220px; max-height: 50px; border-bottom: 1px solid #333;" />
-        <div style="font-size: 0.75em; color: #555; margin-top: 2px;">Assinatura do Cliente</div>
-      </div>` : `
-      <div style="margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: center; page-break-inside: avoid;">
-        <div style="border-top: 1px solid #333; padding-top: 2px; font-size: 0.72em;">Assinatura do Cliente</div>
-        <div style="border-top: 1px solid #333; padding-top: 2px; font-size: 0.72em;">Assinatura do Técnico</div>
-      </div>`;
-
-    return `<!DOCTYPE html>
-<html><head>
-  <title>OS-${ordem.id_os || ''} — Meia Folha</title>
-  <meta charset="UTF-8">
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box;}
-    body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;padding:6mm;font-size:11px;line-height:1.35;color:#1e293b;background:#fff;}
-    .meia-container{max-width:148mm;margin:0 auto;border:1px solid #cbd5e1;padding:8px;border-radius:4px;}
-    .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1e40af;padding-bottom:6px;margin-bottom:8px;}
-    .empresa-title{font-size:1.1em;font-weight:bold;color:#1e3a8a;}
-    .os-badge{background:#1e40af;color:#fff;padding:4px 10px;border-radius:4px;font-size:1.1em;font-weight:bold;text-align:right;}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;padding:6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;font-size:0.88em;}
-    .lbl{font-weight:bold;color:#3b82f6;}
-    table{width:100%;border-collapse:collapse;margin:6px 0;font-size:0.85em;}
-    th{background:#2563eb;color:white;padding:4px;font-size:0.8em;text-transform:uppercase;}
-    td{border:1px solid #e2e8f0;padding:4px;}
-    tbody tr:nth-child(even){background:#f8fafc;}
-    .total-bar{display:flex;justify-content:space-between;align-items:center;background:#1e40af;color:white;padding:6px 10px;border-radius:4px;font-weight:bold;font-size:1.05em;margin:8px 0;}
-    .sec-box{margin:6px 0;padding:5px 8px;border:1px solid #e2e8f0;border-radius:4px;background:#fafafa;font-size:0.85em;}
-    .footer-text{margin-top:8px;text-align:center;color:#64748b;font-size:0.75em;border-top:1px solid #e2e8f0;padding-top:4px;}
-    @media print{
-      body{padding:0;}
-      .meia-container{border:none;padding:0;max-width:100%;}
-      @page{size:A5 landscape;margin:5mm;}
-    }
-  </style>
-</head><body>
-  <div class="meia-container">
-    <div class="header">
-      <div>
-        <div class="empresa-title">${empresa.nome || 'SISTEMA APERUS'}</div>
-        ${empresa.cnpj ? `<div style="font-size:0.8em;color:#475569;">CNPJ: ${empresa.cnpj} | Fone: ${empresa.telefone || 'N/A'}</div>` : ''}
-      </div>
-      <div class="os-badge">
-        OS-${ordem.id_os || '---'}
-      </div>
-    </div>
-
-    <div class="grid2">
-      <div><span class="lbl">Cliente:</span> <strong>${nomeCliente}</strong></div>
-      <div><span class="lbl">Data:</span> ${ordem.data_abertura ? new Date(ordem.data_abertura).toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</div>
-      <div><span class="lbl">Técnico:</span> ${nomeTecnico}</div>
-      <div><span class="lbl">Status:</span> <strong style="color:${getStatusColor(statusInfo.cor)};">${statusInfo.nome}</strong></div>
-      ${ordem.cliente_telefone ? `<div><span class="lbl">Telefone:</span> ${ordem.cliente_telefone}</div>` : ''}
-      ${ordem.solicitante ? `<div><span class="lbl">Solicitante:</span> ${ordem.solicitante}</div>` : ''}
-    </div>
-
-    ${ordem.descricao_problema ? `<div class="sec-box"><strong>📝 Descrição / Obs:</strong> ${ordem.descricao_problema}</div>` : ''}
-    ${ordem.laudo_tecnico ? `<div class="sec-box" style="background:#fff8e1;border-color:#ffe082;"><strong style="color:#b45309;">🔧 Laudo Técnico:</strong> ${ordem.laudo_tecnico}</div>` : ''}
-
-    ${checklistHtml}
-
-    <div style="font-weight:bold;color:#1e40af;margin-top:6px;font-size:0.9em;">🛠️ ITENS E SERVIÇOS</div>
-    <table>
-      <thead>
-        <tr>
-          <th style="width:10%">Tipo</th>
-          <th style="width:48%">Descrição</th>
-          <th style="width:10%;text-align:center">Qtd</th>
-          <th style="width:14%;text-align:right">Unit.</th>
-          <th style="width:18%;text-align:right">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${itensHtml.length > 0 ? itensHtml.join('') : '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:8px;">Nenhum item adicionado</td></tr>'}
-      </tbody>
-    </table>
-
-    <div class="total-bar">
-      <span>VALOR TOTAL DA OS</span>
-      <span>R$ ${totalGeral.toFixed(2)}</span>
-    </div>
-
-    ${financeiroHtml}
-    ${assinaturaHtml}
-
-    <div class="footer-text">
-      Impresso em: ${new Date().toLocaleString('pt-BR')} ${rodapeTexto ? ` | ${rodapeTexto}` : ''}
-    </div>
-  </div>
-</body></html>`;
   };
 
   const gerarConteudoImpressao = (ordem) => {
@@ -3279,8 +2641,51 @@ const OrdemServicoPage = () => {
       `;
     }
 
-    // Buscar informações de financeiro e condições de pagamento
-    const financeiroHtml = gerarHtmlFinanceiroCondicoes(ordem);
+    // Buscar informações de financeiro
+    let financeiroHtml = '';
+    if (ordem.financeiro && Array.isArray(ordem.financeiro) && ordem.financeiro.length > 0) {
+      const financeiroItens = ordem.financeiro.map(fin => {
+        const valor = parseFloat(fin.valor_parcela || 0);
+        const status = fin.status_conta || 'Pendente';
+        const statusClass = status === 'Paga' ? 'pago' : status === 'Parcial' ? 'parcial' : 'pendente';
+        const vencimento = fin.data_vencimento ? new Date(fin.data_vencimento).toLocaleDateString('pt-BR') : 'N/A';
+        const formaPagamento = fin.forma_pagamento_nome || fin.forma_pagamento || 'N/A';
+
+        return `
+          <tr>
+            <td style="text-align: center;">${fin.numero_parcela || 1}</td>
+            <td>${formaPagamento}</td>
+            <td style="text-align: center;">${vencimento}</td>
+            <td style="text-align: right;">R$ ${valor.toFixed(2)}</td>
+            <td style="text-align: center;">
+              <span class="status-financeiro ${statusClass}">${status}</span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      financeiroHtml = `
+        <div style="margin: 20px 0;">
+          <h3 style="color: #2196F3; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.3em;">💰</span> Financeiro
+          </h3>
+          <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+            <thead>
+              <tr style="background-color: #2196F3; color: white;">
+                <th style="border: 1px solid #ddd; padding: 10px; text-align: center; width: 10%;">Parcela</th>
+                <th style="border: 1px solid #ddd; padding: 10px; width: 25%;">Forma Pagamento</th>
+                <th style="border: 1px solid #ddd; padding: 10px; text-align: center; width: 15%;">Vencimento</th>
+                <th style="border: 1px solid #ddd; padding: 10px; text-align: right; width: 20%;">Valor</th>
+                <th style="border: 1px solid #ddd; padding: 10px; text-align: center; width: 15%;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${financeiroItens}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
 
     return `
       <!DOCTYPE html>
@@ -3454,7 +2859,6 @@ const OrdemServicoPage = () => {
         </div>
         
         ${veiculoHtml}
-        ${gerarHtmlChecklistImpressao(ordem)}
         
         ${ordem.descricao_problema ? `
           <div class="section-box">
@@ -3656,8 +3060,6 @@ const OrdemServicoPage = () => {
     ${ordem.cliente_cpf_cnpj ? `<div><span class="lbl">CPF/CNPJ:</span> ${ordem.cliente_cpf_cnpj}</div>` : ''}
   </div>
 
-  ${gerarHtmlChecklistImpressao(ordem)}
-
   ${ordem.descricao_problema ? `<div class="sec"><strong>📝 Problema / Observações:</strong><div style="margin-top:6px;white-space:pre-wrap;">${ordem.descricao_problema}</div></div>` : ''}
   ${ordem.laudo_tecnico ? `<div class="sec" style="border-color:#ff9800;background:#fff3e0;"><strong style="color:#e65100;">🔧 Laudo Técnico:</strong><div style="margin-top:6px;white-space:pre-wrap;">${ordem.laudo_tecnico}</div></div>` : ''}
 
@@ -3672,8 +3074,6 @@ const OrdemServicoPage = () => {
   </table>
 
   <div class="total">💰 VALOR TOTAL: R$ ${totalGeral.toFixed(2)}</div>
-
-  ${gerarHtmlFinanceiroCondicoes(ordem)}
 
   ${fotosHtml}
   ${assinaturaHtml}
@@ -3817,8 +3217,6 @@ const OrdemServicoPage = () => {
 
         <!-- TÉCNICO -->
         <div class="info"><span class="info-label">Técnico:</span> ${nomeTecnico}</div>
-
-        ${gerarHtmlChecklistImpressao(ordem, true)}
 
         <!-- DESCRIÇÃO DO PROBLEMA -->
         ${ordem.descricao_problema ? `
@@ -4493,43 +3891,22 @@ const OrdemServicoPage = () => {
               </Grid>
 
               <Grid item xs={12} sm={6}>
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                  <FormControl fullWidth required>
-                    <InputLabel>Cliente</InputLabel>
-                    <Select
-                      value={cliente}
-                      onChange={(e) => handleClienteChange(e.target.value)}
-                      label="Cliente"
-                      disabled={osBloqueadaParaEdicao}
-                    >
-                      <MenuItem value="">Selecione...</MenuItem>
-                      {clientes.map((cli) => (
-                        <MenuItem key={cli.id_cliente} value={cli.id_cliente}>
-                          {cli.nome_razao_social || cli.nome}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <Tooltip title="Cadastrar Novo Cliente">
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      onClick={abrirModalNovoCliente}
-                      disabled={osBloqueadaParaEdicao}
-                      startIcon={<PersonAddIcon />}
-                      sx={{
-                        minWidth: '110px',
-                        height: '56px',
-                        whiteSpace: 'nowrap',
-                        fontWeight: 600,
-                        backgroundColor: '#1976d2',
-                        '&:hover': { backgroundColor: '#1565c0' },
-                      }}
-                    >
-                      + Cliente
-                    </Button>
-                  </Tooltip>
-                </Box>
+                <FormControl fullWidth required>
+                  <InputLabel>Cliente</InputLabel>
+                  <Select
+                    value={cliente}
+                    onChange={(e) => handleClienteChange(e.target.value)}
+                    label="Cliente"
+                    disabled={osBloqueadaParaEdicao}
+                  >
+                    <MenuItem value="">Selecione...</MenuItem>
+                    {clientes.map((cli) => (
+                      <MenuItem key={cli.id_cliente} value={cli.id_cliente}>
+                        {cli.nome_razao_social || cli.nome}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
 
               {cliente && listaVeiculosCliente.length > 0 && (
@@ -4771,261 +4148,6 @@ const OrdemServicoPage = () => {
                 </Paper>
               </Box>
             )}
-
-            {/* ── Checklist Personalizado para Equipamentos ── */}
-            {tipoAtendimento === 'equipamento' && tabAtual === 0 && (
-              <Box sx={{ mt: 2 }}>
-                <Paper
-                  sx={{
-                    p: 2,
-                    border: '1px solid #1565c0',
-                    backgroundColor: '#e8f0fe',
-                    borderRadius: 2,
-                  }}
-                >
-                  {/* Cabeçalho */}
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                    <Typography
-                      variant="subtitle1"
-                      fontWeight="bold"
-                      sx={{ color: '#0d47a1', display: 'flex', alignItems: 'center', gap: 1 }}
-                    >
-                      🔧 Checklist de Inspeção do Equipamento
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {checklistEquipamentoModelo.length} {checklistEquipamentoModelo.length === 1 ? 'item' : 'itens'}
-                    </Typography>
-                  </Box>
-
-                  <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
-                    Marque cada item como <strong>OK</strong> (Conforme), <strong>NOK</strong> (Não Conforme) ou <strong>N/A</strong> (Não Aplicável).
-                    Adicione itens específicos para este tipo de equipamento e salve o modelo para usar nas próximas OS.
-                  </Typography>
-
-                  {/* Feedback de modelo salvo */}
-                  {modeloSalvoFeedback && (
-                    <Alert severity="success" sx={{ mb: 1.5, py: 0.5 }}>
-                      ✅ Modelo de checklist salvo! Será carregado automaticamente nas próximas ordens de serviço.
-                    </Alert>
-                  )}
-
-                  {/* Lista de itens */}
-                  {checklistEquipamentoModelo.length === 0 ? (
-                    <Box
-                      sx={{
-                        textAlign: 'center',
-                        py: 3,
-                        border: '1px dashed #90a4ae',
-                        borderRadius: 1,
-                        mb: 1.5,
-                        backgroundColor: 'rgba(255,255,255,0.5)',
-                      }}
-                    >
-                      <Typography variant="body2" color="text.secondary">
-                        Nenhum item no checklist. Adicione itens abaixo.
-                      </Typography>
-                    </Box>
-                  ) : (
-                    <Grid container spacing={0.5} sx={{ mb: 1.5 }}>
-                      {checklistEquipamentoModelo.map((item) => {
-                        const valorAtual = checklistEquipamento[item.key] || 'NA';
-                        return (
-                          <Grid item xs={12} sm={6} key={item.key}>
-                            <Box
-                              sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                py: 0.6,
-                                px: 0.5,
-                                borderBottom: '1px solid #bbdefb',
-                                borderRadius: 0.5,
-                                backgroundColor:
-                                  valorAtual === 'OK'
-                                    ? 'rgba(46,125,50,0.08)'
-                                    : valorAtual === 'NOK'
-                                    ? 'rgba(198,40,40,0.08)'
-                                    : 'transparent',
-                                transition: 'background-color 0.2s',
-                              }}
-                            >
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  flex: 1,
-                                  mr: 0.5,
-                                  fontWeight: valorAtual === 'NOK' ? 600 : 400,
-                                  color:
-                                    valorAtual === 'OK'
-                                      ? '#1b5e20'
-                                      : valorAtual === 'NOK'
-                                      ? '#b71c1c'
-                                      : 'text.primary',
-                                }}
-                              >
-                                {item.label}
-                              </Typography>
-                              <Box sx={{ display: 'flex', gap: 0.4, alignItems: 'center' }}>
-                                {['OK', 'NOK', 'NA'].map((opcao) => (
-                                  <Button
-                                    key={opcao}
-                                    size="small"
-                                    variant={valorAtual === opcao ? 'contained' : 'outlined'}
-                                    onClick={() =>
-                                      setChecklistEquipamento((prev) => ({ ...prev, [item.key]: opcao }))
-                                    }
-                                    sx={{
-                                      minWidth: 38,
-                                      fontSize: '0.62rem',
-                                      px: 0.4,
-                                      py: 0.25,
-                                      fontWeight: 700,
-                                      color:
-                                        valorAtual === opcao
-                                          ? '#fff'
-                                          : opcao === 'OK'
-                                          ? '#2e7d32'
-                                          : opcao === 'NOK'
-                                          ? '#c62828'
-                                          : '#616161',
-                                      backgroundColor:
-                                        valorAtual === opcao
-                                          ? opcao === 'OK'
-                                            ? '#2e7d32'
-                                            : opcao === 'NOK'
-                                            ? '#c62828'
-                                            : '#757575'
-                                          : 'rgba(255,255,255,0.7)',
-                                      borderColor:
-                                        opcao === 'OK'
-                                          ? '#2e7d32'
-                                          : opcao === 'NOK'
-                                          ? '#c62828'
-                                          : '#bdbdbd',
-                                      '&:hover': {
-                                        backgroundColor:
-                                          opcao === 'OK' ? '#388e3c' : opcao === 'NOK' ? '#d32f2f' : '#757575',
-                                        color: '#fff',
-                                      },
-                                    }}
-                                  >
-                                    {opcao}
-                                  </Button>
-                                ))}
-                                <Tooltip title="Remover item">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => removerItemChecklistEquipamento(item.key)}
-                                    sx={{
-                                      ml: 0.3,
-                                      color: '#9e9e9e',
-                                      '&:hover': { color: '#c62828', backgroundColor: 'rgba(198,40,40,0.08)' },
-                                    }}
-                                  >
-                                    <DeleteIcon sx={{ fontSize: 15 }} />
-                                  </IconButton>
-                                </Tooltip>
-                              </Box>
-                            </Box>
-                          </Grid>
-                        );
-                      })}
-                    </Grid>
-                  )}
-
-                  {/* Campo para adicionar novo item */}
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      gap: 1,
-                      mb: 1.5,
-                      backgroundColor: 'rgba(255,255,255,0.6)',
-                      p: 1,
-                      borderRadius: 1,
-                      border: '1px dashed #90caf9',
-                    }}
-                  >
-                    <TextField
-                      size="small"
-                      fullWidth
-                      label="Adicionar novo item ao checklist"
-                      placeholder="Ex: Tela sem riscos, Bateria calibrada..."
-                      value={novoItemChecklist}
-                      onChange={(e) => setNovoItemChecklist(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); adicionarItemChecklistEquipamento(); } }}
-                      sx={{ backgroundColor: '#fff', borderRadius: 1 }}
-                    />
-                    <Tooltip title="Adicionar item">
-                      <IconButton
-                        onClick={adicionarItemChecklistEquipamento}
-                        disabled={!novoItemChecklist.trim()}
-                        sx={{
-                          backgroundColor: '#1565c0',
-                          color: '#fff',
-                          borderRadius: 1,
-                          '&:hover': { backgroundColor: '#0d47a1' },
-                          '&:disabled': { backgroundColor: '#cfd8dc', color: '#90a4ae' },
-                        }}
-                      >
-                        <AddIcon />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-
-                  {/* Observações */}
-                  <Box sx={{ mb: 1.5 }}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={2}
-                      size="small"
-                      label="Observações de Entrada / Avarias Visíveis"
-                      value={observacoesEntradaEquipamento}
-                      onChange={(e) => setObservacoesEntradaEquipamento(e.target.value)}
-                      placeholder="Ex: Tampa traseira quebrada, tela com mancha..."
-                      sx={{ backgroundColor: '#fff', borderRadius: 1 }}
-                    />
-                  </Box>
-
-                  {/* Ações */}
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => resetarChecklistEquipamento()}
-                      sx={{ fontSize: '0.72rem', borderColor: '#90a4ae', color: '#546e7a' }}
-                    >
-                      Limpar Marcações
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="success"
-                      onClick={() =>
-                        setChecklistEquipamento(
-                          Object.fromEntries(checklistEquipamentoModelo.map((i) => [i.key, 'OK']))
-                        )
-                      }
-                      sx={{ fontSize: '0.72rem' }}
-                    >
-                      Marcar Tudo OK
-                    </Button>
-                    <Tooltip title="Salva a lista de itens para ser usada automaticamente nas próximas OS de equipamento">
-                      <Button
-                        size="small"
-                        variant="contained"
-                        color="primary"
-                        startIcon={<SaveIcon />}
-                        onClick={salvarModeloChecklistEquipamento}
-                        sx={{ fontSize: '0.72rem', ml: 'auto' }}
-                      >
-                        Salvar Modelo
-                      </Button>
-                    </Tooltip>
-                  </Box>
-                </Paper>
-              </Box>
-            )}
             </>
           )}
 
@@ -5050,50 +4172,144 @@ const OrdemServicoPage = () => {
                       </Select>
                     </FormControl>
                   </Grid>
-                  <Grid item xs={12} sm={5}>
-                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                      {itemAtual.tipo_item === 'produto' ? (
-                        <FormControl fullWidth size="small">
-                          <InputLabel>Produto</InputLabel>
-                          <Select
-                            value={itemAtual.descricao}
-                            onChange={(e) => {
-                              console.log('🛒 Produto selecionado:', e.target.value);
-                              const produtoSelecionado = produtos.find(p => {
-                                const descProduto = p.descricao || p.nome_produto || `Produto ${p.codigo_produto}`;
-                                return descProduto === e.target.value;
-                              });
-                              console.log('📦 Produto encontrado:', produtoSelecionado);
+                  <Grid item xs={12} sm={4}>
+                    {itemAtual.tipo_item === 'produto' ? (
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Produto</InputLabel>
+                        <Select
+                          value={itemAtual.descricao}
+                          onChange={(e) => {
+                            console.log('🛒 Produto selecionado:', e.target.value);
+                            const produtoSelecionado = produtos.find(p => {
+                              const descProduto = p.descricao || p.nome_produto || `Produto ${p.codigo_produto}`;
+                              return descProduto === e.target.value;
+                            });
+                            console.log('📦 Produto encontrado:', produtoSelecionado);
 
-                              let valorVenda = 0;
-                              if (produtoSelecionado?.estoque_por_deposito && produtoSelecionado.estoque_por_deposito.length > 0) {
-                                const estoqueComValor = produtoSelecionado.estoque_por_deposito.find(e => e.valor_venda > 0);
-                                valorVenda = estoqueComValor?.valor_venda || produtoSelecionado.estoque_por_deposito[0].valor_venda || 0;
-                              }
+                            // Pegar valor_venda do estoque (primeiro depósito com estoque)
+                            let valorVenda = 0;
+                            if (produtoSelecionado?.estoque_por_deposito && produtoSelecionado.estoque_por_deposito.length > 0) {
+                              // Procurar depósito com estoque e valor
+                              const estoqueComValor = produtoSelecionado.estoque_por_deposito.find(e => e.valor_venda > 0);
+                              valorVenda = estoqueComValor?.valor_venda || produtoSelecionado.estoque_por_deposito[0].valor_venda || 0;
+                              console.log('💰 Valor venda do estoque:', valorVenda);
+                            }
 
-                              setItemAtual({
-                                ...itemAtual,
-                                id_produto: produtoSelecionado?.id_produto || null,
-                                descricao: e.target.value,
-                                valorUnitario: valorVenda
-                              });
-                            }}
-                            label="Produto"
-                          >
-                            <MenuItem value="">Selecione um produto...</MenuItem>
-                            {produtos.length === 0 && (
-                              <MenuItem disabled>
-                                <em>Nenhum produto cadastrado</em>
+                            setItemAtual({
+                              ...itemAtual,
+                              id_produto: produtoSelecionado?.id_produto || null,
+                              descricao: e.target.value,
+                              valorUnitario: valorVenda
+                            });
+                          }}
+                          onOpen={() => {
+                            console.log('📋 Lista de produtos aberta. Total:', produtos.length);
+                            console.log('📦 Produtos:', produtos);
+                            // Log detalhado dos 3 primeiros produtos
+                            if (produtos.length > 0) {
+                              console.log('📦 Exemplo produto 1:', produtos[0]);
+                              console.log('  - descricao:', produtos[0].descricao);
+                              console.log('  - nome_produto:', produtos[0].nome_produto);
+                              console.log('  - codigo_produto:', produtos[0].codigo_produto);
+                              console.log('  - estoque_por_deposito:', produtos[0].estoque_por_deposito);
+                            }
+                          }}
+                          label="Produto"
+                        >
+                          <MenuItem value="">Selecione um produto...</MenuItem>
+                          {produtos.length === 0 && (
+                            <MenuItem disabled>
+                              <em>Nenhum produto cadastrado</em>
+                            </MenuItem>
+                          )}
+                          {produtos.map((prod) => {
+                            const descricao = prod.descricao || prod.nome_produto || `Produto ${prod.codigo_produto}`;
+
+                            // Pegar valor_venda do estoque
+                            let valorVenda = 0;
+                            let qtdEstoque = 0;
+                            if (prod.estoque_por_deposito && prod.estoque_por_deposito.length > 0) {
+                              const estoqueComValor = prod.estoque_por_deposito.find(e => e.valor_venda > 0);
+                              valorVenda = estoqueComValor?.valor_venda || prod.estoque_por_deposito[0].valor_venda || 0;
+                              qtdEstoque = prod.estoque_total || 0;
+                            }
+
+                            return (
+                              <MenuItem key={prod.id_produto} value={descricao}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                                  <span>
+                                    {prod.codigo_produto && `[${prod.codigo_produto}] `}
+                                    {descricao}
+                                  </span>
+                                  <Box sx={{ display: 'flex', gap: 2, ml: 2 }}>
+                                    <Chip
+                                      label={`Estoque: ${qtdEstoque}`}
+                                      size="small"
+                                      color={qtdEstoque > 0 ? 'success' : 'error'}
+                                      sx={{ fontSize: '0.75rem' }}
+                                    />
+                                    <Chip
+                                      label={`R$ ${(parseFloat(valorVenda) || 0).toFixed(2)}`}
+                                      size="small"
+                                      color="primary"
+                                      sx={{ fontSize: '0.75rem', fontWeight: 'bold' }}
+                                    />
+                                  </Box>
+                                </Box>
                               </MenuItem>
-                            )}
-                            {produtos.map((prod) => {
+                            );
+                          })}
+                        </Select>
+                      </FormControl>
+                    ) : (
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Serviço</InputLabel>
+                        <Select
+                          value={itemAtual.descricao}
+                          onChange={(e) => {
+                            console.log('🔧 Serviço selecionado:', e.target.value);
+                            const servicoSelecionado = produtos.find(p => {
+                              const descProduto = p.descricao || p.nome_produto || `Produto ${p.codigo_produto}`;
+                              return descProduto === e.target.value;
+                            });
+                            console.log('📋 Serviço encontrado:', servicoSelecionado);
+
+                            // Pegar valor_venda do estoque (primeiro depósito com estoque)
+                            let valorVenda = 0;
+                            if (servicoSelecionado?.estoque_por_deposito && servicoSelecionado.estoque_por_deposito.length > 0) {
+                              const estoqueComValor = servicoSelecionado.estoque_por_deposito.find(e => e.valor_venda > 0);
+                              valorVenda = estoqueComValor?.valor_venda || servicoSelecionado.estoque_por_deposito[0].valor_venda || 0;
+                              console.log('💰 Valor serviço:', valorVenda);
+                            }
+
+                            setItemAtual({
+                              ...itemAtual,
+                              id_produto: servicoSelecionado?.id_produto || null,
+                              descricao: e.target.value,
+                              valorUnitario: valorVenda
+                            });
+                          }}
+                          label="Serviço"
+                        >
+                          <MenuItem value="">Selecione um serviço...</MenuItem>
+                          {produtos.filter(p => p.classificacao?.toUpperCase() === 'SERVICO').length === 0 && (
+                            <MenuItem disabled>
+                              <em>Nenhum serviço cadastrado (produtos com classificação "servico")</em>
+                            </MenuItem>
+                          )}
+                          {produtos
+                            .filter(p => p.classificacao?.toUpperCase() === 'SERVICO')
+                            .map((prod) => {
                               const descricao = prod.descricao || prod.nome_produto || `Produto ${prod.codigo_produto}`;
-                              let valorVenda = 0;
+
+                              // Calcular estoque total
                               let qtdEstoque = 0;
-                              if (prod.estoque_por_deposito && prod.estoque_por_deposito.length > 0) {
+                              let valorVenda = 0;
+
+                              if (prod.estoque_por_deposito && Array.isArray(prod.estoque_por_deposito)) {
+                                qtdEstoque = prod.estoque_por_deposito.reduce((sum, est) => sum + (parseFloat(est.quantidade) || 0), 0);
                                 const estoqueComValor = prod.estoque_por_deposito.find(e => e.valor_venda > 0);
-                                valorVenda = estoqueComValor?.valor_venda || prod.estoque_por_deposito[0].valor_venda || 0;
-                                qtdEstoque = prod.estoque_total || 0;
+                                valorVenda = estoqueComValor?.valor_venda || prod.estoque_por_deposito[0]?.valor_venda || 0;
                               }
 
                               return (
@@ -5103,109 +4319,19 @@ const OrdemServicoPage = () => {
                                       {prod.codigo_produto && `[${prod.codigo_produto}] `}
                                       {descricao}
                                     </span>
-                                    <Box sx={{ display: 'flex', gap: 2, ml: 2 }}>
-                                      <Chip
-                                        label={`Estoque: ${qtdEstoque}`}
-                                        size="small"
-                                        color={qtdEstoque > 0 ? 'success' : 'error'}
-                                        sx={{ fontSize: '0.75rem' }}
-                                      />
-                                      <Chip
-                                        label={`R$ ${(parseFloat(valorVenda) || 0).toFixed(2)}`}
-                                        size="small"
-                                        color="primary"
-                                        sx={{ fontSize: '0.75rem', fontWeight: 'bold' }}
-                                      />
-                                    </Box>
+                                    <Chip
+                                      label={`R$ ${(parseFloat(valorVenda) || 0).toFixed(2)}`}
+                                      size="small"
+                                      color="primary"
+                                      sx={{ fontSize: '0.75rem', fontWeight: 'bold', ml: 2 }}
+                                    />
                                   </Box>
                                 </MenuItem>
                               );
                             })}
-                          </Select>
-                        </FormControl>
-                      ) : (
-                        <FormControl fullWidth size="small">
-                          <InputLabel>Serviço</InputLabel>
-                          <Select
-                            value={itemAtual.descricao}
-                            onChange={(e) => {
-                              console.log('🔧 Serviço selecionado:', e.target.value);
-                              const servicoSelecionado = produtos.find(p => {
-                                const descProduto = p.descricao || p.nome_produto || `Produto ${p.codigo_produto}`;
-                                return descProduto === e.target.value;
-                              });
-
-                              let valorVenda = 0;
-                              if (servicoSelecionado?.estoque_por_deposito && servicoSelecionado.estoque_por_deposito.length > 0) {
-                                const estoqueComValor = servicoSelecionado.estoque_por_deposito.find(e => e.valor_venda > 0);
-                                valorVenda = estoqueComValor?.valor_venda || servicoSelecionado.estoque_por_deposito[0].valor_venda || 0;
-                              }
-
-                              setItemAtual({
-                                ...itemAtual,
-                                id_produto: servicoSelecionado?.id_produto || null,
-                                descricao: e.target.value,
-                                valorUnitario: valorVenda
-                              });
-                            }}
-                            label="Serviço"
-                          >
-                            <MenuItem value="">Selecione um serviço...</MenuItem>
-                            {produtos.filter(p => p.classificacao?.toUpperCase() === 'SERVICO').length === 0 && (
-                              <MenuItem disabled>
-                                <em>Nenhum serviço cadastrado (produtos com classificação "servico")</em>
-                              </MenuItem>
-                            )}
-                            {produtos
-                              .filter(p => p.classificacao?.toUpperCase() === 'SERVICO')
-                              .map((prod) => {
-                                const descricao = prod.descricao || prod.nome_produto || `Produto ${prod.codigo_produto}`;
-                                let valorVenda = 0;
-                                if (prod.estoque_por_deposito && Array.isArray(prod.estoque_por_deposito)) {
-                                  const estoqueComValor = prod.estoque_por_deposito.find(e => e.valor_venda > 0);
-                                  valorVenda = estoqueComValor?.valor_venda || prod.estoque_por_deposito[0]?.valor_venda || 0;
-                                }
-
-                                return (
-                                  <MenuItem key={prod.id_produto} value={descricao}>
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                                      <span>
-                                        {prod.codigo_produto && `[${prod.codigo_produto}] `}
-                                        {descricao}
-                                      </span>
-                                      <Chip
-                                        label={`R$ ${(parseFloat(valorVenda) || 0).toFixed(2)}`}
-                                        size="small"
-                                        color="primary"
-                                        sx={{ fontSize: '0.75rem', fontWeight: 'bold', ml: 2 }}
-                                      />
-                                    </Box>
-                                  </MenuItem>
-                                );
-                              })}
-                          </Select>
-                        </FormControl>
-                      )}
-
-                      <Tooltip title="Pesquisa Avançada (Nome, Grupo, Referência e Localização)">
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          onClick={abrirModalPesquisaItem}
-                          startIcon={<SearchIcon />}
-                          sx={{
-                            height: '40px',
-                            minWidth: '110px',
-                            whiteSpace: 'nowrap',
-                            fontWeight: 600,
-                            bgcolor: '#1976d2',
-                            '&:hover': { bgcolor: '#1565c0' }
-                          }}
-                        >
-                          Pesquisar
-                        </Button>
-                      </Tooltip>
-                    </Box>
+                        </Select>
+                      </FormControl>
+                    )}
                   </Grid>
 
                   {itemAtual.tipo_item === 'servico' && (
@@ -6348,21 +5474,12 @@ const OrdemServicoPage = () => {
                     <InputLabel>Forma de Pagamento *</InputLabel>
                     <Select
                       value={formaPagamentoTemp}
-                      onChange={(e) => {
-                        const sel = e.target.value;
-                        setFormaPagamentoTemp(sel);
-                        if (sel && (!valorPagamentoTemp || parseFloat(valorPagamentoTemp) <= 0)) {
-                          const restante = calcularValorRestante();
-                          if (restante > 0) {
-                            setValorPagamentoTemp(restante.toFixed(2));
-                          }
-                        }
-                      }}
+                      onChange={(e) => setFormaPagamentoTemp(e.target.value)}
                       label="Forma de Pagamento *"
                     >
                       <MenuItem value="">Selecione...</MenuItem>
                       {formasPagamento.map((forma) => {
-                        const clienteOS = clientes.find(c => c.id_cliente === parseInt(cliente || ordemAtual?.id_cliente));
+                        const clienteOS = clientes.find(c => c.id_cliente === parseInt(clienteTemp || cliente || ordemAtual?.id_cliente));
                         const nomeNorm = (forma.nome_forma || forma.nome || forma.descricao || '').toUpperCase().replace(/[_]/g, ' ').replace(/[-]/g, ' ');
                         const permitidos = ['CARTAO', 'CARTÃO', 'CREDITO', 'CRÉDITO', 'DEBITO', 'DÉBITO', 'PIX', 'DINHEIRO', 'MERCADO PAGO', 'MERCADOPAGO', 'POINT', 'VOUCHER'];
                         const termosBloqueados = ['BOLETO', 'FATURAD', 'CREDIARI', 'CREDIÁRI', 'DUPLICATA', 'PROMISSORI', 'PROMISSÓRI', 'CARNE', 'CARNÊ', 'FIADO', 'CONVENIO', 'CONVÊNIO'];
@@ -6752,28 +5869,18 @@ const OrdemServicoPage = () => {
                 onChange={(e) => setSelectedNFeOperation(e.target.value)}
                 label="Operação *"
               >
-                {/* Exibe apenas Operações de NF-e Modelo 55 que sejam de Saída */}
+                {/* Agora usa todasOperacoes para poder acessar Modelos 55, que não estão na lista 'operacoes' (apenas serviços) */}
                 {todasOperacoes
-                  .filter(op => {
-                    const ehModelo55 = String(op.modelo_documento) === '55' || String(op.modelo_nf) === '55';
-                    const transacao = op.transacao || op.tipo_transacao || op.tipo_operacao || op.tipo || '';
-                    const isSaida = transacao === '' || transacao.toLowerCase().includes('saida') || transacao.toLowerCase().includes('saída') || transacao.toUpperCase() === 'S';
-                    return ehModelo55 && isSaida;
-                  })
+                  .filter(op => op.modelo_documento === '55')
                   .map((op) => (
                     <MenuItem key={op.id_operacao} value={op.id_operacao}>
-                      {op.nome_operacao || op.nome} (NFe - Saída)
+                      {op.nome_operacao} (NFe)
                     </MenuItem>
                   ))}
                   
-                {todasOperacoes.filter(op => {
-                  const ehModelo55 = String(op.modelo_documento) === '55' || String(op.modelo_nf) === '55';
-                  const transacao = op.transacao || op.tipo_transacao || op.tipo_operacao || op.tipo || '';
-                  const isSaida = transacao === '' || transacao.toLowerCase().includes('saida') || transacao.toLowerCase().includes('saída') || transacao.toUpperCase() === 'S';
-                  return ehModelo55 && isSaida;
-                }).length === 0 && 
+                {todasOperacoes.filter(op => op.modelo_documento === '55').length === 0 && 
                   <MenuItem disabled>
-                    Nenhuma operação de NFe (Modelo 55 - Saída) encontrada.
+                    Nenhuma operação de NFe (Modelo 55) encontrada.
                   </MenuItem>
                 }
               </Select>
@@ -6791,253 +5898,6 @@ const OrdemServicoPage = () => {
             disabled={!selectedNFeOperation}
           >
             Confirmar e Gerar
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* ── DIÁLOGO COMPARTILHADO: CADASTRO DE CLIENTE ─────────────────────── */}
-      <ClienteFormModal
-        open={openNovoClienteModal}
-        onClose={() => setOpenNovoClienteModal(false)}
-        onSaved={handleClienteCriado}
-      />
-
-      {/* ── DIÁLOGO: PESQUISA AVANÇADA DE PRODUTOS E SERVIÇOS ───────────────── */}
-      <Dialog
-        open={openPesquisaItemModal}
-        onClose={() => setOpenPesquisaItemModal(false)}
-        maxWidth="lg"
-        fullWidth
-      >
-        <DialogTitle sx={{ bgcolor: '#1976d2', color: '#fff', py: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <SearchIcon />
-              <Typography variant="h6" fontWeight={700}>
-                Pesquisa Avançada de Produtos e Serviços
-              </Typography>
-            </Box>
-            <Chip
-              label={`Total Cadastrado: ${produtos.length}`}
-              color="default"
-              sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 600 }}
-            />
-          </Box>
-        </DialogTitle>
-
-        <DialogContent sx={{ p: 3 }}>
-          {/* Painel de Filtros */}
-          <Paper variant="outlined" sx={{ p: 2, mb: 3, bgcolor: '#f8fafc' }}>
-            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, color: '#1e293b' }}>
-              🎯 Filtros de Busca:
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={3}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Filtrar Tipo</InputLabel>
-                  <Select
-                    value={filtroTipoBusca}
-                    onChange={(e) => setFiltroTipoBusca(e.target.value)}
-                    label="Filtrar Tipo"
-                  >
-                    <MenuItem value="todos">Todos (Produtos + Serviços)</MenuItem>
-                    <MenuItem value="produto">Apenas Produtos</MenuItem>
-                    <MenuItem value="servico">Apenas Serviços</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} sm={3}>
-                <TextField
-                  fullWidth size="small"
-                  label="Nome / Descrição"
-                  placeholder="Nome do produto ou serviço..."
-                  value={filtroNome}
-                  onChange={(e) => setFiltroNome(e.target.value)}
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={2}>
-                <TextField
-                  fullWidth size="small"
-                  label="Grupo"
-                  placeholder="Grupo / Categoria..."
-                  value={filtroGrupo}
-                  onChange={(e) => setFiltroGrupo(e.target.value)}
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={2}>
-                <TextField
-                  fullWidth size="small"
-                  label="Referência / Código"
-                  placeholder="Código, Ref ou Cód. Barras"
-                  value={filtroRef}
-                  onChange={(e) => setFiltroRef(e.target.value)}
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={2}>
-                <TextField
-                  fullWidth size="small"
-                  label="Localização"
-                  placeholder="Prateleira, Depósito..."
-                  value={filtroLocalizacao}
-                  onChange={(e) => setFiltroLocalizacao(e.target.value)}
-                />
-              </Grid>
-            </Grid>
-
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1.5 }}>
-              <Button
-                size="small"
-                color="inherit"
-                onClick={() => {
-                  setFiltroNome('');
-                  setFiltroGrupo('');
-                  setFiltroRef('');
-                  setFiltroLocalizacao('');
-                }}
-              >
-                Limpar Filtros
-              </Button>
-            </Box>
-          </Paper>
-
-          {/* Tabela de Resultados */}
-          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 400 }}>
-            <Table stickyHeader size="small">
-              <TableHead>
-                <TableRow sx={{ bgcolor: '#e2e8f0' }}>
-                  <TableCell sx={{ fontWeight: 700 }}>Tipo</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Código / Ref.</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Nome / Descrição</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Grupo</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Localização</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700 }}>Estoque Total</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 700 }}>Preço Venda (R$)</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700 }}>Ação</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {produtos
-                  .filter((prod) => {
-                    const isServico = prod.classificacao?.toUpperCase() === 'SERVICO';
-                    if (filtroTipoBusca === 'servico' && !isServico) return false;
-                    if (filtroTipoBusca === 'produto' && isServico) return false;
-
-                    if (filtroNome.trim()) {
-                      const t = filtroNome.toLowerCase().trim();
-                      const desc = (prod.descricao || prod.nome_produto || '').toLowerCase();
-                      if (!desc.includes(t)) return false;
-                    }
-
-                    if (filtroRef.trim()) {
-                      const t = filtroRef.toLowerCase().trim();
-                      const cod = (prod.codigo_produto || '').toString().toLowerCase();
-                      const ref = (prod.referencia || prod.codigo_barras || '').toString().toLowerCase();
-                      if (!cod.includes(t) && !ref.includes(t)) return false;
-                    }
-
-                    if (filtroGrupo.trim()) {
-                      const t = filtroGrupo.toLowerCase().trim();
-                      const grp = (prod.grupo_nome || prod.nome_grupo || prod.grupo?.nome_grupo || prod.grupo || '').toString().toLowerCase();
-                      if (!grp.includes(t)) return false;
-                    }
-
-                    if (filtroLocalizacao.trim()) {
-                      const t = filtroLocalizacao.toLowerCase().trim();
-                      const locMain = (prod.localizacao || prod.localizacao_estoque || prod.prateleira || '').toString().toLowerCase();
-                      const locDep = (prod.estoque_por_deposito || [])
-                        .map(dep => `${dep.deposito_nome || ''} ${dep.localizacao || ''}`)
-                        .join(' ')
-                        .toLowerCase();
-                      if (!locMain.includes(t) && !locDep.includes(t)) return false;
-                    }
-
-                    return true;
-                  })
-                  .map((prod) => {
-                    const isServico = prod.classificacao?.toUpperCase() === 'SERVICO';
-                    const desc = prod.descricao || prod.nome_produto || `Item ${prod.codigo_produto}`;
-                    const codigo = prod.codigo_produto || prod.referencia || '-';
-                    const grupo = prod.grupo_nome || prod.nome_grupo || prod.grupo?.nome_grupo || (typeof prod.grupo === 'string' ? prod.grupo : '-');
-
-                    const locMain = prod.localizacao || prod.localizacao_estoque || prod.prateleira;
-                    const locDepositos = (prod.estoque_por_deposito || [])
-                      .map(d => d.localizacao ? `${d.deposito_nome}: ${d.localizacao}` : null)
-                      .filter(Boolean)
-                      .join(', ');
-                    const localizacaoExibir = locMain || locDepositos || '-';
-
-                    let valorVenda = 0;
-                    let qtdEstoque = prod.estoque_total || 0;
-                    if (prod.estoque_por_deposito && prod.estoque_por_deposito.length > 0) {
-                      const estVal = prod.estoque_por_deposito.find(e => e.valor_venda > 0);
-                      valorVenda = estVal?.valor_venda || prod.estoque_por_deposito[0]?.valor_venda || 0;
-                    } else {
-                      valorVenda = prod.preco_venda || prod.valor_venda || 0;
-                    }
-
-                    return (
-                      <TableRow key={prod.id_produto} hover>
-                        <TableCell>
-                          <Chip
-                            label={isServico ? 'Serviço' : 'Produto'}
-                            size="small"
-                            color={isServico ? 'secondary' : 'primary'}
-                            variant="outlined"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight={600}>{codigo}</Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight={700}>{desc}</Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" color="text.secondary">{grupo}</Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" color="text.secondary">{localizacaoExibir}</Typography>
-                        </TableCell>
-                        <TableCell align="center">
-                          {!isServico ? (
-                            <Chip
-                              label={qtdEstoque}
-                              size="small"
-                              color={qtdEstoque > 0 ? 'success' : 'error'}
-                            />
-                          ) : (
-                            <Typography variant="caption" color="text.secondary">N/A</Typography>
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          <Typography variant="body2" fontWeight={700} color="primary">
-                            R$ {(parseFloat(valorVenda) || 0).toFixed(2)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="center">
-                          <Button
-                            size="small"
-                            variant="contained"
-                            color="success"
-                            onClick={() => selecionarItemDaPesquisa(prod)}
-                          >
-                            Selecionar
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </DialogContent>
-
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setOpenPesquisaItemModal(false)} color="inherit">
-            Fechar
           </Button>
         </DialogActions>
       </Dialog>

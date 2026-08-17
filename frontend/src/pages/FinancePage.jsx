@@ -597,23 +597,19 @@ const FinancePage = () => {
       setOpenBaixa(false);
       await fetchFinancialData();
 
-      if (contaBaixa.tipo_conta === 'Receber') {
-        setTimeout(() => {
-          if (window.confirm("Baixa realizada com sucesso!\n\nDeseja gerar e imprimir o recibo deste recebimento?")) {
-            const principalPago = parseFloat(formBaixa.valorPrincipalPago || 0);
-            const originalParcela = parseFloat(contaBaixa.valor_parcela || 0);
-            const saldoRestante = originalParcela - principalPago;
+      if (window.confirm("Baixa realizada com sucesso!\n\nDeseja gerar e imprimir o recibo deste pagamento?")) {
+        const principalPago = parseFloat(formBaixa.valorPrincipalPago || 0);
+        const originalParcela = parseFloat(contaBaixa.valor_parcela || 0);
+        const saldoRestante = originalParcela - principalPago;
 
-            const contaParaRecibo = {
-              ...contaBaixa,
-              ...response.data,
-              valor_liquidado: parseFloat(formBaixa.valor_pago),
-              data_pagamento: formBaixa.data_pagamento,
-              saldo_restante: saldoRestante > 0.01 ? saldoRestante : 0
-            };
-            imprimirRecibo(contaParaRecibo);
-          }
-        }, 100);
+        const contaParaRecibo = {
+          ...contaBaixa,
+          ...response.data,
+          valor_liquidado: parseFloat(formBaixa.valor_pago),
+          data_pagamento: formBaixa.data_pagamento,
+          saldo_restante: saldoRestante > 0.01 ? saldoRestante : 0
+        };
+        imprimirRecibo(contaParaRecibo);
       }
 
     } catch (err) {
