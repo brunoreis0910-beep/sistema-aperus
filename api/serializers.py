@@ -749,6 +749,15 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
         if old_status != 'Paga' and new_status == 'Paga' and updated_instance.id_conta_baixa:
             tipo_mov = 'C' if updated_instance.tipo_conta == 'Receber' else 'D'
             
+            # Validação segura da chave estrangeira id_cliente_fornecedor
+            # A tabela financeiro_bancario possui FK estrita para clientes(id_cliente).
+            # Para contas a Pagar (onde o ID pode ser de um Fornecedor), passamos None caso não exista em Cliente.
+            id_cli_validado = None
+            if updated_instance.id_cliente_fornecedor_id:
+                from .models import Cliente
+                if Cliente.objects.filter(id_cliente=updated_instance.id_cliente_fornecedor_id).exists():
+                    id_cli_validado = updated_instance.id_cliente_fornecedor_id
+
             from .models import FinanceiroBancario
             FinanceiroBancario.objects.create(
                 id_conta_bancaria=updated_instance.id_conta_baixa,
@@ -757,7 +766,7 @@ class FinanceiroContaSerializer(serializers.ModelSerializer):
                 valor_movimento=updated_instance.valor_liquidado or Decimal('0.00'),
                 descricao=f'{updated_instance.tipo_conta.upper()} - {updated_instance.descricao}',
                 documento_numero=updated_instance.documento_numero or str(updated_instance.id_conta),
-                id_cliente_fornecedor_id=updated_instance.id_cliente_fornecedor_id,
+                id_cliente_fornecedor_id=id_cli_validado,
                 forma_pagamento=updated_instance.forma_pagamento
             )
         
