@@ -2463,20 +2463,53 @@ class CompraItem(models.Model):
     valor_compra = models.DecimalField(max_digits=15, decimal_places=6, default=0.00, db_column='valor_unitario')
     valor_total = models.DecimalField(max_digits=15, decimal_places=6, default=0.00, db_column='valor_total')
     
-    # Valores de tributos e encargos
+    # Valores e alíquotas de tributos e encargos
     desconto = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_desconto')
     valor_frete_item = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_frete_item')
-    valor_ipi = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_ipi')
+    
+    # CFOP
+    cfop = models.CharField(max_length=10, blank=True, null=True, db_column='cfop')
+    
+    # ICMS
+    cst_icms = models.CharField(max_length=10, blank=True, null=True, db_column='cst_icms')
+    csosn = models.CharField(max_length=10, blank=True, null=True, db_column='csosn')
+    vbc_icms = models.DecimalField(max_digits=15, decimal_places=2, blank=True, null=True, default=0.00, db_column='vbc_icms')
+    picms = models.DecimalField(max_digits=7, decimal_places=4, blank=True, null=True, default=0.0000, db_column='picms')
     valor_icms = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_icms')
+    
+    # IPI
+    cst_ipi = models.CharField(max_length=10, blank=True, null=True, db_column='cst_ipi')
+    p_ipi = models.DecimalField(max_digits=7, decimal_places=4, blank=True, null=True, default=0.0000, db_column='p_ipi')
+    valor_ipi = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_ipi')
+    
+    # PIS
+    cst_pis = models.CharField(max_length=10, blank=True, null=True, db_column='cst_pis')
+    vbc_pis = models.DecimalField(max_digits=15, decimal_places=2, blank=True, null=True, default=0.00, db_column='vbc_pis')
+    p_pis = models.DecimalField(max_digits=7, decimal_places=4, blank=True, null=True, default=0.0000, db_column='p_pis')
     valor_pis = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_pis')
+    
+    # COFINS
+    cst_cofins = models.CharField(max_length=10, blank=True, null=True, db_column='cst_cofins')
+    vbc_cofins = models.DecimalField(max_digits=15, decimal_places=2, blank=True, null=True, default=0.00, db_column='vbc_cofins')
+    p_cofins = models.DecimalField(max_digits=7, decimal_places=4, blank=True, null=True, default=0.0000, db_column='p_cofins')
     valor_cofins = models.DecimalField(max_digits=15, decimal_places=6, blank=True, null=True, default=0.00, db_column='valor_cofins')
+    
+    # Reforma Tributária (IBS / CBS)
+    cst_ibs_cbs = models.CharField(max_length=10, blank=True, null=True, db_column='cst_ibs_cbs')
+    vbc_ibs = models.DecimalField(max_digits=15, decimal_places=2, blank=True, null=True, default=0.00, db_column='vbc_ibs')
+    p_ibs = models.DecimalField(max_digits=7, decimal_places=4, blank=True, null=True, default=0.0000, db_column='p_ibs')
+    valor_ibs = models.DecimalField(max_digits=15, decimal_places=2, blank=True, null=True, default=0.00, db_column='valor_ibs')
+    
+    vbc_cbs = models.DecimalField(max_digits=15, decimal_places=2, blank=True, null=True, default=0.00, db_column='vbc_cbs')
+    p_cbs = models.DecimalField(max_digits=7, decimal_places=4, blank=True, null=True, default=0.0000, db_column='p_cbs')
+    valor_cbs = models.DecimalField(max_digits=15, decimal_places=2, blank=True, null=True, default=0.00, db_column='valor_cbs')
 
     class Meta:
         db_table = 'compra_itens'
         managed = False
 
     def __str__(self):
-        return f'CompraItem {self.id_item} (Prod: {getattr(self.id_produto, "codigo_produto", None)})'# Adicione estes modelos ao final do arquivo api/models.py
+        return f'CompraItem {self.id_item} (Prod: {getattr(self.id_produto, "codigo_produto", None)})'
 
 class Deposito(models.Model):
     """Depósitos/Locais de armazenamento"""

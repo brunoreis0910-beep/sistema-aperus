@@ -16,15 +16,38 @@ class CompraItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CompraItem
-        fields = ['id_item', 'id_produto', 'quantidade', 'valor_compra', 'valor_unitario', 'valor_total', 'desconto']
+        fields = [
+            'id_item', 'id_produto', 'quantidade', 'valor_compra', 'valor_unitario', 'valor_total', 'desconto',
+            'cfop', 'cst_icms', 'csosn', 'vbc_icms', 'picms', 'valor_icms',
+            'cst_ipi', 'p_ipi', 'valor_ipi',
+            'cst_pis', 'vbc_pis', 'p_pis', 'valor_pis',
+            'cst_cofins', 'vbc_cofins', 'p_cofins', 'valor_cofins',
+            'cst_ibs_cbs', 'vbc_ibs', 'p_ibs', 'valor_ibs',
+            'vbc_cbs', 'p_cbs', 'valor_cbs'
+        ]
+        extra_kwargs = {f: {'required': False, 'allow_null': True} for f in [
+            'cfop', 'cst_icms', 'csosn', 'vbc_icms', 'picms', 'valor_icms',
+            'cst_ipi', 'p_ipi', 'valor_ipi',
+            'cst_pis', 'vbc_pis', 'p_pis', 'valor_pis',
+            'cst_cofins', 'vbc_cofins', 'p_cofins', 'valor_cofins',
+            'cst_ibs_cbs', 'vbc_ibs', 'p_ibs', 'valor_ibs',
+            'vbc_cbs', 'p_cbs', 'valor_cbs'
+        ]}
     
     def to_representation(self, instance):
-        """Adiciona valor_unitario como alias de valor_compra na saída"""
+        """Adiciona valor_unitario como alias de valor_compra e aliases de impostos na saída"""
         representation = super().to_representation(instance)
         # Inclui valor_unitario como alias de valor_compra para compatibilidade com frontend
         representation['valor_unitario'] = representation.get('valor_compra')
+        
+        # Aliases amigáveis de tributos para o frontend
+        representation['cst'] = instance.cst_icms or ''
+        representation['vicms'] = float(instance.valor_icms or 0)
+        representation['vipi'] = float(instance.valor_ipi or 0)
+        representation['vpis'] = float(instance.valor_pis or 0)
+        representation['vcofins'] = float(instance.valor_cofins or 0)
+        
         # Retorna fração salva para o frontend restaurar os campos de fração
-        # Usa getattr com fallback pois fracao_aplicada não é campo formal do modelo
         fracao = getattr(instance, 'fracao_aplicada', None)
         qtd_fracionada = getattr(instance, 'quantidade_fracionada', None)
         representation['fracao_memorizada'] = float(fracao) if fracao is not None else 1
@@ -32,12 +55,21 @@ class CompraItemSerializer(serializers.ModelSerializer):
         return representation
     
     def to_internal_value(self, data):
-        """Garante que todos os valores numéricos sejam Decimal"""
-        print(f'[DEBUG SERIALIZER] to_internal_value chamado com data: {data}')
-        
-        # Mantém campos extras do frontend para uso no create/update
-        # mas o DRF não vai tentar mapeá-los para o modelo
-        internal_value = super().to_internal_value(data)
+        """Garante parsing correto de campos fiscais e frações"""
+        # Suporta aliases do frontend (cst -> cst_icms, vicms -> valor_icms, etc.)
+        d = dict(data)
+        if 'cst' in d and not d.get('cst_icms'):
+            d['cst_icms'] = d['cst']
+        if 'vicms' in d and not d.get('valor_icms'):
+            d['valor_icms'] = d['vicms']
+        if 'vipi' in d and not d.get('valor_ipi'):
+            d['valor_ipi'] = d['vipi']
+        if 'vpis' in d and not d.get('valor_pis'):
+            d['valor_pis'] = d['vpis']
+        if 'vcofins' in d and not d.get('valor_cofins'):
+            d['valor_cofins'] = d['vcofins']
+            
+        internal_value = super().to_internal_value(d)
 
         # Adiciona os campos extras de volta para que fiquem disponíveis no `validated_data`
         if 'fracao_memorizada' in data:
@@ -45,7 +77,6 @@ class CompraItemSerializer(serializers.ModelSerializer):
         if '_ean' in data:
             internal_value['_ean'] = data['_ean']
             
-        print(f'[DEBUG SERIALIZER] to_internal_value retornou: {internal_value}')
         return internal_value
 
 
@@ -209,6 +240,31 @@ class CompraSerializer(serializers.ModelSerializer):
                     'desconto': desconto,
                     'fracao_aplicada': fracao,
                     'quantidade_fracionada': qtd_estoque if fracao > 1 else None,
+                    # Dados fiscais (CFOP, ICMS, IPI, PIS, COFINS, IBS/CBS)
+                    'cfop': item.get('cfop'),
+                    'cst_icms': item.get('cst_icms') or item.get('cst'),
+                    'csosn': item.get('csosn'),
+                    'vbc_icms': item.get('vbc_icms') or Decimal('0.00'),
+                    'picms': item.get('picms') or Decimal('0.0000'),
+                    'valor_icms': item.get('valor_icms') or item.get('vicms') or Decimal('0.00'),
+                    'cst_ipi': item.get('cst_ipi'),
+                    'p_ipi': item.get('p_ipi') or Decimal('0.0000'),
+                    'valor_ipi': item.get('valor_ipi') or item.get('vipi') or Decimal('0.00'),
+                    'cst_pis': item.get('cst_pis'),
+                    'vbc_pis': item.get('vbc_pis') or Decimal('0.00'),
+                    'p_pis': item.get('p_pis') or Decimal('0.0000'),
+                    'valor_pis': item.get('valor_pis') or item.get('vpis') or Decimal('0.00'),
+                    'cst_cofins': item.get('cst_cofins'),
+                    'vbc_cofins': item.get('vbc_cofins') or Decimal('0.00'),
+                    'p_cofins': item.get('p_cofins') or Decimal('0.0000'),
+                    'valor_cofins': item.get('valor_cofins') or item.get('vcofins') or Decimal('0.00'),
+                    'cst_ibs_cbs': item.get('cst_ibs_cbs'),
+                    'vbc_ibs': item.get('vbc_ibs') or Decimal('0.00'),
+                    'p_ibs': item.get('p_ibs') or Decimal('0.0000'),
+                    'valor_ibs': item.get('valor_ibs') or Decimal('0.00'),
+                    'vbc_cbs': item.get('vbc_cbs') or Decimal('0.00'),
+                    'p_cbs': item.get('p_cbs') or Decimal('0.0000'),
+                    'valor_cbs': item.get('valor_cbs') or Decimal('0.00'),
                 }
                 
                 print(f'[DEBUG_CREATE] Criando item - {item_data}')
@@ -800,36 +856,156 @@ class CompraViewSet(viewsets.ModelViewSet):
                                     except: pass
 
                         # IPI
+                        cst_ipi = ''
+                        p_ipi = 0.0
                         ipi_node = get_node(imposto, 'IPI')
                         if ipi_node is not None:
-                            vipi_el = get_node(ipi_node, 'vIPI') # Pode estar dentro de IPITrib
-                            if vipi_el is None:
-                                ipi_trib = get_node(ipi_node, 'IPITrib')
-                                if ipi_trib: vipi_el = get_node(ipi_trib, 'vIPI')
+                            ipi_trib = get_node(ipi_node, 'IPITrib')
+                            target_ipi = ipi_trib if ipi_trib is not None else ipi_node
                             
+                            cst_ipi_el = get_node(target_ipi, 'CST')
+                            if cst_ipi_el is not None: cst_ipi = cst_ipi_el.text or ''
+                            
+                            p_ipi_el = get_node(target_ipi, 'pIPI')
+                            if p_ipi_el is not None:
+                                try: p_ipi = float(p_ipi_el.text)
+                                except: pass
+                                
+                            vipi_el = get_node(target_ipi, 'vIPI')
                             if vipi_el is not None:
                                 try: vipi = float(vipi_el.text)
                                 except: pass
 
                         # PIS
+                        cst_pis = ''
+                        vbc_pis = 0.0
+                        p_pis = 0.0
                         pis_node = get_node(imposto, 'PIS')
                         if pis_node is not None:
-                            # Geralmente PISAliq ou PISOutr
+                            # Geralmente PISAliq, PISQtde, PISNT, PISOutr
                             for child in pis_node:
+                                cst_pis_el = get_node(child, 'CST')
+                                if cst_pis_el is not None: cst_pis = cst_pis_el.text or ''
+                                
+                                vbc_pis_el = get_node(child, 'vBC')
+                                if vbc_pis_el is not None:
+                                    try: vbc_pis = float(vbc_pis_el.text)
+                                    except: pass
+                                    
+                                p_pis_el = get_node(child, 'pPIS')
+                                if p_pis_el is not None:
+                                    try: p_pis = float(p_pis_el.text)
+                                    except: pass
+                                
                                 vpis_el = get_node(child, 'vPIS')
                                 if vpis_el is not None:
                                     try: vpis = float(vpis_el.text)
                                     except: pass
-                                    break
+                                break
 
                         # COFINS
+                        cst_cofins = ''
+                        vbc_cofins = 0.0
+                        p_cofins = 0.0
                         cofins_node = get_node(imposto, 'COFINS')
                         if cofins_node is not None:
                             for child in cofins_node:
+                                cst_cofins_el = get_node(child, 'CST')
+                                if cst_cofins_el is not None: cst_cofins = cst_cofins_el.text or ''
+                                
+                                vbc_cofins_el = get_node(child, 'vBC')
+                                if vbc_cofins_el is not None:
+                                    try: vbc_cofins = float(vbc_cofins_el.text)
+                                    except: pass
+                                    
+                                p_cofins_el = get_node(child, 'pCOFINS')
+                                if p_cofins_el is not None:
+                                    try: p_cofins = float(p_cofins_el.text)
+                                    except: pass
+                                
                                 vcofins_el = get_node(child, 'vCOFINS')
                                 if vcofins_el is not None:
                                     try: vcofins = float(vcofins_el.text)
                                     except: pass
+                                break
+
+                        # Reforma Tributária (IBS / CBS - tags <IBS>, <CBS> ou <IBSCBS>)
+                        cst_ibs_cbs = ''
+                        vbc_ibs = 0.0
+                        p_ibs = 0.0
+                        valor_ibs = 0.0
+                        vbc_cbs = 0.0
+                        p_cbs = 0.0
+                        valor_cbs = 0.0
+                        
+                        ibscbs_node = get_node(imposto, 'IBSCBS') or get_node(imposto, 'IBS_CBS')
+                        if ibscbs_node is not None:
+                            cst_el = get_node(ibscbs_node, 'CST')
+                            if cst_el is not None: cst_ibs_cbs = cst_el.text or ''
+                            
+                            vbc_el = get_node(ibscbs_node, 'vBC')
+                            if vbc_el is not None:
+                                try:
+                                    vbc_ibs = float(vbc_el.text)
+                                    vbc_cbs = float(vbc_el.text)
+                                except: pass
+                            
+                            p_ibs_el = get_node(ibscbs_node, 'pIBS')
+                            if p_ibs_el is not None:
+                                try: p_ibs = float(p_ibs_el.text)
+                                except: pass
+                            v_ibs_el = get_node(ibscbs_node, 'vIBS')
+                            if v_ibs_el is not None:
+                                try: valor_ibs = float(v_ibs_el.text)
+                                except: pass
+                                
+                            p_cbs_el = get_node(ibscbs_node, 'pCBS')
+                            if p_cbs_el is not None:
+                                try: p_cbs = float(p_cbs_el.text)
+                                except: pass
+                            v_cbs_el = get_node(ibscbs_node, 'vCBS')
+                            if v_cbs_el is not None:
+                                try: valor_cbs = float(v_cbs_el.text)
+                                except: pass
+                        else:
+                            # Tenta nós separados <IBS> e <CBS>
+                            ibs_node = get_node(imposto, 'IBS')
+                            if ibs_node is not None:
+                                for child in ibs_node:
+                                    cst_el = get_node(child, 'CST')
+                                    if cst_el is not None: cst_ibs_cbs = cst_el.text or ''
+                                    vbc_el = get_node(child, 'vBC')
+                                    if vbc_el is not None:
+                                        try: vbc_ibs = float(vbc_el.text)
+                                        except: pass
+                                    p_el = get_node(child, 'pIBS')
+                                    if p_el is not None:
+                                        try: p_ibs = float(p_el.text)
+                                        except: pass
+                                    v_el = get_node(child, 'vIBS')
+                                    if v_el is not None:
+                                        try: valor_ibs = float(v_el.text)
+                                        except: pass
+                                    break
+                                    
+                            cbs_node = get_node(imposto, 'CBS')
+                            if cbs_node is not None:
+                                for child in cbs_node:
+                                    if not cst_ibs_cbs:
+                                        cst_el = get_node(child, 'CST')
+                                        if cst_el is not None: cst_ibs_cbs = cst_el.text or ''
+                                    vbc_el = get_node(child, 'vBC')
+                                    if vbc_el is not None:
+                                        try: vbc_cbs = float(vbc_el.text)
+                                        except: pass
+                                    p_el = get_node(child, 'pCBS')
+                                    if p_el is not None:
+                                        try: p_cbs = float(p_el.text)
+                                        except: pass
+                                    v_el = get_node(child, 'vCBS')
+                                    if v_el is not None:
+                                        try: valor_cbs = float(v_el.text)
+                                        except: pass
                                     break
 
                     # Buscar produto no banco pelo código
@@ -922,16 +1098,43 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'valor_unitario': valor_unit,
                         'ncm': ncm,
                         'unidade': unidade,
+                        # CFOP
                         'cfop': cfop_entrada,
                         'cfop_original': cfop_orig,
+                        # ICMS
                         'cst': cst_icms,
+                        'cst_icms': cst_icms,
                         'csosn': csosn,
                         'vbc_icms': vbc_icms,
                         'picms': picms,
                         'vicms': vicms,
+                        'valor_icms': vicms,
+                        # IPI
+                        'cst_ipi': cst_ipi,
+                        'p_ipi': p_ipi,
                         'vipi': vipi,
+                        'valor_ipi': vipi,
+                        # PIS
+                        'cst_pis': cst_pis,
+                        'vbc_pis': vbc_pis,
+                        'p_pis': p_pis,
                         'vpis': vpis,
+                        'valor_pis': vpis,
+                        # COFINS
+                        'cst_cofins': cst_cofins,
+                        'vbc_cofins': vbc_cofins,
+                        'p_cofins': p_cofins,
                         'vcofins': vcofins,
+                        'valor_cofins': vcofins,
+                        # Reforma Tributária (IBS / CBS)
+                        'cst_ibs_cbs': cst_ibs_cbs,
+                        'vbc_ibs': vbc_ibs,
+                        'p_ibs': p_ibs,
+                        'valor_ibs': valor_ibs,
+                        'vbc_cbs': vbc_cbs,
+                        'p_cbs': p_cbs,
+                        'valor_cbs': valor_cbs,
+                        # Vínculo
                         'id_produto': produto_db.id_produto if produto_db else None,
                         'produto_encontrado': produto_db is not None  # Flag indicando se o produto foi encontrado
                     })

@@ -1036,17 +1036,34 @@ function CompraPage() {
           fracao_memorizada: item.fracao_memorizada || 1,
           quantidade_com_fracao: item.quantidade_com_fracao != null ? item.quantidade_com_fracao : null,
           cfop: item.cfop || '',
-          cst: item.cst || '',
+          cst: item.cst || item.cst_icms || '',
+          cst_icms: item.cst_icms || item.cst || '',
           csosn: item.csosn || '',
-          vbc_icms: item.vbc_icms || '',
-          picms: item.picms || '',
-          vicms: item.vicms || '',
+          vbc_icms: item.vbc_icms != null ? item.vbc_icms : '',
+          picms: item.picms != null ? item.picms : '',
+          vicms: item.vicms != null ? item.vicms : (item.valor_icms != null ? item.valor_icms : ''),
+          valor_icms: item.valor_icms != null ? item.valor_icms : (item.vicms != null ? item.vicms : ''),
           cst_ipi: item.cst_ipi || '',
-          vipi: item.vipi || '',
+          p_ipi: item.p_ipi != null ? item.p_ipi : '',
+          vipi: item.vipi != null ? item.vipi : (item.valor_ipi != null ? item.valor_ipi : ''),
+          valor_ipi: item.valor_ipi != null ? item.valor_ipi : (item.vipi != null ? item.vipi : ''),
           cst_pis: item.cst_pis || '',
-          vpis: item.vpis || '',
+          vbc_pis: item.vbc_pis != null ? item.vbc_pis : '',
+          p_pis: item.p_pis != null ? item.p_pis : '',
+          vpis: item.vpis != null ? item.vpis : (item.valor_pis != null ? item.valor_pis : ''),
+          valor_pis: item.valor_pis != null ? item.valor_pis : (item.vpis != null ? item.vpis : ''),
           cst_cofins: item.cst_cofins || '',
-          vcofins: item.vcofins || '',
+          vbc_cofins: item.vbc_cofins != null ? item.vbc_cofins : '',
+          p_cofins: item.p_cofins != null ? item.p_cofins : '',
+          vcofins: item.vcofins != null ? item.vcofins : (item.valor_cofins != null ? item.valor_cofins : ''),
+          valor_cofins: item.valor_cofins != null ? item.valor_cofins : (item.vcofins != null ? item.vcofins : ''),
+          cst_ibs_cbs: item.cst_ibs_cbs || '',
+          vbc_ibs: item.vbc_ibs != null ? item.vbc_ibs : '',
+          p_ibs: item.p_ibs != null ? item.p_ibs : '',
+          valor_ibs: item.valor_ibs != null ? item.valor_ibs : '',
+          vbc_cbs: item.vbc_cbs != null ? item.vbc_cbs : '',
+          p_cbs: item.p_cbs != null ? item.p_cbs : '',
+          valor_cbs: item.valor_cbs != null ? item.valor_cbs : '',
           _codigo: item.codigo,
           _ean: item.ean || '',
           _descricao: item.descricao,
@@ -1062,13 +1079,25 @@ function CompraPage() {
           _vicms: item.vicms,
           _cst_ipi: item.cst_ipi,
           _cst_ipi_original: item.cst_ipi_original,
+          _p_ipi: item.p_ipi,
           _vipi: item.vipi,
           _cst_pis: item.cst_pis,
           _cst_pis_original: item.cst_pis_original,
+          _vbc_pis: item.vbc_pis,
+          _p_pis: item.p_pis,
           _vpis: item.vpis,
           _cst_cofins: item.cst_cofins,
           _cst_cofins_original: item.cst_cofins_original,
+          _vbc_cofins: item.vbc_cofins,
+          _p_cofins: item.p_cofins,
           _vcofins: item.vcofins,
+          _cst_ibs_cbs: item.cst_ibs_cbs,
+          _vbc_ibs: item.vbc_ibs,
+          _p_ibs: item.p_ibs,
+          _valor_ibs: item.valor_ibs,
+          _vbc_cbs: item.vbc_cbs,
+          _p_cbs: item.p_cbs,
+          _valor_cbs: item.valor_cbs,
           _encontrado: produtoEncontrado
         });
       });
@@ -1697,6 +1726,32 @@ function CompraPage() {
           valor_unitario: Math.trunc((parseFloat(item.valor_unitario) || 0) * 1000000) / 1000000,
           valor_total: parseFloat(item.subtotal.toFixed(6)),
           fracao_memorizada: parseFloat(item.fracao_memorizada) || 1,
+          // Tributos e CFOP
+          cfop: item.cfop || item._cfop || null,
+          cst_icms: item.cst_icms || item.cst || item._cst || null,
+          csosn: item.csosn || item._csosn || null,
+          vbc_icms: parseFloat(item.vbc_icms ?? item._vbc_icms) || 0,
+          picms: parseFloat(item.picms ?? item._picms) || 0,
+          valor_icms: parseFloat(item.valor_icms ?? item.vicms ?? item._vicms) || 0,
+          cst_ipi: item.cst_ipi || item._cst_ipi || null,
+          p_ipi: parseFloat(item.p_ipi ?? item._p_ipi) || 0,
+          valor_ipi: parseFloat(item.valor_ipi ?? item.vipi ?? item._vipi) || 0,
+          cst_pis: item.cst_pis || item._cst_pis || null,
+          vbc_pis: parseFloat(item.vbc_pis ?? item._vbc_pis) || 0,
+          p_pis: parseFloat(item.p_pis ?? item._p_pis) || 0,
+          valor_pis: parseFloat(item.valor_pis ?? item.vpis ?? item._vpis) || 0,
+          cst_cofins: item.cst_cofins || item._cst_cofins || null,
+          vbc_cofins: parseFloat(item.vbc_cofins ?? item._vbc_cofins) || 0,
+          p_cofins: parseFloat(item.p_cofins ?? item._p_cofins) || 0,
+          valor_cofins: parseFloat(item.valor_cofins ?? item.vcofins ?? item._vcofins) || 0,
+          cst_ibs_cbs: item.cst_ibs_cbs || item._cst_ibs_cbs || null,
+          vbc_ibs: parseFloat(item.vbc_ibs ?? item._vbc_ibs) || 0,
+          p_ibs: parseFloat(item.p_ibs ?? item._p_ibs) || 0,
+          valor_ibs: parseFloat(item.valor_ibs ?? item._valor_ibs) || 0,
+          vbc_cbs: parseFloat(item.vbc_cbs ?? item._vbc_cbs) || 0,
+          p_cbs: parseFloat(item.p_cbs ?? item._p_cbs) || 0,
+          valor_cbs: parseFloat(item.valor_cbs ?? item._valor_cbs) || 0,
+          _ean: item._ean || item.ean || ''
         }))
       }
 
@@ -3379,6 +3434,41 @@ function CompraPage() {
                                           inputProps={{ min: 0, step: 0.01 }}
                                           variant="outlined"
                                           helperText="valor COFINS"
+                                          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: 'white' } }}
+                                        />
+                                      </Grid>
+                                      {/* CST IBS/CBS (Reforma) */}
+                                      <Grid item xs={6} sm={3} md={1}>
+                                        <TextField
+                                          fullWidth size="small" label="CST IBS/CBS"
+                                          value={item.cst_ibs_cbs || ''}
+                                          onChange={(e) => atualizarItem(index, 'cst_ibs_cbs', e.target.value.slice(0, 4))}
+                                          variant="outlined"
+                                          helperText="Reforma Trib."
+                                          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: 'white' }, '& input': { fontWeight: 'bold', color: '#1565c0' } }}
+                                        />
+                                      </Grid>
+                                      {/* vIBS */}
+                                      <Grid item xs={6} sm={3} md={1}>
+                                        <TextField
+                                          fullWidth size="small" label="IBS (R$)"
+                                          type="number" value={item.valor_ibs || ''}
+                                          onChange={(e) => atualizarItem(index, 'valor_ibs', e.target.value)}
+                                          inputProps={{ min: 0, step: 0.01 }}
+                                          variant="outlined"
+                                          helperText="valor IBS"
+                                          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: 'white' } }}
+                                        />
+                                      </Grid>
+                                      {/* vCBS */}
+                                      <Grid item xs={6} sm={3} md={1}>
+                                        <TextField
+                                          fullWidth size="small" label="CBS (R$)"
+                                          type="number" value={item.valor_cbs || ''}
+                                          onChange={(e) => atualizarItem(index, 'valor_cbs', e.target.value)}
+                                          inputProps={{ min: 0, step: 0.01 }}
+                                          variant="outlined"
+                                          helperText="valor CBS"
                                           sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: 'white' } }}
                                         />
                                       </Grid>
