@@ -187,8 +187,12 @@ export default function CadastroTurboProduto() {
         dados.aliquota_icms = dadosXML.picms || dados.aliquota_icms || '';
         dados.base_icms = dadosXML.vbc_icms || dados.base_icms || '';
         dados.valor_icms = dadosXML.vicms || dados.valor_icms || '';
+        dados.cst_ipi = dadosXML.cst_ipi || dados.cst_ipi || '';
         dados.valor_ipi = dadosXML.vipi || dados.valor_ipi || '';
+        dados.cst_pis = dadosXML.cst_pis || dados.cst_pis || '';
         dados.valor_pis = dadosXML.vpis || dados.valor_pis || '';
+        dados.cst_cofins = dadosXML.cst_cofins || dados.cst_cofins || '';
+        dados.cst_pis_cofins = dadosXML.cst_pis || dadosXML.cst_cofins || dados.cst_pis_cofins || '';
         dados.valor_cofins = dadosXML.vcofins || dados.valor_cofins || '';
         // Preço de custo real da NF (prioridade sobre o da API)
         if (dadosXML.valor_unitario) {

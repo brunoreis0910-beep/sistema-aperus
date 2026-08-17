@@ -1034,8 +1034,11 @@ function CompraPage() {
           vbc_icms: item.vbc_icms || '',
           picms: item.picms || '',
           vicms: item.vicms || '',
+          cst_ipi: item.cst_ipi || '',
           vipi: item.vipi || '',
+          cst_pis: item.cst_pis || '',
           vpis: item.vpis || '',
+          cst_cofins: item.cst_cofins || '',
           vcofins: item.vcofins || '',
           _codigo: item.codigo,
           _ean: item.ean || '',
@@ -1050,8 +1053,14 @@ function CompraPage() {
           _vbc_icms: item.vbc_icms,
           _picms: item.picms,
           _vicms: item.vicms,
+          _cst_ipi: item.cst_ipi,
+          _cst_ipi_original: item.cst_ipi_original,
           _vipi: item.vipi,
+          _cst_pis: item.cst_pis,
+          _cst_pis_original: item.cst_pis_original,
           _vpis: item.vpis,
+          _cst_cofins: item.cst_cofins,
+          _cst_cofins_original: item.cst_cofins_original,
           _vcofins: item.vcofins,
           _encontrado: produtoEncontrado
         });
@@ -1913,16 +1922,55 @@ function CompraPage() {
         const valorCustoEstoque = parseFloat(item.valor_unitario) || 0;
         const fracao = parseFloat(item.fracao_memorizada || 1);
 
-        // Se o produto foi cadastrado com uma fração de embalagem (ex: fracao > 1),
-        // a quantidade no banco foi salva expandida em unidades (Ex: 12 unidades).
-        // Precisamos reverter para os valores da Nota Fiscal.
+        // Buscar dados fiscais do produto se vierem vazios na API
+        const prod = produtos.find(p => p.id_produto === (item.id_produto || item.id_produto_id));
+        const trib = prod?.tributacao_detalhada;
+        
+        let cfop = item.cfop || '';
+        if (!cfop && trib?.cfop) {
+          cfop = trib.cfop;
+          if (['5','6','7'].includes(cfop[0])) {
+            const mapa = {'5':'1','6':'2','7':'3'};
+            cfop = mapa[cfop[0]] + cfop.slice(1);
+          }
+        }
+
+        const cst = item.cst !== undefined && item.cst !== null && item.cst !== '' ? item.cst : (trib?.cst_icms || '');
+        const csosn = item.csosn !== undefined && item.csosn !== null && item.csosn !== '' ? item.csosn : (trib?.csosn || '');
+        const cst_ipi = item.cst_ipi !== undefined && item.cst_ipi !== null && item.cst_ipi !== '' ? item.cst_ipi : (trib?.cst_ipi || '');
+        const cst_pis = item.cst_pis !== undefined && item.cst_pis !== null && item.cst_pis !== '' ? item.cst_pis : (trib?.cst_pis_cofins || '');
+        const cst_cofins = item.cst_cofins !== undefined && item.cst_cofins !== null && item.cst_cofins !== '' ? item.cst_cofins : (trib?.cst_pis_cofins || '');
+        const picms = item.picms !== undefined && item.picms !== null && item.picms !== '' ? item.picms : (trib?.icms_aliquota || '');
+        const vbc_icms = item.vbc_icms !== undefined && item.vbc_icms !== null && item.vbc_icms !== '' ? item.vbc_icms : (item.valor_total || '');
+        const vicms = item.vicms !== undefined && item.vicms !== null && item.vicms !== '' ? item.vicms : '';
+        const vipi = item.vipi !== undefined && item.vipi !== null && item.vipi !== '' ? item.vipi : '';
+        const vpis = item.vpis !== undefined && item.vpis !== null && item.vpis !== '' ? item.vpis : '';
+        const vcofins = item.vcofins !== undefined && item.vcofins !== null && item.vcofins !== '' ? item.vcofins : '';
+
+        const itemBase = {
+          ...item,
+          cfop: cfop || '1102',
+          cst: cst,
+          csosn: csosn,
+          cst_ipi: cst_ipi,
+          cst_pis: cst_pis,
+          cst_cofins: cst_cofins,
+          picms: picms,
+          vbc_icms: vbc_icms,
+          vicms: vicms,
+          vipi: vipi,
+          vpis: vpis,
+          vcofins: vcofins,
+          _encontrado: true
+        };
+
         if (fracao > 1) {
           const qtdNF = parseFloat((qtdNoEstoque / fracao).toFixed(6));
           const valorUnitNFCalculado = valorCustoEstoque * fracao;
           const valorUnitNF = Math.trunc(valorUnitNFCalculado * 1000000) / 1000000;
 
           return {
-            ...item,
+            ...itemBase,
             quantidade: qtdNF,
             valor_unitario: valorUnitNF,
             fracao_memorizada: fracao,
@@ -1930,7 +1978,7 @@ function CompraPage() {
         }
 
         return {
-          ...item,
+          ...itemBase,
           quantidade: qtdNoEstoque,
           valor_unitario: valorCustoEstoque,
           fracao_memorizada: fracao,
@@ -2631,7 +2679,7 @@ function CompraPage() {
                   />
                 </Grid>
 
-                <Grid item xs={12} md={3}>
+                <Grid item xs={12} sm={6} md={3}>
                   <TextField
                     fullWidth
                     type="date"
@@ -2640,7 +2688,28 @@ function CompraPage() {
                     onChange={(e) => setForm({ ...form, data_documento: e.target.value })}
                     InputLabelProps={{ shrink: true }}
                     variant="outlined"
-                    helperText="Data da nota fiscal (manual ou do XML)"
+                    helperText="Emissão da NF (manual ou do XML)"
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: 2,
+                        '&:hover fieldset': {
+                          borderColor: 'primary.main',
+                        },
+                      },
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    type="date"
+                    label="Data de Entrada / Movimento *"
+                    value={form.data_entrada}
+                    onChange={(e) => setForm({ ...form, data_entrada: e.target.value })}
+                    InputLabelProps={{ shrink: true }}
+                    variant="outlined"
+                    helperText="Data de entrada da mercadoria"
                     sx={{
                       '& .MuiOutlinedInput-root': {
                         borderRadius: 2,
@@ -2964,9 +3033,9 @@ function CompraPage() {
                                                 cst_icms: item._cst || '',
                                                 csosn: item._csosn || '',
                                                 icms_aliquota: item._picms || '',
-                                                cst_ipi: '',
+                                                cst_ipi: item._cst_ipi || '',
                                                 ipi_aliquota: item._vipi ? parseFloat(item._vipi) : '',
-                                                cst_pis_cofins: '',
+                                                cst_pis_cofins: item._cst_pis || item._cst_cofins || '',
                                                 pis_aliquota: item._vpis ? parseFloat(item._vpis) : '',
                                                 cofins_aliquota: item._vcofins ? parseFloat(item._vcofins) : '',
                                                 cst_ibs_cbs: '',
@@ -3025,7 +3094,9 @@ function CompraPage() {
                                                 vbc_icms: item._vbc_icms || '',
                                                 picms: item._picms || '',
                                                 vicms: item._vicms || '',
+                                                cst_ipi: item._cst_ipi || '',
                                                 vipi: item._vipi || '',
+                                                cst_pis: item._cst_pis || '',
                                                 vpis: item._vpis || '',
                                                 vcofins: item._vcofins || ''
                                               };
@@ -3167,7 +3238,7 @@ function CompraPage() {
                                     </Typography>
                                     <Grid container spacing={1.5}>
                                       {/* CFOP */}
-                                      <Grid item xs={6} sm={3} md={2}>
+                                      <Grid item xs={6} sm={3} md={1.5}>
                                         <TextField
                                           fullWidth size="small" label="CFOP"
                                           value={item.cfop || ''}
@@ -3178,8 +3249,8 @@ function CompraPage() {
                                           sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: 'white' }, '& input': { fontWeight: 'bold', color: '#1565c0' } }}
                                         />
                                       </Grid>
-                                      {/* CST */}
-                                      <Grid item xs={6} sm={3} md={2}>
+                                      {/* CST ICMS */}
+                                      <Grid item xs={6} sm={3} md={1.5}>
                                         <TextField
                                           fullWidth size="small" label="CST ICMS"
                                           value={item.cst || ''}
@@ -3190,7 +3261,7 @@ function CompraPage() {
                                         />
                                       </Grid>
                                       {/* CSOSN */}
-                                      <Grid item xs={6} sm={3} md={2}>
+                                      <Grid item xs={6} sm={3} md={1.5}>
                                         <TextField
                                           fullWidth size="small" label="CSOSN"
                                           value={item.csosn || ''}
@@ -3201,14 +3272,14 @@ function CompraPage() {
                                         />
                                       </Grid>
                                       {/* BC ICMS */}
-                                      <Grid item xs={6} sm={3} md={2}>
+                                      <Grid item xs={6} sm={3} md={1.5}>
                                         <TextField
                                           fullWidth size="small" label="BC ICMS (R$)"
                                           type="number" value={item.vbc_icms || ''}
                                           onChange={(e) => atualizarItem(index, 'vbc_icms', e.target.value)}
                                           inputProps={{ min: 0, step: 0.01 }}
                                           variant="outlined"
-                                          helperText="base de cálculo"
+                                          helperText="base cálculo"
                                           sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: 'white' } }}
                                         />
                                       </Grid>
@@ -3236,8 +3307,19 @@ function CompraPage() {
                                           sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: 'white' } }}
                                         />
                                       </Grid>
+                                      {/* CST IPI */}
+                                      <Grid item xs={6} sm={3} md={1}>
+                                        <TextField
+                                          fullWidth size="small" label="CST IPI"
+                                          value={item.cst_ipi || ''}
+                                          onChange={(e) => atualizarItem(index, 'cst_ipi', e.target.value.slice(0, 3))}
+                                          variant="outlined"
+                                          helperText={item._cst_ipi_original && item._cst_ipi_original !== item.cst_ipi ? `orig: ${item._cst_ipi_original}` : 'entrada'}
+                                          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: 'white' }, '& input': { fontWeight: 'bold', color: '#2e7d32' } }}
+                                        />
+                                      </Grid>
                                       {/* IPI */}
-                                      <Grid item xs={6} sm={3} md={2}>
+                                      <Grid item xs={6} sm={3} md={1}>
                                         <TextField
                                           fullWidth size="small" label="IPI (R$)"
                                           type="number" value={item.vipi || ''}
@@ -3248,8 +3330,23 @@ function CompraPage() {
                                           sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: 'white' } }}
                                         />
                                       </Grid>
+                                      {/* CST PIS/COF */}
+                                      <Grid item xs={6} sm={3} md={1.5}>
+                                        <TextField
+                                          fullWidth size="small" label="CST PIS/COF"
+                                          value={item.cst_pis || item.cst_cofins || ''}
+                                          onChange={(e) => {
+                                            const v = e.target.value.slice(0, 3);
+                                            atualizarItem(index, 'cst_pis', v);
+                                            atualizarItem(index, 'cst_cofins', v);
+                                          }}
+                                          variant="outlined"
+                                          helperText={item._cst_pis_original && item._cst_pis_original !== (item.cst_pis || item.cst_cofins) ? `orig: ${item._cst_pis_original}` : 'entrada'}
+                                          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: 'white' }, '& input': { fontWeight: 'bold', color: '#00695c' } }}
+                                        />
+                                      </Grid>
                                       {/* PIS */}
-                                      <Grid item xs={6} sm={3} md={2}>
+                                      <Grid item xs={6} sm={3} md={1}>
                                         <TextField
                                           fullWidth size="small" label="PIS (R$)"
                                           type="number" value={item.vpis || ''}
@@ -3261,7 +3358,7 @@ function CompraPage() {
                                         />
                                       </Grid>
                                       {/* COFINS */}
-                                      <Grid item xs={6} sm={3} md={2}>
+                                      <Grid item xs={6} sm={3} md={1}>
                                         <TextField
                                           fullWidth size="small" label="COFINS (R$)"
                                           type="number" value={item.vcofins || ''}

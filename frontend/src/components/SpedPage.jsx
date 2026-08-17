@@ -401,6 +401,32 @@ const SpedPage = () => {
         </Alert>
       )}
       
+      {/* 🧠 Motor Fiscal Inteligente Ativo */}
+      <Paper 
+        variant="outlined" 
+        sx={{ 
+          p: 2, 
+          mb: 3, 
+          background: 'linear-gradient(135deg, rgba(21, 101, 192, 0.05) 0%, rgba(0, 150, 136, 0.08) 100%)', 
+          border: '1px solid #b2dfdb',
+          borderRadius: 2
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ fontSize: '1.8rem' }}>🧠</Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#00695c' }}>
+              Motor de Higienização e Autocorreção Fiscal Ativo (Regime Normal / CRT 3)
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, lineHeight: 1.4 }}>
+              • <strong>Autocorreção CSOSN $\rightarrow$ CST:</strong> Converte automaticamente qualquer resíduo do Simples Nacional em CST de 3 dígitos válido (102 $\rightarrow$ 041, 500 $\rightarrow$ 060, etc.)<br/>
+              • <strong>Blindagem C100 / C170 / C190:</strong> Garante 100% de harmonia entre bases de cálculo, alíquotas e totais de ICMS do documento mestre e registros analíticos.<br/>
+              • <strong>Receita Estadual & PIS/COFINS/IPI:</strong> Ajusta códigos de receita da UF (MG: 3131) e converte CSTs de saída em CSTs de entrada nas compras.
+            </Typography>
+          </Box>
+        </Box>
+      </Paper>
+
       <Paper sx={{ p: 3 }}>
         <Grid container spacing={3}>
           {/* Período */}

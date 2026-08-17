@@ -19,16 +19,74 @@ class CompraItemSerializer(serializers.ModelSerializer):
         fields = ['id_item', 'id_produto', 'quantidade', 'valor_compra', 'valor_unitario', 'valor_total', 'desconto']
     
     def to_representation(self, instance):
-        """Adiciona valor_unitario como alias de valor_compra na saída"""
+        """Adiciona valor_unitario como alias de valor_compra na saída e restaura impostos e tributação"""
         representation = super().to_representation(instance)
         # Inclui valor_unitario como alias de valor_compra para compatibilidade com frontend
         representation['valor_unitario'] = representation.get('valor_compra')
         # Retorna fração salva para o frontend restaurar os campos de fração
-        # Usa getattr com fallback pois fracao_aplicada não é campo formal do modelo
         fracao = getattr(instance, 'fracao_aplicada', None)
         qtd_fracionada = getattr(instance, 'quantidade_fracionada', None)
         representation['fracao_memorizada'] = float(fracao) if fracao is not None else 1
         representation['quantidade_com_fracao'] = float(qtd_fracionada) if qtd_fracionada is not None else None
+        
+        # Valores de impostos gravados no CompraItem
+        representation['vipi'] = float(instance.valor_ipi) if instance.valor_ipi is not None else ''
+        representation['vicms'] = float(instance.valor_icms) if instance.valor_icms is not None else ''
+        representation['vpis'] = float(instance.valor_pis) if instance.valor_pis is not None else ''
+        representation['vcofins'] = float(instance.valor_cofins) if instance.valor_cofins is not None else ''
+        
+        # Obter dados fiscais do produto vinculado (tributacao_detalhada)
+        prod = instance.id_produto
+        if prod:
+            representation['_codigo'] = prod.codigo_produto or ''
+            representation['_ean'] = prod.gtin or ''
+            representation['_descricao'] = prod.nome_produto or ''
+            representation['_ncm'] = prod.ncm or ''
+            representation['_unidade'] = prod.unidade_medida or 'UN'
+            
+            trib = getattr(prod, 'tributacao_detalhada', None)
+            if trib:
+                cfop_val = trib.cfop or ''
+                # Converte CFOP de saída para entrada (5->1, 6->2, 7->3) se necessário
+                if cfop_val and cfop_val[0] in ['5', '6', '7'] and len(cfop_val) == 4:
+                    mapa_cfop = {'5': '1', '6': '2', '7': '3'}
+                    cfop_val = mapa_cfop[cfop_val[0]] + cfop_val[1:]
+                
+                representation['cfop'] = cfop_val
+                representation['cst'] = trib.cst_icms or ''
+                representation['csosn'] = trib.csosn or ''
+                representation['cst_ipi'] = trib.cst_ipi or ''
+                representation['cst_pis'] = trib.cst_pis_cofins or ''
+                representation['cst_cofins'] = trib.cst_pis_cofins or ''
+                representation['picms'] = float(trib.icms_aliquota) if trib.icms_aliquota is not None else ''
+                representation['pipi'] = float(trib.ipi_aliquota) if trib.ipi_aliquota is not None else ''
+                representation['ppis'] = float(trib.pis_aliquota) if trib.pis_aliquota is not None else ''
+                representation['pcofins'] = float(trib.cofins_aliquota) if trib.cofins_aliquota is not None else ''
+                
+                # Se houver ICMS ou alíquota > 0, base de cálculo ICMS é o valor total
+                if trib.cst_icms in ['000', '020', '090'] and trib.icms_aliquota and trib.icms_aliquota > 0:
+                    representation['vbc_icms'] = float(instance.valor_total) if instance.valor_total is not None else ''
+                else:
+                    representation['vbc_icms'] = ''
+            else:
+                representation['cfop'] = '1102'
+                representation['cst'] = ''
+                representation['csosn'] = ''
+                representation['cst_ipi'] = ''
+                representation['cst_pis'] = ''
+                representation['cst_cofins'] = ''
+                representation['picms'] = ''
+                representation['vbc_icms'] = ''
+        else:
+            representation['cfop'] = ''
+            representation['cst'] = ''
+            representation['csosn'] = ''
+            representation['cst_ipi'] = ''
+            representation['cst_pis'] = ''
+            representation['cst_cofins'] = ''
+            representation['picms'] = ''
+            representation['vbc_icms'] = ''
+
         return representation
     
     def to_internal_value(self, data):
@@ -979,8 +1037,11 @@ class CompraViewSet(viewsets.ModelViewSet):
                     vbc_icms = 0.0
                     picms = 0.0
                     vicms = 0.0
+                    cst_ipi_orig = ''
                     vipi = 0.0
+                    cst_pis_orig = ''
                     vpis = 0.0
+                    cst_cofins_orig = ''
                     vcofins = 0.0
 
                     if imposto is not None:
@@ -1011,10 +1072,21 @@ class CompraViewSet(viewsets.ModelViewSet):
                         # IPI
                         ipi_node = get_node(imposto, 'IPI')
                         if ipi_node is not None:
+                            for child in ipi_node:
+                                cst_ipi_el = get_node(child, 'CST')
+                                if cst_ipi_el is not None and cst_ipi_el.text:
+                                    cst_ipi_orig = cst_ipi_el.text.strip()
+                                    break
+                            
                             vipi_el = get_node(ipi_node, 'vIPI') # Pode estar dentro de IPITrib
                             if vipi_el is None:
                                 ipi_trib = get_node(ipi_node, 'IPITrib')
-                                if ipi_trib: vipi_el = get_node(ipi_trib, 'vIPI')
+                                if ipi_trib: 
+                                    vipi_el = get_node(ipi_trib, 'vIPI')
+                                    if not cst_ipi_orig:
+                                        cst_ipi_trib_el = get_node(ipi_trib, 'CST')
+                                        if cst_ipi_trib_el is not None and cst_ipi_trib_el.text:
+                                            cst_ipi_orig = cst_ipi_trib_el.text.strip()
                             
                             if vipi_el is not None:
                                 try: vipi = float(vipi_el.text)
@@ -1023,23 +1095,40 @@ class CompraViewSet(viewsets.ModelViewSet):
                         # PIS
                         pis_node = get_node(imposto, 'PIS')
                         if pis_node is not None:
-                            # Geralmente PISAliq ou PISOutr
+                            # Geralmente PISAliq, PISNT, PISOutr etc.
                             for child in pis_node:
+                                cst_pis_el = get_node(child, 'CST')
+                                if cst_pis_el is not None and cst_pis_el.text:
+                                    cst_pis_orig = cst_pis_el.text.strip()
                                 vpis_el = get_node(child, 'vPIS')
                                 if vpis_el is not None:
                                     try: vpis = float(vpis_el.text)
                                     except: pass
+                                if cst_pis_orig:
                                     break
 
                         # COFINS
                         cofins_node = get_node(imposto, 'COFINS')
                         if cofins_node is not None:
                             for child in cofins_node:
+                                cst_cofins_el = get_node(child, 'CST')
+                                if cst_cofins_el is not None and cst_cofins_el.text:
+                                    cst_cofins_orig = cst_cofins_el.text.strip()
                                 vcofins_el = get_node(child, 'vCOFINS')
                                 if vcofins_el is not None:
                                     try: vcofins = float(vcofins_el.text)
                                     except: pass
+                                if cst_cofins_orig:
                                     break
+
+                    # Conversão automática de CST de Saída para CST de Entrada
+                    from api.services.tax_converter import (
+                        converter_cst_pis_cofins_entrada,
+                        converter_cst_ipi_entrada
+                    )
+                    cst_ipi_entrada = converter_cst_ipi_entrada(cst_ipi_orig, padrao_se_vazio='00' if vipi > 0 else '49')
+                    cst_pis_entrada = converter_cst_pis_cofins_entrada(cst_pis_orig, padrao_se_vazio='50' if vpis > 0 else '70')
+                    cst_cofins_entrada = converter_cst_pis_cofins_entrada(cst_cofins_orig, padrao_se_vazio='50' if vcofins > 0 else '70')
 
                     # Buscar produto no banco pelo código
                     # Prioridade: 1) EAN/Código de barras, 2) Código do produto, 3) Referência
@@ -1138,8 +1227,14 @@ class CompraViewSet(viewsets.ModelViewSet):
                         'vbc_icms': vbc_icms,
                         'picms': picms,
                         'vicms': vicms,
+                        'cst_ipi': cst_ipi_entrada,
+                        'cst_ipi_original': cst_ipi_orig,
                         'vipi': vipi,
+                        'cst_pis': cst_pis_entrada,
+                        'cst_pis_original': cst_pis_orig,
                         'vpis': vpis,
+                        'cst_cofins': cst_cofins_entrada,
+                        'cst_cofins_original': cst_cofins_orig,
                         'vcofins': vcofins,
                         'id_produto': produto_db.id_produto if produto_db else None,
                         'produto_encontrado': produto_db is not None,  # Flag indicando se o produto foi encontrado

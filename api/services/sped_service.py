@@ -129,16 +129,8 @@ class SpedEFDGenerator:
         return s
 
     def format_cst_icms(self, cst):
-        import re
-        if not cst:
-            return "000"
-        cst_str = str(cst).strip()
-        cst_str = re.sub(r'[^\d]', '', cst_str)
-        if not cst_str:
-            return "000"
-        if len(cst_str) > 3:
-            cst_str = cst_str[-3:]
-        return cst_str.zfill(3)
+        from api.services.tax_converter import formatar_cst_icms_sped
+        return formatar_cst_icms_sped(cst, padrao="000")
 
     def format_cfop(self, cfop_input, default="1949"):
         import re
@@ -496,21 +488,28 @@ class SpedEFDGenerator:
             vl_bc_icms_total = Decimal(0)
             vl_icms_total = Decimal(0)
             
+            from api.services.tax_converter import sanitizar_item_fiscal_sped
+
             if cod_sit == "00":  # Somente se documento regular
                 for item in itens_venda:
                     prod = item.id_produto
                     if not prod: continue
                     
                     trib = getattr(prod, 'tributacao_detalhada', None)
-                    cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None) or "000"
-                    cst_icms = self.format_cst_icms(cst_raw)
+                    cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None)
+                    csosn_raw = getattr(trib, 'csosn', None)
+                    aliq_raw = trib.icms_aliquota if trib else Decimal(0)
                     
-                    aliq_icms = trib.icms_aliquota if trib else Decimal(0)
-                    vl_bc_icms = item.valor_total if cst_icms in ['000', '020', '090'] else Decimal(0)
-                    vl_icms = vl_bc_icms * (aliq_icms / 100) if vl_bc_icms > 0 else Decimal(0)
+                    dados_fiscais = sanitizar_item_fiscal_sped(
+                        cst_raw=cst_raw,
+                        csosn_raw=csosn_raw,
+                        cfop_raw=None,
+                        aliq_raw=aliq_raw,
+                        valor_item=item.valor_total
+                    )
                     
-                    vl_bc_icms_total += vl_bc_icms
-                    vl_icms_total += vl_icms
+                    vl_bc_icms_total += dados_fiscais['vl_bc_icms']
+                    vl_icms_total += dados_fiscais['vl_icms']
             
             # Se a venda tiver IPI/ST somado no total, precisaria descontar para achar vl_merc real. 
             # Simplificação assumindo Total = Merc - Desc
@@ -579,17 +578,25 @@ class SpedEFDGenerator:
                      prod = item.id_produto
                      if not prod: continue
                      
-                     # Buscar dados fiscais
+                     # Buscar dados fiscais com higienização inteligente
                      trib = getattr(prod, 'tributacao_detalhada', None)
-                     cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None) or "000"
-                     cst_icms = self.format_cst_icms(cst_raw)
+                     cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None)
+                     csosn_raw = getattr(trib, 'csosn', None)
+                     aliq_raw = trib.icms_aliquota if trib else Decimal(0)
                      
-                     cfop = "5102" 
-                     if cst_icms in ['060', '500']: cfop = "5405"
+                     dados_fiscais = sanitizar_item_fiscal_sped(
+                         cst_raw=cst_raw,
+                         csosn_raw=csosn_raw,
+                         cfop_raw=None,
+                         aliq_raw=aliq_raw,
+                         valor_item=item.valor_total
+                     )
                      
-                     aliq_icms = trib.icms_aliquota if trib else Decimal(0)
-                     vl_bc_icms = item.valor_total if cst_icms in ['000', '020', '090'] else Decimal(0)
-                     vl_icms = vl_bc_icms * (aliq_icms / 100) if vl_bc_icms > 0 else Decimal(0)
+                     cst_icms = dados_fiscais['cst_icms']
+                     cfop = dados_fiscais['cfop']
+                     aliq_icms = dados_fiscais['aliq_icms']
+                     vl_bc_icms = dados_fiscais['vl_bc_icms']
+                     vl_icms = dados_fiscais['vl_icms']
                      
                      # Somente gera C170 para modelos que não sejam NF-e/NFC-e
                      if gerar_c170:
@@ -691,13 +698,21 @@ class SpedEFDGenerator:
                 prod = item.id_produto
                 if not prod: continue
                 trib = getattr(prod, 'tributacao_detalhada', None)
-                cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None) or "000"
-                cst_icms = self.format_cst_icms(cst_raw)
-                aliq_icms = trib.icms_aliquota if trib else Decimal(0)
-                vl_bc_icms = item.valor_total if cst_icms in ['000', '020', '090'] else Decimal(0)
-                vl_icms = vl_bc_icms * (aliq_icms / 100) if vl_bc_icms > 0 else Decimal(0)
-                vl_bc_icms_total += vl_bc_icms
-                vl_icms_total += vl_icms
+                cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None)
+                csosn_raw = getattr(trib, 'csosn', None)
+                aliq_raw = trib.icms_aliquota if trib else Decimal(0)
+                raw_cfop = getattr(item, 'cfop', None) or (op.cfop if op and getattr(op, 'cfop', None) else None)
+                cfop_entrada = self.format_cfop(raw_cfop, "1949")
+
+                dados_fiscais = sanitizar_item_fiscal_sped(
+                    cst_raw=cst_raw,
+                    csosn_raw=csosn_raw,
+                    cfop_raw=cfop_entrada,
+                    aliq_raw=aliq_raw,
+                    valor_item=item.valor_total
+                )
+                vl_bc_icms_total += dados_fiscais['vl_bc_icms']
+                vl_icms_total += dados_fiscais['vl_icms']
 
             dt_doc = getattr(compra, 'data_emissao_nfe', None) or compra.data_entrada
             dt_es = compra.data_entrada
@@ -754,13 +769,39 @@ class SpedEFDGenerator:
                 prod = item.id_produto
                 if not prod: continue
                 trib = getattr(prod, 'tributacao_detalhada', None)
-                cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None) or "000"
-                cst_icms = self.format_cst_icms(cst_raw)
+                cst_raw = getattr(trib, 'cst_icms', None) or getattr(prod, 'cst_icms', None)
+                csosn_raw = getattr(trib, 'csosn', None)
+                aliq_raw = trib.icms_aliquota if trib else Decimal(0)
                 raw_cfop = getattr(item, 'cfop', None) or (op.cfop if op and getattr(op, 'cfop', None) else None)
-                cfop = self.format_cfop(raw_cfop, "1949")
-                aliq_icms = trib.icms_aliquota if trib else Decimal(0)
-                vl_bc_icms = item.valor_total if cst_icms in ['000', '020', '090'] else Decimal(0)
-                vl_icms = vl_bc_icms * (aliq_icms / 100) if vl_bc_icms > 0 else Decimal(0)
+                cfop_entrada = self.format_cfop(raw_cfop, "1949")
+
+                dados_fiscais = sanitizar_item_fiscal_sped(
+                    cst_raw=cst_raw,
+                    csosn_raw=csosn_raw,
+                    cfop_raw=cfop_entrada,
+                    aliq_raw=aliq_raw,
+                    valor_item=item.valor_total
+                )
+
+                cst_icms = dados_fiscais['cst_icms']
+                cfop = dados_fiscais['cfop']
+                aliq_icms = dados_fiscais['aliq_icms']
+                vl_bc_icms = dados_fiscais['vl_bc_icms']
+                vl_icms = dados_fiscais['vl_icms']
+
+                # CSTs de Entrada para IPI, PIS e COFINS
+                from api.services.tax_converter import (
+                    converter_cst_pis_cofins_entrada,
+                    converter_cst_ipi_entrada
+                )
+                cst_ipi_raw = getattr(trib, 'cst_ipi', None) or "49"
+                cst_ipi = converter_cst_ipi_entrada(cst_ipi_raw, padrao_se_vazio="49")
+                
+                cst_pis_raw = getattr(trib, 'cst_pis_cofins', None) or getattr(trib, 'cst_pis', None) or "70"
+                cst_pis = converter_cst_pis_cofins_entrada(cst_pis_raw, padrao_se_vazio="70")
+                
+                cst_cofins_raw = getattr(trib, 'cst_pis_cofins', None) or getattr(trib, 'cst_cofins', None) or "70"
+                cst_cofins = converter_cst_pis_cofins_entrada(cst_cofins_raw, padrao_se_vazio="70")
 
                 # Gerar C170 para a compra
                 self.add_line("C170",
@@ -778,8 +819,8 @@ class SpedEFDGenerator:
                               self.format_decimal(vl_bc_icms),
                               self.format_decimal(aliq_icms),
                               self.format_decimal(vl_icms),
-                              "0,00", "0,00", "0,00", "0", "50", "",
-                              "0,00", "0,00", "0,00", "01", "0,00", "0,00", "0,00", "0,00", "0,00", "01", "0,00", "0,00", "0,00", "0,00", "0,00", "", "0,00"
+                              "0,00", "0,00", "0,00", "0", cst_ipi, "",
+                              "0,00", "0,00", "0,00", cst_pis, "0,00", "0,00", "0,00", "0,00", "0,00", cst_cofins, "0,00", "0,00", "0,00", "0,00", "0,00", "", "0,00"
                               )
 
                 key = (cst_icms, cfop, aliq_icms)
@@ -923,8 +964,9 @@ class SpedEFDGenerator:
             if cte.tomador_servico == 0: ind_frt = "0"
             elif cte.tomador_servico == 3: ind_frt = "1"
             
-            # Padronizar CST para 3 dígitos: 00 -> 000
-            cst_icms = str(cte.cst_icms or "00").zfill(3)
+            # Padronizar CST para 3 dígitos válidos
+            from api.services.tax_converter import formatar_cst_icms_sped
+            cst_icms = formatar_cst_icms_sped(cte.cst_icms, padrao="000")
             
             self.add_line("D100",
                           ind_oper,              # 02 IND_OPER
@@ -1006,9 +1048,9 @@ class SpedEFDGenerator:
         # E116: Obrigações do ICMS Recolhido ou a Recolher - Operações Próprias (OBRIGATÓRIO quando E110 > 0)
         if self.total_vl_icms > 0:
             uf_emp = (getattr(self.empresa, 'estado', '') or 'MG').upper().strip()
-            padrao_uf = "313-1" if uf_emp == "MG" else ("046-2" if uf_emp == "SP" else "100080")
+            padrao_uf = "3131" if uf_emp == "MG" else ("0462" if uf_emp == "SP" else "100080")
             cod_receita = getattr(self.empresa, 'codigo_receita_icms', None) or padrao_uf
-            cod_receita = str(cod_receita).strip()
+            cod_receita = str(cod_receita).replace('-', '').replace('.', '').strip()
             if not cod_receita or cod_receita in ['000', 'None']:
                 cod_receita = padrao_uf
 
@@ -1027,7 +1069,7 @@ class SpedEFDGenerator:
                           "000",          # COD_OR: Obrigação a recolher - ICMS Próprio
                           vl_recolher,    # VL_OR: Valor da obrigação total (igual ao E110)
                           dt_vcto,        # DT_VCTO: Data de vencimento (DDMMAAAA)
-                          cod_receita,    # COD_REC
+                          cod_receita,    # COD_REC: Código de receita da UF
                           "",             # NUM_PROC: Processo
                           "",             # IND_PROC: Indicador de origem
                           "",             # PROC: Descrição do processo

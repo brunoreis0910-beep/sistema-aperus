@@ -206,6 +206,19 @@ def cadastro_turbo_importar_xml(request):
                             produto_data['aliquota_icms'] = aliq.text
                         break
                 
+                # IPI
+                ipi = imposto.find('.//nfe:IPI', ns)
+                if ipi is not None:
+                    for ipi_child in ipi:
+                        cst_ipi = ipi_child.find('nfe:CST', ns)
+                        aliq_ipi = ipi_child.find('nfe:pIPI', ns)
+                        
+                        if cst_ipi is not None:
+                            produto_data['cst_ipi'] = cst_ipi.text
+                        if aliq_ipi is not None:
+                            produto_data['aliquota_ipi'] = aliq_ipi.text
+                        break
+
                 # PIS
                 pis = imposto.find('.//nfe:PIS', ns)
                 if pis is not None:
@@ -232,10 +245,27 @@ def cadastro_turbo_importar_xml(request):
                             produto_data['aliquota_cofins'] = aliq_cofins.text
                         break
             
+            # Conversão automática de CST de Saída para CST de Entrada
+            from api.services.tax_converter import (
+                converter_cst_pis_cofins_entrada,
+                converter_cst_ipi_entrada,
+                converter_cfop_entrada
+            )
+            if 'cst_pis' in produto_data:
+                produto_data['cst_pis_original'] = produto_data['cst_pis']
+                produto_data['cst_pis'] = converter_cst_pis_cofins_entrada(produto_data['cst_pis'])
+            if 'cst_cofins' in produto_data:
+                produto_data['cst_cofins_original'] = produto_data['cst_cofins']
+                produto_data['cst_cofins'] = converter_cst_pis_cofins_entrada(produto_data['cst_cofins'])
+            if 'cst_ipi' in produto_data:
+                produto_data['cst_ipi_original'] = produto_data['cst_ipi']
+                produto_data['cst_ipi'] = converter_cst_ipi_entrada(produto_data['cst_ipi'])
+
             # Extrai CFOP
             cfop_elem = prod.find('nfe:CFOP', ns)
             if cfop_elem is not None:
-                produto_data['cfop'] = cfop_elem.text
+                produto_data['cfop_original'] = cfop_elem.text
+                produto_data['cfop'] = converter_cfop_entrada(cfop_elem.text)
             
             produtos.append(produto_data)
         
