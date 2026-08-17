@@ -782,15 +782,15 @@ function CompraPage() {
         let op = operacoesData.find(o => String(o.id_operacao || o.id) === String(dev.id_operacao));
 
         // Buscar venda emitida vinculada a esta devolução
-        const vendaVinculada = devolucoesVendasData.find(v => String(v.id_venda) === String(dev.id_venda));
+        const vendaVinculada = dev.id_venda ? devolucoesVendasData.find(v => String(v.id_venda) === String(dev.id_venda)) : null;
         if (vendaVinculada && vendaVinculada.id_operacao) {
           const opVenda = operacoesData.find(o => String(o.id_operacao || o.id) === String(vendaVinculada.id_operacao));
           if (opVenda) op = opVenda;
         }
 
-        const numNota = dev.venda_numero_nfe || vendaVinculada?.numero_documento || vendaVinculada?.numero_nfe || dev.numero_nfe || dev.numero_documento || dev.numero_devolucao;
+        const numNota = dev.venda_numero_nfe || dev.venda_numero_documento || vendaVinculada?.numero_nfe || vendaVinculada?.numero_documento || dev.numero_nfe || dev.numero_documento || dev.numero_devolucao;
         const statusNota = dev.venda_status_nfe || vendaVinculada?.status_nfe || dev.status_nfe || dev.status || 'AUTORIZADA';
-        const chaveNota = dev.venda_chave_nfe || vendaVinculada?.chave_nfe || dev.chave_nfe || '';
+        const chaveNota = dev.venda_chave_nfe || vendaVinculada?.chave_nfe || dev.chave_nfe || dev.chave_nfe_referenciada || '';
         const opNome = dev.operacao_nome || op?.nome_operacao || op?.nome || 'DEVOLUÇÃO DE COMPRA (NFE)';
 
         return {
@@ -807,17 +807,20 @@ function CompraPage() {
           id_operacao: op?.id_operacao || dev.id_operacao || 22,
           numero_nfe: numNota,
           numero_documento: numNota,
+          numero_nota: numNota,
           chave_nfe: chaveNota,
           valor_total_nota: dev.valor_total_devolucao || dev.valor_total || 0,
           valor_total: dev.valor_total_devolucao || dev.valor_total || 0,
           is_devolucao: true,
-          status_nfe: statusNota
+          status_nfe: statusNota,
+          status: statusNota
         };
       });
 
       const devVendasMapeadas = devolucoesVendasData.map(v => {
         const forn = fornecedoresData.find(f => String(f.id_fornecedor || f.id) === String(v.id_cliente || v.id_fornecedor));
         const op = operacoesData.find(o => String(o.id_operacao || o.id) === String(v.id_operacao));
+        const numDocVenda = v.numero_nfe || v.numero_documento || `#${v.id_venda}`;
 
         return {
           id_compra: `NFE-${v.id_venda}`,
@@ -829,12 +832,15 @@ function CompraPage() {
           data_entrada: v.data_venda || v.data_documento,
           operacao_nome: op?.nome_operacao || op?.nome || 'DEVOLUÇÃO DE COMPRA (NFE)',
           id_operacao: v.id_operacao,
-          numero_documento: v.numero_documento || v.numero_nfe || `#${v.id_venda}`,
+          numero_nfe: numDocVenda,
+          numero_documento: numDocVenda,
+          numero_nota: numDocVenda,
           chave_nfe: v.chave_nfe || v.chave_nfe_referenciada || '',
           valor_total_nota: v.valor_total || 0,
           valor_total: v.valor_total || 0,
           is_devolucao: true,
-          status_nfe: v.status_nfe || v.status_venda
+          status_nfe: v.status_nfe || v.status_venda || 'AUTORIZADA',
+          status: v.status_nfe || v.status_venda || 'AUTORIZADA'
         };
       });
 

@@ -34,25 +34,15 @@ class DevolucaoSerializer(serializers.ModelSerializer):
     itens = DevolucaoItemSerializer(many=True, read_only=False)
     criado_por_nome = serializers.SerializerMethodField()
     aprovado_por_nome = serializers.SerializerMethodField()
-    tipo_display = serializers.SerializerMethodField()
-    status_display = serializers.SerializerMethodField()
-    venda_numero_nfe = serializers.SerializerMethodField()
-    venda_status_nfe = serializers.SerializerMethodField()
-    venda_chave_nfe = serializers.SerializerMethodField()
-    operacao_nome = serializers.SerializerMethodField()
-
-    def get_tipo_display(self, obj):
-        return "Devolução de Compra" if obj.tipo == 'compra' else "Devolução de Venda"
-
-    def get_status_display(self, obj):
-        return str(obj.status or '').upper()
-
+    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
     class Meta:
         model = Devolucao
         fields = [
             'id_devolucao', 'tipo', 'tipo_display', 'id_venda', 'id_compra',
-            'id_cliente', 'id_fornecedor', 'id_operacao', 'operacao_nome', 'data_devolucao',
-            'numero_devolucao', 'venda_numero_nfe', 'venda_status_nfe', 'venda_chave_nfe', 'motivo', 'observacoes', 'gerar_credito',
+            'id_cliente', 'id_fornecedor', 'id_operacao', 'data_devolucao',
+            'numero_devolucao', 'motivo', 'observacoes', 'gerar_credito',
             'chave_nfe_referenciada',
             'valor_total_devolucao', 'status', 'status_display',
             'estoque_atualizado', 'financeiro_gerado', 'criado_por',
@@ -65,45 +55,32 @@ class DevolucaoSerializer(serializers.ModelSerializer):
             'criado_em', 'atualizado_em'
         ]
     
-    def get_venda_numero_nfe(self, obj):
-        if obj.id_venda:
-            from .models import Venda
-            v = Venda.objects.filter(pk=obj.id_venda).first()
-            if v and v.numero_nfe:
-                return v.numero_nfe
-        return obj.numero_devolucao
-
-    def get_venda_status_nfe(self, obj):
-        if obj.id_venda:
-            from .models import Venda
-            v = Venda.objects.filter(pk=obj.id_venda).first()
-            if v and v.status_nfe:
-                return v.status_nfe
-        return obj.status
-
-    def get_venda_chave_nfe(self, obj):
-        if obj.id_venda:
-            from .models import Venda
-            v = Venda.objects.filter(pk=obj.id_venda).first()
-            if v and v.chave_nfe:
-                return v.chave_nfe
-        return obj.chave_nfe_referenciada
-
-    def get_operacao_nome(self, obj):
-        if obj.id_venda:
-            from .models import Venda
-            v = Venda.objects.filter(pk=obj.id_venda).first()
-            if v and v.id_operacao:
-                return v.id_operacao.nome_operacao
-        return "DEVOLUÇÃO DE COMPRA (NFE)"
-
     def get_criado_por_nome(self, obj):
         return obj.criado_por.get_full_name() if obj.criado_por else None
     
     def get_aprovado_por_nome(self, obj):
         return obj.aprovado_por.get_full_name() if obj.aprovado_por else None
-    
-    def validate(self, data):
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        
+        # Se tem id_venda vinculada, buscar número da NF-e, chave e status da SEFAZ
+        if instance.id_venda:
+            try:
+                from .models import Venda
+                venda = Venda.objects.filter(pk=instance.id_venda).first()
+                if venda:
+                    representation['venda_numero_documento'] = venda.numero_documento or ''
+                    representation['venda_numero_nfe'] = getattr(venda, 'numero_nfe', None) or venda.numero_documento or ''
+                    representation['venda_status_nfe'] = venda.status_nfe or venda.status_venda or 'AUTORIZADA'
+                    representation['venda_chave_nfe'] = venda.chave_nfe or venda.chave_nfe_referenciada or ''
+                    representation['status_nfe'] = venda.status_nfe or venda.status_venda or 'AUTORIZADA'
+                    representation['numero_documento'] = representation['venda_numero_nfe']
+                    representation['chave_nfe'] = representation['venda_chave_nfe']
+            except Exception as e:
+                print(f"[DEVOLUCAO_SERIALIZER] Erro ao buscar dados da venda {instance.id_venda}: {e}")
+
+        return representation
         """Validações gerais"""
         tipo = data.get('tipo')
         
@@ -150,62 +127,8 @@ class DevolucaoSerializer(serializers.ModelSerializer):
         
         # Atualizar valor total da devolução
         devolucao.valor_total_devolucao = valor_total
-
-        # Se for Devolução de Compra com Operação Fiscal, criar registro em vendas para emissão NF-e SEFAZ
-        if devolucao.tipo == 'compra' and not devolucao.id_venda:
-            try:
-                from .models import Venda, Operacao
-                from django.db.models import Max
-
-                id_op = devolucao.id_operacao
-                if not id_op:
-                    op_dev = Operacao.objects.filter(transacao='Devolucao').first() or Operacao.objects.filter(nome_operacao__icontains='Devolucao').first()
-                    id_op = op_dev.id_operacao if op_dev else 22
-                    devolucao.id_operacao = id_op
-
-                # Gerar próximo número de NF-e sequencial válido (não zero)
-                max_num = Venda.objects.filter(numero_nfe__gt=0).aggregate(Max('numero_nfe'))['numero_nfe__max'] or 0
-                proximo_numero = max_num + 1
-
-                venda = Venda.objects.create(
-                    id_cliente_id=devolucao.id_fornecedor,
-                    id_operacao_id=id_op,
-                    data_documento=devolucao.data_devolucao or timezone.now(),
-                    valor_total=valor_total,
-                    numero_nfe=proximo_numero,
-                    numero_documento=proximo_numero,
-                    serie_nfe='1',
-                    observacao_contribuinte=devolucao.observacoes or f'Devolução referente à compra #{devolucao.id_compra}',
-                    chave_nfe_referenciada=devolucao.chave_nfe_referenciada or '',
-                    status_nfe='PENDENTE',
-                    tipo_frete='9',
-                    peso_bruto=0,
-                    peso_liquido=0,
-                    quantidade_volumes=0
-                )
-                devolucao.id_venda = venda.id_venda
-
-                # Criar itens da venda para a NF-e com CFOP de devolução 5202
-                from django.db import connection
-                with connection.cursor() as cursor:
-                    for dev_item in devolucao.itens.all():
-                        cfop_item = dev_item.cfop if (dev_item.cfop and dev_item.cfop != '5102' and dev_item.cfop != '6102') else '5202'
-                        cursor.execute("""
-                            INSERT INTO venda_itens (
-                                id_venda, id_produto, quantidade, valor_unitario, valor_total, cfop
-                            ) VALUES (%s, %s, %s, %s, %s, %s)
-                        """, [
-                            venda.id_venda,
-                            dev_item.id_produto,
-                            dev_item.quantidade_devolvida,
-                            dev_item.valor_unitario,
-                            dev_item.valor_total,
-                            cfop_item
-                        ])
-            except Exception as e_venda:
-                print(f"Aviso ao gerar Venda de Devolucao: {e_venda}")
-
         devolucao.save()
+        
         return devolucao
     
     def update(self, instance, validated_data):
