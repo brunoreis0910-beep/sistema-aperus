@@ -750,8 +750,9 @@ function CompraPage() {
         ? operRes.data
         : (operRes.data?.results || [])
       const operacoesPermitidas = operacoesData.filter(op => {
-        const trans = (op.transacao || op.tipo_transacao || op.tipo || '').toLowerCase();
-        const nome = (op.nome_operacao || op.nome || '').toLowerCase();
+        if (!op) return false;
+        const trans = String(op.transacao || op.tipo_transacao || op.tipo || '').toLowerCase();
+        const nome = String(op.nome_operacao || op.nome || '').toLowerCase();
         return trans === 'entrada' || trans.includes('devoluc') || nome.includes('devolu');
       });
       setOperacoes(operacoesPermitidas);
@@ -869,15 +870,16 @@ function CompraPage() {
   }
 
   // Função para filtrar compras
-  const comprasFiltradas = compras.filter(compra => {
+  const comprasFiltradas = (Array.isArray(compras) ? compras : []).filter(compra => {
+    if (!compra) return false;
     // Filtro de pesquisa geral
-    if (filtros.pesquisa) {
-      const termoPesquisa = filtros.pesquisa.toLowerCase()
+    if (filtros?.pesquisa) {
+      const termoPesquisa = String(filtros.pesquisa).toLowerCase().trim()
       const corresponde = 
-        (compra.id_compra?.toString() || '').includes(termoPesquisa) ||
-        (compra.numero_documento || '').toLowerCase().includes(termoPesquisa) ||
-        (compra.fornecedor_nome || '').toLowerCase().includes(termoPesquisa) ||
-        (compra.operacao_nome || '').toLowerCase().includes(termoPesquisa)
+        String(compra.id_compra || compra.id || '').includes(termoPesquisa) ||
+        String(compra.numero_documento || compra.numero_nota || '').toLowerCase().includes(termoPesquisa) ||
+        String(compra.fornecedor_nome || compra.nome_fornecedor || '').toLowerCase().includes(termoPesquisa) ||
+        String(compra.operacao_nome || compra.natureza_operacao || '').toLowerCase().includes(termoPesquisa)
       
       if (!corresponde) return false
     }
@@ -2981,12 +2983,15 @@ function CompraPage() {
                                       value={produtos.find(p => String(p.id_produto) === String(item.id_produto)) || null}
                                       onChange={(_, newVal) => selecionarProduto(index, newVal ? newVal.id_produto : '')}
                                       filterOptions={(opts, { inputValue }) => {
-                                        const term = inputValue.toLowerCase();
-                                        return opts.filter(p =>
-                                          (p.nome_produto || '').toLowerCase().includes(term) ||
-                                          (p.codigo_produto || '').toLowerCase().includes(term) ||
-                                          (p.gtin || '').includes(inputValue)
-                                        );
+                                        const term = String(inputValue || '').toLowerCase().trim();
+                                        return (Array.isArray(opts) ? opts : []).filter(p => {
+                                          if (!p) return false;
+                                          return (
+                                            String(p.nome_produto || '').toLowerCase().includes(term) ||
+                                            String(p.codigo_produto || '').toLowerCase().includes(term) ||
+                                            String(p.gtin || '').includes(String(inputValue || ''))
+                                          );
+                                        });
                                       }}
                                       renderInput={(params) => (
                                         <TextField
@@ -6725,7 +6730,8 @@ function CompraPage() {
                       <MenuItem value="">Nenhuma (Devolução Apenas Gerencial Interna)</MenuItem>
                       {operacoes
                         .filter(op => {
-                          const trans = (op.transacao || op.tipo_transacao || op.tipo || '').toLowerCase();
+                          if (!op) return false;
+                          const trans = String(op.transacao || op.tipo_transacao || op.tipo || '').toLowerCase();
                           const mod = String(op.modelo_documento || op.modelo_nf || '');
                           return mod === '55' || trans.includes('devolu');
                         })
