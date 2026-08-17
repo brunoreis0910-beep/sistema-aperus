@@ -1125,7 +1125,7 @@ function CompraPage() {
     setForm({ ...form, itens: novosItens })
   }
 
-  // Seleciona produto e sugere tributação do cadastro do produto
+  // Seleciona produto e preserva impostos do XML (ou sugere do cadastro se o item não tiver impostos)
   const selecionarProduto = (index, idProduto) => {
     const novosItens = [...form.itens]
     const item = { ...novosItens[index], id_produto: idProduto, _sugerido: false }
@@ -1134,8 +1134,10 @@ function CompraPage() {
       const prod = produtos.find(p => p.id_produto === parseInt(idProduto))
       const trib = prod?.tributacao_detalhada
 
-      if (trib) {
-        // Converte CFOP de saída para entrada se necessário (5→1, 6→2, 7→3)
+      // Se o item NÃO tem dados fiscais vindos do XML (ou foi adicionado manualmente), busca do cadastro do produto
+      const itemTemFiscalXml = !!(item.cfop || item._cfop || item.cst || item._cst || item.csosn || item._csosn || item.cst_pis || item.cst_cofins || item.vipi || item.vicms);
+
+      if (!itemTemFiscalXml && trib) {
         let cfop = trib.cfop || ''
         if (cfop && ['5','6','7'].includes(cfop[0])) {
           const mapa = {'5':'1','6':'2','7':'3'}
@@ -1148,12 +1150,16 @@ function CompraPage() {
         item.picms   = trib.icms_aliquota || ''
         item.vicms   = ''
         item.vbc_icms = ''
+        item.cst_ipi = trib.cst_ipi || ''
         item.vipi    = trib.ipi_aliquota || ''
+        item.cst_pis = trib.cst_pis_cofins || ''
+        item.cst_cofins = trib.cst_pis_cofins || ''
         item.vpis    = trib.pis_aliquota || ''
         item.vcofins = trib.cofins_aliquota || ''
         item._sugerido = true
         item._cfop_original_cadastro = trib.cfop || ''
       }
+      
       // Produto selecionado = encontrado (verde)
       item._encontrado = true
       

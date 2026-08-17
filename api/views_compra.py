@@ -261,7 +261,12 @@ class CompraSerializer(serializers.ModelSerializer):
                 print(f'[DEBUG_CALC] -> Qtd Estoque: {qtd_estoque}, Custo Unit Estoque: {custo_unit_estoque}')
                 print(f'[DEBUG_CALC] -> Valor Total Item: {valor_total_item}')
 
-                # Preparar dados do item para salvar no banco
+                # Preparar dados do item para salvar no banco com impostos
+                vipi_val = Decimal(str(item.get('vipi') or 0)) if item.get('vipi') is not None else Decimal('0.00')
+                vicms_val = Decimal(str(item.get('vicms') or 0)) if item.get('vicms') is not None else Decimal('0.00')
+                vpis_val = Decimal(str(item.get('vpis') or 0)) if item.get('vpis') is not None else Decimal('0.00')
+                vcofins_val = Decimal(str(item.get('vcofins') or 0)) if item.get('vcofins') is not None else Decimal('0.00')
+
                 item_data = {
                     'id_compra': compra,
                     'id_produto': produto_obj,
@@ -271,6 +276,10 @@ class CompraSerializer(serializers.ModelSerializer):
                     'desconto': desconto,
                     'fracao_aplicada': fracao,
                     'quantidade_fracionada': qtd_estoque if fracao > 1 else None,
+                    'valor_ipi': vipi_val,
+                    'valor_icms': vicms_val,
+                    'valor_pis': vpis_val,
+                    'valor_cofins': vcofins_val,
                 }
                 
                 print(f'[DEBUG_CREATE] Criando item - {item_data}')
@@ -500,10 +509,34 @@ class CompraSerializer(serializers.ModelSerializer):
                 else:
                     item_data['quantidade_fracionada'] = None
 
-                CompraItem.objects.create(id_compra=instance, **{
-                    k: v for k, v in item_data.items()
-                    if k not in ('_ean', 'ean', '_cfop_original', '_encontrado', '_vicms', '_vipi', '_vpis', '_vcofins')
-                })
+                # Salvar impostos do item
+                if 'vipi' in item_data or 'valor_ipi' in item_data:
+                    item_data['valor_ipi'] = Decimal(str(item_data.get('vipi') or item_data.get('valor_ipi') or 0))
+                if 'vicms' in item_data or 'valor_icms' in item_data:
+                    item_data['valor_icms'] = Decimal(str(item_data.get('vicms') or item_data.get('valor_icms') or 0))
+                if 'vpis' in item_data or 'valor_pis' in item_data:
+                    item_data['valor_pis'] = Decimal(str(item_data.get('vpis') or item_data.get('valor_pis') or 0))
+                if 'vcofins' in item_data or 'valor_cofins' in item_data:
+                    item_data['valor_cofins'] = Decimal(str(item_data.get('vcofins') or item_data.get('valor_cofins') or 0))
+
+                campos_validos_item = {
+                    'id_compra': instance,
+                    'id_produto': item_data.get('id_produto'),
+                    'quantidade': item_data.get('quantidade', 0),
+                    'quantidade_fracionada': item_data.get('quantidade_fracionada'),
+                    'fracao_aplicada': item_data.get('fracao_aplicada'),
+                    'valor_compra': item_data.get('valor_compra', 0),
+                    'valor_total': item_data.get('valor_total', 0),
+                    'desconto': item_data.get('desconto', 0),
+                    'valor_ipi': item_data.get('valor_ipi', 0),
+                    'valor_icms': item_data.get('valor_icms', 0),
+                    'valor_pis': item_data.get('valor_pis', 0),
+                    'valor_cofins': item_data.get('valor_cofins', 0),
+                    'chave_origem': item_data.get('chave_origem'),
+                    'n_item_origem': item_data.get('n_item_origem'),
+                }
+
+                CompraItem.objects.create(**campos_validos_item)
 
                 # Salvar/atualizar fração por fornecedor+produto quando fracao > 1
                 if fracao_memorizada and instance.id_fornecedor:
