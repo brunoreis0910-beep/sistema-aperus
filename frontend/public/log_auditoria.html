@@ -602,9 +602,8 @@
         // Se estiver no frontend (3001, 5173, 5174), usa o proxy '/api'
         // Se estiver no backend (8005), usa '/api' direto
         // Fallback para 127.0.0.1:8005 apenas se necessário
-        const API_URL = ['3001', '5173', '5174', '8005'].includes(window.location.port)
-            ? '/api' 
-            : 'http://127.0.0.1:8005/api';
+        // Usa a rota relativa /api em qualquer ambiente (produção, IP local, ou dev)
+        const API_URL = '/api';
             
         console.log('🔗 Usando API URL:', API_URL);
 
@@ -671,7 +670,8 @@
                 }
 
                 if (response.ok) {
-                    const usuarios = await response.json();
+                    const data = await response.json();
+                    const usuarios = Array.isArray(data) ? data : (data.results || []);
                     const selectUsuario = document.getElementById('usuario');
 
                     // Limpar opções existentes (exceto a primeira)
@@ -681,7 +681,8 @@
                     usuarios.forEach(user => {
                         const option = document.createElement('option');
                         option.value = user.username;
-                        option.textContent = `${user.first_name} ${user.last_name} (${user.username})`.trim();
+                        const nome = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+                        option.textContent = `${nome} (${user.username})`;
                         selectUsuario.appendChild(option);
                     });
                 }
